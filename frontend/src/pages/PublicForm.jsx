@@ -170,7 +170,26 @@ const PublicForm = () => {
           <input
             type={field.type}
             value={formData[field.label] || ''}
-            onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+            onChange={(e) => {
+              const value = e.target.value;
+              // For tel/phone fields, limit to 10 digits
+              if (field.type === 'tel') {
+                const digitsOnly = value.replace(/\D/g, '');
+                if (digitsOnly.length <= 10) {
+                  handleInputChange(field.label, digitsOnly, field.type);
+                }
+              } else {
+                handleInputChange(field.label, value, field.type);
+              }
+            }}
+            onKeyPress={(e) => {
+              // For tel/phone number fields, only allow numbers
+              if (field.type === 'tel' && !/\d/.test(e.key)) {
+                e.preventDefault();
+              }
+            }}
+            pattern={field.type === 'tel' ? '[0-9]{10}' : undefined}
+            maxLength={field.type === 'tel' ? 10 : undefined}
             className={commonClasses}
             placeholder={field.placeholder}
             required={field.required}

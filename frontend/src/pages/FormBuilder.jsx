@@ -53,21 +53,28 @@ const FormBuilder = () => {
     }
   };
 
-  const addField = () => {
-    setFormData({
-      ...formData,
-      formFields: [
-        ...formData.formFields,
-        {
-          id: Date.now().toString(),
-          label: '',
-          type: 'text',
-          required: false,
-          placeholder: '',
-          options: [],
-        },
-      ],
-    });
+  const addField = (insertAtIndex = null) => {
+    const newField = {
+      id: Date.now().toString(),
+      label: '',
+      type: 'text',
+      required: false,
+      placeholder: '',
+      options: [],
+    };
+
+    if (insertAtIndex !== null) {
+      // Insert at specific position
+      const updatedFields = [...formData.formFields];
+      updatedFields.splice(insertAtIndex + 1, 0, newField);
+      setFormData({ ...formData, formFields: updatedFields });
+    } else {
+      // Add at end
+      setFormData({
+        ...formData,
+        formFields: [...formData.formFields, newField],
+      });
+    }
   };
 
   const updateField = (index, field, value) => {
@@ -192,15 +199,16 @@ const FormBuilder = () => {
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {formData.formFields.map((field, index) => (
-                <div key={field.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Field {index + 1}</span>
-                    <button type="button" onClick={() => removeField(index)} className="text-red-600 hover:text-red-700 p-1">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                <React.Fragment key={field.id}>
+                  <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Field {index + 1}</span>
+                      <button type="button" onClick={() => removeField(index)} className="text-red-600 hover:text-red-700 p-1">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
@@ -246,6 +254,20 @@ const FormBuilder = () => {
                     </div>
                   )}
                 </div>
+                
+                {/* Insert Field Button - appears after each field */}
+                <div className="flex justify-center py-2">
+                  <button
+                    type="button"
+                    onClick={() => addField(index)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-full transition-colors"
+                    title="Insert field below"
+                  >
+                    <Plus size={14} />
+                    Add Field Below
+                  </button>
+                </div>
+              </React.Fragment>
               ))}
             </div>
           )}

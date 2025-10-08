@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Trash2, Filter } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 const Submissions = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -11,10 +12,22 @@ const Submissions = () => {
   const [showModal, setShowModal] = useState(false);
   const [admissionNumber, setAdmissionNumber] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [forms, setForms] = useState([]);
 
   useEffect(() => {
     fetchSubmissions();
+    fetchForms();
   }, [filter]);
+
+  const fetchForms = async () => {
+    try {
+      const response = await api.get('/forms');
+      setForms(response.data.data.filter(f => f.is_active));
+    } catch (error) {
+      console.error('Failed to fetch forms');
+    }
+  };
 
   const fetchSubmissions = async () => {
     setLoading(true);
@@ -95,9 +108,18 @@ const Submissions = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Submissions</h1>
-        <p className="text-gray-600 mt-2">Review and approve student form submissions</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Submissions</h1>
+          <p className="text-gray-600 mt-2">Review and approve student form submissions</p>
+        </div>
+        <button
+          onClick={() => setShowBulkUpload(true)}
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Upload size={18} />
+          Bulk Upload
+        </button>
       </div>
 
       <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-fit">
@@ -127,6 +149,7 @@ const Submissions = () => {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Form Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted By</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted At</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
@@ -139,6 +162,11 @@ const Submissions = () => {
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : submission.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {submission.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${submission.submitted_by === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                        {submission.submitted_by === 'admin' ? '👤 Admin' : '🎓 Student'}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{new Date(submission.submitted_at).toLocaleString()}</td>
@@ -227,6 +255,13 @@ const Submissions = () => {
           </div>
         </div>
       )}
+
+      <BulkUploadModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        forms={forms}
+        onUploadComplete={fetchSubmissions}
+      />
     </div>
   );
 };

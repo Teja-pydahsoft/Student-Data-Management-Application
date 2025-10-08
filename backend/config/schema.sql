@@ -39,25 +39,31 @@ CREATE TABLE IF NOT EXISTS form_submissions (
   admission_number VARCHAR(100),
   submission_data JSON NOT NULL,
   status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+  submitted_by ENUM('student', 'admin') DEFAULT 'student',
+  submitted_by_admin INT NULL,
   submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   reviewed_at TIMESTAMP NULL,
   reviewed_by INT,
   rejection_reason TEXT,
   FOREIGN KEY (form_id) REFERENCES forms(form_id) ON DELETE CASCADE,
   FOREIGN KEY (reviewed_by) REFERENCES admins(id) ON DELETE SET NULL,
+  FOREIGN KEY (submitted_by_admin) REFERENCES admins(id) ON DELETE SET NULL,
   INDEX idx_form_id (form_id),
   INDEX idx_status (status),
-  INDEX idx_admission (admission_number)
+  INDEX idx_admission (admission_number),
+  INDEX idx_submitted_by (submitted_by)
 );
 
 -- Students master table (approved data)
 CREATE TABLE IF NOT EXISTS students (
   id INT PRIMARY KEY AUTO_INCREMENT,
   admission_number VARCHAR(100) UNIQUE NOT NULL,
+  roll_number VARCHAR(100) NULL,
   student_data JSON NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_admission (admission_number)
+  INDEX idx_admission (admission_number),
+  INDEX idx_roll_number (roll_number)
 );
 
 -- Audit log table

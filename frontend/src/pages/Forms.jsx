@@ -87,15 +87,9 @@ const Forms = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Forms</h1>
-          <p className="text-gray-600 mt-2">Create and manage dynamic forms with QR codes</p>
-        </div>
-        <Link to="/forms/new" className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors">
-          <Plus size={20} />
-          Create Form
-        </Link>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Forms</h1>
+        <p className="text-gray-600 mt-2">Manage dynamic forms with QR codes</p>
       </div>
 
       {forms.length === 0 ? (
@@ -104,12 +98,8 @@ const Forms = () => {
             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <Plus className="text-gray-400" size={32} />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No forms yet</h3>
-            <p className="text-gray-600 mb-6">Get started by creating your first form</p>
-            <Link to="/forms/new" className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors">
-              <Plus size={20} />
-              Create Your First Form
-            </Link>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No forms available</h3>
+            <p className="text-gray-600">There are no forms in the system yet.</p>
           </div>
         </div>
       ) : (

@@ -8,6 +8,7 @@ router.post('/:formId', submissionController.submitForm);
 
 // Protected routes (admin only)
 router.get('/', authMiddleware, submissionController.getAllSubmissions);
+router.post('/bulk-upload', authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
 router.get('/:submissionId', authMiddleware, submissionController.getSubmissionById);
 router.post('/:submissionId/approve', authMiddleware, submissionController.approveSubmission);
 router.post('/:submissionId/reject', authMiddleware, submissionController.rejectSubmission);

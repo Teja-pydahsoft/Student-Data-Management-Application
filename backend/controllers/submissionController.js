@@ -1,5 +1,12 @@
 const { pool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
+const path = require('path');
+
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
 
 // Helper function to safely parse JSON fields
 const parseJSON = (data) => {
@@ -71,10 +78,12 @@ exports.getAllSubmissions = async (req, res) => {
     const { status, formId } = req.query;
 
     let query = `
-      SELECT fs.*, f.form_name, a.username as reviewed_by_name
+      SELECT fs.*, f.form_name, a.username as reviewed_by_name, 
+             admin_sub.username as submitted_by_admin_name
       FROM form_submissions fs
       LEFT JOIN forms f ON fs.form_id = f.form_id
       LEFT JOIN admins a ON fs.reviewed_by = a.id
+      LEFT JOIN admins admin_sub ON fs.submitted_by_admin = admin_sub.id
       WHERE 1=1
     `;
     const params = [];
@@ -326,3 +335,139 @@ exports.deleteSubmission = async (req, res) => {
     });
   }
 };
+
+// Bulk upload submissions (admin only)
+exports.bulkUploadSubmissions = async (req, res) => {
+  const connection = await pool.getConnection();
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV file is required'
+      });
+    }
+
+    const { formId } = req.body;
+    
+    if (!formId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Form ID is required'
+      });
+    }
+
+    // Verify form exists
+    const [forms] = await connection.query(
+      'SELECT * FROM forms WHERE form_id = ?',
+      [formId]
+    );
+
+    if (forms.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
+      });
+    }
+
+    const form = forms[0];
+    const formFields = parseJSON(form.form_fields);
+    
+    // Parse CSV file
+    const results = [];
+    const errors = [];
+    let rowNumber = 0;
+
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(req.file.path)
+        .pipe(csv())
+        .on('data', (data) => {
+          rowNumber++;
+          results.push({ row: rowNumber, data });
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    await connection.beginTransaction();
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const result of results) {
+      try {
+        const { row, data } = result;
+        const admissionNumber = data.admission_number;
+        
+        if (!admissionNumber) {
+          errors.push({ row, message: 'Missing admission_number' });
+          failedCount++;
+          continue;
+        }
+
+        // Build submission data from CSV row
+        const submissionData = {};
+        formFields.forEach(field => {
+          if (data[field.label] !== undefined) {
+            submissionData[field.label] = data[field.label];
+          }
+        });
+
+        const submissionId = uuidv4();
+
+        // Insert submission with admin tracking
+        await connection.query(
+          `INSERT INTO form_submissions 
+           (submission_id, form_id, admission_number, submission_data, status, submitted_by, submitted_by_admin) 
+           VALUES (?, ?, ?, ?, 'pending', 'admin', ?)`,
+          [submissionId, formId, admissionNumber, JSON.stringify(submissionData), req.admin.id]
+        );
+
+        successCount++;
+      } catch (error) {
+        errors.push({ row: result.row, message: error.message });
+        failedCount++;
+      }
+    }
+
+    await connection.commit();
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    // Log action
+    await pool.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+       VALUES (?, ?, ?, ?, ?)`,
+      ['BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id, 
+       JSON.stringify({ successCount, failedCount, totalRows: results.length })]
+    );
+
+    res.json({
+      success: true,
+      message: `Bulk upload completed. ${successCount} submissions created, ${failedCount} failed.`,
+      successCount,
+      failedCount,
+      errors: errors.slice(0, 20) // Limit errors to first 20
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    
+    // Clean up uploaded file if it exists
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    console.error('Bulk upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during bulk upload'
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+// Export multer middleware
+exports.uploadMiddleware = upload.single('file');
