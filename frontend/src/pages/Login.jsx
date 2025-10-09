@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogIn, Loader2 } from 'lucide-react';
+import { LogIn, Loader2, Eye, EyeOff, Users, Shield } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
@@ -12,6 +12,7 @@ const Login = () => {
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -47,95 +48,116 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-cyan-50/30 flex items-center justify-center p-4">
+      {/* Simple Background Elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
+      </div>
+
+      {/* Wider Login Card */}
+      <div className="w-full max-w-lg relative z-10">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-xl border border-white/60 p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
-              <LogIn className="text-primary-600" size={32} />
+            <div className="relative inline-flex mb-6">
+              <div className="relative bg-gradient-to-br from-white to-slate-50 p-4 rounded-2xl shadow-inner border border-white/80">
+                <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-3 rounded-xl shadow-md">
+                  <Users className="text-white" size={28} />
+                </div>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Welcome Back
+            
+            <h1 className="text-2xl font-semibold text-slate-800 mb-2">
+              Administrator Access
             </h1>
-            <p className="text-gray-600">
-              Student Database Management System
+            <p className="text-slate-600 text-sm">
+              Student Management System
             </p>
           </div>
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
+            {/* Username Field */}
+            <div className="group">
               <label 
                 htmlFor="username" 
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-slate-700 mb-3 flex items-center gap-2"
               >
+                <Users size={16} className="text-cyan-500" />
                 Username
               </label>
-              <input
-                type="text"
-                id="username"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                placeholder="Enter your username"
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none transition-all duration-300 font-normal text-sm shadow-sm group-hover:shadow-md group-hover:border-cyan-300 group-focus-within:border-cyan-400 group-focus-within:ring-2 group-focus-within:ring-cyan-100 group-focus-within:shadow-lg"
+                  placeholder="Enter admin username"
+                  disabled={loading}
+                />
+                {/* Glow effect on focus */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-500/0 to-blue-500/0 group-focus-within:from-cyan-500/10 group-focus-within:to-blue-500/10 transition-all duration-300 -z-10" />
+              </div>
             </div>
 
-            <div>
+            {/* Password Field */}
+            <div className="group">
               <label 
                 htmlFor="password" 
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-slate-700 mb-3 flex items-center gap-2"
               >
+                <Shield size={16} className="text-blue-500" />
                 Password
               </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                placeholder="Enter your password"
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none transition-all duration-300 font-normal text-sm shadow-sm group-hover:shadow-md group-hover:border-blue-300 group-focus-within:border-blue-400 group-focus-within:ring-2 group-focus-within:ring-blue-100 group-focus-within:shadow-lg pr-12"
+                  placeholder="Enter your password"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 p-2 hover:bg-slate-100 rounded-lg"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+                {/* Glow effect on focus */}
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 to-cyan-500/0 group-focus-within:from-blue-500/10 group-focus-within:to-cyan-500/10 transition-all duration-300 -z-10" />
+              </div>
             </div>
 
+            {/* Login Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary-600 text-white py-3 rounded-lg font-medium hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white py-3.5 rounded-xl font-medium hover:from-cyan-600 hover:to-blue-700 focus:ring-2 focus:ring-cyan-100 transform transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-3 group relative overflow-hidden shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.99]"
             >
+              {/* Shine effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+              
               {loading ? (
                 <>
-                  <Loader2 className="animate-spin" size={20} />
-                  Logging in...
+                  <Loader2 className="animate-spin" size={18} />
+                  <span className="text-sm">Signing in...</span>
                 </>
               ) : (
                 <>
-                  <LogIn size={20} />
-                  Login
+                  <LogIn size={18} className="transform group-hover:translate-x-0.5 transition-transform duration-300" />
+                  <span className="text-sm">Access Dashboard</span>
                 </>
               )}
             </button>
           </form>
-
-          {/* Default Credentials Info */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-600 text-center">
-              Default credentials: <br />
-              <span className="font-mono font-semibold">admin / admin123</span>
-            </p>
-          </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-white text-sm mt-6">
-          © 2025 Student Database Management System
-        </p>
       </div>
     </div>
   );
