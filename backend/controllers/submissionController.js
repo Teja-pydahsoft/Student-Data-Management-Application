@@ -171,7 +171,6 @@ exports.approveSubmission = async (req, res) => {
     await connection.beginTransaction();
 
     const { submissionId } = req.params;
-    const { admissionNumber } = req.body;
 
     // Get submission
     const [submissions] = await connection.query(
@@ -188,17 +187,26 @@ exports.approveSubmission = async (req, res) => {
     }
 
     const submission = submissions[0];
-    const finalAdmissionNumber = admissionNumber || submission.admission_number;
-
-    if (!finalAdmissionNumber) {
-      await connection.rollback();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Admission number is required' 
-      });
-    }
-
     const submissionData = parseJSON(submission.submission_data);
+
+    // Separate predefined and custom fields
+    const predefinedFields = {};
+    const customFields = {};
+    const predefinedKeys = [
+      'pin_no', 'batch', 'branch', 'stud_type', 'student_name', 'student_status',
+      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
+      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
+      'roll_number', 'student_address', 'city_village', 'mandal_name', 'district',
+      'previous_college', 'certificates_status', 'student_photo', 'remarks'
+    ];
+
+    Object.entries(submissionData).forEach(([key, value]) => {
+      if (predefinedKeys.includes(key)) {
+        predefinedFields[key] = value;
+      } else {
+    );
+
+    const formFields = forms.length > 0 ? parseJSON(forms[0].form_fields) : [];
 
     // Check if student exists
     const [students] = await connection.query(
@@ -207,19 +215,37 @@ exports.approveSubmission = async (req, res) => {
     );
 
     if (students.length > 0) {
-      // Update existing student
-      const existingData = parseJSON(students[0].student_data);
-      const mergedData = { ...existingData, ...submissionData };
+      // Update existing student - merge data properly
+      const existingData = parseJSON(students[0].student_data) || {};
+
+      // Create merged data with database column mapping
+      const mergedData = { ...existingData };
+
+      // Map submission data to database columns based on form field keys
+      Object.entries(submissionData).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          mergedData[key] = value;
+        }
+      });
 
       await connection.query(
         'UPDATE students SET student_data = ? WHERE admission_number = ?',
         [JSON.stringify(mergedData), finalAdmissionNumber]
       );
     } else {
-      // Create new student
+      // Create new student with proper database column mapping
+      const studentData = {};
+
+      // Map submission data to database columns based on form field keys
+      Object.entries(submissionData).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          studentData[key] = value;
+        }
+      });
+
       await connection.query(
         'INSERT INTO students (admission_number, student_data) VALUES (?, ?)',
-        [finalAdmissionNumber, JSON.stringify(submissionData)]
+        [finalAdmissionNumber, JSON.stringify(studentData)]
       );
     }
 
@@ -405,11 +431,12 @@ exports.bulkUploadSubmissions = async (req, res) => {
           continue;
         }
 
-        // Build submission data from CSV row
+        // Build submission data from CSV row, mapping to database columns
         const submissionData = {};
         formFields.forEach(field => {
-          if (data[field.label] !== undefined) {
-            submissionData[field.label] = data[field.label];
+          if (data[field.label] !== undefined && data[field.label] !== '') {
+            // Map to database column name
+            submissionData[field.key] = data[field.label];
           }
         });
 

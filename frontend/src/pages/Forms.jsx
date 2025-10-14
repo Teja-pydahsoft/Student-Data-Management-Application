@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit, Trash2, QrCode, Eye, EyeOff, Download } from 'lucide-react';
+import { Edit, Trash2, QrCode, Eye, EyeOff, Download, Plus } from 'lucide-react';
 import QRCodeComponent from 'react-qr-code';
 import api from '../config/api';
 import toast from 'react-hot-toast';
@@ -128,6 +128,11 @@ const Forms = () => {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Approved:</span>
                   <span className="font-medium text-green-600">{form.approved_count || 0}</span>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="text-xs text-gray-500">
+                    Fields: {form.form_fields?.map(field => field.label).join(', ') || 'None'}
+                  </div>
                 </div>
               </div>
 

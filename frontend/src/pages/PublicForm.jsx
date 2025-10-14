@@ -82,9 +82,23 @@ const PublicForm = () => {
     setError(null);
 
     try {
+      // Convert form data to database field mapping
+      const submissionData = {};
+
+      // Map form fields to database columns (exclude admission_no for students)
+      form.form_fields.forEach((field) => {
+        if (formData[field.label] !== undefined && formData[field.label] !== '' && field.key !== 'admission_no') {
+          // Use the field key (database column name) as the key in submission data
+          submissionData[field.key] = formData[field.label];
+        }
+      });
+
+      // Admission number is admin-only, don't include it from student input
+      const finalAdmissionNumber = null; // Students cannot set admission number
+
       await api.post(`/submissions/${formId}`, {
-        admissionNumber: admissionNumber.trim() || null,
-        formData,
+        admissionNumber: finalAdmissionNumber,
+        formData: submissionData,
       });
       setSubmitted(true);
     } catch (error) {

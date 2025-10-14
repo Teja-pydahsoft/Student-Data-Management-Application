@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
@@ -20,6 +21,23 @@ const Students = () => {
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
+
+  // Calculate completion percentage for a student
+  const calculateCompletionPercentage = (studentData) => {
+    if (!studentData || typeof studentData !== 'object') return 0;
+
+    const totalFields = Object.keys(studentData).length;
+    if (totalFields === 0) return 0;
+
+    const filledFields = Object.values(studentData).filter(value =>
+      value !== null &&
+      value !== undefined &&
+      value !== '' &&
+      (Array.isArray(value) ? value.length > 0 : true)
+    ).length;
+
+    return Math.round((filledFields / totalFields) * 100);
+  };
 
   useEffect(() => {
     fetchStudents();
@@ -239,6 +257,10 @@ const Students = () => {
           <p className="text-gray-600 mt-2">Manage and view all student records</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link to="/students/add" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
+            <Plus size={18} />
+            Add Student
+          </Link>
           <button onClick={() => setShowManualRollNumber(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
             <UserCog size={18} />
             Update Roll Numbers
@@ -374,58 +396,75 @@ const Students = () => {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Roll Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Completion</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Created At</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {students.map((student) => (
-                  <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {student.roll_number ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
-                          {student.roll_number}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">Not assigned</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-900">
-                      {(() => {
-                        const data = student.student_data;
-                        const nameField = Object.keys(data).find(key =>
-                          key.toLowerCase().includes('name') ||
-                          key.toLowerCase().includes('student name') ||
-                          key.toLowerCase() === 'name'
-                        );
-                        return nameField ? data[nameField] : '-';
-                      })()}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {(() => {
-                        const data = student.student_data;
-                        const mobileField = Object.keys(data).find(key =>
-                          key.toLowerCase().includes('mobile') ||
-                          key.toLowerCase().includes('phone') ||
-                          key.toLowerCase().includes('contact')
-                        );
-                        return mobileField ? data[mobileField] : '-';
-                      })()}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{new Date(student.created_at).toLocaleDateString()}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
-                          <Eye size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {students.map((student) => {
+                  const completionPercentage = calculateCompletionPercentage(student.student_data);
+                  return (
+                    <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {student.roll_number ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
+                            {student.roll_number}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">Not assigned</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-900">
+                        {(() => {
+                          const data = student.student_data;
+                          const nameField = Object.keys(data).find(key =>
+                            key.toLowerCase().includes('name') ||
+                            key.toLowerCase().includes('student name') ||
+                            key.toLowerCase() === 'name'
+                          );
+                          return nameField ? data[nameField] : '-';
+                        })()}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {(() => {
+                          const data = student.student_data;
+                          const mobileField = Object.keys(data).find(key =>
+                            key.toLowerCase().includes('mobile') ||
+                            key.toLowerCase().includes('phone') ||
+                            key.toLowerCase().includes('contact')
+                          );
+                          return mobileField ? data[mobileField] : '-';
+                        })()}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${completionPercentage >= 80 ? 'bg-green-500' : completionPercentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              style={{ width: `${completionPercentage}%` }}
+                            ></div>
+                          </div>
+                          <span className={`text-xs font-medium ${completionPercentage >= 80 ? 'text-green-600' : completionPercentage >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {completionPercentage}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{new Date(student.created_at).toLocaleDateString()}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
+                            <Eye size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

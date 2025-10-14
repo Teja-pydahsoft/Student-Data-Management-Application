@@ -6,6 +6,9 @@ const fs = require('fs');
 // Configure multer for file uploads
 const upload = multer({ dest: 'uploads/' });
 
+// Export multer middleware at the top level
+exports.uploadMiddleware = upload.single('file');
+
 // Helper function to safely parse JSON fields
 const parseJSON = (data) => {
   if (typeof data === 'string') {
@@ -357,10 +360,62 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
+// Create student (manual entry)
+exports.createStudent = async (req, res) => {
+  try {
+    const { admissionNumber, studentData } = req.body;
+
+    if (!admissionNumber || !studentData || typeof studentData !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Admission number and student data are required'
+      });
+    }
+
+    // Check if student already exists
+    const [existing] = await pool.query(
+      'SELECT admission_number FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student with this admission number already exists'
+      });
+    }
+
+    // Insert new student
+    await pool.query(
+      'INSERT INTO students (admission_number, student_data) VALUES (?, ?)',
+      [admissionNumber, JSON.stringify(studentData)]
+    );
+
+    // Log action
+    await pool.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['CREATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Student created successfully'
+    });
+
+  } catch (error) {
+    console.error('Create student error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating student'
+    });
+  }
+};
+
 // Bulk update roll numbers
 exports.bulkUpdateRollNumbers = async (req, res) => {
   const connection = await pool.getConnection();
-  
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -400,9 +455,9 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
         const { row, data } = result;
         const admissionNumber = data.admission_number?.toString().trim();
         const rollNumber = data.roll_number?.toString().trim();
-        
+
         console.log(`Processing row ${row}: admission=${admissionNumber}, roll=${rollNumber}`);
-        
+
         if (!admissionNumber) {
           errors.push({ row, message: 'Missing admission_number' });
           failedCount++;
@@ -444,9 +499,9 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
 
     // Log action
     await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_UPDATE_ROLL_NUMBERS', 'STUDENT', 'bulk', req.admin.id, 
+      ['BULK_UPDATE_ROLL_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
     );
 
@@ -461,12 +516,12 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
 
   } catch (error) {
     await connection.rollback();
-    
+
     // Clean up uploaded file if it exists
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-    
+
     console.error('Bulk update roll numbers error:', error);
     res.status(500).json({
       success: false,
@@ -476,6 +531,3 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
     connection.release();
   }
 };
-
-// Export multer middleware
-exports.uploadMiddleware = upload.single('file');

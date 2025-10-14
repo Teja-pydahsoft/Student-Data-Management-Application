@@ -14,56 +14,41 @@ CREATE TABLE IF NOT EXISTS admins (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Forms table (stores form definitions)
-CREATE TABLE IF NOT EXISTS forms (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  form_id VARCHAR(36) UNIQUE NOT NULL,
-  form_name VARCHAR(255) NOT NULL,
-  form_description TEXT,
-  form_fields JSON NOT NULL,
-  qr_code_data TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_by INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
-  INDEX idx_form_id (form_id),
-  INDEX idx_active (is_active)
-);
-
--- Form submissions table (pending approval)
-CREATE TABLE IF NOT EXISTS form_submissions (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  submission_id VARCHAR(36) UNIQUE NOT NULL,
-  form_id VARCHAR(36) NOT NULL,
-  admission_number VARCHAR(100),
-  submission_data JSON NOT NULL,
-  status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-  submitted_by ENUM('student', 'admin') DEFAULT 'student',
-  submitted_by_admin INT NULL,
-  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  reviewed_at TIMESTAMP NULL,
-  reviewed_by INT,
-  rejection_reason TEXT,
-  FOREIGN KEY (form_id) REFERENCES forms(form_id) ON DELETE CASCADE,
-  FOREIGN KEY (reviewed_by) REFERENCES admins(id) ON DELETE SET NULL,
-  FOREIGN KEY (submitted_by_admin) REFERENCES admins(id) ON DELETE SET NULL,
-  INDEX idx_form_id (form_id),
-  INDEX idx_status (status),
-  INDEX idx_admission (admission_number),
-  INDEX idx_submitted_by (submitted_by)
-);
-
--- Students master table (approved data)
+-- Students table with fixed fields
 CREATE TABLE IF NOT EXISTS students (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  admission_number VARCHAR(100) UNIQUE NOT NULL,
-  roll_number VARCHAR(100) NULL,
-  student_data JSON NOT NULL,
+  pin_no VARCHAR(50),
+  batch VARCHAR(50),
+  branch VARCHAR(100),
+  stud_type VARCHAR(50),
+  student_name VARCHAR(255) NOT NULL,
+  student_status VARCHAR(50),
+  scholar_status VARCHAR(50),
+  student_mobile VARCHAR(20),
+  parent_mobile1 VARCHAR(20),
+  parent_mobile2 VARCHAR(20),
+  caste VARCHAR(50),
+  gender ENUM('M', 'F', 'Other'),
+  father_name VARCHAR(255),
+  dob VARCHAR(50),
+  adhar_no VARCHAR(20),
+  admission_date VARCHAR(50),
+  roll_number VARCHAR(100),
+  student_address TEXT,
+  city_village VARCHAR(100),
+  mandal_name VARCHAR(100),
+  district VARCHAR(100),
+  previous_college VARCHAR(255),
+  certificates_status VARCHAR(100),
+  student_photo VARCHAR(255),
+  remarks TEXT,
+  custom_fields JSON,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_admission (admission_number),
-  INDEX idx_roll_number (roll_number)
+  INDEX idx_roll_number (roll_number),
+  INDEX idx_pin_no (pin_no),
+  INDEX idx_batch (batch),
+  INDEX idx_branch (branch)
 );
 
 -- Audit log table
@@ -80,13 +65,4 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   INDEX idx_action (action_type),
   INDEX idx_entity (entity_type, entity_id),
   INDEX idx_created (created_at)
-);
-
--- Form field templates (optional - for reusable field definitions)
-CREATE TABLE IF NOT EXISTS field_templates (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  template_name VARCHAR(100) NOT NULL,
-  field_type VARCHAR(50) NOT NULL,
-  field_config JSON NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

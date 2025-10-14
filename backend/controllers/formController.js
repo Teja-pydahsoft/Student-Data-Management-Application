@@ -20,28 +20,30 @@ exports.createForm = async (req, res) => {
     const { formName, formDescription, formFields } = req.body;
 
     if (!formName || !formFields || !Array.isArray(formFields)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Form name and fields are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Form name and fields are required'
       });
     }
 
+    // No longer validating against a fixed list of keys to allow for custom fields
+
     const formId = uuidv4();
     const formUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/form/${formId}`;
-    
+
     // Generate QR code
     const qrCodeData = await QRCode.toDataURL(formUrl);
 
     // Insert form
     await pool.query(
-      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by) 
+      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [formId, formName, formDescription || '', JSON.stringify(formFields), qrCodeData, req.admin.id]
     );
 
     // Log action
     await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['CREATE', 'FORM', formId, req.admin.id, JSON.stringify({ formName })]
     );
@@ -59,9 +61,9 @@ exports.createForm = async (req, res) => {
 
   } catch (error) {
     console.error('Create form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while creating form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating form'
     });
   }
 };

@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 require('dotenv').config();
 
 const { testConnection } = require('./config/database');
+const { createDefaultForm } = require('./scripts/createDefaultForm');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -69,6 +70,9 @@ const startServer = async () => {
     if (!dbConnected) {
       console.error('⚠️  Server starting without database connection');
       console.error('⚠️  Please check your database configuration');
+    } else {
+      // Create a default form if none exists
+      await createDefaultForm();
     }
 
     app.listen(PORT, () => {

@@ -10,6 +10,7 @@ import Forms from './pages/Forms';
 import FormBuilder from './pages/FormBuilder';
 import Submissions from './pages/Submissions';
 import Students from './pages/Students';
+import AddStudent from './pages/AddStudent';
 import PublicForm from './pages/PublicForm';
 
 // Layout
@@ -69,6 +70,7 @@ function App() {
           <Route path="forms/edit/:formId" element={<FormBuilder />} />
           <Route path="submissions" element={<Submissions />} />
           <Route path="students" element={<Students />} />
+          <Route path="students/add" element={<AddStudent />} />
         </Route>
         
         {/* Fallback */}

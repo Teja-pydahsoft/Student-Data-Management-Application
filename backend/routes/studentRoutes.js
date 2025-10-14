@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/auth');
 router.get('/', authMiddleware, studentController.getAllStudents);
 router.get('/stats', authMiddleware, studentController.getDashboardStats);
 router.post('/bulk-update-roll-numbers', authMiddleware, studentController.uploadMiddleware, studentController.bulkUpdateRollNumbers);
+router.post('/', authMiddleware, studentController.createStudent);
 router.get('/:admissionNumber', authMiddleware, studentController.getStudentByAdmission);
 router.put('/:admissionNumber', authMiddleware, studentController.updateStudent);
 router.put('/:admissionNumber/roll-number', authMiddleware, studentController.updateRollNumber);
