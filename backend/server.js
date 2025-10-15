@@ -18,8 +18,21 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+// Allow multiple origins via FRONTEND_URLS env var (comma separated), or single FRONTEND_URL
+const rawFrontendUrls = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
+const allowedOrigins = rawFrontendUrls.split(',').map(u => u.trim()).filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      console.warn('Blocked CORS origin:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(bodyParser.json({ limit: '10mb' }));
