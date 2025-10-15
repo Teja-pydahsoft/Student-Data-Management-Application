@@ -2,6 +2,7 @@
   "name": "student-database-frontend",
   "version": "1.0.0",
   "description": "Frontend for Student Database Management System",
+  "type": "module",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",
