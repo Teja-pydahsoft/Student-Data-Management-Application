@@ -167,11 +167,13 @@ The backend will run on `http://localhost:5000`
 
 ### Dual Database Architecture
 
-- **Master DB (`student_database`)**: Stores approved data, forms, admins, audit logs, students.
-- **Staging DB (`student_staging`)**: Stores pending/rejected submissions only.
+- **Master DB (`student_database`)**: Stores approved data and the canonical student records (MySQL/AWS RDS by default).
+- **Staging (for pending/rejected submissions)**: This project supports two staging options:
+   - Supabase (recommended for staging): store forms, admins and pending submissions in Supabase Postgres. Set `SUPABASE_URL` and `SUPABASE_KEY` in `backend/.env` to enable.
+   - MySQL staging database: an optional MySQL `student_staging` (controlled via `STAGING_DB_*` env vars). If `SUPABASE_*` are present, the code uses Supabase for staging features and scripts; otherwise it falls back to MySQL staging.
 
 Flow:
-1. Public/CSV submissions are inserted into `student_staging.form_submissions` as `pending`.
+1. Public/CSV submissions are inserted into staging as `pending` (Supabase or `student_staging.form_submissions`).
 2. Admin reviews and either rejects (stays in staging with `rejected`) or approves.
 3. On approval, data is written to a per-form table in master DB: `form_<form_id>` with columns created from `form_fields`. The staging row is marked `approved`.
 

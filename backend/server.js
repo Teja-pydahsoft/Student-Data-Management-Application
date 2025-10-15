@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { testConnection } = require('./config/database');
 const { createDefaultForm } = require('./scripts/createDefaultForm');
+const { supabase } = require('./config/supabase');
 const mysql = require('mysql2/promise');
 
 // Import routes
@@ -43,11 +44,29 @@ app.get('/health', (req, res) => {
 app.get('/health/db', async (req, res) => {
   const { masterPool, stagingPool } = require('./config/database');
   try {
+    // master MySQL pool check
     const m = await masterPool.getConnection();
     m.release();
+
+    // If Supabase is configured, use it for staging health check; otherwise fallback to stagingPool
+    if (supabase) {
+      try {
+        // lightweight request: check admins table existence (non-destructive)
+        const { error } = await supabase.from('admins').select('id').limit(1);
+        if (error) throw error;
+        return res.json({ success: true, master: 'ok', staging: 'ok (supabase)' });
+      } catch (supErr) {
+        // report supabase error but continue to allow mysql staging fallback
+        console.error('Supabase staging health check failed:', supErr.message || supErr);
+        return res.status(500).json({ success: false, error: supErr.message || String(supErr) });
+      }
+    }
+
+    // fallback: mysql staging pool
     const s = await stagingPool.getConnection();
     s.release();
     res.json({ success: true, master: 'ok', staging: 'ok' });
+
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
