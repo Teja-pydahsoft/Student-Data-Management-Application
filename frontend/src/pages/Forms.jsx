@@ -26,6 +26,7 @@ const Forms = () => {
     }
   };
 
+
   const handleDelete = async (formId, formName) => {
     if (!window.confirm(`Are you sure you want to delete "${formName}"?`)) {
       return;
@@ -87,19 +88,28 @@ const Forms = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Forms</h1>
-        <p className="text-gray-600 mt-2">Manage dynamic forms with QR codes</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Forms</h1>
+          <p className="text-gray-600 mt-2">Manage student registration forms</p>
+        </div>
+        <Link
+          to="/forms/new"
+          className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+        >
+          <Plus size={18} />
+          Create Form
+        </Link>
       </div>
 
       {forms.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <div className="max-w-md mx-auto">
             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Plus className="text-gray-400" size={32} />
+              <QrCode className="text-gray-400" size={32} />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No forms available</h3>
-            <p className="text-gray-600">There are no forms in the system yet.</p>
+            <p className="text-gray-600">Create your first student registration form to get started.</p>
           </div>
         </div>
       ) : (
@@ -118,8 +128,14 @@ const Forms = () => {
 
               <div className="space-y-2 mb-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Fields:</span>
+                  <span className="text-gray-600">Total Fields:</span>
                   <span className="font-medium text-gray-900">{form.form_fields?.length || 0}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Active Fields:</span>
+                  <span className="font-medium text-green-600">
+                    {form.form_fields?.filter(field => field.isEnabled !== false).length || 0}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Pending:</span>
@@ -131,7 +147,33 @@ const Forms = () => {
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="text-xs text-gray-500">
-                    Fields: {form.form_fields?.map(field => field.label).join(', ') || 'None'}
+                    <div className="font-medium mb-1">Active Fields:</div>
+                    <div className="space-y-1">
+                      {form.form_fields
+                        ?.filter(field => field.isEnabled !== false)
+                        .map(field => (
+                          <div key={field.id || field.label} className="flex items-center gap-2">
+                            <span className="text-green-600">●</span>
+                            <span>{field.label}</span>
+                            {field.required && <span className="text-red-500 text-xs">*</span>}
+                          </div>
+                        )) || 'None'}
+                    </div>
+                    {form.form_fields?.filter(field => field.isEnabled === false).length > 0 && (
+                      <div className="mt-2">
+                        <div className="font-medium mb-1 text-gray-400">Hidden Fields:</div>
+                        <div className="space-y-1">
+                          {form.form_fields
+                            ?.filter(field => field.isEnabled === false)
+                            .map(field => (
+                              <div key={field.id || field.label} className="flex items-center gap-2">
+                                <span className="text-gray-400">●</span>
+                                <span className="text-gray-400">{field.label}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

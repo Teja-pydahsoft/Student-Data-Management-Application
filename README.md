@@ -5,9 +5,9 @@ A comprehensive full-stack application for managing student data through dynamic
 ## 🌟 Features
 
 ### Admin Panel
-- **Dynamic Form Builder**: Create custom forms with various field types (text, email, number, date, dropdown, radio, checkbox, etc.)
-- **QR Code Generation**: Automatic QR code generation for each form that remains constant even when form fields are updated
-- **Form Management**: Edit, activate/deactivate, and delete forms
+- **Default Student Form**: Pre-configured student registration form with all necessary fields
+- **QR Code Generation**: Automatic QR code generation for the student form
+- **Form Management**: View and activate/deactivate the default form
 - **Submission Approval Workflow**: Review and approve/reject student submissions before data enters the database
 - **Student Database**: View, search, edit, and export student records
 - **Dashboard**: Real-time statistics and recent submissions overview
@@ -125,6 +125,14 @@ DB_PASSWORD=your_mysql_password
 DB_NAME=student_database
 DB_PORT=3306
 
+# Staging Database (for pending submissions)
+# If omitted, it will use the same host/user/pass as master
+STAGING_DB_HOST=localhost
+STAGING_DB_USER=root
+STAGING_DB_PASSWORD=your_mysql_password
+STAGING_DB_NAME=student_staging
+STAGING_DB_PORT=3306
+
 # JWT Secret (change this to a random string)
 JWT_SECRET=your_super_secret_jwt_key_change_this
 
@@ -156,6 +164,16 @@ npm start
 ```
 
 The backend will run on `http://localhost:5000`
+
+### Dual Database Architecture
+
+- **Master DB (`student_database`)**: Stores approved data, forms, admins, audit logs, students.
+- **Staging DB (`student_staging`)**: Stores pending/rejected submissions only.
+
+Flow:
+1. Public/CSV submissions are inserted into `student_staging.form_submissions` as `pending`.
+2. Admin reviews and either rejects (stays in staging with `rejected`) or approves.
+3. On approval, data is written to a per-form table in master DB: `form_<form_id>` with columns created from `form_fields`. The staging row is marked `approved`.
 
 ### Step 3: Frontend Setup
 
@@ -196,23 +214,17 @@ The frontend will run on `http://localhost:3000`
 
 ## 📱 Usage Guide
 
-### Creating a Form
+### Default Student Form
 
-1. Login to the admin panel
-2. Navigate to **Forms** section
-3. Click **Create Form**
-4. Fill in form details:
-   - Form Name (required)
-   - Description (optional)
-5. Add fields using the **Add Field** button
-6. For each field, configure:
-   - Label (required)
-   - Type (text, email, number, date, dropdown, etc.)
-   - Placeholder text
-   - Required/Optional
-   - Options (for dropdown, radio, checkbox)
-7. Click **Create Form**
-8. A QR code will be automatically generated
+The system comes with a pre-configured student registration form that includes all essential fields:
+
+1. **Personal Information**: Student name, gender, date of birth, Aadhar number
+2. **Academic Information**: Pin number, batch, branch, student type, roll number
+3. **Contact Information**: Student mobile, parent mobile numbers
+4. **Address Information**: Complete address, city/village, mandal, district
+5. **Additional Information**: Previous college, certificate status, remarks
+
+The form is automatically created when you run the database initialization script.
 
 ### Viewing and Downloading QR Codes
 
@@ -252,14 +264,13 @@ The frontend will run on `http://localhost:3000`
 6. Click **Export CSV** to download all records
 7. Delete students if needed
 
-### Editing Forms
+### Managing the Default Form
 
 1. Go to **Forms** section
-2. Click **Edit** on any form
-3. Modify form name, description, or fields
-4. Add/remove/edit fields as needed
-5. Click **Update Form**
-6. **Important**: The QR code remains the same!
+2. View the default student form details
+3. Toggle form activation/deactivation as needed
+4. Download QR code for student access
+5. **Note**: The form fields are pre-configured and cannot be modified through the UI
 
 ## 🔌 API Endpoints
 
@@ -269,11 +280,9 @@ The frontend will run on `http://localhost:3000`
 - `POST /api/auth/change-password` - Change admin password
 
 ### Forms
-- `POST /api/forms` - Create new form (Admin)
 - `GET /api/forms` - Get all forms (Admin)
 - `GET /api/forms/:formId` - Get form by ID (Admin)
 - `PUT /api/forms/:formId` - Update form (Admin)
-- `DELETE /api/forms/:formId` - Delete form (Admin)
 - `GET /api/forms/public/:formId` - Get form for public submission (No auth)
 
 ### Submissions
@@ -283,6 +292,10 @@ The frontend will run on `http://localhost:3000`
 - `POST /api/submissions/:submissionId/approve` - Approve submission (Admin)
 - `POST /api/submissions/:submissionId/reject` - Reject submission (Admin)
 - `DELETE /api/submissions/:submissionId` - Delete submission (Admin)
+
+Notes:
+- Pending/rejected submissions are served from the staging DB.
+- Approval persists data to the master DB.
 
 ### Students
 - `GET /api/students` - Get all students with optional search (Admin)
@@ -352,13 +365,12 @@ npm run preview    # Preview production build
 
 ## 📊 Features in Detail
 
-### Dynamic Form Builder
-- Support for 9+ field types
-- Drag-and-drop field ordering (can be added)
-- Conditional field logic (can be extended)
+### Default Student Form
+- Pre-configured with all essential student fields
+- 25+ predefined fields including personal, academic, and contact information
 - Field validation rules
-- Custom placeholder text
-- Required/optional fields
+- Required/optional field configuration
+- Mobile-optimized form layout
 
 ### QR Code System
 - Unique QR code per form
@@ -420,6 +432,11 @@ npm run preview    # Preview production build
 | ADMIN_USERNAME | Default admin username | admin |
 | ADMIN_PASSWORD | Default admin password | admin123 |
 | FRONTEND_URL | Frontend URL for CORS | http://localhost:3000 |
+| STAGING_DB_HOST | Staging DB host | DB_HOST |
+| STAGING_DB_USER | Staging DB user | DB_USER |
+| STAGING_DB_PASSWORD | Staging DB password | DB_PASSWORD |
+| STAGING_DB_NAME | Staging DB name | student_staging |
+| STAGING_DB_PORT | Staging DB port | DB_PORT |
 
 ### Frontend (.env)
 | Variable | Description | Default |

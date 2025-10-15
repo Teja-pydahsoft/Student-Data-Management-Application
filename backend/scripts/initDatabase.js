@@ -2,6 +2,7 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
+const { createDefaultForm } = require('./createDefaultForm');
 require('dotenv').config();
 
 async function initializeDatabase() {
@@ -19,12 +20,11 @@ async function initializeDatabase() {
 
     console.log('📦 Connected to MySQL server');
 
-    // Read and execute schema
+    // Read and execute schema (now includes master and staging DDL)
     const schemaPath = path.join(__dirname, '../config/schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
-    
     await connection.query(schema);
-    console.log('✅ Database schema created successfully');
+    console.log('✅ Master and staging schemas created successfully');
 
     // Create default admin user
     const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', 10);
@@ -39,6 +39,10 @@ async function initializeDatabase() {
     console.log('✅ Default admin user created');
     console.log(`   Username: ${process.env.ADMIN_USERNAME || 'admin'}`);
     console.log(`   Password: ${process.env.ADMIN_PASSWORD || 'admin123'}`);
+    
+    // Create default student form
+    console.log('\n📝 Creating default student form...');
+    await createDefaultForm();
     
     console.log('\n🎉 Database initialization completed successfully!');
     

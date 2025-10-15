@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { masterPool } = require('../config/database');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
@@ -30,8 +30,8 @@ exports.getAllStudents = async (req, res) => {
     const params = [];
 
     if (search) {
-      query += ' AND (admission_number LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     // Date range filter
@@ -66,15 +66,15 @@ exports.getAllStudents = async (req, res) => {
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
-    const [students] = await pool.query(query, params);
+    const [students] = await masterPool.query(query, params);
 
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM students WHERE 1=1';
     const countParams = [];
 
     if (search) {
-      countQuery += ' AND (admission_number LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
-      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      countQuery += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
+      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     // Apply same filters to count query
@@ -105,7 +105,7 @@ exports.getAllStudents = async (req, res) => {
       }
     });
 
-    const [countResult] = await pool.query(countQuery, countParams);
+    const [countResult] = await masterPool.query(countQuery, countParams);
 
     // Parse JSON fields
     const parsedStudents = students.map(student => ({
@@ -137,9 +137,9 @@ exports.getStudentByAdmission = async (req, res) => {
   try {
     const { admissionNumber } = req.params;
 
-    const [students] = await pool.query(
-      'SELECT * FROM students WHERE admission_number = ?',
-      [admissionNumber]
+    const [students] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ? OR admission_no = ?',
+      [admissionNumber, admissionNumber]
     );
 
     if (students.length === 0) {
@@ -181,21 +181,21 @@ exports.updateStudent = async (req, res) => {
       });
     }
 
-    const [result] = await pool.query(
+    const [result] = await masterPool.query(
       'UPDATE students SET student_data = ? WHERE admission_number = ?',
       [JSON.stringify(studentData), admissionNumber]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+    await masterPool.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['UPDATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
     );
@@ -228,33 +228,33 @@ exports.updateRollNumber = async (req, res) => {
     }
 
     // Check if roll number already exists for another student
-    const [existing] = await pool.query(
+    const [existing] = await masterPool.query(
       'SELECT admission_number FROM students WHERE roll_number = ? AND admission_number != ?',
       [rollNumber.trim(), admissionNumber]
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Roll number '${rollNumber}' is already assigned to another student` 
+      return res.status(400).json({
+        success: false,
+        message: `Roll number '${rollNumber}' is already assigned to another student`
       });
     }
 
-    const [result] = await pool.query(
+    const [result] = await masterPool.query(
       'UPDATE students SET roll_number = ? WHERE admission_number = ?',
       [rollNumber.trim(), admissionNumber]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+    await masterPool.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['UPDATE_ROLL_NUMBER', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify({ rollNumber })]
     );
@@ -278,21 +278,21 @@ exports.deleteStudent = async (req, res) => {
   try {
     const { admissionNumber } = req.params;
 
-    const [result] = await pool.query(
+    const [result] = await masterPool.query(
       'DELETE FROM students WHERE admission_number = ?',
       [admissionNumber]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id) 
+    await masterPool.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
        VALUES (?, ?, ?, ?)`,
       ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
     );
@@ -315,39 +315,56 @@ exports.deleteStudent = async (req, res) => {
 exports.getDashboardStats = async (req, res) => {
   try {
     // Get total students
-    const [studentCount] = await pool.query('SELECT COUNT(*) as total FROM students');
-    
+    const [studentCount] = await masterPool.query('SELECT COUNT(*) as total FROM students');
+
     // Get total forms
-    const [formCount] = await pool.query('SELECT COUNT(*) as total FROM forms');
+    const [formCount] = await masterPool.query('SELECT COUNT(*) as total FROM forms');
     
     // Get pending submissions
-    const [pendingCount] = await pool.query(
-      'SELECT COUNT(*) as total FROM form_submissions WHERE status = "pending"'
-    );
+    const { supabase } = require('../config/supabase');
+    const { count: pendingTotal, error: pErr } = await supabase
+      .from('form_submissions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
     
     // Get approved submissions today
-    const [approvedToday] = await pool.query(
-      `SELECT COUNT(*) as total FROM form_submissions 
-       WHERE status = "approved" AND DATE(reviewed_at) = CURDATE()`
-    );
+    const start = new Date();
+    start.setHours(0,0,0,0);
+    const { count: approvedTodayTotal, error: aErr } = await supabase
+      .from('form_submissions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'approved')
+      .gte('reviewed_at', start.toISOString());
 
     // Get recent submissions
-    const [recentSubmissions] = await pool.query(
-      `SELECT fs.submission_id, fs.admission_number, fs.status, fs.submitted_at, f.form_name
-       FROM form_submissions fs
-       LEFT JOIN forms f ON fs.form_id = f.form_id
-       ORDER BY fs.submitted_at DESC
-       LIMIT 10`
-    );
+    const { data: recentSubmissions, error: rErr } = await supabase
+      .from('form_submissions')
+      .select('submission_id, admission_number, status, created_at, form_id')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Attach form_name via a separate query
+    let recentWithNames = recentSubmissions || [];
+    const formIds = Array.from(new Set((recentSubmissions || []).map(r => r.form_id))).filter(Boolean);
+    if (formIds.length > 0) {
+      const { data: formsRows, error: fErr } = await supabase
+        .from('forms')
+        .select('form_id, form_name')
+        .in('form_id', formIds);
+      if (!fErr && formsRows) {
+        const idToName = new Map(formsRows.map(f => [f.form_id, f.form_name]));
+        recentWithNames = recentWithNames.map(r => ({ ...r, form_name: idToName.get(r.form_id) || null }));
+      }
+    }
 
     res.json({
       success: true,
       data: {
         totalStudents: studentCount[0].total,
         totalForms: formCount[0].total,
-        pendingSubmissions: pendingCount[0].total,
-        approvedToday: approvedToday[0].total,
-        recentSubmissions
+        pendingSubmissions: pendingTotal || 0,
+        approvedToday: approvedTodayTotal || 0,
+        recentSubmissions: recentWithNames
       }
     });
 
@@ -373,7 +390,7 @@ exports.createStudent = async (req, res) => {
     }
 
     // Check if student already exists
-    const [existing] = await pool.query(
+    const [existing] = await masterPool.query(
       'SELECT admission_number FROM students WHERE admission_number = ?',
       [admissionNumber]
     );
@@ -386,13 +403,13 @@ exports.createStudent = async (req, res) => {
     }
 
     // Insert new student
-    await pool.query(
+    await masterPool.query(
       'INSERT INTO students (admission_number, student_data) VALUES (?, ?)',
       [admissionNumber, JSON.stringify(studentData)]
     );
 
     // Log action
-    await pool.query(
+    await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['CREATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
@@ -414,7 +431,7 @@ exports.createStudent = async (req, res) => {
 
 // Bulk update roll numbers
 exports.bulkUpdateRollNumbers = async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await masterPool.getConnection();
 
   try {
     if (!req.file) {
@@ -498,7 +515,7 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
     fs.unlinkSync(req.file.path);
 
     // Log action
-    await pool.query(
+    await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['BULK_UPDATE_ROLL_NUMBERS', 'STUDENT', 'bulk', req.admin.id,

@@ -1,17 +1,22 @@
-const { pool } = require('../config/database');
+const { supabase } = require('../config/supabase');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 
 const createDefaultForm = async () => {
   try {
-    // Check if a form already exists
-    const [forms] = await pool.query('SELECT form_id FROM forms LIMIT 1');
-    if (forms.length > 0) {
-      console.log('A form already exists. Skipping default form creation.');
+    // Check if the default student form already exists
+    const { data: forms, error: e0 } = await supabase
+      .from('forms')
+      .select('form_id')
+      .eq('form_name', 'Default Student Registration Form')
+      .limit(1);
+    if (e0) throw e0;
+    if (forms && forms.length > 0) {
+      console.log('Default student form already exists. Skipping creation.');
       return;
     }
 
-    console.log('No forms found. Creating a default form...');
+    console.log('Creating default student form...');
 
     const formId = uuidv4();
     const formName = 'Default Student Registration Form';
@@ -21,44 +26,56 @@ const createDefaultForm = async () => {
 
     // Define the fields for the default form
     const defaultFormFields = [
-        { key: 'pin_no', label: 'Pin No', type: 'text', required: false },
-        { key: 'batch', label: 'Batch', type: 'text', required: false },
-        { key: 'branch', label: 'Branch', type: 'text', required: false },
-        { key: 'stud_type', label: 'StudType', type: 'text', required: false },
-        { key: 'student_name', label: 'Student Name', type: 'text', required: true },
-        { key: 'student_status', label: 'Student Status', type: 'text', required: false },
-        { key: 'scholar_status', label: 'Scholar Status', type: 'text', required: false },
-        { key: 'student_mobile', label: 'Student Mobile Number', type: 'tel', required: false },
-        { key: 'parent_mobile1', label: 'Parent Mobile Number 1', type: 'tel', required: false },
-        { key: 'parent_mobile2', label: 'Parent Mobile Number 2', type: 'tel', required: false },
-        { key: 'caste', label: 'Caste', type: 'text', required: false },
-        { key: 'gender', label: 'M/F', type: 'select', options: ['M', 'F', 'Other'], required: false },
-        { key: 'father_name', label: 'Father Name', type: 'text', required: false },
-        { key: 'dob', label: 'DOB (Date of Birth - DD-MM-YYYY)', type: 'date', required: false },
-        { key: 'adhar_no', label: 'ADHAR No', type: 'text', required: false },
-        { key: 'admission_date', label: 'Admission Date', type: 'date', required: false },
-        { key: 'roll_number', label: 'Roll Number', type: 'text', required: false },
-        { key: 'student_address', label: 'Student Address (D.no, Str name, Village, Mandal, Dist)', type: 'textarea', required: false },
-        { key: 'city_village', label: 'City/Village', type: 'text', required: false },
-        { key: 'mandal_name', label: 'Mandal Name', type: 'text', required: false },
-        { key: 'district', label: 'District', type: 'text', required: false },
-        { key: 'previous_college', label: 'Previous College Name', type: 'text', required: false },
-        { key: 'certificates_status', label: 'Certificate Status', type: 'text', required: false },
-        { key: 'student_photo', label: 'Student Photo', type: 'text', required: false },
-        { key: 'remarks', label: 'Remarks', type: 'textarea', required: false },
+        { key: 'pin_no', label: 'Pin No', type: 'text', required: false, isEnabled: true },
+        { key: 'batch', label: 'Batch', type: 'text', required: false, isEnabled: true },
+        { key: 'branch', label: 'Branch', type: 'text', required: false, isEnabled: true },
+        { key: 'stud_type', label: 'StudType', type: 'text', required: false, isEnabled: true },
+        { key: 'student_name', label: 'Student Name', type: 'text', required: true, isEnabled: true },
+        { key: 'student_status', label: 'Student Status', type: 'text', required: false, isEnabled: true },
+        { key: 'scholar_status', label: 'Scholar Status', type: 'text', required: false, isEnabled: true },
+        { key: 'student_mobile', label: 'Student Mobile Number', type: 'tel', required: false, isEnabled: true },
+        { key: 'parent_mobile1', label: 'Parent Mobile Number 1', type: 'tel', required: false, isEnabled: true },
+        { key: 'parent_mobile2', label: 'Parent Mobile Number 2', type: 'tel', required: false, isEnabled: true },
+        { key: 'caste', label: 'Caste', type: 'text', required: false, isEnabled: true },
+        { key: 'gender', label: 'M/F', type: 'select', options: ['M', 'F', 'Other'], required: false, isEnabled: true },
+        { key: 'father_name', label: 'Father Name', type: 'text', required: false, isEnabled: true },
+        { key: 'dob', label: 'DOB (Date of Birth - DD-MM-YYYY)', type: 'date', required: false, isEnabled: true },
+        { key: 'adhar_no', label: 'ADHAR No', type: 'text', required: false, isEnabled: true },
+        { key: 'admission_date', label: 'Admission Date', type: 'date', required: false, isEnabled: true },
+        { key: 'roll_number', label: 'Roll Number', type: 'text', required: false, isEnabled: true },
+        { key: 'student_address', label: 'Student Address (D.no, Str name, Village, Mandal, Dist)', type: 'textarea', required: false, isEnabled: true },
+        { key: 'city_village', label: 'City/Village', type: 'text', required: false, isEnabled: true },
+        { key: 'mandal_name', label: 'Mandal Name', type: 'text', required: false, isEnabled: true },
+        { key: 'district', label: 'District', type: 'text', required: false, isEnabled: true },
+        { key: 'previous_college', label: 'Previous College Name', type: 'text', required: false, isEnabled: true },
+        { key: 'certificates_status', label: 'Certificate Status', type: 'text', required: false, isEnabled: true },
+        { key: 'student_photo', label: 'Student Photo', type: 'text', required: false, isEnabled: false }, // Hidden by default
+        { key: 'remarks', label: 'Remarks', type: 'textarea', required: false, isEnabled: true },
     ];
 
     // Assuming there's at least one admin, or created_by can be null/default
-    const [admins] = await pool.query('SELECT id FROM admins LIMIT 1');
-    const adminId = admins.length > 0 ? admins[0].id : null;
+    const { data: admins, error: e1 } = await supabase
+      .from('admins')
+      .select('id')
+      .limit(1);
+    if (e1) throw e1;
+    const adminId = admins && admins.length > 0 ? admins[0].id : null;
 
-    await pool.query(
-      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [formId, formName, formDescription, JSON.stringify(defaultFormFields), qrCodeData, adminId, true]
-    );
+    const { error: e2 } = await supabase
+      .from('forms')
+      .insert({
+        form_id: formId,
+        form_name: formName,
+        form_description: formDescription,
+        form_fields: defaultFormFields,
+        qr_code_data: qrCodeData,
+        created_by: adminId,
+        is_active: true
+      });
+    if (e2) throw e2;
 
-    console.log('Default form created successfully.');
+    console.log('✅ Default student form created successfully with ID:', formId);
+    console.log('📱 QR Code URL:', formUrl);
 
   } catch (error) {
     console.error('Error creating default form:', error);

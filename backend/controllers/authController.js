@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const { supabase } = require('../config/supabase');
 
 // Admin login
 exports.login = async (req, res) => {
@@ -16,12 +16,14 @@ exports.login = async (req, res) => {
     }
 
     // Find admin
-    const [admins] = await pool.query(
-      'SELECT * FROM admins WHERE username = ?',
-      [username]
-    );
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('username', username)
+      .limit(1);
 
-    if (admins.length === 0) {
+    if (error) throw error;
+    if (!admins || admins.length === 0) {
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid credentials' 
@@ -70,12 +72,13 @@ exports.login = async (req, res) => {
 // Verify token
 exports.verifyToken = async (req, res) => {
   try {
-    const [admins] = await pool.query(
-      'SELECT id, username, email FROM admins WHERE id = ?',
-      [req.admin.id]
-    );
-
-    if (admins.length === 0) {
+    const { data: admins, error } = await supabase
+      .from('admins')
+      .select('id, username, email')
+      .eq('id', req.admin.id)
+      .limit(1);
+    if (error) throw error;
+    if (!admins || admins.length === 0) {
       return res.status(404).json({ 
         success: false, 
         message: 'Admin not found' 
@@ -109,12 +112,13 @@ exports.changePassword = async (req, res) => {
     }
 
     // Get admin
-    const [admins] = await pool.query(
-      'SELECT * FROM admins WHERE id = ?',
-      [req.admin.id]
-    );
-
-    if (admins.length === 0) {
+    const { data: admins, error: e1 } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('id', req.admin.id)
+      .limit(1);
+    if (e1) throw e1;
+    if (!admins || admins.length === 0) {
       return res.status(404).json({ 
         success: false, 
         message: 'Admin not found' 
@@ -137,10 +141,11 @@ exports.changePassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    await pool.query(
-      'UPDATE admins SET password = ? WHERE id = ?',
-      [hashedPassword, req.admin.id]
-    );
+    const { error: e2 } = await supabase
+      .from('admins')
+      .update({ password: hashedPassword })
+      .eq('id', req.admin.id);
+    if (e2) throw e2;
 
     res.json({
       success: true,

@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { supabase } = require('../config/supabase');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 
@@ -26,8 +26,6 @@ exports.createForm = async (req, res) => {
       });
     }
 
-    // No longer validating against a fixed list of keys to allow for custom fields
-
     const formId = uuidv4();
     const formUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/form/${formId}`;
 
@@ -35,18 +33,23 @@ exports.createForm = async (req, res) => {
     const qrCodeData = await QRCode.toDataURL(formUrl);
 
     // Insert form
-    await pool.query(
-      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [formId, formName, formDescription || '', JSON.stringify(formFields), qrCodeData, req.admin.id]
-    );
+    const { error: insertErr } = await supabase
+      .from('forms')
+      .insert({
+        form_id: formId,
+        form_name: formName,
+        form_description: formDescription || '',
+        form_fields: formFields,
+        qr_code_data: qrCodeData,
+        created_by: req.admin.id
+      });
+    if (insertErr) throw insertErr;
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['CREATE', 'FORM', formId, req.admin.id, JSON.stringify({ formName })]
-    );
+    await supabase.from('audit_logs').insert({
+      action_type: 'CREATE', entity_type: 'FORM', entity_id: formId,
+      admin_id: req.admin.id, details: { formName }
+    });
 
     res.status(201).json({
       success: true,
@@ -71,18 +74,16 @@ exports.createForm = async (req, res) => {
 // Get all forms
 exports.getAllForms = async (req, res) => {
   try {
-    const [forms] = await pool.query(
-      `SELECT f.*, a.username as created_by_name,
-       (SELECT COUNT(*) FROM form_submissions WHERE form_id = f.form_id AND status = 'pending') as pending_count,
-       (SELECT COUNT(*) FROM form_submissions WHERE form_id = f.form_id AND status = 'approved') as approved_count
-       FROM forms f
-       LEFT JOIN admins a ON f.created_by = a.id
-       ORDER BY f.created_at DESC`
-    );
+    const { data: forms, error } = await supabase
+      .from('forms')
+      .select('*, admins!forms_created_by_fkey(username)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
 
     // Parse JSON fields
-    const parsedForms = forms.map(form => ({
+    const parsedForms = (forms || []).map(form => ({
       ...form,
+      created_by_name: form.admins?.username || null,
       form_fields: parseJSON(form.form_fields)
     }));
 
@@ -105,13 +106,12 @@ exports.getFormById = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    const [forms] = await pool.query(
-      `SELECT f.*, a.username as created_by_name
-       FROM forms f
-       LEFT JOIN admins a ON f.created_by = a.id
-       WHERE f.form_id = ?`,
-      [formId]
-    );
+    const { data: forms, error } = await supabase
+      .from('forms')
+      .select('*, admins!forms_created_by_fkey(username)')
+      .eq('form_id', formId)
+      .limit(1);
+    if (error) throw error;
 
     if (forms.length === 0) {
       return res.status(404).json({ 
@@ -146,10 +146,12 @@ exports.updateForm = async (req, res) => {
     const { formName, formDescription, formFields, isActive } = req.body;
 
     // Check if form exists
-    const [forms] = await pool.query(
-      'SELECT * FROM forms WHERE form_id = ?',
-      [formId]
-    );
+    const { data: forms, error: e1 } = await supabase
+      .from('forms')
+      .select('*')
+      .eq('form_id', formId)
+      .limit(1);
+    if (e1) throw e1;
 
     if (forms.length === 0) {
       return res.status(404).json({ 
@@ -188,17 +190,22 @@ exports.updateForm = async (req, res) => {
 
     values.push(formId);
 
-    await pool.query(
-      `UPDATE forms SET ${updates.join(', ')} WHERE form_id = ?`,
-      values
-    );
+    const updatePayload = {};
+    if (formName !== undefined) updatePayload.form_name = formName;
+    if (formDescription !== undefined) updatePayload.form_description = formDescription;
+    if (formFields !== undefined) updatePayload.form_fields = formFields;
+    if (isActive !== undefined) updatePayload.is_active = isActive;
+    const { error: e2 } = await supabase
+      .from('forms')
+      .update(updatePayload)
+      .eq('form_id', formId);
+    if (e2) throw e2;
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
-       VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE', 'FORM', formId, req.admin.id, JSON.stringify(req.body)]
-    );
+    await supabase.from('audit_logs').insert({
+      action_type: 'UPDATE', entity_type: 'FORM', entity_id: formId,
+      admin_id: req.admin.id, details: req.body
+    });
 
     res.json({
       success: true,
@@ -219,12 +226,13 @@ exports.deleteForm = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    const [result] = await pool.query(
-      'DELETE FROM forms WHERE form_id = ?',
-      [formId]
-    );
-
-    if (result.affectedRows === 0) {
+    const { error: delErr, count } = await supabase
+      .from('forms')
+      .delete()
+      .eq('form_id', formId)
+      .select('form_id', { count: 'exact' });
+    if (delErr) throw delErr;
+    if (!count) {
       return res.status(404).json({ 
         success: false, 
         message: 'Form not found' 
@@ -232,11 +240,10 @@ exports.deleteForm = async (req, res) => {
     }
 
     // Log action
-    await pool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id) 
-       VALUES (?, ?, ?, ?)`,
-      ['DELETE', 'FORM', formId, req.admin.id]
-    );
+    await supabase.from('audit_logs').insert({
+      action_type: 'DELETE', entity_type: 'FORM', entity_id: formId,
+      admin_id: req.admin.id
+    });
 
     res.json({
       success: true,
@@ -257,10 +264,12 @@ exports.getPublicForm = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    const [forms] = await pool.query(
-      'SELECT form_id, form_name, form_description, form_fields, is_active FROM forms WHERE form_id = ?',
-      [formId]
-    );
+    const { data: forms, error: e3 } = await supabase
+      .from('forms')
+      .select('form_id, form_name, form_description, form_fields, is_active')
+      .eq('form_id', formId)
+      .limit(1);
+    if (e3) throw e3;
 
     if (forms.length === 0) {
       return res.status(404).json({ 

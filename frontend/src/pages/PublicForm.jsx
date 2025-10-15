@@ -22,9 +22,10 @@ const PublicForm = () => {
       const response = await api.get(`/forms/public/${formId}`);
       setForm(response.data.data);
       
-      // Initialize form data
+      // Initialize form data for enabled fields only
       const initialData = {};
-      response.data.data.form_fields.forEach((field) => {
+      const enabledFields = response.data.data.form_fields.filter(field => field.isEnabled !== false);
+      enabledFields.forEach((field) => {
         initialData[field.label] = field.type === 'checkbox' ? [] : '';
       });
       setFormData(initialData);
@@ -58,7 +59,9 @@ const PublicForm = () => {
   };
 
   const validateForm = () => {
-    for (const field of form.form_fields) {
+    // Only validate enabled fields
+    const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
+    for (const field of enabledFields) {
       if (field.required) {
         const value = formData[field.label];
         if (!value || (Array.isArray(value) && value.length === 0) || value.trim() === '') {
@@ -86,18 +89,17 @@ const PublicForm = () => {
       const submissionData = {};
 
       // Map form fields to database columns (exclude admission_no for students)
-      form.form_fields.forEach((field) => {
+      // Only process enabled fields
+      const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
+      enabledFields.forEach((field) => {
         if (formData[field.label] !== undefined && formData[field.label] !== '' && field.key !== 'admission_no') {
           // Use the field key (database column name) as the key in submission data
           submissionData[field.key] = formData[field.label];
         }
       });
 
-      // Admission number is admin-only, don't include it from student input
-      const finalAdmissionNumber = null; // Students cannot set admission number
-
+      // Don't send admission number - admin will assign it during approval
       await api.post(`/submissions/${formId}`, {
-        admissionNumber: finalAdmissionNumber,
         formData: submissionData,
       });
       setSubmitted(true);
@@ -275,15 +277,17 @@ const PublicForm = () => {
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Form Fields</h3>
               <div className="space-y-5">
-                {form.form_fields.map((field, index) => (
-                  <div key={index}>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
-                    </label>
-                    {renderField(field)}
-                  </div>
-                ))}
+                {form.form_fields
+                  .filter(field => field.isEnabled !== false) // Only show enabled fields
+                  .map((field, index) => (
+                    <div key={index}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                      </label>
+                      {renderField(field)}
+                    </div>
+                  ))}
               </div>
             </div>
 

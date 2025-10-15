@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { testConnection } = require('./config/database');
 const { createDefaultForm } = require('./scripts/createDefaultForm');
+const mysql = require('mysql2/promise');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -38,11 +39,39 @@ app.get('/health', (req, res) => {
   });
 });
 
+// DB health endpoint
+app.get('/health/db', async (req, res) => {
+  const { masterPool, stagingPool } = require('./config/database');
+  try {
+    const m = await masterPool.getConnection();
+    m.release();
+    const s = await stagingPool.getConnection();
+    s.release();
+    res.json({ success: true, master: 'ok', staging: 'ok' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/forms', formRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/students', studentRoutes);
+
+// Debug route to check if routes are registered
+app.get('/api/debug/routes', (req, res) => {
+  const routes = [];
+  app._router.stack.forEach(layer => {
+    if (layer.route) {
+      routes.push({
+        path: layer.route.path,
+        methods: Object.keys(layer.route.methods)
+      });
+    }
+  });
+  res.json({ routes });
+});
 
 // 404 handler
 app.use((req, res) => {

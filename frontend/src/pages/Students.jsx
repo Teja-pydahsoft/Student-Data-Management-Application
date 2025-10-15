@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../config/api';
 import toast from 'react-hot-toast';
@@ -21,27 +21,43 @@ const Students = () => {
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
+  const [completionPercentages, setCompletionPercentages] = useState({});
 
-  // Calculate completion percentage for a student
-  const calculateCompletionPercentage = (studentData) => {
-    if (!studentData || typeof studentData !== 'object') return 0;
-
-    const totalFields = Object.keys(studentData).length;
-    if (totalFields === 0) return 0;
-
-    const filledFields = Object.values(studentData).filter(value =>
-      value !== null &&
-      value !== undefined &&
-      value !== '' &&
-      (Array.isArray(value) ? value.length > 0 : true)
-    ).length;
-
-    return Math.round((filledFields / totalFields) * 100);
+  // Get completion percentage for a student from backend
+  const getStudentCompletionPercentage = async (admissionNumber) => {
+    try {
+      const response = await api.get(`/submissions/student/${admissionNumber}/completion-status`);
+      return response.data.data.completionPercentage;
+    } catch (error) {
+      console.error('Failed to fetch completion status:', error);
+      return 0;
+    }
   };
 
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  // Fetch completion percentages when students are loaded
+  useEffect(() => {
+    const fetchCompletionPercentages = async () => {
+      if (students.length === 0) return;
+
+      const percentages = {};
+      for (const student of students) {
+        try {
+          const response = await api.get(`/submissions/student/${student.admission_number}/completion-status`);
+          percentages[student.admission_number] = response.data.data.completionPercentage;
+        } catch (error) {
+          console.error(`Failed to fetch completion for ${student.admission_number}:`, error);
+          percentages[student.admission_number] = 0;
+        }
+      }
+      setCompletionPercentages(percentages);
+    };
+
+    fetchCompletionPercentages();
+  }, [students]);
 
   useEffect(() => {
     // Extract available fields and their unique values from students data
@@ -241,6 +257,34 @@ const Students = () => {
     setEditData({ ...editData, [key]: value });
   };
 
+  // Calculate overall statistics
+  const calculateOverallStats = async () => {
+    if (students.length === 0) return { total: 0, completed: 0, averageCompletion: 0 };
+
+    const totalStudents = students.length;
+    let completedStudents = 0;
+    let totalCompletion = 0;
+
+    // Fetch completion percentages for all students
+    for (const student of students) {
+      const percentage = await getStudentCompletionPercentage(student.admission_number);
+      totalCompletion += percentage;
+      if (percentage >= 80) {
+        completedStudents++;
+      }
+    }
+
+    const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
+
+    return {
+      total: totalStudents,
+      completed: completedStudents,
+      averageCompletion
+    };
+  };
+
+  const stats = calculateOverallStats();
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -376,6 +420,56 @@ const Students = () => {
         )}
       </div>
 
+      {/* Statistics Cards */}
+      {students.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Total Students</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <Users className="text-blue-600" size={24} />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Completed Profiles</p>
+                <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}% of total
+                </p>
+              </div>
+              <div className="bg-green-100 p-3 rounded-lg">
+                <CheckCircle className="text-green-600" size={24} />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 mb-1">Average Completion</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.averageCompletion}%</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div 
+                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${stats.averageCompletion}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div className="bg-purple-100 p-3 rounded-lg">
+                <TrendingUp className="text-purple-600" size={24} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {students.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <div className="max-w-md mx-auto">
@@ -403,7 +497,7 @@ const Students = () => {
               </thead>
               <tbody>
                 {students.map((student) => {
-                  const completionPercentage = calculateCompletionPercentage(student.student_data);
+                  const completionPercentage = completionPercentages[student.admission_number] || 0;
                   return (
                     <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "init-db": "node scripts/initDatabase.js"
+    "init-db": "node scripts/initDatabase.js",
+    "seed-staging-admin": "node scripts/seedStagingAdmin.js"
   },
   "keywords": ["student", "database", "forms", "qr-code", "admin-panel"],
   "author": "",
@@ -23,7 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "express-validator": "^7.0.1",
     "multer": "^1.4.5-lts.1",
-    "csv-parser": "^3.0.0"
+    "csv-parser": "^3.0.0",
+    "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
