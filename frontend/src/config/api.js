@@ -16,6 +16,16 @@ if (rawApiUrl) {
 // Also create a base URL for static files (without /api)
 export const STATIC_BASE_URL = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
 
+// For production, ensure we use the same domain for static files
+export const getStaticFileUrl = (filename) => {
+  if (!filename) return '';
+  if (filename.startsWith('http')) return filename;
+
+  // In production, use the same domain as the API but without /api
+  const baseUrl = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
+  return `${baseUrl}/uploads/${filename}`;
+};
+
 console.log('🚀 Frontend API Configuration:');
 console.log('API Base URL:', API_BASE_URL);
 console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);

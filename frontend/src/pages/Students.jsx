@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import api, { STATIC_BASE_URL } from '../config/api';
+import api, { getStaticFileUrl } from '../config/api';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
@@ -585,7 +585,7 @@ const Students = () => {
                            student.student_photo !== '' &&
                            student.student_photo !== '{}' ? (
                             <img
-                              src={`${STATIC_BASE_URL}/uploads/${student.student_photo}`}
+                              src={getStaticFileUrl(student.student_photo)}
                               alt="Student Photo"
                               className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
                               onError={(e) => {
@@ -1280,7 +1280,7 @@ const Students = () => {
                         {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
                           <div className="flex items-center gap-2">
                             <img
-                              src={`${STATIC_BASE_URL}/uploads/${editData.student_photo}`}
+                              src={getStaticFileUrl(editData.student_photo)}
                               alt="Student Photo"
                               className="w-12 h-12 rounded-lg object-cover border-2 border-gray-200"
                               onError={(e) => {
