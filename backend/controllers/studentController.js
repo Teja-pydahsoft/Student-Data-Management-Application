@@ -1,4 +1,5 @@
 const { masterPool } = require('../config/database');
+const { supabase } = require('../config/supabase');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
@@ -474,7 +475,6 @@ exports.getDashboardStats = async (req, res) => {
       .select('*', { count: 'exact', head: true });
 
     // Get pending submissions
-    const { supabase } = require('../config/supabase');
     const { count: pendingTotal, error: pErr } = await supabase
       .from('form_submissions')
       .select('*', { count: 'exact', head: true })
