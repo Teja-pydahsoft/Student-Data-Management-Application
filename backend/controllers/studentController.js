@@ -9,6 +9,75 @@ const upload = multer({ dest: 'uploads/' });
 // Export multer middleware at the top level
 exports.uploadMiddleware = upload.single('file');
 
+// Upload student photo
+exports.uploadStudentPhoto = async (req, res) => {
+  try {
+    console.log('Photo upload request received');
+    console.log('File:', req.file);
+    console.log('Body:', req.body);
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No photo file provided'
+      });
+    }
+
+    const { admissionNumber } = req.body;
+    if (!admissionNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admission number is required'
+      });
+    }
+
+    // Generate unique filename
+    const fileExtension = req.file.originalname.split('.').pop();
+    const uniqueFilename = `student_${admissionNumber}_${Date.now()}.${fileExtension}`;
+
+    // Move file to uploads folder with new name
+    const fs = require('fs');
+    const oldPath = req.file.path;
+    const newPath = `uploads/${uniqueFilename}`;
+
+    console.log('Moving file from:', oldPath, 'to:', newPath);
+
+    fs.renameSync(oldPath, newPath);
+
+    // Update student record with photo filename
+    const [result] = await masterPool.query(
+      'UPDATE students SET student_photo = ? WHERE admission_number = ?',
+      [uniqueFilename, admissionNumber]
+    );
+
+    console.log('Database update result:', result);
+    console.log('Updated photo filename to:', uniqueFilename);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Photo uploaded successfully',
+      data: {
+        filename: uniqueFilename,
+        path: newPath
+      }
+    });
+
+  } catch (error) {
+    console.error('Upload student photo error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while uploading photo'
+    });
+  }
+};
+
 // Helper function to safely parse JSON fields
 const parseJSON = (data) => {
   if (typeof data === 'string') {
@@ -174,17 +243,89 @@ exports.updateStudent = async (req, res) => {
     const { admissionNumber } = req.params;
     const { studentData } = req.body;
 
+    console.log('Update request for admission:', admissionNumber);
+    console.log('Received studentData:', JSON.stringify(studentData, null, 2));
+
     if (!studentData || typeof studentData !== 'object') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Student data is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Student data is required'
       });
     }
 
-    const [result] = await masterPool.query(
-      'UPDATE students SET student_data = ? WHERE admission_number = ?',
-      [JSON.stringify(studentData), admissionNumber]
+    // First, get the current student data to preserve existing individual columns
+    const [existingStudents] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ?',
+      [admissionNumber]
     );
+
+    if (existingStudents.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const existingStudent = existingStudents[0];
+    console.log('Existing student data:', JSON.stringify(existingStudent, null, 2));
+
+    // Map form field names to database columns
+    const fieldMapping = {
+      // Student form fields
+      'Student Name': 'student_name',
+      'Student Mobile Number': 'student_mobile',
+      'Father Name': 'father_name',
+      'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
+      'ADHAR No': 'adhar_no',
+      'Admission Date': 'admission_date',
+      'Batch': 'batch',
+      'Branch': 'branch',
+      'StudType': 'stud_type',
+      'Parent Mobile Number 1': 'parent_mobile1',
+      'Parent Mobile Number 2': 'parent_mobile2',
+      'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
+      'City/Village': 'city_village',
+      'Mandal Name': 'mandal_name',
+      'District': 'district',
+      'Caste': 'caste',
+      'M/F': 'gender',
+      'Student Status': 'student_status',
+      'Scholar Status': 'scholar_status',
+      'Remarks': 'remarks',
+
+      // Admin-only fields
+      'pin_no': 'pin_no',
+      'previous_college': 'previous_college',
+      'certificates_status': 'certificates_status',
+      'student_photo': 'student_photo'
+    };
+
+    // Build update query for individual columns
+    const updateFields = [];
+    const updateValues = [];
+
+    // Update individual columns based on the field mapping
+    Object.entries(studentData).forEach(([key, value]) => {
+      const columnName = fieldMapping[key];
+      if (columnName && value !== undefined && value !== '' && value !== '{}' && value !== null) {
+        updateFields.push(`${columnName} = ?`);
+        updateValues.push(value);
+      }
+    });
+
+    // Always update the JSON data field
+    updateFields.push('student_data = ?');
+    updateValues.push(JSON.stringify(studentData));
+    updateValues.push(admissionNumber);
+
+    // Execute the update query
+    const [result] = await masterPool.query(
+      `UPDATE students SET ${updateFields.join(', ')} WHERE admission_number = ?`,
+      updateValues
+    );
+
+    console.log('Update result:', result);
+    console.log('Affected rows:', result.affectedRows);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -193,12 +334,22 @@ exports.updateStudent = async (req, res) => {
       });
     }
 
+    // Verify the update by fetching the updated data
+    const [updatedStudents] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    console.log('Updated student data:', JSON.stringify(updatedStudents[0], null, 2));
+
     // Log action
     await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['UPDATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
     );
+
+    console.log('Update completed successfully');
 
     res.json({
       success: true,
@@ -207,9 +358,9 @@ exports.updateStudent = async (req, res) => {
 
   } catch (error) {
     console.error('Update student error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while updating student' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating student'
     });
   }
 };
@@ -319,14 +470,14 @@ exports.getDashboardStats = async (req, res) => {
 
     // Get total forms
     const [formCount] = await masterPool.query('SELECT COUNT(*) as total FROM forms');
-    
+
     // Get pending submissions
     const { supabase } = require('../config/supabase');
     const { count: pendingTotal, error: pErr } = await supabase
       .from('form_submissions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
-    
+
     // Get approved submissions today
     const start = new Date();
     start.setHours(0,0,0,0);
@@ -357,6 +508,59 @@ exports.getDashboardStats = async (req, res) => {
       }
     }
 
+    // Calculate completed profiles and average completion
+    let completedProfiles = 0;
+    let totalCompletion = 0;
+
+    if (studentCount[0].total > 0) {
+      // Get all students to calculate completion percentages
+      const [students] = await masterPool.query('SELECT admission_number FROM students');
+
+      for (const student of students) {
+        try {
+          // Get completion status for each student
+          const { data: completionData, error: compErr } = await supabase
+            .from('form_submissions')
+            .select('submission_id, form_id, submission_data')
+            .eq('admission_number', student.admission_number)
+            .limit(1);
+
+          if (!compErr && completionData && completionData.length > 0) {
+            const submission = completionData[0];
+            const submissionData = parseJSON(submission.submission_data);
+
+            // Get form fields to determine total fields
+            const { data: forms, error: formErr } = await supabase
+              .from('forms')
+              .select('form_fields')
+              .eq('form_id', submission.form_id)
+              .limit(1);
+
+            if (!formErr && forms && forms.length > 0) {
+              const formFields = parseJSON(forms[0].form_fields);
+              const allFields = formFields.filter(field => field.key);
+
+              const completedFields = allFields.filter(field => {
+                const value = submissionData[field.key];
+                return value !== undefined && value !== null && value !== '';
+              }).length;
+
+              const completionPercentage = allFields.length > 0 ? Math.round((completedFields / allFields.length) * 100) : 0;
+              totalCompletion += completionPercentage;
+
+              if (completionPercentage >= 80) {
+                completedProfiles++;
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error calculating completion for student ${student.admission_number}:`, error);
+        }
+      }
+    }
+
+    const averageCompletion = studentCount[0].total > 0 ? Math.round(totalCompletion / studentCount[0].total) : 0;
+
     res.json({
       success: true,
       data: {
@@ -364,15 +568,17 @@ exports.getDashboardStats = async (req, res) => {
         totalForms: formCount[0].total,
         pendingSubmissions: pendingTotal || 0,
         approvedToday: approvedTodayTotal || 0,
-        recentSubmissions: recentWithNames
+        recentSubmissions: recentWithNames,
+        completedProfiles,
+        averageCompletion
       }
     });
 
   } catch (error) {
     console.error('Get dashboard stats error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching dashboard statistics' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching dashboard statistics'
     });
   }
 };

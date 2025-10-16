@@ -97,6 +97,10 @@ const Students = () => {
     try {
       const response = await api.get('/students');
       setStudents(response.data.data);
+      // Update statistics after fetching students
+      setTimeout(() => {
+        calculateOverallStats();
+      }, 100);
     } catch (error) {
       toast.error('Failed to fetch students');
     } finally {
@@ -122,6 +126,10 @@ const Students = () => {
 
       const response = await api.get(`/students?${params.toString()}`);
       setStudents(response.data.data);
+      // Update statistics after search
+      setTimeout(() => {
+        calculateOverallStats();
+      }, 100);
     } catch (error) {
       toast.error('Search failed');
     } finally {
@@ -152,6 +160,23 @@ const Students = () => {
     setEditMode(false);
     setEditingRollNumber(false);
     setTempRollNumber(student.roll_number || '');
+
+    // Prepare all possible fields including hidden ones
+    const allFields = {
+      // From student_data (form submission) - use original field names
+      ...student.student_data,
+      // Map individual database columns to expected field names
+      'pin_no': student.pin_no || '',
+      'previous_college': student.previous_college || '',
+      'certificates_status': student.certificates_status || '',
+      'student_photo': student.student_photo || '',
+      'roll_number': student.roll_number || ''
+    };
+
+    console.log('Student data:', student);
+    console.log('All fields being set:', allFields);
+
+    setEditData(allFields);
     setShowModal(true);
   };
 
@@ -161,13 +186,19 @@ const Students = () => {
 
   const handleSaveEdit = async () => {
     try {
+      console.log('Saving edit data:', editData);
+      console.log('Selected student:', selectedStudent);
+
       await api.put(`/students/${selectedStudent.admission_number}`, {
         studentData: editData,
       });
+
+      console.log('Save successful');
       toast.success('Student data updated successfully');
       setEditMode(false);
       fetchStudents();
     } catch (error) {
+      console.error('Save failed:', error);
       toast.error('Failed to update student data');
     }
   };
@@ -258,32 +289,77 @@ const Students = () => {
   };
 
   // Calculate overall statistics
+  const [stats, setStats] = useState({ total: 0, completed: 0, averageCompletion: 0 });
+
   const calculateOverallStats = async () => {
-    if (students.length === 0) return { total: 0, completed: 0, averageCompletion: 0 };
+    try {
+      // Fetch dashboard statistics from backend
+      const response = await api.get('/students/dashboard-stats');
+      if (response.data.success) {
+        const data = response.data.data;
+        setStats({
+          total: data.totalStudents || 0,
+          completed: data.completedProfiles || 0,
+          averageCompletion: data.averageCompletion || 0
+        });
+      } else {
+        // Fallback to local calculation if backend stats fail
+        if (students.length === 0) {
+          setStats({ total: 0, completed: 0, averageCompletion: 0 });
+          return;
+        }
 
-    const totalStudents = students.length;
-    let completedStudents = 0;
-    let totalCompletion = 0;
+        const totalStudents = students.length;
+        let completedStudents = 0;
+        let totalCompletion = 0;
 
-    // Fetch completion percentages for all students
-    for (const student of students) {
-      const percentage = await getStudentCompletionPercentage(student.admission_number);
-      totalCompletion += percentage;
-      if (percentage >= 80) {
-        completedStudents++;
+        // Fetch completion percentages for all students
+        for (const student of students) {
+          const percentage = await getStudentCompletionPercentage(student.admission_number);
+          totalCompletion += percentage;
+          if (percentage >= 80) {
+            completedStudents++;
+          }
+        }
+
+        const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
+
+        setStats({
+          total: totalStudents,
+          completed: completedStudents,
+          averageCompletion
+        });
       }
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+      // Fallback to local calculation
+      if (students.length === 0) {
+        setStats({ total: 0, completed: 0, averageCompletion: 0 });
+        return;
+      }
+
+      const totalStudents = students.length;
+      let completedStudents = 0;
+      let totalCompletion = 0;
+
+      // Fetch completion percentages for all students
+      for (const student of students) {
+        const percentage = await getStudentCompletionPercentage(student.admission_number);
+        totalCompletion += percentage;
+        if (percentage >= 80) {
+          completedStudents++;
+        }
+      }
+
+      const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
+
+      setStats({
+        total: totalStudents,
+        completed: completedStudents,
+        averageCompletion
+      });
     }
-
-    const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
-
-    return {
-      total: totalStudents,
-      completed: completedStudents,
-      averageCompletion
-    };
   };
-
-  const stats = calculateOverallStats();
 
   if (loading) {
     return (
@@ -486,6 +562,7 @@ const Students = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Photo</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Roll Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
@@ -500,6 +577,36 @@ const Students = () => {
                   const completionPercentage = completionPercentages[student.admission_number] || 0;
                   return (
                     <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                        <div className="flex items-center justify-center">
+                          {student.student_photo &&
+                           student.student_photo !== '{}' &&
+                           student.student_photo !== null &&
+                           student.student_photo !== '' &&
+                           student.student_photo !== '{}' ? (
+                            <img
+                              src={`/uploads/${student.student_photo}`}
+                              alt="Student Photo"
+                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                              onError={(e) => {
+                                console.error('Photo failed to load:', student.student_photo);
+                                if (e.target && e.target.style) {
+                                  e.target.style.display = 'none';
+                                }
+                                // Find the fallback div and show it
+                                const fallbackDiv = e.target && e.target.parentNode ? e.target.parentNode.querySelector('.photo-fallback') : null;
+                                if (fallbackDiv) {
+                                  fallbackDiv.style.display = 'block';
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+                              <span className="text-gray-400 text-xs">No Photo</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {student.roll_number ? (
@@ -650,32 +757,620 @@ const Students = () => {
               </div>
 
               {/* Student Information Section */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900">Student Information</h4>
-                  <span className="text-xs text-gray-500">{Object.keys(editData).length} fields</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">{Object.keys(editData).length} fields</span>
+                    {(() => {
+                      const completionPercentage = completionPercentages[selectedStudent.admission_number] || 0;
+                      return (
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          completionPercentage >= 80 ? 'bg-green-100 text-green-800' :
+                          completionPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {completionPercentage}% Complete
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
-                
+
+                {/* Individual Fields Display - All 25 Fields - Now All Editable */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(editData).map(([key, value]) => (
-                    <div key={key} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                        {key}
-                      </label>
-                      {editMode ? (
+                  {/* Student Form Fields (20 visible fields) - Now All Editable */}
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <label className="block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
+                      Student Name
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.student_name || editData['Student Name'] || ''}
+                        onChange={(e) => updateEditField('student_name', e.target.value)}
+                        placeholder="Enter student name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.student_name || editData['Student Name'] || editData.student_name || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <label className="block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
+                      Mobile Number
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={editData.student_mobile || editData['Student Mobile Number'] || ''}
+                        onChange={(e) => updateEditField('student_mobile', e.target.value)}
+                        placeholder="Enter mobile number"
+                        maxLength={10}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.student_mobile || editData['Student Mobile Number'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <label className="block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
+                      Father Name
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.father_name || editData['Father Name'] || ''}
+                        onChange={(e) => updateEditField('father_name', e.target.value)}
+                        placeholder="Enter father name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.father_name || editData['Father Name'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <label className="block text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                      Date of Birth
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="date"
+                        value={editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'] ?
+                          (editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)']).split('T')[0] : ''}
+                        onChange={(e) => updateEditField('dob', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'] ?
+                          new Date(editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)']).toLocaleDateString() : '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <label className="block text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                      Aadhar Number
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.adhar_no || editData['ADHAR No'] || ''}
+                        onChange={(e) => updateEditField('adhar_no', e.target.value)}
+                        placeholder="Enter Aadhar number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.adhar_no || editData['ADHAR No'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <label className="block text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                      Admission Date
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="date"
+                        value={editData.admission_date || editData['Admission Date'] ?
+                          (editData.admission_date || editData['Admission Date']).split('T')[0] : ''}
+                        onChange={(e) => updateEditField('admission_date', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.admission_date || editData['Admission Date'] ?
+                          new Date(editData.admission_date || editData['Admission Date']).toLocaleDateString() : '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      Batch
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.batch || editData.Batch || ''}
+                        onChange={(e) => updateEditField('batch', e.target.value)}
+                        placeholder="Enter batch"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.batch || editData.Batch || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      Branch
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.branch || editData.Branch || ''}
+                        onChange={(e) => updateEditField('branch', e.target.value)}
+                        placeholder="Enter branch"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.branch || editData.Branch || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      Student Type
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.stud_type || editData.StudType || ''}
+                        onChange={(e) => updateEditField('stud_type', e.target.value)}
+                        placeholder="Enter student type"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.stud_type || editData.StudType || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                    <label className="block text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">
+                      Parent Mobile 1
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={editData.parent_mobile1 || editData['Parent Mobile Number 1'] || ''}
+                        onChange={(e) => updateEditField('parent_mobile1', e.target.value)}
+                        placeholder="Enter parent mobile 1"
+                        maxLength={10}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.parent_mobile1 || editData['Parent Mobile Number 1'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                    <label className="block text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">
+                      Parent Mobile 2
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={editData.parent_mobile2 || editData['Parent Mobile Number 2'] || ''}
+                        onChange={(e) => updateEditField('parent_mobile2', e.target.value)}
+                        placeholder="Enter parent mobile 2"
+                        maxLength={10}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.parent_mobile2 || editData['Parent Mobile Number 2'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                    <label className="block text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">
+                      Student Address
+                    </label>
+                    {editMode ? (
+                      <textarea
+                        value={editData.student_address || editData['Student Address (D.No, Str name, Village, Mandal, Dist)'] || ''}
+                        onChange={(e) => updateEditField('student_address', e.target.value)}
+                        placeholder="Enter student address"
+                        rows="3"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.student_address || editData['Student Address (D.No, Str name, Village, Mandal, Dist)'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      City/Village
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.city_village || editData['City/Village'] || ''}
+                        onChange={(e) => updateEditField('city_village', e.target.value)}
+                        placeholder="Enter city/village"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.city_village || editData['City/Village'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Mandal Name
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.mandal_name || editData['Mandal Name'] || ''}
+                        onChange={(e) => updateEditField('mandal_name', e.target.value)}
+                        placeholder="Enter mandal name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.mandal_name || editData['Mandal Name'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      District
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.district || editData.District || ''}
+                        onChange={(e) => updateEditField('district', e.target.value)}
+                        placeholder="Enter district"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.district || editData.District || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Caste
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.caste || editData.Caste || ''}
+                        onChange={(e) => updateEditField('caste', e.target.value)}
+                        placeholder="Enter caste"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.caste || editData.Caste || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Gender
+                    </label>
+                    {editMode ? (
+                      <select
+                        value={editData.gender || editData['M/F'] || ''}
+                        onChange={(e) => updateEditField('gender', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.gender || editData['M/F'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Student Status
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.student_status || editData['Student Status'] || ''}
+                        onChange={(e) => updateEditField('student_status', e.target.value)}
+                        placeholder="Enter student status"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.student_status || editData['Student Status'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Scholar Status
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.scholar_status || editData['Scholar Status'] || ''}
+                        onChange={(e) => updateEditField('scholar_status', e.target.value)}
+                        placeholder="Enter scholar status"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.scholar_status || editData['Scholar Status'] || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                      Remarks
+                    </label>
+                    {editMode ? (
+                      <textarea
+                        value={editData.remarks || editData.Remarks || ''}
+                        onChange={(e) => updateEditField('remarks', e.target.value)}
+                        placeholder="Enter remarks"
+                        rows="2"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.remarks || editData.Remarks || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Hidden Admin Fields (5 fields) - Now with photo display */}
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                      📝 Pin No (Admin)
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.pin_no || ''}
+                        onChange={(e) => updateEditField('pin_no', e.target.value)}
+                        placeholder="Enter PIN number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.pin_no || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                      📝 Previous College (Admin)
+                    </label>
+                    {editMode ? (
+                      <input
+                        type="text"
+                        value={editData.previous_college || ''}
+                        onChange={(e) => updateEditField('previous_college', e.target.value)}
+                        placeholder="Enter previous college"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.previous_college || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                      📝 Certificate Status (Admin)
+                    </label>
+                    {editMode ? (
+                      <select
+                        value={editData.certificates_status || ''}
+                        onChange={(e) => updateEditField('certificates_status', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm"
+                      >
+                        <option value="">Select Status</option>
+                        <option value="Verified">Verified</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.certificates_status || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                      📝 Student Photo (Admin)
+                    </label>
+                    {editMode ? (
+                      <div className="space-y-2">
                         <input
-                          type="text"
-                          value={Array.isArray(value) ? value.join(', ') : value}
-                          onChange={(e) => updateEditField(key, Array.isArray(value) ? e.target.value.split(',').map(v => v.trim()) : e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-sm"
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              try {
+                                // Upload file to server first
+                                const formData = new FormData();
+                                formData.append('photo', file);
+                                formData.append('admissionNumber', selectedStudent.admission_number);
+
+                                const uploadResponse = await api.post('/students/upload-photo', formData, {
+                                  headers: {
+                                    'Content-Type': 'multipart/form-data',
+                                  },
+                                });
+
+                                if (uploadResponse.data.success) {
+                                  // Update the field with the uploaded filename
+                                  updateEditField('student_photo', uploadResponse.data.data.filename);
+                                  toast.success('Photo uploaded successfully');
+                                } else {
+                                  toast.error('Failed to upload photo');
+                                }
+                              } catch (error) {
+                                console.error('Photo upload error:', error);
+                                toast.error('Failed to upload photo');
+                              }
+                            } else {
+                              updateEditField('student_photo', '');
+                              updateEditField('student_photo_preview', null);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none text-sm"
                         />
-                      ) : (
-                        <p className="text-sm text-gray-900 break-words">
-                          {Array.isArray(value) ? value.join(', ') : value || '-'}
-                        </p>
-                      )}
+                        {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' && (
+                          <p className="text-xs text-gray-600">Current: {String(editData.student_photo)}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={`/uploads/${editData.student_photo}`}
+                              alt="Student Photo"
+                              className="w-12 h-12 rounded-lg object-cover border-2 border-gray-200"
+                              onError={(e) => {
+                                console.error('Photo failed to load:', editData.student_photo);
+                                if (e.target && e.target.style) {
+                                  e.target.style.display = 'none';
+                                }
+                                // Find the fallback div and show it
+                                const fallbackDiv = e.target && e.target.parentNode ? e.target.parentNode.querySelector('.photo-fallback') : null;
+                                if (fallbackDiv) {
+                                  fallbackDiv.style.display = 'block';
+                                }
+                              }}
+                            />
+                            <div style={{ display: 'none' }}>
+                              <span className="text-sm text-gray-900 font-medium">
+                                {String(editData.student_photo)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
+                            <span className="text-gray-400 text-xs">No Photo</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Raw Data Section (Collapsible) */}
+                <div className="border-t pt-4">
+                  <details className="group">
+                    <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 flex items-center gap-2">
+                      <span>View Raw Data (Advanced)</span>
+                      <svg className="w-4 h-4 group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </summary>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(editData).map(([key, value]) => (
+                        <div key={key} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                            {key}
+                          </label>
+                          {editMode ? (
+                            key === 'student_photo' ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                      updateEditField('student_photo', file.name);
+                                      updateEditField('student_photo_preview', file);
+                                    } else {
+                                      updateEditField('student_photo', '');
+                                      updateEditField('student_photo_preview', null);
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-sm"
+                                />
+                                {value && value !== '{}' && (
+                                  <p className="text-xs text-gray-600">Current: {value}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                value={Array.isArray(value) ? value.join(', ') : value}
+                                onChange={(e) => updateEditField(key, Array.isArray(value) ? e.target.value.split(',').map(v => v.trim()) : e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-sm"
+                              />
+                            )
+                          ) : (
+                            <p className="text-sm text-gray-900 break-words font-mono text-xs">
+                              {key === 'student_photo' ?
+                                (value && value !== '{}' && value !== null && value !== '' ? String(value) : 'No Photo') :
+                                (key === 'student_photo_preview' ?
+                                  (value ? 'File selected for upload' : 'No file') :
+                                  (Array.isArray(value) ? value.join(', ') : (value !== null && value !== undefined && value !== '{}' ? String(value) : '-'))
+                                )
+                              }
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </details>
                 </div>
               </div>
 

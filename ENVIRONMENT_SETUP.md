@@ -6,7 +6,7 @@ This guide explains how to configure environment variables for both local develo
 
 ### Local Development (`frontend/.env`)
 ```env
-# Frontend Environment Variables - LOCAL DEVELOPMENT
+# Frontend Environment Variables - LOCAL DEVELOPMENT (Connected to Local Backend)
 VITE_API_URL=http://localhost:5000/api
 VITE_APP_NAME="Student Database Management System"
 VITE_APP_VERSION="1.0.0"
@@ -22,32 +22,35 @@ VITE_APP_VERSION="1.0.0"
 
 ### Template (`frontend/.env.example`)
 ```env
-# Frontend Environment Variables - Example Template
+# Frontend Environment Variables - LOCAL DEVELOPMENT (Connected to Local Backend)
 VITE_API_URL=http://localhost:5000/api
 VITE_APP_NAME="Student Database Management System"
 VITE_APP_VERSION="1.0.0"
 
 # For production deployment, create a .env.production file with:
 # VITE_API_URL=https://your-backend-domain.com/api
+
+# NOTE: This configuration connects local frontend development to local backend
+# For hosted backend, change VITE_API_URL to https://student-data-management-application.onrender.com/api
 ```
 
 ## Backend Environment Files
 
 ### Local Development (`backend/.env`)
 ```env
-# Backend Environment Variables - LOCAL DEVELOPMENT
+# Backend Environment Variables - LOCAL DEVELOPMENT (Connected to Hosted DBs)
 PORT=5000
 NODE_ENV=development
 
-# Master Database (MySQL) - LOCAL
-DB_HOST=localhost
+# Master Database (AWS RDS MySQL) - HOSTED PRODUCTION DATABASE
+DB_HOST=student-database.cfu0qmo26gh3.ap-south-1.rds.amazonaws.com
 DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=root
+DB_USER=admin
+DB_PASSWORD=jzuy?28y_A8qB*x5OxdV)$h*90_A
 DB_NAME=student_database
-DB_SSL=false
+DB_SSL=true
 
-# Staging Database (Supabase) - For forms, submissions, admins, audit logs
+# Staging Database (Supabase) - HOSTED PRODUCTION DATABASE
 SUPABASE_URL=https://dxotfrooegqxqeuxarxv.supabase.co
 SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4b3Rmcm9vZWdxeHFldXhhcnh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MTcxNTYsImV4cCI6MjA3NjA5MzE1Nn0.oYqgtKW9wdg577ip5gARLP-O5hubw3KxsH5ZQ-r1N_k
 
@@ -59,8 +62,8 @@ JWT_EXPIRES_IN=24h
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin123
 
-# CORS Configuration
-FRONTEND_URL=http://localhost:3000
+# CORS Configuration - Allow local development and production
+FRONTEND_URL=http://localhost:3000,https://student-data-management-application.vercel.app
 
 # File Upload Configuration
 MAX_FILE_SIZE=10485760
@@ -169,11 +172,28 @@ LOG_LEVEL=info
 
 ## Deployment Instructions
 
-### Local Development
+### Local Development (Connected to Hosted Databases)
+1. Copy `frontend/.env.example` to `frontend/.env` (already configured for local backend)
+2. Copy `backend/.env.example` to `backend/.env` (already configured for hosted databases)
+3. Install dependencies and run the applications
+4. **No database setup required** - already connected to your hosted databases!
+
+### Quick Start Commands
+```bash
+# Terminal 1 - Backend (connects to hosted DBs)
+cd backend && npm install && npm run dev
+
+# Terminal 2 - Frontend (connects to local backend)
+cd frontend && npm install && npm run dev
+```
+
+### Local Development (With Local Databases)
+If you want to use local databases instead:
 1. Copy `frontend/.env.example` to `frontend/.env`
 2. Copy `backend/.env.example` to `backend/.env`
-3. Update the credentials in `backend/.env` with your local MySQL credentials
-4. Install dependencies and run the applications
+3. Update `VITE_API_URL=http://localhost:5000/api` in `frontend/.env`
+4. Update database credentials in `backend/.env` for your local MySQL setup
+5. Install dependencies and run the applications
 
 ### Production Deployment
 

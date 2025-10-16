@@ -13,9 +13,10 @@ if (rawApiUrl) {
   API_BASE_URL = 'http://localhost:5000/api';
 }
 
+console.log('🚀 Frontend API Configuration:');
 console.log('API Base URL:', API_BASE_URL);
 console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
-console.log('All env vars:', import.meta.env);
+console.log('Current origin:', window.location.origin);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

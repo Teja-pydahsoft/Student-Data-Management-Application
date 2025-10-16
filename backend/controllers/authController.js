@@ -2,6 +2,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../config/supabase');
 
+console.log('🔐 Auth Controller loaded');
+console.log('Supabase available:', !!supabase);
+
 // Admin login
 exports.login = async (req, res) => {
   try {

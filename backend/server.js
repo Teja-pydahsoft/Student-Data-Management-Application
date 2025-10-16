@@ -22,24 +22,21 @@ const PORT = process.env.PORT || 5000;
 const rawFrontendUrls = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
 const allowedOrigins = rawFrontendUrls.split(',').map(u => u.trim()).filter(Boolean);
 
+console.log('🌐 CORS Allowed Origins:', allowedOrigins);
+console.log('🔍 Current request origin will be checked against these');
+console.log('🔧 Development mode: CORS is permissive for local development');
+
 app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    } else {
-      console.warn('Blocked CORS origin:', origin);
-      // Do not throw an error here; tell CORS to disallow the origin.
-      // The browser will enforce the CORS policy. Returning an error here
-      // causes a server-side stack trace and a 500 for preflight requests.
-      return callback(null, false);
-    }
-  },
-  credentials: true
+  origin: true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -49,10 +46,15 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    success: true, 
+  res.json({
+    success: true,
     message: 'Server is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    corsOrigins: allowedOrigins,
+    database: process.env.DB_NAME || 'student_database',
+    port: PORT,
+    uptime: process.uptime()
   });
 });
 
@@ -195,41 +197,78 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    // Test database connection
-    const dbConnected = await testConnection();
-    
-    if (!dbConnected) {
-      console.error('⚠️  Server starting without database connection');
-      console.error('⚠️  Please check your database configuration');
-    } else {
-      // Create a default form if none exists
-      await createDefaultForm();
-    }
+    console.log('🔄 Starting server...');
+    console.log('📊 Environment:', process.env.NODE_ENV || 'development');
+    console.log('🔗 Frontend URLs:', process.env.FRONTEND_URL);
+    console.log('🔗 All env vars loaded:', Object.keys(process.env).length);
 
-    app.listen(PORT, () => {
+    // Start the server FIRST (before DB connection test)
+    const server = app.listen(PORT, () => {
       console.log('');
       console.log('═══════════════════════════════════════════════════════');
       console.log('  🚀 Student Database Management System - Backend');
       console.log('═══════════════════════════════════════════════════════');
-      console.log(`  Server running on: http://localhost:${PORT}`);
-      console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`  Database: ${process.env.DB_NAME || 'student_database'}`);
+      console.log(`  ✅ Server running on: http://localhost:${PORT}`);
+      console.log(`  🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`  🗄️  Database: ${process.env.DB_NAME || 'student_database'}`);
+      console.log(`  🌐 CORS Origins: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
       console.log('═══════════════════════════════════════════════════════');
       console.log('');
-      console.log('  Available endpoints:');
+      console.log('  📋 Available endpoints:');
       console.log('  - GET  /health');
       console.log('  - POST /api/auth/login');
       console.log('  - GET  /api/forms');
       console.log('  - POST /api/forms');
       console.log('  - GET  /api/submissions');
       console.log('  - GET  /api/students');
+      console.log('  - GET  /api/debug/health');
+      console.log('  - GET  /api/debug/routes');
+      console.log('');
+      console.log('  🔧 Debug endpoints:');
+      console.log('  - Visit http://localhost:' + PORT + '/health');
+      console.log('  - Visit http://localhost:' + PORT + '/api/debug/health');
+      console.log('  - Visit http://localhost:' + PORT + '/api/debug/routes');
       console.log('');
       console.log('  Press Ctrl+C to stop the server');
       console.log('');
     });
 
+    // Test database connection AFTER server starts (async)
+    setTimeout(async () => {
+      console.log('🔌 Testing database connections...');
+      try {
+        const dbConnected = await testConnection();
+
+        if (!dbConnected) {
+          console.error('❌ Database connection failed!');
+          console.error('❌ API calls may fail but server is running');
+        } else {
+          console.log('✅ Database connections successful');
+          // Create a default form if none exists
+          try {
+            await createDefaultForm();
+            console.log('✅ Default form created/verified');
+          } catch (formError) {
+            console.error('⚠️  Form creation warning:', formError.message);
+          }
+        }
+      } catch (dbError) {
+        console.error('❌ Database test error:', dbError.message);
+      }
+    }, 1000); // Wait 1 second after server starts
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('🛑 SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        console.log('✅ Process terminated');
+      });
+    });
+
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Stack trace:', error.stack);
     process.exit(1);
   }
 };
