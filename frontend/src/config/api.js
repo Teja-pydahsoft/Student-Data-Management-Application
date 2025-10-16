@@ -13,6 +13,9 @@ if (rawApiUrl) {
   API_BASE_URL = 'http://localhost:5000/api';
 }
 
+// Also create a base URL for static files (without /api)
+export const STATIC_BASE_URL = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
+
 console.log('🚀 Frontend API Configuration:');
 console.log('API Base URL:', API_BASE_URL);
 console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
