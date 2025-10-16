@@ -30,7 +30,10 @@ app.use(cors({
       return callback(null, true);
     } else {
       console.warn('Blocked CORS origin:', origin);
-      return callback(new Error('Not allowed by CORS'));
+      // Do not throw an error here; tell CORS to disallow the origin.
+      // The browser will enforce the CORS policy. Returning an error here
+      // causes a server-side stack trace and a 500 for preflight requests.
+      return callback(null, false);
     }
   },
   credentials: true
@@ -103,6 +106,30 @@ app.get('/api/debug/routes', (req, res) => {
     }
   });
   res.json({ routes });
+});
+
+// Small debug/health endpoint - non-sensitive
+app.get('/api/debug/health', async (req, res) => {
+  const { masterPool } = require('./config/database');
+  const jwtPresent = !!process.env.JWT_SECRET;
+  const supabaseReady = !!(supabase && supabase.from);
+  // basic DB check (fast)
+  let dbStatus = 'unknown';
+  try {
+    const conn = await masterPool.getConnection();
+    conn.release();
+    dbStatus = 'ok';
+  } catch (e) {
+    dbStatus = 'error';
+  }
+
+  res.json({
+    success: true,
+    allowedOrigins: allowedOrigins,
+    jwtPresent,
+    supabaseReady,
+    dbStatus
+  });
 });
 
 // 404 handler
