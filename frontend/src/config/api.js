@@ -23,7 +23,23 @@ export const getStaticFileUrl = (filename) => {
 
   // In production, use the same domain as the API but without /api
   const baseUrl = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
+
+  // Handle cross-domain static file serving
   return `${baseUrl}/uploads/${filename}`;
+};
+
+// Alternative function for direct static file access (bypass CORS issues)
+export const getStaticFileUrlDirect = (filename) => {
+  if (!filename) return '';
+  if (filename.startsWith('http')) return filename;
+
+  // Use proxy approach for production
+  if (rawApiUrl && rawApiUrl.includes('onrender.com')) {
+    // For Render backend, use direct URL construction
+    return `https://student-data-management-application.onrender.com/uploads/${filename}`;
+  }
+
+  return `${rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000'}/uploads/${filename}`;
 };
 
 console.log('🚀 Frontend API Configuration:');
