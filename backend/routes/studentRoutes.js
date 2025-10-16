@@ -6,6 +6,7 @@ const authMiddleware = require('../middleware/auth');
 // All routes are protected (admin only)
 router.get('/', authMiddleware, studentController.getAllStudents);
 router.get('/stats', authMiddleware, studentController.getDashboardStats);
+router.get('/dashboard-stats', authMiddleware, studentController.getDashboardStats);
 router.post('/bulk-update-roll-numbers', authMiddleware, studentController.uploadMiddleware, studentController.bulkUpdateRollNumbers);
 router.post('/', authMiddleware, studentController.createStudent);
 router.get('/:admissionNumber', authMiddleware, studentController.getStudentByAdmission);

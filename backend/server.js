@@ -94,6 +94,49 @@ app.use('/api/forms', formRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/students', studentRoutes);
 
+// Legacy route support for direct API access (without /api prefix)
+app.use('/auth', authRoutes);
+app.use('/forms', formRoutes);
+app.use('/submissions', submissionRoutes);
+app.use('/students', studentRoutes);
+
+// Root API endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Student Database Management API',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      forms: '/api/forms',
+      submissions: '/api/submissions',
+      students: '/api/students'
+    }
+  });
+});
+
+// Catch all non-API routes to return proper 404 (must be after all routes)
+app.use('/api/*', (req, res) => {
+  console.log('API route not found:', req.method, req.path);
+  res.status(404).json({
+    success: false,
+    message: `API route not found: ${req.method} ${req.path}`,
+    availableRoutes: [
+      'GET /api/auth/verify',
+      'POST /api/auth/login',
+      'POST /api/auth/change-password',
+      'GET /api/forms',
+      'POST /api/forms',
+      'GET /api/forms/public/:formId',
+      'GET /api/submissions',
+      'POST /api/submissions/generate-admission-series',
+      'GET /api/students',
+      'GET /api/students/stats',
+      'GET /api/students/dashboard-stats'
+    ]
+  });
+});
+
 // Debug route to check if routes are registered
 app.get('/api/debug/routes', (req, res) => {
   const routes = [];

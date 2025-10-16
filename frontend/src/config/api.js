@@ -2,9 +2,20 @@ import axios from 'axios';
 
 // If VITE_API_URL is provided at build time, normalize it and ensure it points to the backend API root
 const rawApiUrl = import.meta.env.VITE_API_URL;
-const API_BASE_URL = rawApiUrl
-  ? (rawApiUrl.replace(/\/+$/, '') + '/api')
-  : 'http://localhost:5000/api';
+let API_BASE_URL;
+
+if (rawApiUrl) {
+  // Remove trailing slash if present
+  const cleanUrl = rawApiUrl.replace(/\/$/, '');
+  // Ensure it includes /api
+  API_BASE_URL = cleanUrl.endsWith('/api') ? cleanUrl : cleanUrl + '/api';
+} else {
+  API_BASE_URL = 'http://localhost:5000/api';
+}
+
+console.log('API Base URL:', API_BASE_URL);
+console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('All env vars:', import.meta.env);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -31,6 +42,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error('API Error:', error.response?.status, error.response?.data || error.message);
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('admin');
