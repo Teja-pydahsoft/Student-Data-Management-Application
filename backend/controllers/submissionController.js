@@ -215,9 +215,10 @@ exports.getSubmissionById = async (req, res) => {
 
 // Approve submission
 exports.approveSubmission = async (req, res) => {
-  const masterConn = await masterPool.getConnection();
+  let masterConn = null;
 
   try {
+    masterConn = await masterPool.getConnection();
     await masterConn.beginTransaction();
 
     const { submissionId } = req.params;
@@ -226,6 +227,15 @@ exports.approveSubmission = async (req, res) => {
     console.log('Approve submission request:', { submissionId, admissionNumber });
     console.log('Request body:', req.body);
 
+    // Validate admission number
+    if (!admissionNumber || typeof admissionNumber !== 'string' || !admissionNumber.trim()) {
+      await masterConn.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Valid admission number is required'
+      });
+    }
+
     // Get submission
     const { data: submissions, error: subErr } = await supabase
       .from('form_submissions')
@@ -233,7 +243,10 @@ exports.approveSubmission = async (req, res) => {
       .eq('submission_id', submissionId)
       .eq('status', 'pending')
       .limit(1);
-    if (subErr) throw subErr;
+    if (subErr) {
+      console.error('Supabase error fetching submission:', subErr);
+      throw subErr;
+    }
 
     if (submissions.length === 0) {
       await masterConn.rollback();
@@ -246,9 +259,8 @@ exports.approveSubmission = async (req, res) => {
     const submission = submissions[0];
     const submissionData = parseJSON(submission.submission_data);
 
-    // Use the admission number from the request body (admin input) if provided
-    // Otherwise fall back to the existing logic
-    const finalAdmissionNumber = admissionNumber || submission.admission_number || submissionData.admission_number || submissionData.admission_no || null;
+    // Use the admission number from the request body (admin input)
+    const finalAdmissionNumber = admissionNumber.trim();
 
     console.log('Final admission number:', finalAdmissionNumber);
 
@@ -293,23 +305,6 @@ exports.approveSubmission = async (req, res) => {
       await masterConn.query(
         `ALTER TABLE ${destinationTable} ADD COLUMN IF NOT EXISTS ${col} VARCHAR(1024) NULL`
       );
-    }
-
-    // Only proceed if we have a valid admission number
-    if (!finalAdmissionNumber) {
-      console.log('No admission number provided, skipping student database operations');
-      // Update submission status only
-      const { error: updErr } = await supabase
-        .from('form_submissions')
-        .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: req.admin.id, admission_number: finalAdmissionNumber })
-        .eq('submission_id', submissionId);
-      if (updErr) throw updErr;
-
-      await masterConn.commit();
-      return res.json({
-        success: true,
-        message: 'Submission approved but no admission number provided for student creation'
-      });
     }
 
     // Prepare insert columns/values for dynamic table
@@ -456,11 +451,13 @@ exports.rejectSubmission = async (req, res) => {
     }
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
+    const masterConn2 = await masterPool.getConnection();
+    await masterConn2.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['REJECT', 'SUBMISSION', submissionId, req.admin.id, JSON.stringify({ reason })]
     );
+    masterConn2.release();
 
     res.json({
       success: true,
@@ -495,11 +492,13 @@ exports.deleteSubmission = async (req, res) => {
     }
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id) 
+    const masterConn3 = await masterPool.getConnection();
+    await masterConn3.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
        VALUES (?, ?, ?, ?)`,
       ['DELETE', 'SUBMISSION', submissionId, req.admin.id]
     );
+    masterConn3.release();
 
     res.json({
       success: true,
@@ -623,12 +622,14 @@ exports.bulkUploadSubmissions = async (req, res) => {
     fs.unlinkSync(req.file.path);
 
     // Log action
-    await masterPool.query(
+    const masterConn4 = await masterPool.getConnection();
+    await masterConn4.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id,
        JSON.stringify({ successCount, failedCount, totalRows: results.length })]
     );
+    masterConn4.release();
 
     res.json({
       success: true,
