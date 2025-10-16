@@ -578,7 +578,7 @@ const Students = () => {
                   return (
                     <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center w-10 h-10">
                           {student.student_photo &&
                            student.student_photo !== '{}' &&
                            student.student_photo !== null &&
@@ -587,7 +587,7 @@ const Students = () => {
                             <img
                               src={getStaticFileUrl(student.student_photo)}
                               alt="Student Photo"
-                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 shadow-sm"
                               onError={(e) => {
                                 console.error('Photo failed to load:', student.student_photo);
                                 if (e.target && e.target.style) {
@@ -596,13 +596,13 @@ const Students = () => {
                                 // Find the fallback div and show it
                                 const fallbackDiv = e.target && e.target.parentNode ? e.target.parentNode.querySelector('.photo-fallback') : null;
                                 if (fallbackDiv) {
-                                  fallbackDiv.style.display = 'block';
+                                  fallbackDiv.style.display = 'flex';
                                 }
                               }}
                             />
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center">
-                              <span className="text-gray-400 text-xs">No Photo</span>
+                            <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
+                              <span className="text-gray-400 text-xs font-medium">No Photo</span>
                             </div>
                           )}
                         </div>

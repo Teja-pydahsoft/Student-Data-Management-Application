@@ -468,8 +468,10 @@ exports.getDashboardStats = async (req, res) => {
     // Get total students
     const [studentCount] = await masterPool.query('SELECT COUNT(*) as total FROM students');
 
-    // Get total forms
-    const [formCount] = await masterPool.query('SELECT COUNT(*) as total FROM forms');
+    // Get total forms from Supabase (since forms are stored in Supabase)
+    const { count: formCountTotal, error: formErr } = await supabase
+      .from('forms')
+      .select('*', { count: 'exact', head: true });
 
     // Get pending submissions
     const { supabase } = require('../config/supabase');
@@ -565,7 +567,7 @@ exports.getDashboardStats = async (req, res) => {
       success: true,
       data: {
         totalStudents: studentCount[0].total,
-        totalForms: formCount[0].total,
+        totalForms: formCountTotal || 0,
         pendingSubmissions: pendingTotal || 0,
         approvedToday: approvedTodayTotal || 0,
         recentSubmissions: recentWithNames,
