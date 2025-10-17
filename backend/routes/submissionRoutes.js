@@ -3,6 +3,9 @@ const router = express.Router();
 const submissionController = require('../controllers/submissionController');
 const authMiddleware = require('../middleware/auth');
 
+// CRITICAL: Bulk upload route must come BEFORE any generic routes that could match it
+router.post('/bulk-upload', authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
+
 // Public routes - Order matters! More specific routes first
 router.post('/:formId([0-9a-fA-F-]{36})', submissionController.submitForm);
 router.post('/:formId', submissionController.submitForm);
@@ -14,7 +17,6 @@ router.post('/test/:formId', submissionController.submitForm);
 // Protected routes (admin only) - Order matters! More specific routes first
 router.post('/generate-admission-series', authMiddleware, submissionController.generateAdmissionSeries);
 router.get('/', authMiddleware, submissionController.getAllSubmissions);
-router.post('/bulk-upload', authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
 
 // More specific route for UUID pattern
 router.get('/:submissionId([0-9a-fA-F-]{36})', authMiddleware, submissionController.getSubmissionById);

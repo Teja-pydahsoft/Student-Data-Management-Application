@@ -7,7 +7,12 @@ const fs = require('fs');
 const path = require('path');
 
 // Configure multer for file uploads
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({
+  dest: 'uploads/',
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 
 // Helper function to safely parse JSON fields
 const parseJSON = (data) => {
@@ -19,6 +24,176 @@ const parseJSON = (data) => {
     }
   }
   return data;
+};
+
+// Helper function to safely stringify data for database storage
+const safeJSONStringify = (data) => {
+  try {
+    // First validate that the data can be JSON parsed (round-trip test)
+    const testString = JSON.stringify(data);
+    JSON.parse(testString);
+
+    // Check size limit
+    if (testString.length > 50000) {
+      console.warn('Data size exceeds limit, truncating...');
+      const essentialData = {
+        admission_number: data.admission_number || 'Unknown',
+        student_name: data.student_name || 'Unknown',
+        warning: 'Data truncated due to size limitations',
+        original_size: testString.length,
+        timestamp: new Date().toISOString()
+      };
+      return JSON.stringify(essentialData);
+    }
+
+    return testString;
+  } catch (error) {
+    console.error('JSON stringify error:', error);
+    // Return a minimal safe object
+    return JSON.stringify({
+      error: 'Data serialization failed',
+      timestamp: new Date().toISOString(),
+      fallback: true
+    });
+  }
+};
+
+// Enhanced validation and duplicate checking function
+const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber) => {
+  try {
+    console.log(`🔍 Validating row ${rowNumber} data:`, submissionData);
+
+    // Check for missing critical fields that are required for processing
+    const criticalFields = ['student_name']; // Only student name is truly required
+    const missingCriticalFields = [];
+
+    criticalFields.forEach(field => {
+      if (!submissionData[field] || submissionData[field].trim() === '') {
+        missingCriticalFields.push(field);
+      }
+    });
+
+    if (missingCriticalFields.length > 0) {
+      return {
+        isValid: false,
+        type: 'missing_fields',
+        error: `Missing required fields: ${missingCriticalFields.join(', ')}`,
+        details: { missingFields: missingCriticalFields }
+      };
+    }
+
+    // Check for duplicates based on unique identifiers
+    const duplicateChecks = [];
+
+    // Check by admission_number if provided
+    if (submissionData.admission_number && submissionData.admission_number.trim() !== '') {
+      const admissionNumber = submissionData.admission_number.trim();
+
+      // Check in students table (both admission_number and admission_no columns)
+      const [existingStudents] = await masterConn.query(
+        'SELECT admission_number, admission_no FROM students WHERE admission_number = ? OR admission_no = ?',
+        [admissionNumber, admissionNumber]
+      );
+
+      if (existingStudents.length > 0) {
+        duplicateChecks.push({
+          field: 'admission_number',
+          value: admissionNumber,
+          foundIn: 'students_table',
+          existingRecord: existingStudents[0]
+        });
+      }
+
+      // Also check in form_submissions table
+      const { data: existingSubmissions, error } = await supabase
+        .from('form_submissions')
+        .select('submission_id, admission_number, status')
+        .eq('admission_number', admissionNumber);
+
+      if (!error && existingSubmissions && existingSubmissions.length > 0) {
+        duplicateChecks.push({
+          field: 'admission_number',
+          value: admissionNumber,
+          foundIn: 'form_submissions_table',
+          existingRecord: existingSubmissions[0]
+        });
+      }
+    }
+
+    // Check by AADHAR number if provided
+    if (submissionData.adhar_no && submissionData.adhar_no.trim() !== '') {
+      const adharNo = submissionData.adhar_no.trim();
+
+      // Check in students table for existing AADHAR
+      const [existingByAdhar] = await masterConn.query(
+        'SELECT admission_number, admission_no FROM students WHERE adhar_no = ?',
+        [adharNo]
+      );
+
+      if (existingByAdhar.length > 0) {
+        duplicateChecks.push({
+          field: 'adhar_no',
+          value: adharNo,
+          foundIn: 'students_table',
+          existingRecord: existingByAdhar[0]
+        });
+      }
+    }
+
+    // Check by Student Mobile Number if provided
+    if (submissionData.student_mobile && submissionData.student_mobile.trim() !== '') {
+      const studentMobile = submissionData.student_mobile.trim();
+
+      // Check in students table for existing mobile
+      const [existingByMobile] = await masterConn.query(
+        'SELECT admission_number, admission_no FROM students WHERE student_mobile = ?',
+        [studentMobile]
+      );
+
+      if (existingByMobile.length > 0) {
+        duplicateChecks.push({
+          field: 'student_mobile',
+          value: studentMobile,
+          foundIn: 'students_table',
+          existingRecord: existingByMobile[0]
+        });
+      }
+    }
+
+    if (duplicateChecks.length > 0) {
+      const duplicateDetails = duplicateChecks.map(check => ({
+        field: check.field,
+        value: check.value,
+        foundIn: check.foundIn,
+        existingAdmissionNumber: check.existingRecord.admission_number || check.existingRecord.admission_no
+      }));
+
+      return {
+        isValid: false,
+        type: 'duplicate',
+        error: `Duplicate entry found for: ${duplicateChecks.map(d => d.field).join(', ')}`,
+        details: { duplicates: duplicateDetails }
+      };
+    }
+
+    // Data is valid - no critical missing fields and no duplicates
+    console.log(`✅ Row ${rowNumber} validation passed`);
+    return {
+      isValid: true,
+      type: 'valid',
+      error: null,
+      details: null
+    };
+
+  } catch (error) {
+    console.error(`❌ Error validating row ${rowNumber}:`, error);
+    return {
+      isValid: false,
+      type: 'validation_error',
+      error: `Validation error: ${error.message}`,
+      details: { error: error.message }
+    };
+  }
 };
 
 // Submit form (public endpoint)
@@ -270,7 +445,7 @@ exports.approveSubmission = async (req, res) => {
       'pin_no', 'batch', 'branch', 'stud_type', 'student_name', 'student_status',
       'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
       'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
-      'roll_number', 'student_address', 'city_village', 'mandal_name', 'district',
+      'admission_no', 'student_address', 'city_village', 'mandal_name', 'district',
       'previous_college', 'certificates_status', 'student_photo', 'remarks'
     ];
 
@@ -347,22 +522,47 @@ exports.approveSubmission = async (req, res) => {
         }
       });
 
-      // Update both individual columns and JSON data
+      // Add form_id to mergedData for completion percentage calculation
+      mergedData.form_id = submission.form_id;
+      console.log(`📋 Added form_id to mergedData: ${submission.form_id}`);
+
+      // Update both individual columns and JSON data with proper field mapping
       const updateFields = [];
       const updateValues = [];
+      const addedUpdateFields = new Set();
 
-      // Update individual columns for predefined fields
+      // Update individual columns for predefined fields with proper ordering (avoid duplicates)
       Object.entries(submissionData).forEach(([key, value]) => {
-        if (predefinedKeys.includes(key) && value !== undefined && value !== '') {
+        if (predefinedKeys.includes(key) && value !== undefined && value !== '' && !addedUpdateFields.has(key)) {
           updateFields.push(`${key} = ?`);
           updateValues.push(value);
+          addedUpdateFields.add(key);
         }
       });
 
-      // Always update the JSON data
-      updateFields.push('student_data = ?');
-      updateValues.push(JSON.stringify(mergedData));
-      updateValues.push(finalAdmissionNumber);
+      // Handle JSON data update with helper function (avoid duplicates)
+      if (!addedUpdateFields.has('student_data')) {
+        const jsonMergedData = safeJSONStringify(mergedData);
+        updateFields.push('student_data = ?');
+        updateValues.push(jsonMergedData);
+      }
+
+      updateValues.push(finalAdmissionNumber); // WHERE clause value
+
+      // Check for duplicates in update fields
+      const uniqueUpdateFields = [...new Set(updateFields.map(f => f.split(' = ')[0]))];
+      if (uniqueUpdateFields.length !== updateFields.length) {
+        console.error('❌ DUPLICATE UPDATE FIELDS DETECTED!');
+        console.error('Original fields:', updateFields);
+        console.error('Unique fields:', uniqueUpdateFields);
+        throw new Error('Duplicate fields detected in update query');
+      }
+
+      console.log('🔍 Debug - Update Field-Value Mapping:');
+      updateFields.forEach((field, index) => {
+        console.log(`  ${index}: ${field} = "${updateValues[index]}"`);
+      });
+      console.log(`  WHERE: admission_number = ? OR admission_no = ? (value: "${finalAdmissionNumber}")`);
 
       await masterConn.query(
         `UPDATE students SET ${updateFields.join(', ')} WHERE admission_number = ? OR admission_no = ?`,
@@ -371,30 +571,98 @@ exports.approveSubmission = async (req, res) => {
     } else {
       // Create new student with proper database column mapping
       const studentData = {};
-      const insertFields = ['admission_number', 'admission_no'];
-      const insertValues = [finalAdmissionNumber, finalAdmissionNumber];
+      const fieldValuePairs = [];
+
+      // Use a Set to track added fields and prevent duplicates
+      const addedFields = new Set();
+
+      // Add base fields (admission_number and admission_no) - prevent duplicates
+      fieldValuePairs.push({ field: 'admission_number', value: finalAdmissionNumber });
+      addedFields.add('admission_number');
+
+      fieldValuePairs.push({ field: 'admission_no', value: finalAdmissionNumber });
+      addedFields.add('admission_no');
+
+      // Add admission_no field if provided in submission data (avoid duplicates)
+      if (submissionData.admission_no && !addedFields.has('admission_no')) {
+        fieldValuePairs.push({ field: 'admission_no', value: submissionData.admission_no });
+        addedFields.add('admission_no');
+      }
 
       // Map submission data to database columns based on form field keys
       Object.entries(submissionData).forEach(([key, value]) => {
         if (value !== undefined && value !== '') {
-          studentData[key] = value;
+          // Sanitize the value to ensure it's JSON serializable
+          let sanitizedValue = value;
+          if (typeof value === 'string') {
+            sanitizedValue = value.trim();
+          }
 
-          // Add to individual columns if it's a predefined field
-          if (predefinedKeys.includes(key)) {
-            insertFields.push(key);
-            insertValues.push(value);
+          studentData[key] = sanitizedValue;
+
+          // Add to individual columns if it's a predefined field (avoid duplicates)
+          if (predefinedKeys.includes(key) && !addedFields.has(key)) {
+            fieldValuePairs.push({ field: key, value: sanitizedValue });
+            addedFields.add(key);
           }
         }
       });
 
-      // Always include JSON data
-      insertFields.push('student_data');
-      insertValues.push(JSON.stringify(studentData));
+      // Add form_id to studentData for completion percentage calculation
+      studentData.form_id = submission.form_id;
+      console.log(`📋 Added form_id to studentData: ${submission.form_id}`);
 
-      await masterConn.query(
-        `INSERT INTO students (${insertFields.join(', ')}) VALUES (${insertFields.map(() => '?').join(', ')})`,
-        insertValues
-      );
+      // Handle JSON data with helper function (avoid duplicates)
+      if (!addedFields.has('student_data')) {
+        const jsonStudentData = safeJSONStringify(studentData);
+        fieldValuePairs.push({ field: 'student_data', value: jsonStudentData });
+        addedFields.add('student_data');
+      }
+
+      // Extract ordered fields and values
+      const insertFields = fieldValuePairs.map(pair => pair.field);
+      const insertValues = fieldValuePairs.map(pair => pair.value);
+
+      // Check for duplicates in the final fields array
+      const uniqueFields = [...new Set(insertFields)];
+      if (uniqueFields.length !== insertFields.length) {
+        console.error('❌ DUPLICATE FIELDS DETECTED!');
+        console.error('Original fields:', insertFields);
+        console.error('Unique fields:', uniqueFields);
+        throw new Error('Duplicate fields detected in insert query');
+      }
+
+      console.log('🔍 Debug - Field-Value Mapping:');
+      fieldValuePairs.forEach((pair, index) => {
+        console.log(`  ${index}: ${pair.field} = "${pair.value}"`);
+      });
+
+      console.log('Final insert query prepared:', {
+        fieldsCount: insertFields.length,
+        valuesCount: insertValues.length,
+        orderedFields: insertFields,
+        uniqueFields: uniqueFields.length === insertFields.length ? '✅ No duplicates' : '❌ Has duplicates',
+        jsonSize: fieldValuePairs.find(p => p.field === 'student_data')?.value?.length || 0
+      });
+
+      // Execute insert with error handling
+      try {
+        const placeholders = insertFields.map(() => '?').join(', ');
+        const query = `INSERT INTO students (${insertFields.join(', ')}) VALUES (${placeholders})`;
+        console.log('Executing insert query, JSON size:', fieldValuePairs.find(p => p.field === 'student_data')?.value?.length || 0);
+        console.log('SQL Query:', query);
+        console.log('Values:', insertValues.length, 'items');
+
+        await masterConn.query(query, insertValues);
+        console.log('✅ Student data inserted successfully');
+      } catch (insertError) {
+        console.error('❌ Insert error:', insertError.message);
+        console.error('❌ SQL query was:', `INSERT INTO students (${insertFields.join(', ')}) VALUES (${insertFields.map(() => '?').join(', ')})`);
+        console.error('❌ Values count:', insertValues.length);
+        console.error('❌ Field-value mapping:', fieldValuePairs);
+        console.error('❌ Added fields Set:', Array.from(addedFields));
+        throw insertError;
+      }
     }
 
     // Update submission status
@@ -514,20 +782,33 @@ exports.deleteSubmission = async (req, res) => {
   }
 };
 
-// Bulk upload submissions (admin only)
+// Enhanced bulk upload submissions (admin only) with duplicate checking and missing field handling
 exports.bulkUploadSubmissions = async (req, res) => {
-  // Supabase path doesn't require connection
-  
+  let masterConn = null;
+
   try {
+    console.log('🚀 Enhanced bulk upload request received');
+    console.log('📁 Request file:', req.file ? {
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'No file');
+    console.log('📋 Request body keys:', Object.keys(req.body));
+    console.log('📋 Request body:', req.body);
+    console.log('👤 Admin ID:', req.admin?.id);
+
     if (!req.file) {
+      console.log('❌ No file received - multer did not parse the file');
       return res.status(400).json({
         success: false,
-        message: 'CSV file is required'
+        message: 'CSV file is required - file was not received by server'
       });
     }
 
-    const { formId } = req.body;
-    
+    const formId = req.body.formId;
+    console.log('📝 Form ID from body:', formId);
+
     if (!formId) {
       return res.status(400).json({
         success: false,
@@ -552,57 +833,129 @@ exports.bulkUploadSubmissions = async (req, res) => {
 
     const form = forms[0];
     const formFields = parseJSON(form.form_fields);
-    
+
     // Parse CSV file
     const results = [];
     const errors = [];
     let rowNumber = 0;
+
+    console.log('📄 Starting CSV parsing for file:', req.file.path);
 
     await new Promise((resolve, reject) => {
       fs.createReadStream(req.file.path)
         .pipe(csv())
         .on('data', (data) => {
           rowNumber++;
+          console.log(`📊 Parsed row ${rowNumber}:`, data);
           results.push({ row: rowNumber, data });
         })
-        .on('end', resolve)
-        .on('error', reject);
+        .on('end', () => {
+          console.log(`✅ CSV parsing completed. Total rows: ${results.length}`);
+          resolve();
+        })
+        .on('error', (error) => {
+          console.error('❌ CSV parsing error:', error);
+          reject(error);
+        });
     });
 
-    // No transaction needed on Supabase client for bulk insert
-
+    // Initialize counters for enhanced tracking
     let successCount = 0;
     let failedCount = 0;
+    let duplicateCount = 0;
+    let missingFieldCount = 0;
+    const processedRows = [];
+    const duplicateDetails = [];
+
+    // Get database connection for duplicate checking
+    masterConn = await masterPool.getConnection();
 
     for (const result of results) {
       try {
         const { row, data } = result;
-        const admissionNumber = data.admission_number;
-        
-        if (!admissionNumber) {
-          errors.push({ row, message: 'Missing admission_number' });
-          failedCount++;
-          continue;
-        }
 
-        // Build submission data from CSV row, mapping to database columns
+        console.log(`🔄 Processing row ${row} with data keys:`, Object.keys(data));
+
+        // Build submission data from CSV row, mapping screenshot field names to form field keys
         const submissionData = {};
-        formFields.forEach(field => {
-          if (data[field.label] !== undefined && data[field.label] !== '') {
-            // Map to database column name
-            submissionData[field.key] = data[field.label];
+
+        // Define field mapping from screenshot CSV headers to form field keys
+        const fieldMapping = {
+          'admission_number': 'admission_number',
+          'Pin No': 'pin_no',
+          'Batch': 'batch',
+          'Branch': 'branch',
+          'StudType': 'stud_type',
+          'Student Name': 'student_name',
+          'Student Status': 'student_status',
+          'Scholar Status': 'scholar_status',
+          'Student Mobile Number': 'student_mobile',
+          'Parent Mobile Number 1': 'parent_mobile1',
+          'Parent Mobile Number 2': 'parent_mobile2',
+          'Caste': 'caste',
+          'M/F': 'gender',
+          'DOB (Date-Month-Year)': 'dob',
+          'Father Name': 'father_name',
+          'Admission Year (Ex: 09-Sep-2003)': 'admission_date',
+          'AADHAR No': 'adhar_no',
+          'Admission No': 'admission_no',
+          'Student Address': 'student_address',
+          'CityVillage Name': 'city_village',
+          'Mandal Name': 'mandal_name',
+          'District Name': 'district',
+          'Previous College Name': 'previous_college',
+          'Certificate Status': 'certificates_status',
+          'Student Photo': 'student_photo',
+          'Remarks': 'remarks'
+        };
+
+        // Map CSV data using the field mapping - handle missing fields gracefully
+        Object.entries(fieldMapping).forEach(([csvHeader, fieldKey]) => {
+          if (data[csvHeader] !== undefined) {
+            // Allow empty strings but preserve them for optional fields
+            submissionData[fieldKey] = data[csvHeader];
           }
         });
+
+        console.log(`📝 Final submission data for row ${row}:`, submissionData);
+
+        // Enhanced validation and duplicate checking
+        const validationResult = await validateAndCheckDuplicates(submissionData, masterConn, row);
+
+        if (!validationResult.isValid) {
+          errors.push({
+            row,
+            message: validationResult.error,
+            type: validationResult.type,
+            details: validationResult.details
+          });
+
+          if (validationResult.type === 'duplicate') {
+            duplicateCount++;
+          } else if (validationResult.type === 'missing_fields') {
+            missingFieldCount++;
+          }
+
+          failedCount++;
+          processedRows.push({
+            row,
+            status: 'failed',
+            reason: validationResult.error,
+            type: validationResult.type
+          });
+          continue;
+        }
 
         const submissionId = uuidv4();
 
         // Insert submission with admin tracking
+        console.log(`💾 Inserting submission ${submissionId} for admission ${submissionData.admission_number}`);
         await supabase
           .from('form_submissions')
           .insert({
             submission_id: submissionId,
             form_id: formId,
-            admission_number: admissionNumber,
+            admission_number: submissionData.admission_number,
             submission_data: submissionData,
             status: 'pending',
             submitted_by: 'admin',
@@ -610,48 +963,81 @@ exports.bulkUploadSubmissions = async (req, res) => {
           });
 
         successCount++;
+        processedRows.push({
+          row,
+          status: 'success',
+          submissionId,
+          admissionNumber: submissionData.admission_number
+        });
+
       } catch (error) {
-        errors.push({ row: result.row, message: error.message });
+        console.error(`❌ Error processing row ${result.row}:`, error);
+        errors.push({
+          row: result.row,
+          message: error.message,
+          type: 'processing_error'
+        });
         failedCount++;
+        processedRows.push({
+          row: result.row,
+          status: 'failed',
+          reason: error.message,
+          type: 'processing_error'
+        });
       }
     }
-
-    // no-op
 
     // Clean up uploaded file
     fs.unlinkSync(req.file.path);
 
-    // Log action
+    // Enhanced logging with detailed statistics
     const masterConn4 = await masterPool.getConnection();
     await masterConn4.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id,
-       JSON.stringify({ successCount, failedCount, totalRows: results.length })]
+      ['ENHANCED_BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id,
+       JSON.stringify({
+         successCount,
+         failedCount,
+         duplicateCount,
+         missingFieldCount,
+         totalRows: results.length,
+         processedRows: processedRows.length
+       })]
     );
     masterConn4.release();
 
+    console.log(`✅ Enhanced bulk upload completed: ${successCount} success, ${failedCount} failed, ${duplicateCount} duplicates, ${missingFieldCount} missing fields`);
+
     res.json({
       success: true,
-      message: `Bulk upload completed. ${successCount} submissions created, ${failedCount} failed.`,
+      message: `Enhanced bulk upload completed. ${successCount} submissions created, ${failedCount} failed.`,
       successCount,
       failedCount,
-      errors: errors.slice(0, 20) // Limit errors to first 20
+      duplicateCount,
+      missingFieldCount,
+      totalRows: results.length,
+      errors: errors.slice(0, 50), // Increased error limit for better debugging
+      processedRows: processedRows.slice(0, 100) // Include processing details
     });
 
   } catch (error) {
-    
+    console.error('Enhanced bulk upload error:', error);
+
     // Clean up uploaded file if it exists
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-    
-    console.error('Bulk upload error:', error);
+
     res.status(500).json({
       success: false,
-      message: 'Server error during bulk upload'
+      message: 'Server error during enhanced bulk upload',
+      error: error.message
     });
   } finally {
+    if (masterConn) {
+      masterConn.release();
+    }
   }
 };
 
@@ -842,14 +1228,23 @@ exports.getStudentCompletionStatus = async (req, res) => {
     }
 
     const student = students[0];
-    const studentData = parseJSON(student.student_data);
 
     // We need to find which form this student came from
     // Check if student data contains form_id or look it up from submissions
-    let formId = studentData.form_id;
+    let formId = null;
 
+    // First try to get form_id from the student_data JSON
+    if (student.student_data) {
+      try {
+        const studentData = parseJSON(student.student_data);
+        formId = studentData.form_id;
+      } catch (error) {
+        console.log('Could not parse student_data JSON for form_id');
+      }
+    }
+
+    // If not found in JSON, look it up from submissions
     if (!formId) {
-      // Try to find the form_id from submissions
       const { data: submissions, error } = await supabase
         .from('form_submissions')
         .select('form_id')
@@ -871,7 +1266,7 @@ exports.getStudentCompletionStatus = async (req, res) => {
     // Get form fields
     const { data: forms, error: formErr } = await supabase
       .from('forms')
-      .select('form_fields')
+      .select('form_fields, form_name')
       .eq('form_id', formId)
       .limit(1);
 
@@ -884,26 +1279,66 @@ exports.getStudentCompletionStatus = async (req, res) => {
     }
 
     const formFields = parseJSON(forms[0].form_fields);
+    const formName = forms[0].form_name;
 
     // Include both visible and hidden fields for completion calculation
     const allFields = formFields.filter(field => field.key);
 
+    console.log(`🔍 Calculating completion for student ${admissionNumber}:`);
+    console.log(`   Total form fields: ${allFields.length}`);
+    console.log(`   Form ID: ${formId}`);
+
     // Calculate completion status considering all fields from the original form
     const totalFields = allFields.length;
-    const completedFields = allFields.filter(field => {
-      const value = studentData[field.key];
-      return value !== undefined && value !== null && value !== '';
-    }).length;
+    let completedFields = 0;
 
-    const fieldStatus = allFields.map(field => ({
-      key: field.key,
-      label: field.label,
-      type: field.type || 'text',
-      completed: studentData[field.key] !== undefined && studentData[field.key] !== null && studentData[field.key] !== '',
-      value: studentData[field.key] || null,
-      required: field.required || false,
-      isHidden: field.isHidden || false
-    }));
+    const fieldStatus = allFields.map(field => {
+      const key = field.key;
+
+      // Check if the field exists in the student record (individual columns take precedence)
+      let value = null;
+      let completed = false;
+
+      // First check individual database columns
+      if (student[key] !== undefined && student[key] !== null && student[key] !== '') {
+        value = student[key];
+        completed = true;
+        completedFields++;
+        console.log(`   ✅ ${key}: Found in database column = "${value}"`);
+      }
+      // Then check student_data JSON as fallback
+      else if (student.student_data) {
+        try {
+          const studentData = parseJSON(student.student_data);
+          if (studentData && studentData[key] !== undefined && studentData[key] !== null && studentData[key] !== '') {
+            value = studentData[key];
+            completed = true;
+            completedFields++;
+            console.log(`   ✅ ${key}: Found in JSON data = "${value}"`);
+          } else {
+            console.log(`   ❌ ${key}: Not found or empty`);
+          }
+        } catch (error) {
+          console.log(`   ❌ ${key}: JSON parse error`);
+        }
+      } else {
+        console.log(`   ❌ ${key}: No data available`);
+      }
+
+      return {
+        key: field.key,
+        label: field.label,
+        type: field.type || 'text',
+        completed: completed,
+        value: value,
+        required: field.required || false,
+        isHidden: field.isHidden || false
+      };
+    });
+
+    const completionPercentage = totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0;
+
+    console.log(`📊 Completion calculation: ${completedFields}/${totalFields} = ${completionPercentage}%`);
 
     res.json({
       success: true,
@@ -911,9 +1346,14 @@ exports.getStudentCompletionStatus = async (req, res) => {
         totalFields,
         completedFields,
         pendingFields: totalFields - completedFields,
-        completionPercentage: totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0,
+        completionPercentage,
         fieldStatus,
-        formName: forms[0].form_name
+        formName,
+        debugInfo: {
+          admissionNumber,
+          formId,
+          dataSource: 'Database columns + JSON fallback'
+        }
       }
     });
 

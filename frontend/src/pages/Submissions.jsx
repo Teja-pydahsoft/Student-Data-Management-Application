@@ -63,16 +63,39 @@ const Submissions = () => {
 
     try {
       console.log('Approving submission:', selectedSubmission.submission_id, 'with admission number:', admissionNumber.trim());
+
       await api.post(`/submissions/${selectedSubmission.submission_id}/approve`, {
         admissionNumber: admissionNumber.trim(),
       });
+
       toast.success('Submission approved successfully');
       setShowModal(false);
       setAdmissionNumber('');
       fetchSubmissions();
     } catch (error) {
       console.error('Approval error:', error);
-      toast.error(error.response?.data?.message || 'Failed to approve submission');
+
+      // Enhanced error handling for different types of errors
+      let errorMessage = 'Failed to approve submission';
+
+      if (error.response?.status === 500) {
+        if (error.response?.data?.message?.includes('JSON')) {
+          errorMessage = 'Data format error: Please check all form fields are properly filled.';
+        } else {
+          errorMessage = 'Server error: Please check the data format and try again.';
+        }
+      } else if (error.response?.status === 400) {
+        errorMessage = error.response?.data?.message || 'Invalid data provided';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      // Log additional error details for debugging
+      if (error.response?.data) {
+        console.error('Error response data:', error.response.data);
+      }
+
+      toast.error(errorMessage);
     }
   };
 

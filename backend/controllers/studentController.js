@@ -100,7 +100,7 @@ exports.getAllStudents = async (req, res) => {
     const params = [];
 
     if (search) {
-      query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
+      query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
@@ -115,11 +115,11 @@ exports.getAllStudents = async (req, res) => {
       params.push(filter_dateTo);
     }
 
-    // Roll number status filter
+    // PIN number status filter
     if (filter_rollNumberStatus === 'assigned') {
-      query += ' AND roll_number IS NOT NULL';
+      query += ' AND pin_no IS NOT NULL';
     } else if (filter_rollNumberStatus === 'unassigned') {
-      query += ' AND roll_number IS NULL';
+      query += ' AND pin_no IS NULL';
     }
 
     // Dynamic field filters (e.g., filter_field_Admission category)
@@ -143,7 +143,7 @@ exports.getAllStudents = async (req, res) => {
     const countParams = [];
 
     if (search) {
-      countQuery += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR roll_number LIKE ? OR student_data LIKE ?)';
+      countQuery += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
       countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
@@ -159,9 +159,9 @@ exports.getAllStudents = async (req, res) => {
     }
 
     if (filter_rollNumberStatus === 'assigned') {
-      countQuery += ' AND roll_number IS NOT NULL';
+      countQuery += ' AND pin_no IS NOT NULL';
     } else if (filter_rollNumberStatus === 'unassigned') {
-      countQuery += ' AND roll_number IS NULL';
+      countQuery += ' AND pin_no IS NULL';
     }
 
     // Apply dynamic field filters to count query
@@ -366,35 +366,35 @@ exports.updateStudent = async (req, res) => {
   }
 };
 
-// Update student roll number
-exports.updateRollNumber = async (req, res) => {
+// Update student PIN number
+exports.updatePinNumber = async (req, res) => {
   try {
     const { admissionNumber } = req.params;
-    const { rollNumber } = req.body;
+    const { pinNumber } = req.body;
 
-    if (!rollNumber || typeof rollNumber !== 'string') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Roll number is required' 
+    if (!pinNumber || typeof pinNumber !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'PIN number is required'
       });
     }
 
-    // Check if roll number already exists for another student
+    // Check if PIN number already exists for another student
     const [existing] = await masterPool.query(
-      'SELECT admission_number FROM students WHERE roll_number = ? AND admission_number != ?',
-      [rollNumber.trim(), admissionNumber]
+      'SELECT admission_number FROM students WHERE pin_no = ? AND admission_number != ?',
+      [pinNumber.trim(), admissionNumber]
     );
 
     if (existing.length > 0) {
       return res.status(400).json({
         success: false,
-        message: `Roll number '${rollNumber}' is already assigned to another student`
+        message: `PIN number '${pinNumber}' is already assigned to another student`
       });
     }
 
     const [result] = await masterPool.query(
-      'UPDATE students SET roll_number = ? WHERE admission_number = ?',
-      [rollNumber.trim(), admissionNumber]
+      'UPDATE students SET pin_no = ? WHERE admission_number = ?',
+      [pinNumber.trim(), admissionNumber]
     );
 
     if (result.affectedRows === 0) {
@@ -408,19 +408,19 @@ exports.updateRollNumber = async (req, res) => {
     await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE_ROLL_NUMBER', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify({ rollNumber })]
+      ['UPDATE_PIN_NUMBER', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify({ pinNumber })]
     );
 
     res.json({
       success: true,
-      message: 'Roll number updated successfully'
+      message: 'PIN number updated successfully'
     });
 
   } catch (error) {
-    console.error('Update roll number error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while updating roll number' 
+    console.error('Update PIN number error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating PIN number'
     });
   }
 };
@@ -637,8 +637,8 @@ exports.createStudent = async (req, res) => {
   }
 };
 
-// Bulk update roll numbers
-exports.bulkUpdateRollNumbers = async (req, res) => {
+// Bulk update PIN numbers
+exports.bulkUpdatePinNumbers = async (req, res) => {
   const connection = await masterPool.getConnection();
 
   try {
@@ -679,9 +679,9 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
       try {
         const { row, data } = result;
         const admissionNumber = data.admission_number?.toString().trim();
-        const rollNumber = data.roll_number?.toString().trim();
+        const pinNumber = data.pin_number?.toString().trim();
 
-        console.log(`Processing row ${row}: admission=${admissionNumber}, roll=${rollNumber}`);
+        console.log(`Processing row ${row}: admission=${admissionNumber}, pin=${pinNumber}`);
 
         if (!admissionNumber) {
           errors.push({ row, message: 'Missing admission_number' });
@@ -689,16 +689,16 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
           continue;
         }
 
-        if (!rollNumber) {
-          errors.push({ row, message: 'Missing roll_number' });
+        if (!pinNumber) {
+          errors.push({ row, message: 'Missing pin_number' });
           failedCount++;
           continue;
         }
 
-        // Update student roll number
+        // Update student PIN number
         const [updateResult] = await connection.query(
-          'UPDATE students SET roll_number = ? WHERE admission_number = ?',
-          [rollNumber, admissionNumber]
+          'UPDATE students SET pin_no = ? WHERE admission_number = ?',
+          [pinNumber, admissionNumber]
         );
 
         console.log(`Update result for ${admissionNumber}: affected rows = ${updateResult.affectedRows}`);
@@ -726,13 +726,13 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
     await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_UPDATE_ROLL_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
+      ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
     );
 
     res.json({
       success: true,
-      message: `Bulk update completed. ${successCount} roll numbers updated, ${failedCount} failed.`,
+      message: `Bulk update completed. ${successCount} PIN numbers updated, ${failedCount} failed.`,
       successCount,
       failedCount,
       notFoundCount,
@@ -747,7 +747,7 @@ exports.bulkUpdateRollNumbers = async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    console.error('Bulk update roll numbers error:', error);
+    console.error('Bulk update PIN numbers error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error during bulk update'

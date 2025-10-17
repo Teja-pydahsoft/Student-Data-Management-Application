@@ -56,7 +56,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
     };
 
     // Create CSV with actual student data
-    const headers = ['admission_number', 'student_name', 'mobile_number', 'roll_number'];
+    const headers = ['admission_number', 'student_name', 'mobile_number', 'pin_no'];
     const rows = students.map(student => {
       const name = extractField(student.student_data, ['name', 'student name']);
       const mobile = extractField(student.student_data, ['mobile', 'phone', 'contact']);
@@ -64,7 +64,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
         student.admission_number,
         name,
         mobile,
-        student.roll_number || '' // Empty if not assigned
+        student.admission_number || '' // Use admission_number for now
       ].map(val => `"${val}"`).join(',');
     });
 
@@ -74,7 +74,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `roll_numbers_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `pin_numbers_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
     toast.success('Template with student data downloaded');
@@ -93,14 +93,14 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post('/students/bulk-update-roll-numbers', formData, {
+      const response = await api.post('/students/bulk-update-pin-numbers', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
       setUploadResult(response.data);
-      toast.success(`Successfully updated ${response.data.successCount} roll numbers`);
+      toast.success(`Successfully updated ${response.data.successCount} PIN numbers`);
       
       if (onUpdateComplete) {
         onUpdateComplete();
@@ -123,7 +123,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-2xl font-bold text-gray-900">Bulk Update Roll Numbers</h3>
+          <h3 className="text-2xl font-bold text-gray-900">Bulk Update PIN Numbers</h3>
           <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <X size={24} />
           </button>
@@ -138,9 +138,9 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
                 <p className="text-sm text-blue-800 font-medium mb-2">Instructions:</p>
                 <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
                   <li>Download CSV with actual student data (includes name & mobile)</li>
-                  <li>Add roll numbers in the roll_number column</li>
+                  <li>Add PIN numbers in the pin_no column</li>
                   <li>Upload the completed CSV file</li>
-                  <li>Only admission_number and roll_number columns are required</li>
+                  <li>Only admission_number and pin_no columns are required</li>
                 </ul>
                 <button
                   onClick={downloadTemplate}
@@ -181,7 +181,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
                 <p className="text-sm text-gray-600 mb-1">
                   {file ? file.name : 'Click to upload CSV file'}
                 </p>
-                <p className="text-xs text-gray-500">CSV files only (admission_number, roll_number)</p>
+                <p className="text-xs text-gray-500">CSV files only (admission_number, pin_no)</p>
               </label>
             </div>
           </div>
@@ -265,7 +265,7 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
               ) : (
                 <>
                   <Upload size={20} />
-                  Update Roll Numbers
+                  Update PIN Numbers
                 </>
               )}
             </button>

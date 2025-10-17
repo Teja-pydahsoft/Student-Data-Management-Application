@@ -50,7 +50,7 @@ async function migrateStudentData() {
             dob VARCHAR(50),
             adhar_no VARCHAR(20),
             admission_no VARCHAR(100) UNIQUE NOT NULL,
-            roll_number VARCHAR(100),
+            pin_no VARCHAR(50),
             student_address TEXT,
             city_village VARCHAR(100),
             mandal_name VARCHAR(100),
@@ -62,7 +62,6 @@ async function migrateStudentData() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_admission (admission_no),
-            INDEX idx_roll_number (roll_number),
             INDEX idx_pin_no (pin_no),
             INDEX idx_batch (batch),
             INDEX idx_branch (branch)
@@ -111,7 +110,7 @@ async function migrateStudentData() {
             dob: studentData['DOB'] || studentData['dob'] || null,
             adhar_no: studentData['ADHAR No'] || studentData['adhar_no'] || null,
             admission_no: oldStudent.admission_number,
-            roll_number: oldStudent.roll_number,
+            pin_no: oldStudent.pin_no || null, // pin_no is the standard field
             student_address: studentData['Student Address'] || studentData['student_address'] || null,
             city_village: studentData['City/Village Name'] || studentData['city_village'] || null,
             mandal_name: studentData['Mandal Name'] || studentData['mandal_name'] || null,

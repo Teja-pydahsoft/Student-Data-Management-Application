@@ -24,7 +24,6 @@ const AddStudent = () => {
     dob: '',
     adhar_no: '',
     admission_no: '',
-    roll_number: '',
     student_address: '',
     city_village: '',
     mandal_name: '',
@@ -104,19 +103,7 @@ const AddStudent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Roll Number
-                </label>
-                <input
-                  type="text"
-                  name="roll_number"
-                  value={studentData.roll_number}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pin No
+                  PIN Number
                 </label>
                 <input
                   type="text"

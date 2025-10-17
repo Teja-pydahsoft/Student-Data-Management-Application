@@ -160,7 +160,7 @@ const Students = () => {
     setEditData(student.student_data);
     setEditMode(false);
     setEditingRollNumber(false);
-    setTempRollNumber(student.roll_number || '');
+    setTempRollNumber(student.pin_no || '');
 
     // Prepare all possible fields including hidden ones
     const allFields = {
@@ -170,8 +170,7 @@ const Students = () => {
       'pin_no': student.pin_no || '',
       'previous_college': student.previous_college || '',
       'certificates_status': student.certificates_status || '',
-      'student_photo': student.student_photo || '',
-      'roll_number': student.roll_number || ''
+      'student_photo': student.student_photo || ''
     };
 
     console.log('Student data:', student);
@@ -206,15 +205,15 @@ const Students = () => {
 
   const handleSaveRollNumber = async () => {
     try {
-      await api.put(`/students/${selectedStudent.admission_number}/roll-number`, {
-        rollNumber: tempRollNumber,
+      await api.put(`/students/${selectedStudent.admission_number}/pin-number`, {
+        pinNumber: tempRollNumber,
       });
-      toast.success('Roll number updated successfully');
+      toast.success('PIN number updated successfully');
       setEditingRollNumber(false);
-      setSelectedStudent({ ...selectedStudent, roll_number: tempRollNumber });
+      setSelectedStudent({ ...selectedStudent, pin_no: tempRollNumber });
       fetchStudents();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update roll number');
+      toast.error(error.response?.data?.message || 'Failed to update PIN number');
     }
   };
 
@@ -237,7 +236,7 @@ const Students = () => {
       return;
     }
 
-    const headers = ['Admission Number', 'Roll Number', 'Name', 'Mobile Number', ...Object.keys(students[0].student_data)];
+    const headers = ['Admission Number', 'PIN Number', 'Name', 'Mobile Number', ...Object.keys(students[0].student_data)];
     const csvContent = [
       headers.join(','),
       ...students.map((student) => {
@@ -255,7 +254,7 @@ const Students = () => {
 
         const row = [
           student.admission_number,
-          student.roll_number || '',
+          student.pin_no || '',
           nameField ? data[nameField] : '',
           mobileField ? data[mobileField] : '',
           ...Object.values(student.student_data).map((val) =>
@@ -388,11 +387,11 @@ const Students = () => {
           </Link>
           <button onClick={() => setShowManualRollNumber(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
             <UserCog size={18} />
-            Update Roll Numbers
+            Update PIN Numbers
           </button>
           <button onClick={() => setShowBulkRollNumber(true)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
             <Upload size={18} />
-            Bulk Upload CSV
+            Bulk Upload PIN CSV
           </button>
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
             <Download size={18} />
@@ -453,15 +452,15 @@ const Students = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Roll Number Status</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">PIN Number Status</label>
                 <select
                   value={filters.rollNumberStatus || ''}
                   onChange={(e) => handleFilterChange('rollNumberStatus', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 >
                   <option value="">All</option>
-                  <option value="assigned">With Roll Number</option>
-                  <option value="unassigned">Without Roll Number</option>
+                  <option value="assigned">With PIN Number</option>
+                  <option value="unassigned">Without PIN Number</option>
                 </select>
               </div>
             </div>
@@ -569,7 +568,7 @@ const Students = () => {
                 <tr>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Photo</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Roll Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">PIN Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Completion</th>
@@ -614,9 +613,9 @@ const Students = () => {
                       </td>
                       <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">
-                        {student.roll_number ? (
+                        {student.pin_no ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
-                            {student.roll_number}
+                            {student.pin_no}
                           </span>
                         ) : (
                           <span className="text-gray-400 text-xs">Not assigned</span>
@@ -710,7 +709,7 @@ const Students = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                      Roll Number
+                      PIN Number
                     </label>
                     {editingRollNumber ? (
                       <div className="flex items-center gap-2">
@@ -718,7 +717,7 @@ const Students = () => {
                           type="text"
                           value={tempRollNumber}
                           onChange={(e) => setTempRollNumber(e.target.value)}
-                          placeholder="Enter roll number"
+                          placeholder="Enter PIN number"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                         />
                         <button
@@ -730,7 +729,7 @@ const Students = () => {
                         <button
                           onClick={() => {
                             setEditingRollNumber(false);
-                            setTempRollNumber(selectedStudent.roll_number || '');
+                            setTempRollNumber(selectedStudent.pin_no || '');
                           }}
                           className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                         >
@@ -739,9 +738,9 @@ const Students = () => {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        {selectedStudent.roll_number ? (
+                        {selectedStudent.pin_no ? (
                           <span className="inline-flex items-center px-3 py-1 rounded-lg bg-green-100 text-green-800 text-lg font-semibold">
-                            {selectedStudent.roll_number}
+                            {selectedStudent.pin_no}
                           </span>
                         ) : (
                           <span className="text-gray-400 text-sm italic">Not assigned</span>
@@ -750,7 +749,7 @@ const Students = () => {
                           <button
                             onClick={() => setEditingRollNumber(true)}
                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit roll number"
+                            title="Edit PIN Number"
                           >
                             <Edit size={16} />
                           </button>

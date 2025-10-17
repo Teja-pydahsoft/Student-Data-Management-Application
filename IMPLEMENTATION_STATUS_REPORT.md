@@ -50,14 +50,14 @@ All requested features have been successfully implemented, tested, and documente
 - Date picker UI for easy selection
 - Backend query optimization with indexed dates
 
-#### B. Roll Number Status Filter
-- Filter by "With Roll Number"
-- Filter by "Without Roll Number"
+#### B. PIN Number Status Filter
+- Filter by "With PIN Number"
+- Filter by "Without PIN Number"
 - Filter by "All" (default)
 
 #### C. Enhanced Search
 - Search by admission number
-- Search by roll number
+- Search by PIN number
 - Search by student data (JSON fields)
 
 #### D. UI Components
@@ -186,12 +186,12 @@ POST /api/submissions/bulk-upload
 
 ---
 
-### 5. Bulk Roll Number Update
+### 5. Bulk PIN Number Update
 **Status**: ✅ **COMPLETED**
 
 **Features Implemented**:
 
-#### A. Bulk Roll Number Modal
+#### A. Bulk PIN Number Modal
 - CSV file upload interface
 - Template download with instructions
 - Progress indication during upload
@@ -200,8 +200,8 @@ POST /api/submissions/bulk-upload
 
 #### B. Database Schema
 ```sql
-- roll_number: VARCHAR(100) NULL
-- Index on roll_number for performance
+- pin_no: VARCHAR(50) NULL
+- Index on pin_no for performance
 ```
 
 #### C. Backend Processing
@@ -212,15 +212,15 @@ POST /api/submissions/bulk-upload
 - Audit logging
 
 #### D. UI Integration
-- "Bulk Roll Numbers" button on Students page
-- Roll number column in students table
+- "Bulk PIN Numbers" button on Students page
+- PIN number column in students table
 - Visual badges for assigned/unassigned status
-- Green badge for assigned roll numbers
+- Green badge for assigned PIN numbers
 - Gray text for unassigned
 
 **Files Created**:
 - `frontend/src/components/BulkRollNumberModal.jsx` (New)
-- Backend: Added `bulkUpdateRollNumbers` function
+- Backend: Added `bulkUpdatePinNumbers` function
 
 **Files Modified**:
 - `frontend/src/pages/Students.jsx`
@@ -230,7 +230,7 @@ POST /api/submissions/bulk-upload
 
 **API Endpoint**:
 ```
-POST /api/students/bulk-update-roll-numbers
+POST /api/students/bulk-update-pin-numbers
 - Requires: Admin authentication
 - Accepts: multipart/form-data (CSV)
 - Returns: Success/failure/not found counts
@@ -238,16 +238,16 @@ POST /api/students/bulk-update-roll-numbers
 
 **CSV Format**:
 ```csv
-admission_number,roll_number
-ADM001,ROLL2025001
-ADM002,ROLL2025002
+admission_number,pin_no
+ADM001,PIN2025001
+ADM002,PIN2025002
 ```
 
 **Testing**:
 - ✅ Modal opens and closes
 - ✅ Template downloads correctly
 - ✅ CSV upload works
-- ✅ Roll numbers update correctly
+- ✅ PIN numbers update correctly
 - ✅ Not found students tracked
 - ✅ Visual badges display correctly
 - ✅ Filter by roll number status works
@@ -278,8 +278,8 @@ ADM002,ROLL2025002
 
 2. `frontend/src/pages/Students.jsx`
    - Added filtering UI (Lines 15-18, 188-256)
-   - Added bulk roll number button (Lines 177-180)
-   - Added roll number column (Lines 276, 286-294)
+   - Added bulk PIN number button (Lines 177-180)
+   - Added PIN number column (Lines 276, 286-294)
    - Enhanced search functionality (Lines 47-87)
 
 3. `frontend/src/pages/Submissions.jsx`
@@ -308,7 +308,7 @@ ADM002,ROLL2025002
    - Added bulk upload route (Line 11)
 
 5. `backend/routes/studentRoutes.js`
-   - Added bulk roll number route (Line 9)
+   - Added bulk PIN number route (Line 9)
 
 6. `backend/package.json`
    - Added csv-parser dependency (Line 26)
@@ -325,8 +325,8 @@ ADM002,ROLL2025002
 - Index: `idx_submitted_by`
 
 #### students table
-- `roll_number` VARCHAR(100) NULL
-- Index: `idx_roll_number`
+- `pin_no` VARCHAR(50) NULL
+- Index: `idx_pin_no`
 
 ### Migration Script
 Location: `backend/scripts/migration_add_features.sql`
@@ -361,7 +361,7 @@ mysql -u username -p student_database < backend/scripts/migration_add_features.s
 
 #### Student Filtering
 - ✅ Date range filter works
-- ✅ Roll number status filter works
+- ✅ PIN number status filter works
 - ✅ Combined filters work
 - ✅ Clear filters resets state
 - ✅ Search with filters works

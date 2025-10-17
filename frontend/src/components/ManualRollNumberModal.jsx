@@ -32,7 +32,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       // Initialize roll numbers state with existing values
       const initialRollNumbers = {};
       studentsData.forEach(student => {
-        initialRollNumbers[student.admission_number] = student.roll_number || '';
+        initialRollNumbers[student.admission_number] = student.pin_no || '';
       });
       setRollNumbers(initialRollNumbers);
     } catch (error) {
@@ -48,7 +48,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
 
     // Filter by pending status
     if (showOnlyPending) {
-      filtered = filtered.filter(student => !student.roll_number);
+      filtered = filtered.filter(student => !student.pin_no);
     }
 
     // Filter by search term
@@ -56,7 +56,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(student => {
         const admissionMatch = student.admission_number.toLowerCase().includes(term);
-        const rollMatch = student.roll_number?.toLowerCase().includes(term);
+        const rollMatch = student.pin_no?.toLowerCase().includes(term);
         
         // Search in student data
         const data = student.student_data;
@@ -86,13 +86,13 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       // Filter only changed roll numbers
       const updates = [];
       filteredStudents.forEach(student => {
-        const newRollNumber = rollNumbers[student.admission_number]?.trim();
-        const oldRollNumber = student.roll_number;
-        
-        if (newRollNumber && newRollNumber !== oldRollNumber) {
+        const newPinNumber = rollNumbers[student.admission_number]?.trim();
+        const oldPinNumber = student.pin_no;
+
+        if (newPinNumber && newPinNumber !== oldPinNumber) {
           updates.push({
             admission_number: student.admission_number,
-            roll_number: newRollNumber
+            pin_no: newPinNumber
           });
         }
       });
@@ -110,8 +110,8 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
 
       for (const update of updates) {
         try {
-          await api.put(`/students/${update.admission_number}/roll-number`, {
-            rollNumber: update.roll_number
+          await api.put(`/students/${update.admission_number}/pin-number`, {
+            pinNumber: update.pin_no
           });
           successCount++;
         } catch (error) {
@@ -124,7 +124,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       }
 
       if (successCount > 0) {
-        toast.success(`Successfully updated ${successCount} roll number(s)`);
+        toast.success(`Successfully updated ${successCount} PIN number(s)`);
         if (onUpdateComplete) {
           onUpdateComplete();
         }
@@ -132,12 +132,12 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       }
 
       if (failedCount > 0) {
-        toast.error(`Failed to update ${failedCount} roll number(s)`);
+        toast.error(`Failed to update ${failedCount} PIN number(s)`);
         console.error('Update errors:', errors);
       }
 
     } catch (error) {
-      toast.error('Failed to save roll numbers');
+      toast.error('Failed to save PIN numbers');
       console.error(error);
     } finally {
       setSaving(false);
@@ -165,8 +165,8 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
-            <h3 className="text-2xl font-bold text-gray-900">Update Roll Numbers</h3>
-            <p className="text-sm text-gray-600 mt-1">Assign roll numbers to students individually</p>
+            <h3 className="text-2xl font-bold text-gray-900">Update PIN Numbers</h3>
+            <p className="text-sm text-gray-600 mt-1">Assign PIN numbers to students individually</p>
           </div>
           <button 
             onClick={handleClose} 
@@ -205,7 +205,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
               Showing <strong>{filteredStudents.length}</strong> student(s)
               {showOnlyPending && (
                 <span className="ml-2 text-orange-600">
-                  ({filteredStudents.length} without roll numbers)
+                  ({filteredStudents.length} without PIN numbers)
                 </span>
               )}
             </div>
@@ -250,18 +250,18 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">
-                        Roll Number *
+                        PIN Number *
                       </label>
                       <input
                         type="text"
                         value={rollNumbers[student.admission_number] || ''}
                         onChange={(e) => handleRollNumberChange(student.admission_number, e.target.value)}
-                        placeholder="Enter roll number"
+                        placeholder="Enter PIN number"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                       />
                     </div>
                   </div>
-                  {student.roll_number && (
+                  {student.pin_no && (
                     <div className="flex items-center gap-1 text-green-600">
                       <CheckCircle size={16} />
                       <span className="text-xs font-medium">Assigned</span>

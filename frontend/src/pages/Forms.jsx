@@ -161,15 +161,15 @@ const Forms = () => {
                     </div>
                     {form.form_fields?.filter(field => field.isEnabled === false).length > 0 && (
                       <div className="mt-2">
-                        <div className="font-medium mb-1 text-gray-400">Hidden Fields:</div>
+                        <div className="font-medium mb-1 text-gray-400">Admin Fields:</div>
                         <div className="space-y-1">
                           {form.form_fields
                             ?.filter(field => field.isEnabled === false)
                             .map(field => (
                               <div key={field.id || field.label} className="flex items-center gap-2">
-                                <span className="text-gray-400">●</span>
-                                <span className="text-gray-400">{field.label}</span>
-                              </div>
+                                    <span className="text-gray-400">●</span>
+                                    <span className="text-gray-400">{field.label} (Admin Only)</span>
+                                  </div>
                             ))}
                         </div>
                       </div>

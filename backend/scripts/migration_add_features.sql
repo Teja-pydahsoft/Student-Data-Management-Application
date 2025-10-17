@@ -14,10 +14,11 @@ ALTER TABLE form_submissions
 ADD CONSTRAINT fk_submitted_by_admin 
 FOREIGN KEY (submitted_by_admin) REFERENCES admins(id) ON DELETE SET NULL;
 
--- Add roll_number column to students table
-ALTER TABLE students 
-ADD COLUMN IF NOT EXISTS roll_number VARCHAR(100) NULL AFTER admission_number,
-ADD INDEX IF NOT EXISTS idx_roll_number (roll_number);
+-- Note: pin_no column is the standard for student identification
+-- This script ensures pin_no column exists
+ALTER TABLE students
+ADD COLUMN IF NOT EXISTS pin_no VARCHAR(50) NULL,
+ADD INDEX IF NOT EXISTS idx_pin_no (pin_no);
 
 -- Update existing records to have 'student' as submitted_by
 UPDATE form_submissions SET submitted_by = 'student' WHERE submitted_by IS NULL;

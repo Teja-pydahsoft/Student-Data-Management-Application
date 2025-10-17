@@ -12,6 +12,7 @@ const PublicForm = () => {
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({});
   const [admissionNumber, setAdmissionNumber] = useState('');
+  const [fileData, setFileData] = useState({});
 
   useEffect(() => {
     fetchForm();
@@ -58,6 +59,13 @@ const PublicForm = () => {
     }
   };
 
+  const handleFileChange = (label, file) => {
+    setFileData({
+      ...fileData,
+      [label]: file,
+    });
+  };
+
   const validateForm = () => {
     // Only validate enabled fields
     const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
@@ -92,7 +100,13 @@ const PublicForm = () => {
       // Only process enabled fields
       const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
       enabledFields.forEach((field) => {
-        if (formData[field.label] !== undefined && formData[field.label] !== '' && field.key !== 'admission_no') {
+        if (field.type === 'file') {
+          // Handle file uploads separately
+          const file = fileData[field.label];
+          if (file) {
+            submissionData[field.key] = file.name; // Store filename for now
+          }
+        } else if (formData[field.label] !== undefined && formData[field.label] !== '' && field.key !== 'admission_no') {
           // Use the field key (database column name) as the key in submission data
           submissionData[field.key] = formData[field.label];
         }
@@ -178,6 +192,24 @@ const PublicForm = () => {
                 <span className="text-gray-700">{option}</span>
               </label>
             ))}
+          </div>
+        );
+
+      case 'file':
+        return (
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept={field.accept || 'image/*'}
+              onChange={(e) => handleFileChange(field.label, e.target.files[0])}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              required={field.required}
+            />
+            {fileData[field.label] && (
+              <p className="text-sm text-green-600">
+                Selected: {fileData[field.label].name}
+              </p>
+            )}
           </div>
         );
 

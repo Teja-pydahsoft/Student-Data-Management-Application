@@ -17,8 +17,8 @@ This document outlines the new features added to the Student Database Management
 ### 2. **Dynamic Filtering for Students Page** ✅
 - **Features**:
   - Date range filtering (Created From - Created To)
-  - Roll number status filter (With/Without roll numbers)
-  - Search by admission number, roll number, or student data
+  - PIN number status filter (With/Without PIN numbers)
+  - Search by admission number, PIN number, or student data
   - Clear all filters option
 - **Location**: `frontend/src/pages/Students.jsx`
 - **UI Components**:
@@ -60,7 +60,7 @@ This document outlines the new features added to the Student Database Management
 
 ### 6. **Roll Number Field in Students Table** ✅
 - **Database Changes**:
-  - Added `roll_number` column to students table
+  - Added `pin_no` column to students table
   - Added index for performance
 - **UI Changes**:
   - Display roll number in students table
@@ -96,7 +96,7 @@ mysql -u your_username -p student_database < backend/scripts/migration_add_featu
 **Migration includes**:
 - Add `submitted_by` column to form_submissions
 - Add `submitted_by_admin` column to form_submissions
-- Add `roll_number` column to students table
+- Add `pin_no` column to students table
 - Add necessary indexes
 
 ### Step 3: Create Uploads Directory
@@ -165,9 +165,9 @@ ADM002,Value1,Value2,Value3
 
 **CSV Format**:
 ```csv
-admission_number,roll_number
-ADM001,ROLL2025001
-ADM002,ROLL2025002
+admission_number,pin_no
+ADM001,PIN2025001
+ADM002,PIN2025002
 ```
 
 ## 🔧 API Endpoints
@@ -245,9 +245,9 @@ ADD FOREIGN KEY (submitted_by_admin) REFERENCES admins(id);
 
 ### students Table
 ```sql
-ALTER TABLE students 
-ADD COLUMN roll_number VARCHAR(100) NULL,
-ADD INDEX idx_roll_number (roll_number);
+ALTER TABLE students
+ADD COLUMN pin_no VARCHAR(50) NULL,
+ADD INDEX idx_pin_no (pin_no);
 ```
 
 ## 🐛 Troubleshooting
@@ -301,7 +301,7 @@ mkdir backend/uploads
 ## 📈 Performance Considerations
 
 - Bulk operations use database transactions
-- Indexes added for roll_number and submitted_by
+- Indexes added for pin_no and submitted_by
 - CSV parsing is streamed for memory efficiency
 - Error reporting limited to first 20 errors
 
