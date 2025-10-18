@@ -4,6 +4,7 @@ import { Edit, Trash2, QrCode, Eye, EyeOff, Download, Plus } from 'lucide-react'
 import QRCodeComponent from 'react-qr-code';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const Forms = () => {
   const [forms, setForms] = useState([]);
@@ -81,7 +82,10 @@ const Forms = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <LoadingAnimation
+          size="lg"
+          message="Loading forms..."
+        />
       </div>
     );
   }

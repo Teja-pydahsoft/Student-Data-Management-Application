@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogIn, Loader2, Eye, EyeOff, Users, Shield } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -146,7 +147,12 @@ const Login = () => {
               
               {loading ? (
                 <>
-                  <Loader2 className="animate-spin" size={18} />
+                  <LoadingAnimation
+                    width={18}
+                    height={18}
+                    variant="inline"
+                    showMessage={false}
+                  />
                   <span className="text-sm">Signing in...</span>
                 </>
               ) : (

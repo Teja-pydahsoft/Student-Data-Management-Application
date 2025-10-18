@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const AddStudent = () => {
   const navigate = useNavigate();
@@ -425,7 +426,12 @@ const AddStudent = () => {
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <LoadingAnimation
+                    width={16}
+                    height={16}
+                    variant="inline"
+                    showMessage={false}
+                  />
                   Saving...
                 </>
               ) : (

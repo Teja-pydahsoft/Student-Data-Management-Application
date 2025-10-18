@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from './LoadingAnimation';
 
 const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
   const [selectedForm, setSelectedForm] = useState('');
@@ -293,7 +294,12 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
               <div className="flex items-center gap-4">
                 <div className="flex-shrink-0">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <LoadingAnimation
+                    width={32}
+                    height={32}
+                    variant="minimal"
+                    showMessage={false}
+                  />
                 </div>
                 <div className="flex-1">
                   <h4 className="text-lg font-semibold text-blue-800 mb-2">Processing Upload...</h4>
@@ -572,7 +578,12 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
             >
               {uploading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <LoadingAnimation
+                    width={20}
+                    height={20}
+                    variant="inline"
+                    showMessage={false}
+                  />
                   <div className="flex flex-col items-start">
                     <span>Uploading...</span>
                     {uploadProgress && (

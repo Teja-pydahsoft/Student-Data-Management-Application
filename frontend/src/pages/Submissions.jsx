@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload, Plus, Hash } from 'l
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import BulkUploadModal from '../components/BulkUploadModal';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const Submissions = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -130,7 +131,10 @@ const Submissions = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <LoadingAnimation
+          size="lg"
+          message="Loading submissions..."
+        />
       </div>
     );
   }

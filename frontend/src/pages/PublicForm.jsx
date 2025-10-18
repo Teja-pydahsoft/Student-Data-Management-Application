@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../config/api';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const PublicForm = () => {
   const { formId } = useParams();
@@ -249,7 +250,11 @@ const PublicForm = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <LoadingAnimation
+          size="xl"
+          message="Loading form..."
+          variant="overlay"
+        />
       </div>
     );
   }

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Save, Eye, EyeOff, GripVertical, Settings } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const FormBuilder = () => {
   const { formId } = useParams();
@@ -209,7 +210,10 @@ const FormBuilder = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <LoadingAnimation
+          size="lg"
+          message="Loading form builder..."
+        />
       </div>
     );
   }

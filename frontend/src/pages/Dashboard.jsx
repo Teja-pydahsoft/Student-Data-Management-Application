@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Users, 
-  FileText, 
-  ClipboardList, 
+import {
+  Users,
+  FileText,
+  ClipboardList,
   CheckCircle,
   TrendingUp,
   Clock
 } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from '../components/LoadingAnimation';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
@@ -68,7 +69,10 @@ const Dashboard = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <LoadingAnimation
+          size="lg"
+          message="Loading dashboard..."
+        />
       </div>
     );
   }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from './LoadingAnimation';
 
 const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
   const [file, setFile] = useState(null);
@@ -149,7 +150,12 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
                 >
                   {loadingStudents ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <LoadingAnimation
+                        width={16}
+                        height={16}
+                        variant="inline"
+                        showMessage={false}
+                      />
                       Loading...
                     </>
                   ) : (
@@ -259,7 +265,12 @@ const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
             >
               {uploading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <LoadingAnimation
+                    width={20}
+                    height={20}
+                    variant="inline"
+                    showMessage={false}
+                  />
                   Updating...
                 </>
               ) : (

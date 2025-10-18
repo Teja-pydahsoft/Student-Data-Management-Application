@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, AlertCircle, CheckCircle, Search } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
+import LoadingAnimation from './LoadingAnimation';
 
 const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
   const [students, setStudents] = useState([]);
@@ -216,7 +217,10 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
         <div className="flex-1 overflow-y-auto p-6">
           {loadingStudents ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+              <LoadingAnimation
+                size="lg"
+                message="Loading students..."
+              />
             </div>
           ) : filteredStudents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -283,7 +287,12 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
             >
               {saving ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <LoadingAnimation
+                    width={20}
+                    height={20}
+                    variant="inline"
+                    showMessage={false}
+                  />
                   Saving...
                 </>
               ) : (
