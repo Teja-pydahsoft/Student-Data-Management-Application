@@ -36,43 +36,50 @@ const Dashboard = () => {
       title: 'Total Students',
       value: stats?.totalStudents || 0,
       icon: Users,
-      color: 'bg-blue-500',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-600',
+      color: 'bg-primary',
+      bgColor: 'bg-accent/10',
+      textColor: 'text-primary',
     },
     {
       title: 'Total Forms',
       value: stats?.totalForms || 0,
       icon: FileText,
-      color: 'bg-green-500',
-      bgColor: 'bg-green-50',
-      textColor: 'text-green-600',
+      color: 'bg-success',
+      bgColor: 'bg-success/10',
+      textColor: 'text-success',
     },
     {
       title: 'Pending Submissions',
       value: stats?.pendingSubmissions || 0,
       icon: Clock,
-      color: 'bg-yellow-500',
-      bgColor: 'bg-yellow-50',
-      textColor: 'text-yellow-600',
+      color: 'bg-warning',
+      bgColor: 'bg-warning/10',
+      textColor: 'text-warning',
     },
     {
       title: 'Approved Today',
       value: stats?.approvedToday || 0,
       icon: CheckCircle,
-      color: 'bg-purple-500',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600',
+      color: 'bg-info',
+      bgColor: 'bg-info/10',
+      textColor: 'text-info',
     },
   ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingAnimation
-          size="lg"
-          message="Loading dashboard..."
-        />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-6">
+          <LoadingAnimation
+            width={120}
+            height={120}
+            message="Loading dashboard..."
+          />
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-text-primary">Loading Dashboard</p>
+            <p className="text-sm text-text-secondary">Please wait while we fetch your statistics...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -81,8 +88,8 @@ const Dashboard = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-3xl font-bold text-text-primary heading-font">Dashboard</h1>
+        <p className="text-text-secondary mt-2 body-font">
           Welcome back! Here's an overview of your system.
         </p>
       </div>
@@ -94,14 +101,14 @@ const Dashboard = () => {
           return (
             <div
               key={index}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+              className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6 card-hover"
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">
+                  <p className="text-sm font-medium text-text-secondary mb-1 body-font">
                     {stat.title}
                   </p>
-                  <p className="text-3xl font-bold text-gray-900">
+                  <p className="text-3xl font-bold text-text-primary heading-font">
                     {stat.value}
                   </p>
                 </div>
@@ -115,20 +122,20 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
+      <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6">
+        <h2 className="text-xl font-bold text-text-primary mb-4 heading-font">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           <Link
             to="/submissions"
-            className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors group"
+            className="flex items-center gap-3 p-4 border-2 border-dashed border-border-light rounded-lg hover:border-accent hover:bg-accent/5 transition-colors group"
           >
-            <div className="bg-yellow-100 p-2 rounded-lg group-hover:bg-yellow-200 transition-colors">
-              <ClipboardList className="text-yellow-600" size={20} />
+            <div className="bg-warning/10 p-2 rounded-lg group-hover:bg-warning/20 transition-colors">
+              <ClipboardList className="text-warning" size={20} />
             </div>
             <div>
-              <p className="font-medium text-gray-900">Review Submissions</p>
-              <p className="text-sm text-gray-600">
+              <p className="font-medium text-text-primary">Review Submissions</p>
+              <p className="text-sm text-text-secondary">
                 {stats?.pendingSubmissions || 0} pending
               </p>
             </div>
@@ -136,14 +143,14 @@ const Dashboard = () => {
 
           <Link
             to="/students"
-            className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors group"
+            className="flex items-center gap-3 p-4 border-2 border-dashed border-border-light rounded-lg hover:border-primary hover:bg-primary/5 transition-colors group"
           >
-            <div className="bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
-              <Users className="text-blue-600" size={20} />
+            <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20 transition-colors">
+              <Users className="text-primary" size={20} />
             </div>
             <div>
-              <p className="font-medium text-gray-900">View Students</p>
-              <p className="text-sm text-gray-600">Manage database</p>
+              <p className="font-medium text-text-primary">View Students</p>
+              <p className="text-sm text-text-secondary">Manage database</p>
             </div>
           </Link>
         </div>
@@ -151,24 +158,24 @@ const Dashboard = () => {
 
       {/* Recent Submissions */}
       {stats?.recentSubmissions && stats.recentSubmissions.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6">
+          <h2 className="text-xl font-bold text-text-primary mb-4 heading-font">
             Recent Submissions
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                <tr className="border-b border-border-light">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-heading-dark">
                     Form Name
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-heading-dark">
                     Admission Number
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-heading-dark">
                     Status
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-heading-dark">
                     Submitted At
                   </th>
                 </tr>
@@ -177,12 +184,12 @@ const Dashboard = () => {
                 {stats.recentSubmissions.map((submission) => (
                   <tr
                     key={submission.submission_id}
-                    className="border-b border-gray-100 hover:bg-gray-50"
+                    className="border-b border-border-lighter hover:bg-accent/5 transition-colors"
                   >
-                    <td className="py-3 px-4 text-sm text-gray-900">
+                    <td className="py-3 px-4 text-sm text-text-primary">
                       {submission.form_name}
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
+                    <td className="py-3 px-4 text-sm text-text-secondary">
                       {submission.admission_number || 'N/A'}
                     </td>
                     <td className="py-3 px-4">
@@ -198,7 +205,7 @@ const Dashboard = () => {
                         {submission.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
+                    <td className="py-3 px-4 text-sm text-text-secondary">
                       {new Date(submission.submitted_at).toLocaleString()}
                     </td>
                   </tr>

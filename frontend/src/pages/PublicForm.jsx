@@ -348,7 +348,7 @@ const PublicForm = () => {
         </div>
 
         <p className="text-center text-gray-600 text-sm mt-6">
-          © 2025 Student Database Management System
+          © 2025 Pydah Student Database Management System
         </p>
       </div>
     </div>

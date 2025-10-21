@@ -1,4 +1,4 @@
--- Student Database Management System Schema
+-- Pydah Student Database Management System Schema
 
 -- Create database if not exists
 CREATE DATABASE IF NOT EXISTS student_database;

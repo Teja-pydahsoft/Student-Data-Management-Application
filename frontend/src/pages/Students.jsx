@@ -363,12 +363,18 @@ const Students = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingAnimation
-          width={80}
-          height={80}
-          message="Loading students..."
-        />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-6">
+          <LoadingAnimation
+            width={120}
+            height={120}
+            message="Loading students..."
+          />
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-text-primary">Loading Students Database</p>
+            <p className="text-sm text-text-secondary">Please wait while we fetch your data...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -377,8 +383,8 @@ const Students = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Students Database</h1>
-          <p className="text-gray-600 mt-2">Manage and view all student records</p>
+          <h1 className="text-3xl font-bold text-text-primary heading-font">Students Database</h1>
+          <p className="text-text-secondary mt-2 body-font">Manage and view all student records</p>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/students/add" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
@@ -400,10 +406,10 @@ const Students = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-4">
         <div className="flex gap-2 mb-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary" size={20} />
             <input
               type="text"
               value={searchTerm}
@@ -413,7 +419,7 @@ const Students = () => {
               placeholder="Search by admission number or student data..."
             />
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilters ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilters ? 'bg-primary text-white' : 'bg-border-light text-text-primary hover:bg-accent/10'}`}>
             <Filter size={18} />
             Filters
           </button>
@@ -425,8 +431,8 @@ const Students = () => {
         {showFilters && (
           <div className="border-t pt-4 space-y-3">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-700">Advanced Filters</h3>
-              <button onClick={clearFilters} className="text-xs text-red-600 hover:text-red-700 flex items-center gap-1">
+              <h3 className="text-sm font-semibold text-text-primary">Advanced Filters</h3>
+              <button onClick={clearFilters} className="text-xs text-error hover:text-red-700 flex items-center gap-1">
                 <X size={14} />
                 Clear All
               </button>
@@ -434,7 +440,7 @@ const Students = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Created From</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Created From</label>
                 <input
                   type="date"
                   value={filters.dateFrom || ''}
@@ -443,16 +449,16 @@ const Students = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Created To</label>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Created To</label>
                 <input
                   type="date"
                   value={filters.dateTo || ''}
                   onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 py-2 text-sm border border-navy-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">PIN Number Status</label>
+                <label className="block text-xs font-medium text-navy-600 mb-1">PIN Number Status</label>
                 <select
                   value={filters.pinNumberStatus || ''}
                   onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
@@ -466,12 +472,12 @@ const Students = () => {
             </div>
 
             {availableFields.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-xs font-semibold text-gray-700 mb-3">Filter by Form Fields:</p>
+              <div className="mt-4 pt-4 border-t border-border-light">
+                <p className="text-xs font-semibold text-text-primary mb-3">Filter by Form Fields:</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {availableFields.map((field) => (
                     <div key={field.name}>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">{field.name}</label>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">{field.name}</label>
                       <select
                         value={filters[`field_${field.name}`] || ''}
                         onChange={(e) => handleFilterChange(`field_${field.name}`, e.target.value)}
@@ -492,7 +498,7 @@ const Students = () => {
               <button onClick={applyFilters} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm">
                 Apply Filters
               </button>
-              <button onClick={clearFilters} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+              <button onClick={clearFilters} className="px-4 py-2 border border-border-light text-text-primary rounded-lg hover:bg-accent/10 transition-colors text-sm btn-hover">
                 Reset
               </button>
             </div>

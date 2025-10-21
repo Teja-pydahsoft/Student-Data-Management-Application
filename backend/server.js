@@ -106,7 +106,7 @@ app.use('/students', studentRoutes);
 app.get('/api', (req, res) => {
   res.json({
     success: true,
-    message: 'Student Database Management API',
+    message: 'Pydah Student Database Management API',
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
@@ -206,7 +206,7 @@ const startServer = async () => {
     const server = app.listen(PORT, () => {
       console.log('');
       console.log('═══════════════════════════════════════════════════════');
-      console.log('  🚀 Student Database Management System - Backend');
+      console.log('  🚀 Pydah Student Database Management System - Backend');
       console.log('═══════════════════════════════════════════════════════');
       console.log(`  ✅ Server running on: http://localhost:${PORT}`);
       console.log(`  🌐 Environment: ${process.env.NODE_ENV || 'development'}`);

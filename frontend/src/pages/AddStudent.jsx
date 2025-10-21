@@ -8,6 +8,7 @@ import LoadingAnimation from '../components/LoadingAnimation';
 const AddStudent = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [studentData, setStudentData] = useState({
     pin_no: '',
     batch: '',
@@ -66,6 +67,24 @@ const AddStudent = () => {
       setLoading(false);
     }
   };
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-6">
+          <LoadingAnimation
+            width={120}
+            height={120}
+            message="Loading add student form..."
+          />
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-text-primary">Loading Student Form</p>
+            <p className="text-sm text-text-secondary">Please wait while we prepare the form...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

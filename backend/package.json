@@ -1,7 +1,7 @@
 {
-  "name": "student-database-backend",
+  "name": "pydah-student-database-backend",
   "version": "1.0.0",
-  "description": "Backend for Student Database Management System with Dynamic Form Builder",
+  "description": "Backend for Pydah Student Database Management System with Dynamic Form Builder",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

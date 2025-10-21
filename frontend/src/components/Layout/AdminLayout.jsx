@@ -32,13 +32,13 @@ const AdminLayout = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Mobile Header */}
-      <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">Admin Panel</h1>
+      <div className="lg:hidden bg-card-bg border-b border-border-light px-4 py-3 flex items-center justify-between shadow-sm">
+        <h1 className="text-xl font-bold text-text-primary heading-font">Admin Panel</h1>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 rounded-lg hover:bg-gray-100"
+          className="p-2 rounded-lg hover:bg-accent/10 text-text-secondary hover:text-accent transition-colors"
         >
           {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -47,7 +47,7 @@ const AdminLayout = () => {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-screen w-64 bg-white border-r border-gray-200
+          fixed top-0 left-0 z-40 h-screen w-64 bg-sidebar-bg border-r border-border-light
           transition-transform duration-300 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -55,11 +55,11 @@ const AdminLayout = () => {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-6 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-primary-600">
-              Student DB
+          <div className="p-6 border-b border-border-light">
+            <h1 className="text-2xl font-bold text-primary heading-font">
+              Pydah DB
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Management System</p>
+            <p className="text-sm text-text-secondary mt-1 body-font">Student Management System</p>
           </div>
 
           {/* Navigation */}
@@ -74,10 +74,10 @@ const AdminLayout = () => {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${isActive 
-                      ? 'bg-primary-50 text-primary-600 font-medium' 
-                      : 'text-gray-700 hover:bg-gray-100'
+                    flex items-center gap-3 px-4 py-3 rounded-lg sidebar-link-hover
+                    ${isActive
+                      ? 'bg-accent/10 text-primary font-medium border-l-4 border-l-accent shadow-sm'
+                      : 'text-text-primary hover:bg-accent/10 hover:text-accent'
                     }
                   `}
                 >
@@ -89,25 +89,25 @@ const AdminLayout = () => {
           </nav>
 
           {/* User Info & Logout */}
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-border-light">
             <div className="flex items-center gap-3 px-4 py-3 mb-2">
-              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                <span className="text-primary-600 font-semibold">
+              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+                <span className="text-white font-semibold text-sm">
                   {admin?.username?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-text-primary truncate">
                   {admin?.username}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-xs text-text-secondary truncate">
                   {admin?.email || 'Administrator'}
                 </p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-error hover:bg-error/10 transition-colors btn-hover"
             >
               <LogOut size={20} />
               <span>Logout</span>
@@ -125,7 +125,7 @@ const AdminLayout = () => {
       )}
 
       {/* Main Content */}
-      <main className="lg:ml-64 min-h-screen">
+      <main className="lg:ml-64 min-h-screen bg-neutral-bg">
         <div className="p-4 lg:p-8">
           <Outlet />
         </div>

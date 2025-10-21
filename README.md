@@ -1,4 +1,4 @@
-# Student Database Management System
+# Pydah Student Database Management System
 
 A comprehensive full-stack application for managing student data through dynamic forms with QR code generation. Built with Node.js, Express, MySQL, React, and modern UI components.
 
@@ -30,7 +30,7 @@ A comprehensive full-stack application for managing student data through dynamic
 ## 📁 Project Structure
 
 ```
-Student Database Management/
+Pydah Student Database Management/
 ├── backend/
 │   ├── config/
 │   │   ├── database.js          # Database connection configuration

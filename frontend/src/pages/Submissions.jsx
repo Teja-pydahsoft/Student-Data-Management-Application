@@ -130,11 +130,18 @@ const Submissions = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingAnimation
-          size="lg"
-          message="Loading submissions..."
-        />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-6">
+          <LoadingAnimation
+            width={120}
+            height={120}
+            message="Loading submissions..."
+          />
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-text-primary">Loading Submissions Database</p>
+            <p className="text-sm text-text-secondary">Please wait while we fetch your data...</p>
+          </div>
+        </div>
       </div>
     );
   }
