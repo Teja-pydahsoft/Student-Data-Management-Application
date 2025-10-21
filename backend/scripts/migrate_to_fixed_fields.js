@@ -57,7 +57,7 @@ async function migrateStudentData() {
             district VARCHAR(100),
             previous_college VARCHAR(255),
             certificates_status VARCHAR(100),
-            student_photo VARCHAR(255),
+            student_photo LONGTEXT,
             remarks TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

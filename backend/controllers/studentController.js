@@ -10,7 +10,7 @@ const upload = multer({ dest: 'uploads/' });
 // Export multer middleware at the top level
 exports.uploadMiddleware = upload.single('file');
 
-// Upload student photo
+// Upload student photo to MySQL database
 exports.uploadStudentPhoto = async (req, res) => {
   try {
     console.log('Photo upload request received');
@@ -32,27 +32,24 @@ exports.uploadStudentPhoto = async (req, res) => {
       });
     }
 
-    // Generate unique filename
-    const fileExtension = req.file.originalname.split('.').pop();
-    const uniqueFilename = `student_${admissionNumber}_${Date.now()}.${fileExtension}`;
-
-    // Move file to uploads folder with new name
+    // Read file and convert to base64
     const fs = require('fs');
-    const oldPath = req.file.path;
-    const newPath = `uploads/${uniqueFilename}`;
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const base64Image = fileBuffer.toString('base64');
+    const mimeType = req.file.mimetype;
 
-    console.log('Moving file from:', oldPath, 'to:', newPath);
+    // Create data URL for the image
+    const imageDataUrl = `data:${mimeType};base64,${base64Image}`;
 
-    fs.renameSync(oldPath, newPath);
+    console.log('Image converted to base64, size:', base64Image.length);
 
-    // Update student record with photo filename
+    // Update student record with base64 image data
     const [result] = await masterPool.query(
       'UPDATE students SET student_photo = ? WHERE admission_number = ?',
-      [uniqueFilename, admissionNumber]
+      [imageDataUrl, admissionNumber]
     );
 
     console.log('Database update result:', result);
-    console.log('Updated photo filename to:', uniqueFilename);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -61,17 +58,31 @@ exports.uploadStudentPhoto = async (req, res) => {
       });
     }
 
+    // Log the successful upload (minimal logging to reduce clutter)
+    console.log(`✅ Photo uploaded for student ${admissionNumber} (${(base64Image.length / 1024).toFixed(2)} KB)`);
+
+    // Clean up temporary file
+    fs.unlinkSync(req.file.path);
+
     res.json({
       success: true,
-      message: 'Photo uploaded successfully',
+      message: 'Photo uploaded successfully to MySQL database',
       data: {
-        filename: uniqueFilename,
-        path: newPath
+        student_admission_number: admissionNumber,
+        image_size: `${(base64Image.length / 1024).toFixed(2)} KB`,
+        image_type: mimeType,
+        storage: 'mysql'
       }
     });
 
   } catch (error) {
     console.error('Upload student photo error:', error);
+
+    // Clean up temporary file if it exists
+    if (req.file && req.file.path && require('fs').existsSync(req.file.path)) {
+      require('fs').unlinkSync(req.file.path);
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error while uploading photo'
@@ -94,7 +105,7 @@ const parseJSON = (data) => {
 // Get all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const { search, limit = 50, offset = 0, filter_dateFrom, filter_dateTo, filter_rollNumberStatus, ...otherFilters } = req.query;
+    const { search, limit = 50, offset = 0, filter_dateFrom, filter_dateTo, filter_pinNumberStatus, ...otherFilters } = req.query;
 
     let query = 'SELECT * FROM students WHERE 1=1';
     const params = [];
@@ -116,9 +127,9 @@ exports.getAllStudents = async (req, res) => {
     }
 
     // PIN number status filter
-    if (filter_rollNumberStatus === 'assigned') {
+    if (filter_pinNumberStatus === 'assigned') {
       query += ' AND pin_no IS NOT NULL';
-    } else if (filter_rollNumberStatus === 'unassigned') {
+    } else if (filter_pinNumberStatus === 'unassigned') {
       query += ' AND pin_no IS NULL';
     }
 
@@ -158,9 +169,9 @@ exports.getAllStudents = async (req, res) => {
       countParams.push(filter_dateTo);
     }
 
-    if (filter_rollNumberStatus === 'assigned') {
+    if (filter_pinNumberStatus === 'assigned') {
       countQuery += ' AND pin_no IS NOT NULL';
-    } else if (filter_rollNumberStatus === 'unassigned') {
+    } else if (filter_pinNumberStatus === 'unassigned') {
       countQuery += ' AND pin_no IS NULL';
     }
 

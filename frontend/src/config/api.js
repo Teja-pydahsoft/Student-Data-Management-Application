@@ -31,8 +31,14 @@ export const getStaticFileUrl = (filename) => {
 // Alternative function for direct static file access (bypass CORS issues)
 export const getStaticFileUrlDirect = (filename) => {
   if (!filename) return '';
+
+  // If it's already a data URL (base64), return as-is
+  if (filename.startsWith('data:')) return filename;
+
+  // If it's already a full HTTP URL, return as-is
   if (filename.startsWith('http')) return filename;
 
+  // For file paths, construct the URL
   // Use proxy approach for production
   if (rawApiUrl && rawApiUrl.includes('onrender.com')) {
     // For Render backend, use direct URL construction

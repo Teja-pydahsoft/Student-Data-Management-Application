@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS students (
   district VARCHAR(100),
   previous_college VARCHAR(255),
   certificates_status VARCHAR(100),
-  student_photo VARCHAR(255),
+  student_photo LONGTEXT,
   remarks TEXT,
   custom_fields JSON,
   student_data TEXT,

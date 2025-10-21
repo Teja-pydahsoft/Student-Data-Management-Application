@@ -454,8 +454,8 @@ const Students = () => {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">PIN Number Status</label>
                 <select
-                  value={filters.rollNumberStatus || ''}
-                  onChange={(e) => handleFilterChange('rollNumberStatus', e.target.value)}
+                  value={filters.pinNumberStatus || ''}
+                  onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 >
                   <option value="">All</option>

@@ -1282,29 +1282,38 @@ exports.getStudentCompletionStatus = async (req, res) => {
     const formName = forms[0].form_name;
 
     // Include both visible and hidden fields for completion calculation
+    // Exclude PIN number fields as they are optional administrative fields
     const allFields = formFields.filter(field => field.key);
+    const completionFields = allFields.filter(field =>
+      !field.key.toLowerCase().includes('pin') &&
+      field.key !== 'pin_no'
+    );
 
-    console.log(`🔍 Calculating completion for student ${admissionNumber}:`);
-    console.log(`   Total form fields: ${allFields.length}`);
-    console.log(`   Form ID: ${formId}`);
+    console.log(`\n🔍 STUDENT COMPLETION ANALYSIS: ${admissionNumber}`);
+    console.log(`   📊 Form fields: ${allFields.length} total, ${completionFields.length} for completion (${allFields.length - completionFields.length} PIN fields excluded)`);
 
-    // Calculate completion status considering all fields from the original form
-    const totalFields = allFields.length;
+    // Calculate completion status considering all fields except PIN numbers
+    const totalFields = completionFields.length;
     let completedFields = 0;
 
     const fieldStatus = allFields.map(field => {
       const key = field.key;
+      const isPinField = key.toLowerCase().includes('pin') || key === 'pin_no';
 
       // Check if the field exists in the student record (individual columns take precedence)
       let value = null;
       let completed = false;
+      let source = 'none';
 
       // First check individual database columns
       if (student[key] !== undefined && student[key] !== null && student[key] !== '') {
         value = student[key];
-        completed = true;
-        completedFields++;
-        console.log(`   ✅ ${key}: Found in database column = "${value}"`);
+        source = 'database_column';
+        // Only count non-PIN fields towards completion
+        if (!isPinField) {
+          completed = true;
+          completedFields++;
+        }
       }
       // Then check student_data JSON as fallback
       else if (student.student_data) {
@@ -1312,18 +1321,29 @@ exports.getStudentCompletionStatus = async (req, res) => {
           const studentData = parseJSON(student.student_data);
           if (studentData && studentData[key] !== undefined && studentData[key] !== null && studentData[key] !== '') {
             value = studentData[key];
-            completed = true;
-            completedFields++;
-            console.log(`   ✅ ${key}: Found in JSON data = "${value}"`);
+            source = 'json_data';
+            // Only count non-PIN fields towards completion
+            if (!isPinField) {
+              completed = true;
+              completedFields++;
+            }
           } else {
-            console.log(`   ❌ ${key}: Not found or empty`);
+            source = 'json_empty';
           }
         } catch (error) {
-          console.log(`   ❌ ${key}: JSON parse error`);
+          source = 'json_error';
         }
       } else {
-        console.log(`   ❌ ${key}: No data available`);
+        source = 'no_data';
       }
+
+      // Enhanced logging for all fields
+      const status = completed ? '✅' : (isPinField ? '🔄' : '❌');
+      const fieldType = isPinField ? 'PIN' : 'REG';
+      const sourceInfo = source !== 'none' ? `(${source})` : '';
+      const valuePreview = value ? `"${value.substring ? value.substring(0, 30) + (value.length > 30 ? '...' : '') : value}"` : '""';
+
+      console.log(`   ${status} ${fieldType} ${key.padEnd(25)} ${valuePreview.padEnd(35)} ${sourceInfo}`);
 
       return {
         key: field.key,
@@ -1332,13 +1352,48 @@ exports.getStudentCompletionStatus = async (req, res) => {
         completed: completed,
         value: value,
         required: field.required || false,
-        isHidden: field.isHidden || false
+        isHidden: field.isHidden || false,
+        isPinField: isPinField,
+        source: source
       };
     });
 
+    // Summary section
+    const missingFields = fieldStatus.filter(field => !field.isPinField && !field.completed);
+    const pinFields = fieldStatus.filter(field => field.isPinField);
+
+    console.log(`\n📊 COMPLETION SUMMARY for ${admissionNumber}:`);
+    console.log(`   ✅ Completed: ${completedFields}/${totalFields} fields (${Math.round((completedFields / totalFields) * 100)}%)`);
+
+    if (missingFields.length > 0) {
+      console.log(`   ❌ Missing ${missingFields.length} fields:`);
+      missingFields.forEach(field => {
+        console.log(`      • ${field.key}: ${field.source} - "${field.value || 'empty'}"`);
+      });
+    } else {
+      console.log(`   🎉 All required fields completed!`);
+    }
+
+    if (pinFields.length > 0) {
+      console.log(`   🔄 PIN fields (${pinFields.length}):`);
+      pinFields.forEach(field => {
+        console.log(`      • ${field.key}: ${field.source} - "${field.value || 'not assigned'}"`);
+      });
+    }
+
+    console.log(`   📋 Data sources: DB columns + JSON fallback`);
+
     const completionPercentage = totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0;
 
-    console.log(`📊 Completion calculation: ${completedFields}/${totalFields} = ${completionPercentage}%`);
+    console.log(`📊 Completion: ${completionPercentage}% (${completedFields}/${totalFields} fields completed)`);
+
+    // Add summary of missing fields for easier debugging
+    const missingFieldSummary = fieldStatus.filter(field => !field.isPinField && !field.completed).map(field => ({
+      key: field.key,
+      label: field.label,
+      source: field.source,
+      currentValue: field.value
+    }));
 
     res.json({
       success: true,
@@ -1349,11 +1404,8 @@ exports.getStudentCompletionStatus = async (req, res) => {
         completionPercentage,
         fieldStatus,
         formName,
-        debugInfo: {
-          admissionNumber,
-          formId,
-          dataSource: 'Database columns + JSON fallback'
-        }
+        missingFields: missingFields,
+        note: 'PIN number fields are excluded from completion calculation as they are optional administrative fields'
       }
     });
 

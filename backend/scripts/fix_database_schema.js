@@ -80,7 +80,7 @@ async function fixDatabaseSchema() {
       'admission_date', 'student_address', 'city_village', 'mandal_name', 'district', 'batch', 'branch',
       'stud_type', 'student_status', 'scholar_status', 'caste', 'gender', 'remarks',
       // Admin-only columns that are missing
-      'pin_no', 'previous_college', 'certificates_status', 'student_photo'
+      'pin_no', 'previous_college', 'certificates_status'
     ];
     const existingColumns = rows.map(r => r.COLUMN_NAME);
     const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
