@@ -1079,7 +1079,6 @@ exports.bulkUploadSubmissions = async (req, res) => {
       'District Name': 'district',
       'Previous College Name': 'previous_college',
       'Certificate Status': 'certificates_status',
-      'Student Photo': 'student_photo',
       'Remarks': 'remarks'
     };
 
@@ -2016,7 +2015,6 @@ exports.downloadExcelTemplate = async (req, res) => {
       'District Name',
       'Previous College Name',
       'Certificate Status',
-      'Student Photo',
       'Remarks'
     ];
 
@@ -2033,7 +2031,6 @@ exports.downloadExcelTemplate = async (req, res) => {
         case 'M/F': return 'M';
         case 'DOB (Date-Month-Year)': return '01-Jan-2000';
         case 'Admission Year (Ex: 09-Sep-2003)': return '01-Sep-2023';
-        case 'Student Photo': return 'photo.jpg';
         default: return '';
       }
     });

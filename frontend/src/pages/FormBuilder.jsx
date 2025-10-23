@@ -451,13 +451,17 @@ const FormBuilder = () => {
         {/* Save Button */}
         <div className="flex items-center gap-4">
           <button
-            type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Save size={20} />
-            {saving ? 'Saving...' : (formId ? 'Update Form' : 'Create Form')}
-          </button>
+  type="submit"
+  disabled={saving}
+  className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white px-8 py-3 rounded-xl font-semibold
+             hover:from-pink-600 hover:via-purple-700 hover:to-indigo-700 focus:ring-4 focus:ring-purple-300/50 
+             transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed
+             shadow-md hover:shadow-xl transform hover:scale-105 active:scale-95"
+>
+  <Save size={20} />
+  {saving ? 'Saving...' : (formId ? 'Update Form' : 'Create Form')}
+</button>
+
           <button
             type="button"
             onClick={() => navigate('/forms')}

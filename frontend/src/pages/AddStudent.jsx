@@ -90,23 +90,26 @@ const AddStudent = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Add New Student</h1>
-          <p className="text-gray-600 mt-2">Create a new student record</p>
+          <h1 className="text-3xl font-bold text-text-primary heading-font">Add New Student</h1>
+          <p className="text-text-secondary mt-2 body-font">Create a new student record</p>
         </div>
-        <button 
+        <button
           onClick={() => navigate('/students')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-indigo-600 to-purple-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
         >
           <ArrowLeft size={18} />
           Back to Students
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Form sections */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              Basic Information
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -118,7 +121,8 @@ const AddStudent = () => {
                   value={studentData.admission_no}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-3 border border-border-light rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-input-bg text-text-primary transition-all duration-200 hover:border-primary-300"
+                  placeholder="Enter admission number"
                 />
               </div>
               <div>
@@ -177,8 +181,11 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Academic Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              Academic Information
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -255,8 +262,11 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+              Contact Information
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -297,8 +307,11 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+              Personal Information
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -339,8 +352,11 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Address Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
+              Address Information
+            </h2>
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -395,8 +411,11 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h2>
+          <div className="border-b border-border-light pb-6">
+            <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              Additional Information
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -410,17 +429,91 @@ const AddStudent = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Student Photo URL
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-text-primary mb-2">
+                  Student Photo
                 </label>
-                <input
-                  type="text"
-                  name="student_photo"
-                  value={studentData.student_photo}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                <div className="border-2 border-dashed border-border-light rounded-lg p-6 text-center hover:border-primary-400 transition-colors bg-input-bg">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        try {
+                          // Validate file type
+                          if (!file.type.startsWith('image/')) {
+                            toast.error('Please select a valid image file');
+                            return;
+                          }
+
+                          // Validate file size (5MB limit)
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('File size should be less than 5MB');
+                            return;
+                          }
+
+                          // Upload file to server
+                          const formData = new FormData();
+                          formData.append('photo', file);
+                          formData.append('admissionNumber', studentData.admission_no || 'temp');
+
+                          const response = await api.post('/students/upload-photo', formData, {
+                            headers: {
+                              'Content-Type': 'multipart/form-data',
+                            },
+                          });
+
+                          if (response.data.success) {
+                            setStudentData(prev => ({
+                              ...prev,
+                              student_photo: response.data.data.filename
+                            }));
+                            toast.success('Photo uploaded successfully');
+                          } else {
+                            toast.error('Failed to upload photo');
+                          }
+                        } catch (error) {
+                          console.error('Photo upload error:', error);
+                          toast.error('Failed to upload photo');
+                        }
+                      }
+                    }}
+                    className="hidden"
+                    id="photo-upload"
+                  />
+                  <label
+                    htmlFor="photo-upload"
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                      <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-text-primary">
+                        {studentData.student_photo ? 'Change Photo' : 'Upload Photo'}
+                      </p>
+                      <p className="text-xs text-text-secondary mt-1">
+                        PNG, JPG up to 5MB
+                      </p>
+                    </div>
+                  </label>
+                  {studentData.student_photo && (
+                    <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 text-green-700">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-sm font-medium">Photo uploaded successfully</span>
+                      </div>
+                      <p className="text-xs text-green-600 mt-1">
+                        {studentData.student_photo}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -437,29 +530,27 @@ const AddStudent = () => {
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-6">
             <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 focus:ring-4 focus:ring-primary-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <LoadingAnimation
-                    width={16}
-                    height={16}
-                    variant="inline"
-                    showMessage={false}
-                  />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={18} />
-                  Save Student
-                </>
-              )}
-            </button>
+  type="submit"
+  disabled={loading}
+  className="flex items-center gap-2 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white px-8 py-4 rounded-xl font-semibold
+             hover:from-gray-900 hover:via-black hover:to-gray-800 focus:ring-4 focus:ring-gray-400/40 transition-all duration-300
+             disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-2xl transform hover:scale-105 active:scale-95"
+>
+  {loading ? (
+    <>
+      <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
+      Saving...
+    </>
+  ) : (
+    <>
+      <Save size={18} />
+      Save Student
+    </>
+  )}
+</button>
+
           </div>
         </form>
       </div>

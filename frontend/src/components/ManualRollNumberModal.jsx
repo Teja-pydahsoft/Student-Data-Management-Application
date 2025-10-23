@@ -280,28 +280,27 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSaveAll}
-              disabled={saving || loadingStudents || filteredStudents.length === 0}
-              className="flex-1 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-            >
-              {saving ? (
-                <>
-                  <LoadingAnimation
-                    width={20}
-                    height={20}
-                    variant="inline"
-                    showMessage={false}
-                  />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={20} />
-                  Save All Changes
-                </>
-              )}
-            </button>
+           <button
+  onClick={handleSaveAll}
+  disabled={saving || loadingStudents || filteredStudents.length === 0}
+  className="flex-1 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white px-8 py-3 rounded-xl font-semibold
+             hover:from-gray-900 hover:via-black hover:to-gray-800 focus:ring-4 focus:ring-gray-500/40
+             transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed
+             flex items-center justify-center gap-2 shadow-md hover:shadow-2xl transform hover:scale-105 active:scale-95"
+>
+  {saving ? (
+    <>
+      <LoadingAnimation width={20} height={20} variant="inline" showMessage={false} />
+      Saving...
+    </>
+  ) : (
+    <>
+      <Save size={20} />
+      Save All Changes
+    </>
+  )}
+</button>
+
             <button
               onClick={handleClose}
               disabled={saving}
