@@ -14,15 +14,17 @@ const PublicForm = () => {
   const [formData, setFormData] = useState({});
   const [admissionNumber, setAdmissionNumber] = useState('');
   const [fileData, setFileData] = useState({});
+  const [fetchingForm, setFetchingForm] = useState(false); // Prevent multiple simultaneous fetches
+  const [formCache, setFormCache] = useState(new Map()); // Simple cache for form data
+  const [retryCount, setRetryCount] = useState(0); // Track retry attempts
 
   // Mobile browser detection - moved to component level
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
 
+  // Separate useEffect for mobile detection - runs only once
   useEffect(() => {
-    fetchForm();
-
     // Log mobile browser detection for debugging
     if (isMobile) {
       console.log('Mobile browser detected:', {
@@ -45,40 +47,86 @@ const PublicForm = () => {
           viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
         }
       }
-
-      // Test URL accessibility for mobile browsers
-      try {
-        // Verify the URL is accessible
-        const testUrl = `${window.location.origin}${window.location.pathname}`;
-        console.log('Testing URL accessibility:', testUrl);
-
-        // Add a small delay to ensure the page is fully loaded
-        setTimeout(() => {
-          if (window.location.href !== testUrl) {
-            console.warn('URL mismatch detected:', { expected: testUrl, actual: window.location.href });
-          }
-
-          // Test if the form is properly loaded
-          if (form && form.form_id) {
-            console.log('Form loaded successfully:', {
-              formId: form.form_id,
-              formName: form.form_name,
-              fieldCount: form.form_fields?.length || 0
-            });
-          }
-        }, 1000);
-      } catch (error) {
-        console.error('Error testing URL accessibility:', error);
-      }
     }
-  }, [formId, form]);
+  }, []); // Empty dependency array - runs only once
 
-  const fetchForm = async () => {
+  // Separate useEffect for form fetching - runs only when formId changes
+  useEffect(() => {
+    let abortController;
+
+    if (formId) {
+      // Create new abort controller for this request
+      abortController = new AbortController();
+      fetchForm(abortController);
+    }
+
+    // Cleanup function to abort request if component unmounts or formId changes
+    return () => {
+      if (abortController) {
+        console.log('Aborting form fetch request');
+        abortController.abort();
+      }
+    };
+  }, [formId]); // Only depends on formId
+
+  // Cleanup effect to clear cache on unmount
+  useEffect(() => {
+    return () => {
+      // Clear cache when component unmounts to prevent memory leaks
+      setFormCache(new Map());
+      console.log('Form cache cleared on component unmount');
+    };
+  }, []);
+
+  const fetchForm = async (abortController = null) => {
+    // Check cache first
+    const cachedForm = formCache.get(formId);
+    if (cachedForm) {
+      console.log('Using cached form data for ID:', formId);
+      setForm(cachedForm);
+
+      // Initialize form data for enabled fields only
+      const initialData = {};
+      const enabledFields = cachedForm.form_fields.filter(field => field.isEnabled !== false);
+      enabledFields.forEach((field) => {
+        initialData[field.label] = field.type === 'checkbox' ? [] : '';
+      });
+      setFormData(initialData);
+      setLoading(false);
+      return;
+    }
+
+    // Check if we already have the form data (avoid unnecessary fetch)
+    if (form && form.form_id === formId && !loading) {
+      console.log('Form already loaded, skipping fetch');
+      setLoading(false);
+      return;
+    }
+
+    // Prevent multiple simultaneous requests
+    if (fetchingForm) {
+      console.log('Form fetch already in progress, skipping duplicate request');
+      return;
+    }
+
     try {
+      setFetchingForm(true);
+      setError(null); // Clear any previous errors
       console.log('Fetching form with ID:', formId);
-      const response = await api.get(`/forms/public/${formId}`);
-      console.log('Form fetched successfully:', response.data.data);
 
+      const startTime = performance.now();
+      const response = await api.get(`/forms/public/${formId}`, {
+        signal: abortController?.signal
+      });
+      const endTime = performance.now();
+
+      console.log(`Form fetched successfully in ${Math.round(endTime - startTime)}ms:`, response.data.data);
+
+      // Reset retry count on successful fetch
+      setRetryCount(0);
+
+      // Cache the form data
+      setFormCache(prev => new Map(prev).set(formId, response.data.data));
       setForm(response.data.data);
 
       // Initialize form data for enabled fields only
@@ -88,10 +136,31 @@ const PublicForm = () => {
         initialData[field.label] = field.type === 'checkbox' ? [] : '';
       });
       setFormData(initialData);
+
     } catch (error) {
-      console.error('Error fetching form:', error);
-      setError(error.response?.data?.message || 'Form not found');
+      if (error.name === 'AbortError') {
+        console.log('Form fetch was aborted');
+        return;
+      }
+
+      console.error(`Error fetching form (attempt ${retryCount + 1}):`, error);
+
+      // Retry logic for network errors
+      if (retryCount < 2 && (error.code === 'NETWORK_ERROR' || error.response?.status >= 500)) {
+        console.log(`Retrying form fetch in 1 second... (attempt ${retryCount + 2})`);
+        setRetryCount(prev => prev + 1);
+
+        setTimeout(() => {
+          if (!fetchingForm) {
+            fetchForm(abortController);
+          }
+        }, 1000);
+        return;
+      }
+
+      setError(error.response?.data?.message || 'Form not found or network error occurred');
     } finally {
+      setFetchingForm(false);
       setLoading(false);
     }
   };
@@ -305,14 +374,21 @@ const PublicForm = () => {
     }
   };
 
-  if (loading) {
+  if (loading || fetchingForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
-        <LoadingAnimation
-          size="xl"
-          message="Loading form..."
-          variant="overlay"
-        />
+        <div className="text-center space-y-4">
+          <LoadingAnimation
+            width={64}
+            height={64}
+            message={fetchingForm ? "Loading form..." : "Please wait..."}
+            variant="minimal"
+          />
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-text-primary">Loading Form</p>
+            <p className="text-sm text-text-secondary">Fetching form data...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -386,6 +462,9 @@ const PublicForm = () => {
                 <strong>Mobile Details:</strong> iOS: {isIOS ? 'Yes' : 'No'} | Android: {isAndroid ? 'Yes' : 'No'}
               </div>
             )}
+            <div className="mt-1">
+              <strong>Performance:</strong> Fetching: {fetchingForm ? 'Yes' : 'No'} | Cached: {formCache.has(formId) ? 'Yes' : 'No'} | Retries: {retryCount}
+            </div>
           </div>
         )}
 
