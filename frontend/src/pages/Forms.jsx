@@ -267,20 +267,8 @@ const Forms = () => {
               </button>
             </div>
 
-            {/* Mobile-specific instructions */}
-            <div className="text-xs text-text-secondary text-center bg-blue-50 rounded-lg p-3 border border-blue-200">
-              <p className="font-medium text-blue-800 mb-1">📱 Mobile Instructions:</p>
-              <p className="text-blue-700">
-                1. Point your camera at the QR code<br/>
-                2. Tap the notification that appears<br/>
-                3. The form will open automatically
-              </p>
-              <p className="text-blue-600 mt-2 text-xs">
-                If it shows text instead of opening, copy the URL above and paste it in your browser.
-              </p>
-            </div>
             <div className="flex gap-3">
-              <button onClick={downloadQRCode} className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
+              <button onClick={downloadQRCode} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                 <Download size={18} />
                 Download
               </button>
