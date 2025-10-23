@@ -15,14 +15,15 @@ const PublicForm = () => {
   const [admissionNumber, setAdmissionNumber] = useState('');
   const [fileData, setFileData] = useState({});
 
+  // Mobile browser detection - moved to component level
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
   useEffect(() => {
     fetchForm();
 
     // Log mobile browser detection for debugging
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-
     if (isMobile) {
       console.log('Mobile browser detected:', {
         userAgent: navigator.userAgent,
@@ -70,7 +71,7 @@ const PublicForm = () => {
         console.error('Error testing URL accessibility:', error);
       }
     }
-  }, [formId]);
+  }, [formId, form]);
 
   const fetchForm = async () => {
     try {
