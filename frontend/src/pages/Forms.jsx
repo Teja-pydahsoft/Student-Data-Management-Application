@@ -6,6 +6,16 @@ import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
 
+// Helper function to get the correct frontend URL for QR codes
+const getFrontendUrl = () => {
+  // In production, use the primary frontend URL
+  if (import.meta.env.PROD) {
+    return 'https://student-data-management-application.vercel.app';
+  }
+  // In development, use the current origin
+  return window.location.origin;
+};
+
 const Forms = () => {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,19 +73,25 @@ const Forms = () => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const img = new Image();
-    
+
     img.onload = () => {
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
       const pngFile = canvas.toDataURL('image/png');
-      
+
       const downloadLink = document.createElement('a');
       downloadLink.download = `${selectedForm.form_name}-QR.png`;
       downloadLink.href = pngFile;
       downloadLink.click();
+
+      toast.success('QR code downloaded successfully!');
     };
-    
+
+    img.onerror = () => {
+      toast.error('Failed to generate QR code image');
+    };
+
     img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
   };
 
@@ -215,13 +231,69 @@ const Forms = () => {
           <div className="bg-card-bg rounded-xl shadow-2xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-text-primary mb-4 heading-font">{selectedForm.form_name}</h3>
             <div className="bg-card-bg p-6 rounded-lg border-2 border-border-light mb-4 flex items-center justify-center">
-              <QRCodeComponent id="qr-code-svg" value={`${window.location.origin}/form/${selectedForm.form_id}`} size={256} />
+              <QRCodeComponent
+                id="qr-code-svg"
+                value={`${getFrontendUrl()}/form/${selectedForm.form_id}`}
+                size={256}
+              />
             </div>
-            <p className="text-sm text-text-secondary mb-4 text-center body-font">Scan this QR code to access the form</p>
+            <p className="text-sm text-text-secondary mb-4 text-center body-font">
+              Scan this QR code to access the form
+            </p>
+            <div className="text-xs text-text-secondary text-center bg-gray-50 rounded-lg p-2 mb-4 font-mono break-all">
+              {getFrontendUrl()}/form/{selectedForm.form_id}
+            </div>
+            <div className="text-xs text-text-secondary text-center mb-4">
+              <p className="mb-2">If QR code doesn't work, copy and paste this URL:</p>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(`${getFrontendUrl()}/form/${selectedForm.form_id}`);
+                    toast.success('URL copied to clipboard!');
+                  } catch (error) {
+                    // Fallback for browsers that don't support clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = `${getFrontendUrl()}/form/${selectedForm.form_id}`;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    toast.success('URL copied to clipboard!');
+                  }
+                }}
+                className="text-primary-600 hover:text-primary-700 underline"
+              >
+                Copy URL
+              </button>
+            </div>
+
+            {/* Mobile-specific instructions */}
+            <div className="text-xs text-text-secondary text-center bg-blue-50 rounded-lg p-3 border border-blue-200">
+              <p className="font-medium text-blue-800 mb-1">📱 Mobile Instructions:</p>
+              <p className="text-blue-700">
+                1. Point your camera at the QR code<br/>
+                2. Tap the notification that appears<br/>
+                3. The form will open automatically
+              </p>
+              <p className="text-blue-600 mt-2 text-xs">
+                If it shows text instead of opening, copy the URL above and paste it in your browser.
+              </p>
+            </div>
             <div className="flex gap-3">
               <button onClick={downloadQRCode} className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
                 <Download size={18} />
                 Download
+              </button>
+              <button
+                onClick={() => {
+                  // Test the QR code URL
+                  const testUrl = `${getFrontendUrl()}/form/${selectedForm.form_id}`;
+                  window.open(testUrl, '_blank');
+                  toast.success('Testing QR code URL in new tab');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Test URL
               </button>
               <button onClick={() => setShowQRModal(false)} className="flex-1 bg-border-light text-text-primary px-4 py-2 rounded-lg hover:bg-accent/10 transition-colors btn-hover">
                 Close

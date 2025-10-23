@@ -27,7 +27,14 @@ exports.createForm = async (req, res) => {
     }
 
     const formId = uuidv4();
-    const formUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/form/${formId}`;
+    // Use the primary frontend URL for QR codes (first one in the list)
+    const frontendUrl = process.env.FRONTEND_URL
+      ? process.env.FRONTEND_URL.split(',')[0].trim()
+      : (process.env.NODE_ENV === 'production'
+          ? 'https://student-data-management-application.vercel.app'
+          : 'http://localhost:3000');
+
+    const formUrl = `${frontendUrl}/form/${formId}`;
 
     // Generate QR code
     const qrCodeData = await QRCode.toDataURL(formUrl);

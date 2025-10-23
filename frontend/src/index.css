@@ -142,3 +142,68 @@ code {
   background-color: rgba(255, 107, 107, 0.1);
   transform: translateX(4px);
 }
+
+/* Mobile optimizations */
+.mobile-optimized {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mobile-optimized input,
+.mobile-optimized select,
+.mobile-optimized textarea,
+.mobile-optimized button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 8px;
+  font-size: 16px; /* Prevents zoom on iOS */
+}
+
+.mobile-optimized input[type="tel"],
+.mobile-optimized input[type="email"],
+.mobile-optimized input[type="text"],
+.mobile-optimized input[type="password"] {
+  font-size: 16px !important; /* Prevents zoom on iOS */
+}
+
+/* Improve touch targets for mobile */
+@media (max-width: 768px) {
+  .mobile-optimized button,
+  .mobile-optimized input,
+  .mobile-optimized select,
+  .mobile-optimized textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mobile-optimized input[type="checkbox"],
+  .mobile-optimized input[type="radio"] {
+    min-height: 24px;
+    min-width: 24px;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .mobile-optimized * {
+    max-width: 100%;
+  }
+}
+
+/* Improve form spacing on mobile */
+@media (max-width: 640px) {
+  .mobile-form-spacing {
+    margin-bottom: 1rem;
+  }
+
+  .mobile-form-spacing:last-child {
+    margin-bottom: 0;
+  }
+}
