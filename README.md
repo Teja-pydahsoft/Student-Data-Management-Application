@@ -9,6 +9,7 @@ A comprehensive full-stack application for managing student data through dynamic
 - **QR Code Generation**: Automatic QR code generation for the student form
 - **Form Management**: View and activate/deactivate the default form
 - **Submission Approval Workflow**: Review and approve/reject student submissions before data enters the database
+- **Auto-Assign Admission Series**: Generate sequential admission numbers with toggle for automatic assignment
 - **Student Database**: View, search, edit, and export student records
 - **Dashboard**: Real-time statistics and recent submissions overview
 - **Audit Logging**: Track all admin actions for accountability
@@ -154,6 +155,31 @@ This will:
 - Create all necessary tables
 - Set up the default admin user
 
+5. **Initialize Supabase settings (if using Supabase for staging):**
+```bash
+npm run init-settings
+```
+
+This will check if the settings table exists in Supabase and provide instructions to create it if needed. The settings table is required for the auto-assign series feature.
+
+**Important:** If using Supabase for staging, you need to manually create the settings table in your Supabase dashboard:
+1. Go to your Supabase project dashboard
+2. Navigate to SQL Editor
+3. Run the following SQL:
+
+```sql
+CREATE TABLE IF NOT EXISTS settings (
+  id SERIAL PRIMARY KEY,
+  key VARCHAR(100) UNIQUE NOT NULL,
+  value TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO settings (key, value) VALUES ('auto_assign_series', 'false')
+ON CONFLICT (key) DO NOTHING;
+```
+
 5. **Start the backend server:**
 ```bash
 # Development mode with auto-reload
@@ -274,6 +300,17 @@ The form is automatically created when you run the database initialization scrip
 4. Download QR code for student access
 5. **Note**: The form fields are pre-configured and cannot be modified through the UI
 
+### Auto-Assign Admission Series
+
+1. **Enable Auto-Assign**: Go to **Submissions** section and toggle the "Auto-Assign Series" switch
+2. **Generate Series**: Click the "Generate Series" button to create sequential admission numbers
+3. **Auto-Assignment Options**:
+   - Generate numbers for manual assignment (copy to clipboard)
+   - Auto-assign to pending submissions (assigns to existing pending forms)
+   - Enable global auto-assign (new submissions automatically get numbers)
+4. **Sequential Format**: Numbers are generated in format `PREFIX_001`, `PREFIX_002`, etc.
+5. **Default Prefix**: Uses `PYDAH2025` by default, can be customized
+
 ## 🔌 API Endpoints
 
 ### Authentication
@@ -294,6 +331,9 @@ The form is automatically created when you run the database initialization scrip
 - `POST /api/submissions/:submissionId/approve` - Approve submission (Admin)
 - `POST /api/submissions/:submissionId/reject` - Reject submission (Admin)
 - `DELETE /api/submissions/:submissionId` - Delete submission (Admin)
+- `POST /api/submissions/generate-admission-series` - Generate sequential admission numbers (Admin)
+- `GET /api/submissions/auto-assign-status` - Get auto-assign series setting (Admin)
+- `POST /api/submissions/toggle-auto-assign` - Toggle auto-assign series setting (Admin)
 
 Notes:
 - Pending/rejected submissions are served from the staging DB.
@@ -356,6 +396,7 @@ Notes:
 npm start          # Start production server
 npm run dev        # Start development server with nodemon
 npm run init-db    # Initialize database
+npm run init-settings # Initialize Supabase settings table
 ```
 
 ### Frontend

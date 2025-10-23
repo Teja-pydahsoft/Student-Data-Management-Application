@@ -109,7 +109,6 @@ async function addPhotoFieldToForm() {
     // Set proper permissions on uploads folder
     try {
       fs.chmodSync(uploadsDir, 0o755);
-      console.log(`🔐 Set proper permissions on uploads folder`);
     } catch (error) {
       console.log(`⚠️ Could not set permissions on uploads folder:`, error.message);
     }

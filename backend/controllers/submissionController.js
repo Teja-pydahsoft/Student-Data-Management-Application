@@ -439,13 +439,59 @@ exports.submitForm = async (req, res) => {
 
     const submissionId = uuidv4();
 
-    // Insert submission (no admission number initially - admin will assign it)
+    // Check if auto-assign is enabled
+    let generatedAdmissionNumber = null;
+    try {
+      const { data: setting, error: setErr } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'auto_assign_series')
+        .single();
+
+      if (!setErr && setting && setting.value === 'true') {
+        // Generate next sequential number
+        const prefix = 'PYDAH2025'; // Default prefix, can be made configurable
+        const { data: submissions, error: subErr } = await supabase
+          .from('form_submissions')
+          .select('admission_number')
+          .like('admission_number', `${prefix}_%`);
+
+        if (subErr) throw subErr;
+
+        // Query students from MySQL
+        const masterConn2 = await masterPool.getConnection();
+        const [studentRows2] = await masterConn2.query(
+          'SELECT admission_number FROM students WHERE admission_number LIKE ?',
+          [`${prefix}_%`]
+        );
+        masterConn2.release();
+
+        const allNumbers = [...(submissions || []).map(s => s.admission_number), ...studentRows2.map(s => s.admission_number)].filter(Boolean);
+
+        let maxNum = 0;
+        allNumbers.forEach(num => {
+          const match = num.match(new RegExp(`^${prefix}_(\\d+)$`));
+          if (match) {
+            const numPart = parseInt(match[1], 10);
+            if (numPart > maxNum) maxNum = numPart;
+          }
+        });
+
+        const nextNum = (maxNum + 1).toString().padStart(3, '0');
+        generatedAdmissionNumber = `${prefix}_${nextNum}`;
+      }
+    } catch (error) {
+      console.error('Error checking auto-assign setting:', error);
+      // Continue without assigning
+    }
+
+    // Insert submission
     const { error: insErr } = await supabase
       .from('form_submissions')
       .insert({
         submission_id: submissionId,
         form_id: formId,
-        admission_number: null, // Admin will assign this during approval
+        admission_number: generatedAdmissionNumber,
         submission_data: formData,
         status: 'pending',
         submitted_by: 'student'
@@ -1585,7 +1631,7 @@ exports.bulkUploadSubmissions = async (req, res) => {
 // Generate admission number series
 exports.generateAdmissionSeries = async (req, res) => {
   try {
-    const { prefix = 'ADM', count = 10, autoAssign = false } = req.body;
+    const { prefix = 'PYDAH2025', count = 10, autoAssign = false } = req.body;
 
     if (!prefix || typeof prefix !== 'string') {
       return res.status(400).json({
@@ -1594,11 +1640,37 @@ exports.generateAdmissionSeries = async (req, res) => {
       });
     }
 
+    // Find the next sequential number
+    const { data: submissions, error: subErr } = await supabase
+      .from('form_submissions')
+      .select('admission_number')
+      .like('admission_number', `${prefix}_%`);
+
+    if (subErr) throw subErr;
+
+    // Query students from MySQL
+    const masterConn = await masterPool.getConnection();
+    const [studentRows] = await masterConn.query(
+      'SELECT admission_number FROM students WHERE admission_number LIKE ?',
+      [`${prefix}_%`]
+    );
+    masterConn.release();
+
+    const allNumbers = [...(submissions || []).map(s => s.admission_number), ...studentRows.map(s => s.admission_number)].filter(Boolean);
+
+    let maxNum = 0;
+    allNumbers.forEach(num => {
+      const match = num.match(new RegExp(`^${prefix}_(\\d+)$`));
+      if (match) {
+        const numPart = parseInt(match[1], 10);
+        if (numPart > maxNum) maxNum = numPart;
+      }
+    });
+
     const admissionNumbers = [];
-    for (let i = 0; i < count; i++) {
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substr(2, 9);
-      admissionNumbers.push(`${prefix}_${timestamp}_${random}`);
+    for (let i = 1; i <= count; i++) {
+      const num = (maxNum + i).toString().padStart(3, '0');
+      admissionNumbers.push(`${prefix}_${num}`);
     }
 
     // If autoAssign is true, assign these numbers to pending submissions
@@ -2370,6 +2442,112 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
     .eq('submission_id', submission.submission_id);
 
   if (updErr) throw updErr;
+};
+
+// Toggle auto-assign series setting
+exports.toggleAutoAssignSeries = async (req, res) => {
+  try {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'Enabled must be a boolean'
+      });
+    }
+
+    // First, try to create the settings table if it doesn't exist
+    try {
+      const { error: tableCheckError } = await supabase
+        .from('settings')
+        .select('id')
+        .limit(1);
+
+      if (tableCheckError && tableCheckError.code === 'PGRST205') {
+        console.log('Settings table does not exist, cannot toggle setting');
+        return res.status(500).json({
+          success: false,
+          message: 'Settings table does not exist. Please create it in Supabase first.'
+        });
+      }
+    } catch (createError) {
+      console.error('Error checking settings table:', createError);
+    }
+
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key: 'auto_assign_series', value: enabled.toString() }, { onConflict: 'key' });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: `Auto-assign series ${enabled ? 'enabled' : 'disabled'}`
+    });
+
+  } catch (error) {
+    console.error('Toggle auto-assign series error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while toggling auto-assign series'
+    });
+  }
+};
+
+// Get auto-assign series setting
+exports.getAutoAssignSeries = async (req, res) => {
+  try {
+    // First, try to create the settings table if it doesn't exist
+    try {
+      // Check if table exists by trying to query it
+      const { error: tableCheckError } = await supabase
+        .from('settings')
+        .select('id')
+        .limit(1);
+
+      if (tableCheckError && tableCheckError.code === 'PGRST205') {
+        // Table doesn't exist, try to create it
+        console.log('Settings table does not exist, attempting to create...');
+
+        // Since we can't create tables directly via Supabase client,
+        // we'll use a workaround by inserting with error handling
+        // For now, return default value and log the issue
+        console.warn('Settings table missing. Please create it manually in Supabase or run the init script.');
+
+        // Return default value
+        res.json({
+          success: true,
+          data: { enabled: false },
+          note: 'Settings table not found, using default value'
+        });
+        return;
+      }
+    } catch (createError) {
+      console.error('Error checking/creating settings table:', createError);
+    }
+
+    const { data: setting, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'auto_assign_series')
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is not found
+
+    const enabled = setting ? setting.value === 'true' : false;
+
+    res.json({
+      success: true,
+      data: { enabled }
+    });
+
+  } catch (error) {
+    console.error('Get auto-assign series error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while getting auto-assign series setting'
+    });
+  }
 };
 
 // Export multer middleware

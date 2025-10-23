@@ -7,6 +7,8 @@ const authMiddleware = require('../middleware/auth');
 router.post('/bulk-approve', authMiddleware, submissionController.bulkApproveSubmissions);
 router.get('/template/:formId', authMiddleware, submissionController.downloadExcelTemplate);
 router.post('/generate-admission-series', authMiddleware, submissionController.generateAdmissionSeries);
+router.post('/toggle-auto-assign', authMiddleware, submissionController.toggleAutoAssignSeries);
+router.get('/auto-assign-status', authMiddleware, submissionController.getAutoAssignSeries);
 router.get('/', authMiddleware, submissionController.getAllSubmissions);
 
 // More specific route for UUID pattern
@@ -21,12 +23,7 @@ router.post('/:submissionId/reject', authMiddleware, submissionController.reject
 router.delete('/:submissionId', authMiddleware, submissionController.deleteSubmission);
 
 // CRITICAL: Bulk upload route must come BEFORE any generic routes that could match it
-router.post('/bulk-upload', (req, res, next) => {
-  console.log('🔄 Bulk upload request received at route level');
-  console.log('📋 Request headers:', req.headers.authorization ? 'Token present' : 'No token');
-  console.log('📁 Content-Type:', req.headers['content-type']);
-  next();
-}, authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
+router.post('/bulk-upload', authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
 
 // Public routes - Order matters! More specific routes first
 router.post('/:formId([0-9a-fA-F-]{36})', submissionController.submitForm);

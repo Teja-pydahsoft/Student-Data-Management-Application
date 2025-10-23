@@ -21,10 +21,16 @@ const Submissions = () => {
   const [fieldStatus, setFieldStatus] = useState(null);
   const [selectedSubmissions, setSelectedSubmissions] = useState(new Set());
   const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
+  const [globalAutoAssign, setGlobalAutoAssign] = useState(false);
+
+  useEffect(() => {
+    setAutoAssign(globalAutoAssign);
+  }, [globalAutoAssign]);
 
   useEffect(() => {
     fetchSubmissions();
     fetchForms();
+    fetchAutoAssignStatus();
   }, [filter]);
 
   const fetchForms = async () => {
@@ -33,6 +39,32 @@ const Submissions = () => {
       setForms(response.data.data.filter(f => f.is_active));
     } catch (error) {
       console.error('Failed to fetch forms');
+    }
+  };
+
+  const fetchAutoAssignStatus = async () => {
+    try {
+      const response = await api.get('/submissions/auto-assign-status');
+      setGlobalAutoAssign(response.data.data.enabled);
+    } catch (error) {
+      console.error('Failed to fetch auto-assign status:', error.response?.data?.message || error.message);
+      // Set default value if API fails
+      setGlobalAutoAssign(false);
+      // Show user-friendly error message
+      if (error.response?.status === 500) {
+        toast.error('Settings not configured. Please run the database initialization script.');
+      }
+    }
+  };
+
+  const toggleGlobalAutoAssign = async () => {
+    try {
+      await api.post('/submissions/toggle-auto-assign', { enabled: !globalAutoAssign });
+      setGlobalAutoAssign(!globalAutoAssign);
+      toast.success(`Auto-assign ${!globalAutoAssign ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to toggle auto-assign:', error.response?.data?.message || error.message);
+      toast.error(error.response?.data?.message || 'Failed to toggle auto-assign. Settings table may not be configured.');
     }
   };
 
@@ -227,20 +259,34 @@ const Submissions = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-fit">
-  {['pending', 'approved', 'rejected'].map((status) => (
-    <button
-      key={status}
-      onClick={() => setFilter(status)}
-      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 ease-in-out transform 
-        ${filter === status 
-          ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white border-transparent shadow-md scale-105' 
-          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100 hover:scale-105 hover:shadow-sm'}`}
-    >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </button>
-  ))}
-</div>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-fit">
+          {['pending', 'approved', 'rejected'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 ease-in-out transform
+                ${filter === status
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white border-transparent shadow-md scale-105'
+                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100 hover:scale-105 hover:shadow-sm'}`}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="globalAutoAssign"
+            checked={globalAutoAssign}
+            onChange={toggleGlobalAutoAssign}
+            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+          />
+          <label htmlFor="globalAutoAssign" className="text-sm font-medium text-gray-700">
+            Auto-Assign Series
+          </label>
+        </div>
+      </div>
 
 
       {submissions.length === 0 ? (
@@ -471,7 +517,7 @@ const Submissions = () => {
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
                 <label htmlFor="autoAssign" className="ml-2 block text-sm text-gray-900">
-                  Auto-assign to pending submissions
+                  Auto-assign to pending submissions and enable global auto-assign
                 </label>
               </div>
             </div>
@@ -504,6 +550,8 @@ const Submissions = () => {
                       if (autoAssign) {
                         toast.success(`Generated and auto-assigned ${numbers.length} admission numbers to pending submissions!`);
                         fetchSubmissions(); // Refresh to show updated admission numbers
+                        // Set global auto-assign
+                        toggleGlobalAutoAssign();
                       } else {
                         navigator.clipboard.writeText(numbers.join('\n'));
                         toast.success(`${numbers.length} admission numbers generated and copied to clipboard!`);

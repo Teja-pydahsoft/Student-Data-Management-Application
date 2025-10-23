@@ -22,9 +22,6 @@ const PORT = process.env.PORT || 5000;
 const rawFrontendUrls = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
 const allowedOrigins = rawFrontendUrls.split(',').map(u => u.trim()).filter(Boolean);
 
-console.log('🌐 CORS Allowed Origins:', allowedOrigins);
-console.log('🔍 Current request origin will be checked against these');
-console.log('🔧 Development mode: CORS is permissive for local development');
 
 app.use(cors({
   origin: true, // Allow all origins in development
@@ -40,7 +37,6 @@ app.use('/uploads', express.static('uploads'));
 
 // Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
@@ -198,44 +194,15 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     console.log('🔄 Starting server...');
-    console.log('📊 Environment:', process.env.NODE_ENV || 'development');
-    console.log('🔗 Frontend URLs:', process.env.FRONTEND_URL);
-    console.log('🔗 All env vars loaded:', Object.keys(process.env).length);
 
     // Start the server FIRST (before DB connection test)
     const server = app.listen(PORT, () => {
-      console.log('');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('  🚀 Pydah Student Database Management System - Backend');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log(`  ✅ Server running on: http://localhost:${PORT}`);
-      console.log(`  🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`  🗄️  Database: ${process.env.DB_NAME || 'student_database'}`);
-      console.log(`  🌐 CORS Origins: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('');
-      console.log('  📋 Available endpoints:');
-      console.log('  - GET  /health');
-      console.log('  - POST /api/auth/login');
-      console.log('  - GET  /api/forms');
-      console.log('  - POST /api/forms');
-      console.log('  - GET  /api/submissions');
-      console.log('  - GET  /api/students');
-      console.log('  - GET  /api/debug/health');
-      console.log('  - GET  /api/debug/routes');
-      console.log('');
-      console.log('  🔧 Debug endpoints:');
-      console.log('  - Visit http://localhost:' + PORT + '/health');
-      console.log('  - Visit http://localhost:' + PORT + '/api/debug/health');
-      console.log('  - Visit http://localhost:' + PORT + '/api/debug/routes');
-      console.log('');
-      console.log('  Press Ctrl+C to stop the server');
-      console.log('');
+      console.log(`✅ Server running on: http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 
     // Test database connection AFTER server starts (async)
     setTimeout(async () => {
-      console.log('🔌 Testing database connections...');
       try {
         const dbConnected = await testConnection();
 
@@ -243,11 +210,9 @@ const startServer = async () => {
           console.error('❌ Database connection failed!');
           console.error('❌ API calls may fail but server is running');
         } else {
-          console.log('✅ Database connections successful');
           // Create a default form if none exists
           try {
             await createDefaultForm();
-            console.log('✅ Default form created/verified');
           } catch (formError) {
             console.error('⚠️  Form creation warning:', formError.message);
           }
