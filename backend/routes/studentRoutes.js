@@ -9,6 +9,8 @@ const photoUpload = multer({ dest: 'uploads/' });
 
 // All routes are protected (admin only)
 router.get('/', authMiddleware, studentController.getAllStudents);
+router.get('/filter-fields', authMiddleware, studentController.getFilterFields);
+router.put('/filter-fields/:fieldName', authMiddleware, studentController.updateFilterField);
 router.get('/stats', authMiddleware, studentController.getDashboardStats);
 router.get('/dashboard-stats', authMiddleware, studentController.getDashboardStats);
 router.post('/bulk-update-pin-numbers', authMiddleware, studentController.uploadMiddleware, studentController.bulkUpdatePinNumbers);

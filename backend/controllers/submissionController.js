@@ -3,6 +3,7 @@ const { supabase } = require('../config/supabase');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const csv = require('csv-parser');
+const xlsx = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 
@@ -58,42 +59,151 @@ const safeJSONStringify = (data) => {
   }
 };
 
-// Enhanced validation and duplicate checking function
+// Comprehensive logging utility for bulk upload operations
+const logBulkUploadEvent = (level, event, data, timestamp = new Date().toISOString()) => {
+  const logEntry = {
+    timestamp,
+    level: level.toUpperCase(),
+    event,
+    ...data
+  };
+
+  const formattedLog = JSON.stringify(logEntry, null, 2);
+  console.log(`[${level.toUpperCase()}] ${event}: ${formattedLog}`);
+  return logEntry;
+};
+
+// Detailed row data logging utility
+const logRowData = (rowNumber, rowData, fieldMapping) => {
+  const extractedData = {};
+  const missingFields = [];
+  const presentFields = [];
+
+  // Check each expected field
+  Object.entries(fieldMapping).forEach(([csvHeader, fieldKey]) => {
+    const value = rowData[csvHeader];
+    if (value !== undefined && value !== null && value !== '') {
+      extractedData[fieldKey] = value;
+      presentFields.push(fieldKey);
+    } else {
+      missingFields.push(fieldKey);
+    }
+  });
+
+  const logData = {
+    rowNumber,
+    totalFields: Object.keys(fieldMapping).length,
+    presentFields: presentFields.length,
+    missingFields: missingFields.length,
+    presentFieldsList: presentFields,
+    missingFieldsList: missingFields,
+    extractedData,
+    rawRowData: rowData
+  };
+
+  logBulkUploadEvent('info', 'ROW_DATA_EXTRACTED', logData);
+  return logData;
+};
+
+// Error logging utility with context
+const logBulkUploadError = (rowNumber, errorType, errorMessage, contextData = {}) => {
+  const errorData = {
+    rowNumber,
+    errorType,
+    errorMessage,
+    context: contextData,
+    stackTrace: new Error().stack
+  };
+
+  logBulkUploadEvent('error', 'BULK_UPLOAD_ERROR', errorData);
+  return errorData;
+};
+
+// Performance logging utility
+const logPerformanceMetrics = (operation, startTime, endTime, additionalMetrics = {}) => {
+  const duration = endTime - startTime;
+  const metricsData = {
+    operation,
+    startTime,
+    endTime,
+    duration: `${duration}ms`,
+    durationSeconds: (duration / 1000).toFixed(2),
+    ...additionalMetrics
+  };
+
+  logBulkUploadEvent('info', 'PERFORMANCE_METRICS', metricsData);
+  return metricsData;
+};
+
+// Enhanced validation and duplicate checking function with comprehensive logging
 const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber) => {
+  const validationStartTime = Date.now();
+
   try {
-    console.log(`🔍 Validating row ${rowNumber} data:`, submissionData);
+    logBulkUploadEvent('info', 'VALIDATION_STARTED', {
+      rowNumber,
+      submissionData: submissionData,
+      fieldCount: Object.keys(submissionData).length,
+      availableFields: Object.keys(submissionData)
+    });
 
     // Check for missing critical fields that are required for processing
     const criticalFields = ['student_name']; // Only student name is truly required
     const missingCriticalFields = [];
 
     criticalFields.forEach(field => {
-      if (!submissionData[field] || submissionData[field].trim() === '') {
+      const value = submissionData[field];
+      if (!value || String(value).trim() === '') {
         missingCriticalFields.push(field);
       }
     });
 
     if (missingCriticalFields.length > 0) {
+      const validationTime = Date.now() - validationStartTime;
+      logBulkUploadEvent('warn', 'CRITICAL_FIELDS_MISSING', {
+        rowNumber,
+        missingFields: missingCriticalFields,
+        validationTime: `${validationTime}ms`
+      });
+
       return {
         isValid: false,
         type: 'missing_fields',
         error: `Missing required fields: ${missingCriticalFields.join(', ')}`,
-        details: { missingFields: missingCriticalFields }
+        details: { missingFields: missingCriticalFields },
+        validationTime: `${validationTime}ms`
       };
     }
 
-    // Check for duplicates based on unique identifiers
+    // Check for duplicates based on unique identifiers with detailed logging
     const duplicateChecks = [];
+    const duplicateCheckStartTime = Date.now();
+
+    logBulkUploadEvent('info', 'DUPLICATE_CHECK_STARTED', {
+      rowNumber,
+      checkingFields: ['admission_number', 'adhar_no', 'student_mobile'],
+      submissionData: submissionData
+    });
 
     // Check by admission_number if provided
-    if (submissionData.admission_number && submissionData.admission_number.trim() !== '') {
-      const admissionNumber = submissionData.admission_number.trim();
+    if (submissionData.admission_number && String(submissionData.admission_number).trim() !== '') {
+      const admissionNumber = String(submissionData.admission_number).trim();
+      const admissionCheckStart = Date.now();
 
       // Check in students table (both admission_number and admission_no columns)
       const [existingStudents] = await masterConn.query(
         'SELECT admission_number, admission_no FROM students WHERE admission_number = ? OR admission_no = ?',
         [admissionNumber, admissionNumber]
       );
+
+      const admissionCheckTime = Date.now() - admissionCheckStart;
+      logBulkUploadEvent('info', 'ADMISSION_CHECK_COMPLETED', {
+        rowNumber,
+        admissionNumber,
+        checkTime: `${admissionCheckTime}ms`,
+        foundInStudents: existingStudents.length,
+        studentsTableResult: existingStudents.length > 0 ? existingStudents[0] : null
+      });
 
       if (existingStudents.length > 0) {
         duplicateChecks.push({
@@ -102,13 +212,29 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
           foundIn: 'students_table',
           existingRecord: existingStudents[0]
         });
+
+        logBulkUploadEvent('warn', 'DUPLICATE_FOUND_STUDENTS', {
+          rowNumber,
+          admissionNumber,
+          existingRecord: existingStudents[0]
+        });
       }
 
       // Also check in form_submissions table
+      const submissionCheckStart = Date.now();
       const { data: existingSubmissions, error } = await supabase
         .from('form_submissions')
         .select('submission_id, admission_number, status')
         .eq('admission_number', admissionNumber);
+
+      const submissionCheckTime = Date.now() - submissionCheckStart;
+      logBulkUploadEvent('info', 'SUBMISSION_CHECK_COMPLETED', {
+        rowNumber,
+        admissionNumber,
+        checkTime: `${submissionCheckTime}ms`,
+        foundInSubmissions: existingSubmissions ? existingSubmissions.length : 0,
+        submissionsTableResult: existingSubmissions && existingSubmissions.length > 0 ? existingSubmissions[0] : null
+      });
 
       if (!error && existingSubmissions && existingSubmissions.length > 0) {
         duplicateChecks.push({
@@ -117,18 +243,35 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
           foundIn: 'form_submissions_table',
           existingRecord: existingSubmissions[0]
         });
+
+        logBulkUploadEvent('warn', 'DUPLICATE_FOUND_SUBMISSIONS', {
+          rowNumber,
+          admissionNumber,
+          existingRecord: existingSubmissions[0]
+        });
       }
     }
 
     // Check by AADHAR number if provided
-    if (submissionData.adhar_no && submissionData.adhar_no.trim() !== '') {
-      const adharNo = submissionData.adhar_no.trim();
+    if (submissionData.adhar_no && submissionData.adhar_no !== '') {
+      // Convert to string and trim safely
+      const adharNo = String(submissionData.adhar_no).trim();
+      const adharCheckStart = Date.now();
 
       // Check in students table for existing AADHAR
       const [existingByAdhar] = await masterConn.query(
         'SELECT admission_number, admission_no FROM students WHERE adhar_no = ?',
         [adharNo]
       );
+
+      const adharCheckTime = Date.now() - adharCheckStart;
+      logBulkUploadEvent('info', 'ADHAR_CHECK_COMPLETED', {
+        rowNumber,
+        adharNo,
+        checkTime: `${adharCheckTime}ms`,
+        foundInStudents: existingByAdhar.length,
+        studentsTableResult: existingByAdhar.length > 0 ? existingByAdhar[0] : null
+      });
 
       if (existingByAdhar.length > 0) {
         duplicateChecks.push({
@@ -137,18 +280,34 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
           foundIn: 'students_table',
           existingRecord: existingByAdhar[0]
         });
+
+        logBulkUploadEvent('warn', 'DUPLICATE_FOUND_ADHAR', {
+          rowNumber,
+          adharNo,
+          existingRecord: existingByAdhar[0]
+        });
       }
     }
 
     // Check by Student Mobile Number if provided
-    if (submissionData.student_mobile && submissionData.student_mobile.trim() !== '') {
-      const studentMobile = submissionData.student_mobile.trim();
+    if (submissionData.student_mobile && String(submissionData.student_mobile).trim() !== '') {
+      const studentMobile = String(submissionData.student_mobile).trim();
+      const mobileCheckStart = Date.now();
 
       // Check in students table for existing mobile
       const [existingByMobile] = await masterConn.query(
         'SELECT admission_number, admission_no FROM students WHERE student_mobile = ?',
         [studentMobile]
       );
+
+      const mobileCheckTime = Date.now() - mobileCheckStart;
+      logBulkUploadEvent('info', 'MOBILE_CHECK_COMPLETED', {
+        rowNumber,
+        studentMobile,
+        checkTime: `${mobileCheckTime}ms`,
+        foundInStudents: existingByMobile.length,
+        studentsTableResult: existingByMobile.length > 0 ? existingByMobile[0] : null
+      });
 
       if (existingByMobile.length > 0) {
         duplicateChecks.push({
@@ -157,8 +316,22 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
           foundIn: 'students_table',
           existingRecord: existingByMobile[0]
         });
+
+        logBulkUploadEvent('warn', 'DUPLICATE_FOUND_MOBILE', {
+          rowNumber,
+          studentMobile,
+          existingRecord: existingByMobile[0]
+        });
       }
     }
+
+    const duplicateCheckTime = Date.now() - duplicateCheckStartTime;
+    logBulkUploadEvent('info', 'DUPLICATE_CHECK_COMPLETED', {
+      rowNumber,
+      totalDuplicateChecks: duplicateChecks.length,
+      duplicateCheckTime: `${duplicateCheckTime}ms`,
+      checkedFields: ['admission_number', 'adhar_no', 'student_mobile']
+    });
 
     if (duplicateChecks.length > 0) {
       const duplicateDetails = duplicateChecks.map(check => ({
@@ -168,30 +341,59 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
         existingAdmissionNumber: check.existingRecord.admission_number || check.existingRecord.admission_no
       }));
 
+      logBulkUploadEvent('error', 'VALIDATION_FAILED_DUPLICATES', {
+        rowNumber,
+        duplicateCount: duplicateChecks.length,
+        duplicates: duplicateDetails,
+        validationTime: `${Date.now() - validationStartTime}ms`
+      });
+
       return {
         isValid: false,
         type: 'duplicate',
         error: `Duplicate entry found for: ${duplicateChecks.map(d => d.field).join(', ')}`,
-        details: { duplicates: duplicateDetails }
+        details: { duplicates: duplicateDetails },
+        validationTime: `${Date.now() - validationStartTime}ms`
       };
     }
 
     // Data is valid - no critical missing fields and no duplicates
-    console.log(`✅ Row ${rowNumber} validation passed`);
+    const totalValidationTime = Date.now() - validationStartTime;
+    logBulkUploadEvent('info', 'VALIDATION_PASSED', {
+      rowNumber,
+      totalValidationTime: `${totalValidationTime}ms`,
+      validationBreakdown: {
+        criticalFieldsCheck: 'passed',
+        duplicateChecks: 'passed',
+        totalChecks: 1 + duplicateChecks.length
+      }
+    });
+
+    console.log(`✅ Row ${rowNumber} validation passed in ${totalValidationTime}ms`);
     return {
       isValid: true,
       type: 'valid',
       error: null,
-      details: null
+      details: null,
+      validationTime: `${totalValidationTime}ms`
     };
 
   } catch (error) {
-    console.error(`❌ Error validating row ${rowNumber}:`, error);
+    const totalValidationTime = Date.now() - validationStartTime;
+
+    logBulkUploadError(rowNumber, 'VALIDATION_EXCEPTION', error.message, {
+      errorStack: error.stack,
+      validationTime: `${totalValidationTime}ms`,
+      submissionData: submissionData
+    });
+
+    console.error(`❌ Error validating row ${rowNumber} after ${totalValidationTime}ms:`, error);
     return {
       isValid: false,
       type: 'validation_error',
       error: `Validation error: ${error.message}`,
-      details: { error: error.message }
+      details: { error: error.message, stack: error.stack },
+      validationTime: `${totalValidationTime}ms`
     };
   }
 };
@@ -316,7 +518,8 @@ exports.getAllSubmissions = async (req, res) => {
       submission_data: parseJSON(sub.submission_data),
       form_name: idToFormName.get(sub.form_id) || null,
       reviewed_by_name: sub.reviewed_by ? (idToAdmin.get(sub.reviewed_by) || null) : null,
-      submitted_by_admin_name: sub.submitted_by_admin ? (idToSubmittedAdmin.get(sub.submitted_by_admin) || null) : null
+      submitted_by_admin_name: sub.submitted_by_admin ? (idToSubmittedAdmin.get(sub.submitted_by_admin) || null) : null,
+      submitted_at: sub.created_at
     }));
 
     res.json({ success: true, data: enriched });
@@ -374,7 +577,8 @@ exports.getSubmissionById = async (req, res) => {
       ...base,
       form_name: formName,
       submission_data: parseJSON(base.submission_data),
-      form_fields: formFields
+      form_fields: formFields,
+      submitted_at: base.created_at
     };
 
     res.json({ success: true, data: submission });
@@ -782,34 +986,42 @@ exports.deleteSubmission = async (req, res) => {
   }
 };
 
-// Enhanced bulk upload submissions (admin only) with duplicate checking and missing field handling
+// Enhanced bulk upload submissions (admin only) with comprehensive logging
 exports.bulkUploadSubmissions = async (req, res) => {
   let masterConn = null;
+  const uploadStartTime = Date.now();
 
   try {
-    console.log('🚀 Enhanced bulk upload request received');
-    console.log('📁 Request file:', req.file ? {
-      filename: req.file.filename,
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    } : 'No file');
-    console.log('📋 Request body keys:', Object.keys(req.body));
-    console.log('📋 Request body:', req.body);
-    console.log('👤 Admin ID:', req.admin?.id);
+    // Initial request logging
+    logBulkUploadEvent('info', 'BULK_UPLOAD_STARTED', {
+      adminId: req.admin?.id,
+      fileInfo: req.file ? {
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        sizeMB: (req.file.size / (1024 * 1024)).toFixed(2)
+      } : null,
+      requestBody: req.body,
+      timestamp: new Date().toISOString()
+    });
 
     if (!req.file) {
-      console.log('❌ No file received - multer did not parse the file');
+      logBulkUploadError(null, 'MISSING_FILE', 'No file received from client');
       return res.status(400).json({
         success: false,
-        message: 'CSV file is required - file was not received by server'
+        message: 'CSV or Excel file is required - file was not received by server'
       });
     }
 
     const formId = req.body.formId;
-    console.log('📝 Form ID from body:', formId);
+    logBulkUploadEvent('info', 'FORM_VALIDATION', {
+      formId,
+      hasFormId: !!formId
+    });
 
     if (!formId) {
+      logBulkUploadError(null, 'MISSING_FORM_ID', 'Form ID not provided in request');
       return res.status(400).json({
         success: false,
         message: 'Form ID is required'
@@ -817,6 +1029,7 @@ exports.bulkUploadSubmissions = async (req, res) => {
     }
 
     // Verify form exists
+    const formFetchStart = Date.now();
     const { data: forms, error } = await supabase
       .from('forms')
       .select('*')
@@ -824,7 +1037,14 @@ exports.bulkUploadSubmissions = async (req, res) => {
       .limit(1);
     if (error) throw error;
 
+    const formFetchTime = Date.now() - formFetchStart;
+    logPerformanceMetrics('FORM_FETCH', formFetchStart, Date.now(), {
+      formFetchTime: `${formFetchTime}ms`,
+      formsFound: forms.length
+    });
+
     if (forms.length === 0) {
+      logBulkUploadError(null, 'FORM_NOT_FOUND', `Form with ID ${formId} not found`);
       return res.status(404).json({
         success: false,
         message: 'Form not found'
@@ -834,106 +1054,266 @@ exports.bulkUploadSubmissions = async (req, res) => {
     const form = forms[0];
     const formFields = parseJSON(form.form_fields);
 
-    // Parse CSV file
+    // Create field mapping between CSV headers and form field keys
+    const fieldMapping = {
+      'admission_number': 'admission_number',
+      'Pin No': 'pin_no',
+      'Batch': 'batch',
+      'Branch': 'branch',
+      'StudType': 'stud_type',
+      'Student Name': 'student_name',
+      'Student Status': 'student_status',
+      'Scholar Status': 'scholar_status',
+      'Student Mobile Number': 'student_mobile',
+      'Parent Mobile Number 1': 'parent_mobile1',
+      'Parent Mobile Number 2': 'parent_mobile2',
+      'Caste': 'caste',
+      'M/F': 'gender',
+      'DOB (Date-Month-Year)': 'dob',
+      'Father Name': 'father_name',
+      'Admission Year (Ex: 09-Sep-2003)': 'admission_date',
+      'AADHAR No': 'adhar_no',
+      'Student Address': 'student_address',
+      'CityVillage Name': 'city_village',
+      'Mandal Name': 'mandal_name',
+      'District Name': 'district',
+      'Previous College Name': 'previous_college',
+      'Certificate Status': 'certificates_status',
+      'Student Photo': 'student_photo',
+      'Remarks': 'remarks'
+    };
+
+    logBulkUploadEvent('info', 'FORM_LOADED', {
+      formId: form.form_id,
+      formName: form.form_name,
+      formFieldsCount: formFields.length,
+      isActive: form.is_active,
+      fieldMapping: fieldMapping
+    });
+
+    // Parse file (CSV or Excel) with comprehensive logging
     const results = [];
     const errors = [];
     let rowNumber = 0;
+    const parsingStartTime = Date.now();
 
-    console.log('📄 Starting CSV parsing for file:', req.file.path);
-
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on('data', (data) => {
-          rowNumber++;
-          console.log(`📊 Parsed row ${rowNumber}:`, data);
-          results.push({ row: rowNumber, data });
-        })
-        .on('end', () => {
-          console.log(`✅ CSV parsing completed. Total rows: ${results.length}`);
-          resolve();
-        })
-        .on('error', (error) => {
-          console.error('❌ CSV parsing error:', error);
-          reject(error);
-        });
+    logBulkUploadEvent('info', 'FILE_PARSING_STARTED', {
+      filePath: req.file.path,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype
     });
 
-    // Initialize counters for enhanced tracking
+    // Determine file type and parse accordingly
+    const isExcel = req.file.mimetype.includes('excel') || req.file.mimetype.includes('spreadsheet') ||
+                   req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
+
+    logBulkUploadEvent('info', 'FILE_TYPE_DETERMINED', {
+      isExcel,
+      detectionMethod: isExcel ? 'MIME type or extension check' : 'Default to CSV',
+      mimeType: req.file.mimetype,
+      fileExtension: req.file.originalname.split('.').pop()
+    });
+
+    if (isExcel) {
+      // Parse Excel file with detailed logging
+      logBulkUploadEvent('info', 'EXCEL_PARSING_INITIATED', {
+        library: 'xlsx',
+        filePath: req.file.path
+      });
+
+      try {
+        const workbook = xlsx.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0]; // Use first sheet
+        const worksheet = workbook.Sheets[sheetName];
+
+        logBulkUploadEvent('info', 'EXCEL_WORKBOOK_LOADED', {
+          sheetNames: workbook.SheetNames,
+          selectedSheet: sheetName,
+          totalSheets: workbook.SheetNames.length
+        });
+
+        // Convert to JSON with header row
+        const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+        logBulkUploadEvent('info', 'EXCEL_DATA_CONVERTED', {
+          totalRows: jsonData.length,
+          headerRow: jsonData[0],
+          dataRows: jsonData.length - 1
+        });
+
+        // Process rows (skip header row)
+        for (let i = 1; i < jsonData.length; i++) {
+          rowNumber++;
+          const row = jsonData[i];
+
+          if (row && row.length > 0) {
+            // Convert array to object using headers
+            const headers = jsonData[0];
+            const data = {};
+            headers.forEach((header, index) => {
+              if (header && row[index] !== undefined) {
+                data[header] = row[index];
+              }
+            });
+
+            // Log detailed row data extraction
+            const rowLogData = logRowData(rowNumber, data, fieldMapping);
+            results.push({ row: rowNumber, data, logData: rowLogData });
+          } else {
+            logBulkUploadError(rowNumber, 'EMPTY_ROW', 'Row is empty or contains no data', { rowData: row });
+          }
+        }
+
+        const parsingTime = Date.now() - parsingStartTime;
+        logPerformanceMetrics('EXCEL_PARSING', parsingStartTime, Date.now(), {
+          rowsParsed: results.length,
+          parsingTime: `${parsingTime}ms`,
+          averageTimePerRow: results.length > 0 ? `${(parsingTime / results.length).toFixed(2)}ms` : 'N/A'
+        });
+
+        logBulkUploadEvent('info', 'EXCEL_PARSING_COMPLETED', {
+          totalRowsParsed: results.length,
+          parsingTime: `${parsingTime}ms`
+        });
+
+      } catch (error) {
+        logBulkUploadError(null, 'EXCEL_PARSING_FAILED', error.message, {
+          filePath: req.file.path,
+          errorStack: error.stack
+        });
+        throw error;
+      }
+    } else {
+      // Parse CSV file with detailed logging
+      logBulkUploadEvent('info', 'CSV_PARSING_INITIATED', {
+        library: 'csv-parser',
+        filePath: req.file.path
+      });
+
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(req.file.path)
+          .pipe(csv())
+          .on('data', (data) => {
+            rowNumber++;
+            // Log detailed row data extraction for CSV
+            const rowLogData = logRowData(rowNumber, data, fieldMapping);
+            results.push({ row: rowNumber, data, logData: rowLogData });
+          })
+          .on('end', () => {
+            const parsingTime = Date.now() - parsingStartTime;
+            logPerformanceMetrics('CSV_PARSING', parsingStartTime, Date.now(), {
+              rowsParsed: results.length,
+              parsingTime: `${parsingTime}ms`,
+              averageTimePerRow: results.length > 0 ? `${(parsingTime / results.length).toFixed(2)}ms` : 'N/A'
+            });
+
+            logBulkUploadEvent('info', 'CSV_PARSING_COMPLETED', {
+              totalRowsParsed: results.length,
+              parsingTime: `${parsingTime}ms`
+            });
+            resolve();
+          })
+          .on('error', (error) => {
+            logBulkUploadError(null, 'CSV_PARSING_FAILED', error.message, {
+              filePath: req.file.path,
+              errorStack: error.stack
+            });
+            reject(error);
+          });
+      });
+    }
+
+    // Initialize counters for enhanced tracking with logging
     let successCount = 0;
     let failedCount = 0;
     let duplicateCount = 0;
     let missingFieldCount = 0;
     const processedRows = [];
     const duplicateDetails = [];
+    const rowProcessingStartTime = Date.now();
+
+    logBulkUploadEvent('info', 'ROW_PROCESSING_STARTED', {
+      totalRowsToProcess: results.length,
+      fieldMapping: Object.keys(fieldMapping),
+      expectedFields: Object.values(fieldMapping)
+    });
 
     // Get database connection for duplicate checking
     masterConn = await masterPool.getConnection();
+    logBulkUploadEvent('info', 'DATABASE_CONNECTION_ESTABLISHED', {
+      connectionType: 'masterPool',
+      databaseName: 'student_database'
+    });
 
     for (const result of results) {
+      const rowProcessingTime = Date.now();
       try {
         const { row, data } = result;
 
-        console.log(`🔄 Processing row ${row} with data keys:`, Object.keys(data));
+        logBulkUploadEvent('info', 'ROW_PROCESSING_INITIATED', {
+          rowNumber: row,
+          availableFields: Object.keys(data),
+          fieldCount: Object.keys(data).length
+        });
 
-        // Build submission data from CSV row, mapping screenshot field names to form field keys
+        // Build submission data from row, mapping field names to form field keys
         const submissionData = {};
 
-        // Define field mapping from screenshot CSV headers to form field keys
-        const fieldMapping = {
-          'admission_number': 'admission_number',
-          'Pin No': 'pin_no',
-          'Batch': 'batch',
-          'Branch': 'branch',
-          'StudType': 'stud_type',
-          'Student Name': 'student_name',
-          'Student Status': 'student_status',
-          'Scholar Status': 'scholar_status',
-          'Student Mobile Number': 'student_mobile',
-          'Parent Mobile Number 1': 'parent_mobile1',
-          'Parent Mobile Number 2': 'parent_mobile2',
-          'Caste': 'caste',
-          'M/F': 'gender',
-          'DOB (Date-Month-Year)': 'dob',
-          'Father Name': 'father_name',
-          'Admission Year (Ex: 09-Sep-2003)': 'admission_date',
-          'AADHAR No': 'adhar_no',
-          'Admission No': 'admission_no',
-          'Student Address': 'student_address',
-          'CityVillage Name': 'city_village',
-          'Mandal Name': 'mandal_name',
-          'District Name': 'district',
-          'Previous College Name': 'previous_college',
-          'Certificate Status': 'certificates_status',
-          'Student Photo': 'student_photo',
-          'Remarks': 'remarks'
-        };
-
-        // Map CSV data using the field mapping - handle missing fields gracefully
+        // Map data using the field mapping - handle missing fields gracefully
         Object.entries(fieldMapping).forEach(([csvHeader, fieldKey]) => {
-          if (data[csvHeader] !== undefined) {
-            // Allow empty strings but preserve them for optional fields
-            submissionData[fieldKey] = data[csvHeader];
+          if (data[csvHeader] !== undefined && data[csvHeader] !== null) {
+            // Convert Excel data to string and trim safely
+            submissionData[fieldKey] = String(data[csvHeader]).trim();
           }
         });
 
-        console.log(`📝 Final submission data for row ${row}:`, submissionData);
+        // Log the final submission data for this row
+        logBulkUploadEvent('info', 'SUBMISSION_DATA_MAPPED', {
+          rowNumber: row,
+          mappedFields: Object.keys(submissionData),
+          fieldCount: Object.keys(submissionData).length,
+          submissionData: submissionData
+        });
 
-        // Enhanced validation and duplicate checking
+        // Enhanced validation and duplicate checking with detailed logging
+        const validationStartTime = Date.now();
         const validationResult = await validateAndCheckDuplicates(submissionData, masterConn, row);
+        const validationTime = Date.now() - validationStartTime;
+
+        logBulkUploadEvent('info', 'VALIDATION_COMPLETED', {
+          rowNumber: row,
+          validationTime: `${validationTime}ms`,
+          isValid: validationResult.isValid,
+          validationType: validationResult.type,
+          errorMessage: validationResult.error
+        });
 
         if (!validationResult.isValid) {
-          errors.push({
+          const errorDetails = {
             row,
             message: validationResult.error,
             type: validationResult.type,
-            details: validationResult.details
-          });
+            details: validationResult.details,
+            validationTime: `${validationTime}ms`
+          };
+
+          errors.push(errorDetails);
 
           if (validationResult.type === 'duplicate') {
             duplicateCount++;
+            logBulkUploadEvent('warn', 'DUPLICATE_DETECTED', {
+              rowNumber: row,
+              duplicates: validationResult.details.duplicates,
+              validationTime: `${validationTime}ms`
+            });
           } else if (validationResult.type === 'missing_fields') {
             missingFieldCount++;
+            logBulkUploadEvent('warn', 'MISSING_FIELDS_DETECTED', {
+              rowNumber: row,
+              missingFields: validationResult.details.missingFields,
+              validationTime: `${validationTime}ms`
+            });
           }
 
           failedCount++;
@@ -941,7 +1321,13 @@ exports.bulkUploadSubmissions = async (req, res) => {
             row,
             status: 'failed',
             reason: validationResult.error,
-            type: validationResult.type
+            type: validationResult.type,
+            validationTime: `${validationTime}ms`
+          });
+
+          logBulkUploadError(row, validationResult.type, validationResult.error, {
+            validationTime: `${validationTime}ms`,
+            details: validationResult.details
           });
           continue;
         }
@@ -949,7 +1335,7 @@ exports.bulkUploadSubmissions = async (req, res) => {
         const submissionId = uuidv4();
 
         // Insert submission with admin tracking
-        console.log(`💾 Inserting submission ${submissionId} for admission ${submissionData.admission_number}`);
+        const insertionStartTime = Date.now();
         await supabase
           .from('form_submissions')
           .insert({
@@ -961,53 +1347,177 @@ exports.bulkUploadSubmissions = async (req, res) => {
             submitted_by: 'admin',
             submitted_by_admin: req.admin.id
           });
+        const insertionTime = Date.now() - insertionStartTime;
+
+        logBulkUploadEvent('info', 'SUBMISSION_INSERTED', {
+          rowNumber: row,
+          submissionId,
+          admissionNumber: submissionData.admission_number,
+          insertionTime: `${insertionTime}ms`
+        });
 
         successCount++;
+        const totalRowTime = Date.now() - rowProcessingTime;
         processedRows.push({
           row,
           status: 'success',
           submissionId,
-          admissionNumber: submissionData.admission_number
+          admissionNumber: submissionData.admission_number,
+          processingTime: `${totalRowTime}ms`
+        });
+
+        logBulkUploadEvent('info', 'ROW_PROCESSING_COMPLETED', {
+          rowNumber: row,
+          status: 'success',
+          processingTime: `${totalRowTime}ms`,
+          insertionTime: `${insertionTime}ms`
         });
 
       } catch (error) {
-        console.error(`❌ Error processing row ${result.row}:`, error);
+        const totalRowTime = Date.now() - rowProcessingTime;
+        logBulkUploadError(result.row, 'PROCESSING_ERROR', error.message, {
+          processingTime: `${totalRowTime}ms`,
+          errorStack: error.stack,
+          rowData: result.data
+        });
+
         errors.push({
           row: result.row,
           message: error.message,
-          type: 'processing_error'
+          type: 'processing_error',
+          processingTime: `${totalRowTime}ms`
         });
         failedCount++;
         processedRows.push({
           row: result.row,
           status: 'failed',
           reason: error.message,
-          type: 'processing_error'
+          type: 'processing_error',
+          processingTime: `${totalRowTime}ms`
         });
       }
     }
 
+    const totalProcessingTime = Date.now() - rowProcessingStartTime;
+
     // Clean up uploaded file
     fs.unlinkSync(req.file.path);
+    logBulkUploadEvent('info', 'FILE_CLEANUP_COMPLETED', {
+      filePath: req.file.path,
+      fileName: req.file.originalname
+    });
 
-    // Enhanced logging with detailed statistics
+    // Data integrity verification
+    const integrityStartTime = Date.now();
+    let dataIntegrityIssues = 0;
+
+    // Verify submissions were actually inserted
+    const { data: insertedSubmissions, error: verifyError } = await supabase
+      .from('form_submissions')
+      .select('submission_id, admission_number, status')
+      .eq('form_id', formId)
+      .eq('submitted_by_admin', req.admin.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(successCount + 10); // Get a few extra to check for duplicates
+
+    if (verifyError) {
+      logBulkUploadError(null, 'INTEGRITY_VERIFICATION_FAILED', verifyError.message);
+      dataIntegrityIssues++;
+    } else {
+      const actualInsertedCount = insertedSubmissions ? insertedSubmissions.length : 0;
+      logBulkUploadEvent('info', 'INTEGRITY_VERIFICATION_COMPLETED', {
+        expectedCount: successCount,
+        actualCount: actualInsertedCount,
+        difference: actualInsertedCount - successCount,
+        integrityIssues: actualInsertedCount !== successCount ? 1 : 0
+      });
+
+      if (actualInsertedCount !== successCount) {
+        dataIntegrityIssues++;
+        logBulkUploadError(null, 'DATA_INTEGRITY_MISMATCH',
+          `Expected ${successCount} submissions but found ${actualInsertedCount}`,
+          { expectedCount: successCount, actualCount: actualInsertedCount });
+      }
+    }
+
+    const integrityTime = Date.now() - integrityStartTime;
+
+    // Enhanced logging with detailed statistics and performance metrics
+    const totalUploadTime = Date.now() - uploadStartTime;
     const masterConn4 = await masterPool.getConnection();
+
+    const auditDetails = {
+      successCount,
+      failedCount,
+      duplicateCount,
+      missingFieldCount,
+      totalRows: results.length,
+      processedRows: processedRows.length,
+      totalUploadTime: `${totalUploadTime}ms`,
+      averageTimePerRow: results.length > 0 ? `${(totalUploadTime / results.length).toFixed(2)}ms` : 'N/A',
+      parsingTime: 'calculated',
+      validationTime: 'calculated',
+      insertionTime: 'calculated',
+      integrityVerificationTime: `${integrityTime}ms`,
+      dataIntegrityIssues,
+      fileInfo: {
+        name: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype
+      },
+      formInfo: {
+        formId,
+        formName: form.form_name
+      },
+      errors: errors.slice(0, 20), // Limit for audit log
+      processedRows: processedRows.slice(0, 20) // Limit for audit log
+    };
+
     await masterConn4.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['ENHANCED_BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id,
-       JSON.stringify({
-         successCount,
-         failedCount,
-         duplicateCount,
-         missingFieldCount,
-         totalRows: results.length,
-         processedRows: processedRows.length
-       })]
+      ['ENHANCED_BULK_UPLOAD', 'SUBMISSION', formId, req.admin.id, JSON.stringify(auditDetails)]
     );
     masterConn4.release();
 
-    console.log(`✅ Enhanced bulk upload completed: ${successCount} success, ${failedCount} failed, ${duplicateCount} duplicates, ${missingFieldCount} missing fields`);
+    // Comprehensive final summary logging
+    logPerformanceMetrics('TOTAL_BULK_UPLOAD', uploadStartTime, Date.now(), {
+      totalRows: results.length,
+      successCount,
+      failedCount,
+      duplicateCount,
+      missingFieldCount,
+      dataIntegrityIssues,
+      averageTimePerRow: results.length > 0 ? `${(totalUploadTime / results.length).toFixed(2)}ms` : 'N/A'
+    });
+
+    logBulkUploadEvent('info', 'BULK_UPLOAD_COMPLETED', {
+      summary: {
+        totalRowsProcessed: results.length,
+        successfulUploads: successCount,
+        failedUploads: failedCount,
+        duplicateEntries: duplicateCount,
+        missingFields: missingFieldCount,
+        dataIntegrityIssues,
+        totalProcessingTime: `${totalUploadTime}ms`
+      },
+      performance: {
+        averageTimePerRow: results.length > 0 ? `${(totalUploadTime / results.length).toFixed(2)}ms` : 'N/A',
+        parsingTime: 'calculated',
+        validationTime: 'calculated',
+        insertionTime: 'calculated',
+        integrityVerificationTime: `${integrityTime}ms`
+      },
+      fileInfo: {
+        name: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    console.log(`✅ Enhanced bulk upload completed: ${successCount} success, ${failedCount} failed, ${duplicateCount} duplicates, ${missingFieldCount} missing fields, ${dataIntegrityIssues} integrity issues`);
 
     res.json({
       success: true,
@@ -1017,26 +1527,58 @@ exports.bulkUploadSubmissions = async (req, res) => {
       duplicateCount,
       missingFieldCount,
       totalRows: results.length,
+      dataIntegrityIssues,
+      totalProcessingTime: `${totalUploadTime}ms`,
       errors: errors.slice(0, 50), // Increased error limit for better debugging
       processedRows: processedRows.slice(0, 100) // Include processing details
     });
 
   } catch (error) {
-    console.error('Enhanced bulk upload error:', error);
+    const totalUploadTime = Date.now() - uploadStartTime;
+
+    // Comprehensive error logging
+    logBulkUploadError(null, 'BULK_UPLOAD_FAILED', error.message, {
+      errorStack: error.stack,
+      totalUploadTime: `${totalUploadTime}ms`,
+      fileInfo: req.file ? {
+        name: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype
+      } : null,
+      formId: req.body.formId,
+      adminId: req.admin?.id
+    });
 
     // Clean up uploaded file if it exists
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
+      logBulkUploadEvent('info', 'ERROR_CLEANUP_COMPLETED', {
+        filePath: req.file.path,
+        cleanupReason: 'Error occurred during processing'
+      });
     }
+
+    // Log performance metrics even for failed uploads
+    logPerformanceMetrics('FAILED_BULK_UPLOAD', uploadStartTime, Date.now(), {
+      errorType: error.name,
+      errorMessage: error.message,
+      totalUploadTime: `${totalUploadTime}ms`
+    });
 
     res.status(500).json({
       success: false,
       message: 'Server error during enhanced bulk upload',
-      error: error.message
+      error: error.message,
+      totalUploadTime: `${totalUploadTime}ms`,
+      timestamp: new Date().toISOString()
     });
   } finally {
     if (masterConn) {
       masterConn.release();
+      logBulkUploadEvent('info', 'DATABASE_CONNECTION_RELEASED', {
+        connectionType: 'masterPool',
+        releaseReason: 'Upload process completed or failed'
+      });
     }
   }
 };
@@ -1416,6 +1958,421 @@ exports.getStudentCompletionStatus = async (req, res) => {
       message: 'Server error while fetching student completion status'
     });
   }
+};
+
+// Download Excel template for bulk upload
+exports.downloadExcelTemplate = async (req, res) => {
+  try {
+    const { formId } = req.params;
+
+    if (!formId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Form ID is required'
+      });
+    }
+
+    // Verify form exists
+    const { data: forms, error } = await supabase
+      .from('forms')
+      .select('*')
+      .eq('form_id', formId)
+      .limit(1);
+
+    if (error) throw error;
+
+    if (forms.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
+      });
+    }
+
+    const form = forms[0];
+    const formFields = parseJSON(form.form_fields);
+
+    // Define headers in the same order as the frontend template
+    const headers = [
+      'admission_number',
+      'Pin No',
+      'Batch',
+      'Branch',
+      'StudType',
+      'Student Name',
+      'Student Status',
+      'Scholar Status',
+      'Student Mobile Number',
+      'Parent Mobile Number 1',
+      'Parent Mobile Number 2',
+      'Caste',
+      'M/F',
+      'DOB (Date-Month-Year)',
+      'Father Name',
+      'Admission Year (Ex: 09-Sep-2003)',
+      'AADHAR No',
+      'Student Address',
+      'CityVillage Name',
+      'Mandal Name',
+      'District Name',
+      'Previous College Name',
+      'Certificate Status',
+      'Student Photo',
+      'Remarks'
+    ];
+
+    // Create Excel workbook and worksheet
+    const workbook = xlsx.utils.book_new();
+    const worksheetData = [headers]; // Header row
+
+    // Add a sample data row for reference
+    const sampleRow = headers.map(header => {
+      switch(header) {
+        case 'admission_number': return 'ADM001';
+        case 'Student Name': return 'John Doe';
+        case 'Student Mobile Number': return '9876543210';
+        case 'M/F': return 'M';
+        case 'DOB (Date-Month-Year)': return '01-Jan-2000';
+        case 'Admission Year (Ex: 09-Sep-2003)': return '01-Sep-2023';
+        case 'Student Photo': return 'photo.jpg';
+        default: return '';
+      }
+    });
+    worksheetData.push(sampleRow);
+
+    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+
+    // Set column widths for better readability
+    const columnWidths = headers.map(header => ({ wch: Math.max(header.length, 15) }));
+    worksheet['!cols'] = columnWidths;
+
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Template');
+
+    // Generate buffer
+    const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${form.form_name}_template.xlsx"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    res.send(buffer);
+
+    console.log(`✅ Excel template downloaded for form: ${form.form_name}`);
+
+  } catch (error) {
+    console.error('Download Excel template error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while generating Excel template'
+    });
+  }
+};
+
+// Bulk approve submissions (admin only)
+exports.bulkApproveSubmissions = async (req, res) => {
+  let masterConn = null;
+  const startTime = Date.now();
+
+  try {
+    const { submissionIds } = req.body;
+
+    if (!submissionIds || !Array.isArray(submissionIds) || submissionIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Submission IDs array is required'
+      });
+    }
+
+    console.log(`🔄 Starting bulk approval for ${submissionIds.length} submissions`);
+
+    // Get database connection
+    masterConn = await masterPool.getConnection();
+
+    let approvedCount = 0;
+    let failedCount = 0;
+    const results = [];
+    const errors = [];
+
+    // Process each submission
+    for (const submissionId of submissionIds) {
+      try {
+        console.log(`📋 Processing submission: ${submissionId}`);
+
+        // Get submission details
+        const { data: submissions, error: fetchError } = await supabase
+          .from('form_submissions')
+          .select('*')
+          .eq('submission_id', submissionId)
+          .eq('status', 'pending')
+          .limit(1);
+
+        if (fetchError) {
+          console.error(`❌ Error fetching submission ${submissionId}:`, fetchError);
+          errors.push({
+            submissionId,
+            error: fetchError.message,
+            type: 'fetch_error'
+          });
+          failedCount++;
+          continue;
+        }
+
+        if (!submissions || submissions.length === 0) {
+          console.error(`❌ Submission ${submissionId} not found or not pending`);
+          errors.push({
+            submissionId,
+            error: 'Submission not found or not pending',
+            type: 'not_found'
+          });
+          failedCount++;
+          continue;
+        }
+
+        const submission = submissions[0];
+        const submissionData = parseJSON(submission.submission_data);
+
+        // Generate admission number if not present
+        const admissionNumber = submissionData.admission_number || `ADM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Update submission data with admission number
+        const updatedSubmissionData = {
+          ...submissionData,
+          admission_number: admissionNumber
+        };
+
+        // Approve the submission (same logic as single approval)
+        await approveSingleSubmission(submission, updatedSubmissionData, admissionNumber, masterConn, req.admin);
+
+        approvedCount++;
+        results.push({
+          submissionId,
+          admissionNumber,
+          status: 'approved'
+        });
+
+        console.log(`✅ Approved submission ${submissionId} with admission number: ${admissionNumber}`);
+
+      } catch (error) {
+        console.error(`❌ Error approving submission ${submissionId}:`, error);
+        errors.push({
+          submissionId,
+          error: error.message,
+          type: 'approval_error'
+        });
+        failedCount++;
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+
+    // Log action
+    const masterConn2 = await masterPool.getConnection();
+    await masterConn2.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['BULK_APPROVE', 'SUBMISSION', JSON.stringify(submissionIds), req.admin.id, JSON.stringify({
+        approvedCount,
+        failedCount,
+        totalTime: `${totalTime}ms`
+      })]
+    );
+    masterConn2.release();
+
+    console.log(`✅ Bulk approval completed: ${approvedCount} approved, ${failedCount} failed in ${totalTime}ms`);
+
+    res.json({
+      success: true,
+      message: `Bulk approval completed: ${approvedCount} approved, ${failedCount} failed`,
+      approvedCount,
+      failedCount,
+      totalTime: `${totalTime}ms`,
+      results,
+      errors
+    });
+
+  } catch (error) {
+    const totalTime = Date.now() - startTime;
+    console.error('❌ Bulk approval failed:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error during bulk approval',
+      error: error.message,
+      totalTime: `${totalTime}ms`
+    });
+  } finally {
+    if (masterConn) {
+      masterConn.release();
+    }
+  }
+};
+
+// Helper function to approve a single submission (extracted from original approveSubmission)
+const approveSingleSubmission = async (submission, submissionData, admissionNumber, masterConn, admin) => {
+  const finalAdmissionNumber = String(admissionNumber).trim();
+
+  // Separate predefined and custom fields
+  const predefinedFields = {};
+  const predefinedKeys = [
+    'pin_no', 'batch', 'branch', 'stud_type', 'student_name', 'student_status',
+    'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
+    'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
+    'admission_no', 'student_address', 'city_village', 'mandal_name', 'district',
+    'previous_college', 'certificates_status', 'student_photo', 'remarks'
+  ];
+
+  Object.entries(submissionData).forEach(([key, value]) => {
+    if (predefinedKeys.includes(key)) {
+      predefinedFields[key] = value;
+    }
+  });
+
+  // Load form to determine dynamic table/columns in master DB
+  const [forms] = await masterConn.query('SELECT * FROM forms WHERE form_id = ?', [submission.form_id]);
+  const formFields = forms.length > 0 ? parseJSON(forms[0].form_fields) : [];
+
+  // Determine destination table in master DB: single table per form, named by form_id
+  const destinationTable = `form_${submission.form_id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+  // Build DDL to ensure destination table exists with columns from formFields
+  await masterConn.query(
+    `CREATE TABLE IF NOT EXISTS ${destinationTable} (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      admission_number VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`
+  );
+
+  // Ensure columns for each field key exist
+  for (const field of formFields) {
+    const col = field.key?.replace(/[^a-zA-Z0-9_]/g, '_');
+    if (!col) continue;
+    await masterConn.query(
+      `ALTER TABLE ${destinationTable} ADD COLUMN IF NOT EXISTS ${col} VARCHAR(1024) NULL`
+    );
+  }
+
+  // Prepare insert columns/values for dynamic table
+  const insertCols = ['admission_number'];
+  const insertVals = [finalAdmissionNumber];
+  const placeholders = ['?'];
+
+  for (const field of formFields) {
+    const key = field.key;
+    const col = key?.replace(/[^a-zA-Z0-9_]/g, '_');
+    if (!col) continue;
+    insertCols.push(col);
+    insertVals.push(submissionData[key] ?? null);
+    placeholders.push('?');
+  }
+
+  await masterConn.query(
+    `INSERT INTO ${destinationTable} (${insertCols.join(',')}) VALUES (${placeholders.join(',')})`,
+    insertVals
+  );
+
+  // Check if student exists and update/create accordingly
+  const [students] = await masterConn.query(
+    'SELECT * FROM students WHERE admission_number = ? OR admission_no = ?',
+    [finalAdmissionNumber, finalAdmissionNumber]
+  );
+
+  if (students.length > 0) {
+    // Update existing student
+    const existingStudent = students[0];
+    const existingData = parseJSON(existingStudent.student_data) || {};
+    const mergedData = { ...existingData };
+
+    Object.entries(submissionData).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        mergedData[key] = value;
+      }
+    });
+
+    mergedData.form_id = submission.form_id;
+
+    const updateFields = [];
+    const updateValues = [];
+    const addedUpdateFields = new Set();
+
+    Object.entries(submissionData).forEach(([key, value]) => {
+      if (predefinedKeys.includes(key) && value !== undefined && value !== '' && !addedUpdateFields.has(key)) {
+        updateFields.push(`${key} = ?`);
+        updateValues.push(value);
+        addedUpdateFields.add(key);
+      }
+    });
+
+    if (!addedUpdateFields.has('student_data')) {
+      const jsonMergedData = safeJSONStringify(mergedData);
+      updateFields.push('student_data = ?');
+      updateValues.push(jsonMergedData);
+    }
+
+    updateValues.push(finalAdmissionNumber);
+
+    await masterConn.query(
+      `UPDATE students SET ${updateFields.join(', ')} WHERE admission_number = ? OR admission_no = ?`,
+      [...updateValues, finalAdmissionNumber, finalAdmissionNumber]
+    );
+  } else {
+    // Create new student
+    const studentData = {};
+    const fieldValuePairs = [];
+    const addedFields = new Set();
+
+    fieldValuePairs.push({ field: 'admission_number', value: finalAdmissionNumber });
+    addedFields.add('admission_number');
+
+    fieldValuePairs.push({ field: 'admission_no', value: finalAdmissionNumber });
+    addedFields.add('admission_no');
+
+    Object.entries(submissionData).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        let sanitizedValue = value;
+        if (typeof value === 'string') {
+          sanitizedValue = value.trim();
+        }
+
+        studentData[key] = sanitizedValue;
+
+        if (predefinedKeys.includes(key) && !addedFields.has(key)) {
+          fieldValuePairs.push({ field: key, value: sanitizedValue });
+          addedFields.add(key);
+        }
+      }
+    });
+
+    studentData.form_id = submission.form_id;
+
+    if (!addedFields.has('student_data')) {
+      const jsonStudentData = safeJSONStringify(studentData);
+      fieldValuePairs.push({ field: 'student_data', value: jsonStudentData });
+      addedFields.add('student_data');
+    }
+
+    const insertFields = fieldValuePairs.map(pair => pair.field);
+    const insertValues = fieldValuePairs.map(pair => pair.value);
+
+    const placeholders = insertFields.map(() => '?').join(', ');
+    const query = `INSERT INTO students (${insertFields.join(', ')}) VALUES (${placeholders})`;
+
+    await masterConn.query(query, insertValues);
+  }
+
+  // Update submission status
+  const { error: updErr } = await supabase
+    .from('form_submissions')
+    .update({
+      status: 'approved',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: admin.id,
+      admission_number: finalAdmissionNumber
+    })
+    .eq('submission_id', submission.submission_id);
+
+  if (updErr) throw updErr;
 };
 
 // Export multer middleware

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload, Plus, Hash } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload, Plus, Hash, CheckSquare, Square } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import BulkUploadModal from '../components/BulkUploadModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { formatDate } from '../utils/dateUtils';
 
 const Submissions = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -18,6 +19,8 @@ const Submissions = () => {
   const [autoAssign, setAutoAssign] = useState(false);
   const [forms, setForms] = useState([]);
   const [fieldStatus, setFieldStatus] = useState(null);
+  const [selectedSubmissions, setSelectedSubmissions] = useState(new Set());
+  const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
 
   useEffect(() => {
     fetchSubmissions();
@@ -128,6 +131,45 @@ const Submissions = () => {
     }
   };
 
+  const handleSelectSubmission = (submissionId, isSelected) => {
+    const newSelected = new Set(selectedSubmissions);
+    if (isSelected) {
+      newSelected.add(submissionId);
+    } else {
+      newSelected.delete(submissionId);
+    }
+    setSelectedSubmissions(newSelected);
+  };
+
+  const handleSelectAll = (isSelected) => {
+    if (isSelected) {
+      setSelectedSubmissions(new Set(submissions.map(s => s.submission_id)));
+    } else {
+      setSelectedSubmissions(new Set());
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedSubmissions.size === 0) {
+      toast.error('Please select submissions to approve');
+      return;
+    }
+
+    try {
+      const response = await api.post('/submissions/bulk-approve', {
+        submissionIds: Array.from(selectedSubmissions)
+      });
+
+      toast.success(`Successfully approved ${response.data.approvedCount} submissions`);
+      setSelectedSubmissions(new Set());
+      setShowBulkApproveModal(false);
+      fetchSubmissions();
+    } catch (error) {
+      console.error('Bulk approval error:', error);
+      toast.error(error.response?.data?.message || 'Failed to approve submissions');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -152,8 +194,22 @@ const Submissions = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Submissions</h1>
           <p className="text-gray-600 mt-2">Review and approve student form submissions</p>
+          {selectedSubmissions.size > 0 && (
+            <p className="text-sm text-blue-600 mt-1">
+              {selectedSubmissions.size} submission{selectedSubmissions.size !== 1 ? 's' : ''} selected
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {selectedSubmissions.size > 0 && (
+            <button
+              onClick={() => setShowBulkApproveModal(true)}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <CheckCircle size={18} />
+              Approve Selected ({selectedSubmissions.size})
+            </button>
+          )}
           <button
             onClick={() => setShowBulkUpload(true)}
             className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
@@ -172,12 +228,20 @@ const Submissions = () => {
       </div>
 
       <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-fit">
-        {['pending', 'approved', 'rejected'].map((status) => (
-          <button key={status} onClick={() => setFilter(status)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === status ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </button>
-        ))}
-      </div>
+  {['pending', 'approved', 'rejected'].map((status) => (
+    <button
+      key={status}
+      onClick={() => setFilter(status)}
+      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 ease-in-out transform 
+        ${filter === status 
+          ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white border-transparent shadow-md scale-105' 
+          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100 hover:scale-105 hover:shadow-sm'}`}
+    >
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </button>
+  ))}
+</div>
+
 
       {submissions.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -195,6 +259,14 @@ const Submissions = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedSubmissions.size === submissions.length && submissions.length > 0}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                  </th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Form Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
@@ -205,7 +277,20 @@ const Submissions = () => {
               </thead>
               <tbody>
                 {submissions.map((submission) => (
-                  <tr key={submission.submission_id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={submission.submission_id}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${
+                      selectedSubmissions.has(submission.submission_id) ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    <td className="py-3 px-4 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubmissions.has(submission.submission_id)}
+                        onChange={(e) => handleSelectSubmission(submission.submission_id, e.target.checked)}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                    </td>
                     <td className="py-3 px-4 text-sm text-gray-900">{submission.form_name}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{submission.admission_number || 'N/A'}</td>
                     <td className="py-3 px-4">
@@ -218,7 +303,7 @@ const Submissions = () => {
                         {submission.submitted_by === 'admin' ? '👤 Admin' : '🎓 Student'}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{new Date(submission.submitted_at).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{formatDate(submission.submitted_at)}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <button onClick={() => handleViewDetails(submission.submission_id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
@@ -255,7 +340,7 @@ const Submissions = () => {
               </div>
               <div>
                 <span className="text-sm font-medium text-gray-600">Submitted At:</span>
-                <p className="text-gray-900">{new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
+                <p className="text-gray-900">{formatDate(selectedSubmission.submitted_at)}</p>
               </div>
             </div>
 
@@ -311,6 +396,40 @@ const Submissions = () => {
         forms={forms}
         onUploadComplete={fetchSubmissions}
       />
+
+      {/* Bulk Approve Modal */}
+      {showBulkApproveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Bulk Approve Submissions</h3>
+
+            <div className="mb-6">
+              <p className="text-gray-600 mb-2">
+                You are about to approve <strong>{selectedSubmissions.size}</strong> submission{selectedSubmissions.size !== 1 ? 's' : ''}.
+              </p>
+              <p className="text-sm text-gray-500">
+                Each submission will need an admission number assigned during the approval process.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleBulkApprove}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <CheckCircle size={18} />
+                Approve All Selected
+              </button>
+              <button
+                onClick={() => setShowBulkApproveModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Admission Number Series Modal */}
       {showAdmissionSeries && (

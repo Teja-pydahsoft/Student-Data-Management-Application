@@ -503,7 +503,7 @@ exports.getDashboardStats = async (req, res) => {
     // Get recent submissions
     const { data: recentSubmissions, error: rErr } = await supabase
       .from('form_submissions')
-      .select('submission_id, admission_number, status, created_at, form_id')
+      .select('submission_id, admission_number, status, created_at as submitted_at, form_id')
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -517,7 +517,7 @@ exports.getDashboardStats = async (req, res) => {
         .in('form_id', formIds);
       if (!fErr && formsRows) {
         const idToName = new Map(formsRows.map(f => [f.form_id, f.form_name]));
-        recentWithNames = recentWithNames.map(r => ({ ...r, form_name: idToName.get(r.form_id) || null }));
+        recentWithNames = recentWithNames.map(r => ({ ...r, form_name: idToName.get(r.form_id) || null, submitted_at: r.created_at }));
       }
     }
 
@@ -644,6 +644,144 @@ exports.createStudent = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while creating student'
+    });
+  }
+};
+
+// Get available filter fields configuration
+exports.getFilterFields = async (req, res) => {
+  try {
+    // First, get all unique field names from existing student data
+    const [results] = await masterPool.query(
+      'SELECT DISTINCT student_data FROM students WHERE student_data IS NOT NULL LIMIT 100'
+    );
+
+    // Extract all unique field names from student data
+    const fieldMap = {};
+
+    results.forEach(row => {
+      try {
+        const studentData = parseJSON(row.student_data);
+        Object.keys(studentData).forEach(key => {
+          if (!fieldMap[key]) {
+            fieldMap[key] = {
+              name: key,
+              type: 'text',
+              enabled: true,
+              required: false,
+              options: []
+            };
+          }
+        });
+      } catch (error) {
+        console.error('Error parsing student data:', error);
+      }
+    });
+
+    // Get existing filter field configurations from database
+    const [existingConfigs] = await masterPool.query(
+      'SELECT * FROM filter_fields'
+    );
+
+    // Merge dynamic fields with saved configurations
+    const fields = Object.values(fieldMap).map(field => {
+      const existingConfig = existingConfigs.find(config => config.field_name === field.name);
+      if (existingConfig) {
+        return {
+          name: existingConfig.field_name,
+          type: existingConfig.field_type,
+          enabled: existingConfig.enabled,
+          required: existingConfig.required,
+          options: parseJSON(existingConfig.options) || []
+        };
+      }
+      return field;
+    });
+
+    // Add any saved configurations for fields that might not exist in current data
+    existingConfigs.forEach(config => {
+      if (!fieldMap[config.field_name]) {
+        fields.push({
+          name: config.field_name,
+          type: config.field_type,
+          enabled: config.enabled,
+          required: config.required,
+          options: parseJSON(config.options) || []
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      data: fields
+    });
+
+  } catch (error) {
+    console.error('Get filter fields error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching filter fields'
+    });
+  }
+};
+
+// Add or update filter field configuration
+exports.updateFilterField = async (req, res) => {
+  try {
+    const { fieldName } = req.params;
+    const { enabled, type, required, options } = req.body;
+
+    if (!fieldName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Field name is required'
+      });
+    }
+
+    // Check if configuration already exists
+    const [existing] = await masterPool.query(
+      'SELECT id FROM filter_fields WHERE field_name = ?',
+      [fieldName]
+    );
+
+    const configData = {
+      field_type: type || 'text',
+      enabled: enabled !== undefined ? enabled : true,
+      required: required || false,
+      options: JSON.stringify(options || [])
+    };
+
+    if (existing.length > 0) {
+      // Update existing configuration
+      await masterPool.query(
+        'UPDATE filter_fields SET field_type = ?, enabled = ?, required = ?, options = ?, updated_at = CURRENT_TIMESTAMP WHERE field_name = ?',
+        [configData.field_type, configData.enabled, configData.required, configData.options, fieldName]
+      );
+    } else {
+      // Insert new configuration
+      await masterPool.query(
+        'INSERT INTO filter_fields (field_name, field_type, enabled, required, options) VALUES (?, ?, ?, ?, ?)',
+        [fieldName, configData.field_type, configData.enabled, configData.required, configData.options]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Filter field configuration updated successfully',
+      data: {
+        fieldName,
+        enabled: configData.enabled,
+        type: configData.field_type,
+        required: configData.required,
+        options: options || []
+      }
+    });
+
+  } catch (error) {
+    console.error('Update filter field error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating filter field'
     });
   }
 };

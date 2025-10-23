@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
 
 const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
-  const [selectedForm, setSelectedForm] = useState('');
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState('');
+   if (!isOpen) {
+     return null;
+   }
 
-  if (!isOpen) return null;
+   // Auto-select the first available form when forms are loaded
+   const [selectedForm, setSelectedForm] = useState('');
+   const [file, setFile] = useState(null);
+   const [uploading, setUploading] = useState(false);
+   const [uploadResult, setUploadResult] = useState(null);
+   const [uploadProgress, setUploadProgress] = useState('');
+
+   useEffect(() => {
+     if (forms && forms.length > 0 && !selectedForm) {
+       setSelectedForm(forms[0].form_id);
+       console.log('🔄 Auto-selected form:', forms[0].form_name, forms[0].form_id);
+     }
+   }, [forms, selectedForm]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -21,78 +31,52 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
       size: selectedFile?.size
     });
 
-    if (selectedFile && selectedFile.type === 'text/csv') {
+    const validTypes = ['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+    if (selectedFile && validTypes.includes(selectedFile.type)) {
       setFile(selectedFile);
       setUploadResult(null);
-      console.log('✅ Valid CSV file selected:', selectedFile.name);
+      console.log('✅ Valid file selected:', selectedFile.name, 'Type:', selectedFile.type);
     } else {
-      toast.error('Please select a valid CSV file');
+      toast.error('Please select a valid CSV or Excel file');
       e.target.value = null;
       console.log('❌ Invalid file selected:', selectedFile?.type);
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     if (!selectedForm) {
       toast.error('Please select a form first');
       return;
     }
 
-    const form = forms?.find(f => f.form_id === selectedForm);
-    if (!form) {
-      toast.error('Selected form not found');
-      return;
+    try {
+      // Download Excel template from backend
+      const response = await api.get(`/submissions/template/${selectedForm}`, {
+        responseType: 'blob' // Important for binary data
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${forms.find(f => f.form_id === selectedForm)?.form_name}_template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Excel template downloaded successfully');
+    } catch (error) {
+      console.error('Download template error:', error);
+      toast.error('Failed to download template');
     }
-
-    // Create CSV template with all fields from screenshot in correct order
-    const headers = [
-      'admission_number',
-      'Pin No',
-      'Batch',
-      'Branch',
-      'StudType',
-      'Student Name',
-      'Student Status',
-      'Scholar Status',
-      'Student Mobile Number',
-      'Parent Mobile Number 1',
-      'Parent Mobile Number 2',
-      'Caste',
-      'M/F',
-      'DOB (Date-Month-Year)',
-      'Father Name',
-      'Admission Year (Ex: 09-Sep-2003)',
-      'AADHAR No',
-      'Admission No',
-      'Student Address',
-      'CityVillage Name',
-      'Mandal Name',
-      'District Name',
-      'Previous College Name',
-      'Certificate Status',
-      'Student Photo',
-      'Remarks'
-    ];
-    const csvContent = headers.join(',') + '\n';
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${form.form_name}_template.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    toast.success('Template downloaded');
   };
 
   const handleUpload = async () => {
-    if (!selectedForm) {
-      toast.error('Please select a form');
-      return;
-    }
+    console.log('🔘 Upload button clicked');
 
     if (!file) {
-      toast.error('Please select a CSV file');
+      toast.error('Please select a CSV or Excel file');
       return;
     }
 
@@ -102,21 +86,17 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
 
     try {
       console.log('🚀 Starting bulk upload...');
-      console.log('📋 Selected form:', selectedForm);
       console.log('📁 File in state:', file ? {
         name: file.name,
         type: file.type,
         size: file.size
       } : 'No file in state');
 
-      if (!file) {
-        toast.error('No file selected');
-        return;
-      }
-
       const formData = new FormData();
       formData.append('file', file);
       formData.append('formId', selectedForm);
+
+      console.log('📋 Using selected form ID:', selectedForm);
 
       console.log('📦 FormData contents:', {
         hasFile: formData.has('file'),
@@ -128,7 +108,11 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
       });
 
       setUploadProgress('Uploading file and processing data...');
+      console.log('📡 Making API request to:', '/submissions/bulk-upload');
+
       const response = await api.post('/submissions/bulk-upload', formData);
+      console.log('✅ API request successful, response status:', response.status);
+      console.log('✅ Response data:', response.data);
 
       setUploadProgress('Processing completed, displaying results...');
 
@@ -154,43 +138,57 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
         onUploadComplete();
       }
     } catch (error) {
-      console.error('❌ Upload error:', error);
-      console.error('❌ Error response:', error.response?.data);
+       console.error('❌ Upload error occurred:');
+       console.error('❌ Error type:', error.constructor.name);
+       console.error('❌ Error message:', error.message);
+       console.error('❌ Error response:', error.response);
+       console.error('❌ Error request:', error.request);
+       console.error('❌ Full error object:', error);
 
-      // Set error result for detailed display in modal
-      const errorResult = error.response?.data || {
-        success: false,
-        message: error.response?.data?.message || 'Failed to upload file',
-        successCount: 0,
-        failedCount: 0,
-        duplicateCount: 0,
-        missingFieldCount: 0,
-        errors: []
-      };
-      setUploadResult(errorResult);
+       if (error.response) {
+         console.error('❌ Response status:', error.response.status);
+         console.error('❌ Response data:', error.response.data);
+         console.error('❌ Response headers:', error.response.headers);
+       } else if (error.request) {
+         console.error('❌ No response received. Network error?');
+         console.error('❌ Request details:', error.request);
+       } else {
+         console.error('❌ Request setup error:', error.message);
+       }
 
-      // Enhanced error toast with detailed information
-      let errorMessage = '❌ Upload failed: ';
-      if (errorResult && errorResult.failedCount > 0) {
-        errorMessage += `${errorResult.failedCount} failed`;
-      }
-      if (errorResult && errorResult.duplicateCount > 0) {
-        errorMessage += `, ${errorResult.duplicateCount} duplicates`;
-      }
-      if (errorResult && errorResult.missingFieldCount > 0) {
-        errorMessage += `, ${errorResult.missingFieldCount} missing fields`;
-      }
+       // Set error result for detailed display in modal
+       const errorResult = error.response?.data || {
+         success: false,
+         message: error.response?.data?.message || error.message || 'Failed to upload file',
+         successCount: 0,
+         failedCount: 0,
+         duplicateCount: 0,
+         missingFieldCount: 0,
+         errors: []
+       };
+       setUploadResult(errorResult);
 
-      toast.error(errorMessage || errorResult.message, {
-        duration: 6000,
-        style: {
-          maxWidth: '500px',
-          whiteSpace: 'normal',
-        }
-      });
-    } finally {
-      setUploading(false);
-    }
+       // Enhanced error toast with detailed information
+       let errorMessage = '❌ Upload failed: ';
+       if (error.response) {
+         errorMessage += `Server error (${error.response.status})`;
+       } else if (error.request) {
+         errorMessage += 'Network error - check connection';
+       } else {
+         errorMessage += error.message || 'Unknown error';
+       }
+
+       toast.error(errorMessage, {
+         duration: 6000,
+         style: {
+           maxWidth: '500px',
+           whiteSpace: 'normal',
+         }
+       });
+     } finally {
+       console.log('🔄 Upload process finished, setting uploading to false');
+       setUploading(false);
+     }
   };
 
   const handleClose = () => {
@@ -248,14 +246,14 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
                 <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
                 <div className="flex-1">
                   <p className="text-sm text-blue-800 mb-2">
-                    Download the CSV template for the selected form and fill it with student data.
+                    Download the Excel template for the selected form and fill it with student data.
                   </p>
                   <button
                     onClick={downloadTemplate}
                     className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
                   >
                     <Download size={16} />
-                    Download Template
+                    Download Excel Template
                   </button>
                 </div>
               </div>
@@ -270,7 +268,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-500 transition-colors">
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
                 className="hidden"
                 id="csv-upload"
@@ -282,9 +280,9 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
               >
                 <Upload className="mx-auto text-gray-400 mb-2" size={32} />
                 <p className="text-sm text-gray-600 mb-1">
-                  {file ? file.name : 'Click to upload CSV file'}
+                  {file ? file.name : 'Click to upload CSV or Excel file'}
                 </p>
-                <p className="text-xs text-gray-500">CSV files only</p>
+                <p className="text-xs text-gray-500">CSV or Excel files only</p>
               </label>
             </div>
           </div>
@@ -574,7 +572,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
             <button
               onClick={handleUpload}
               disabled={!selectedForm || !file || uploading}
-              className="flex-1 bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
             >
               {uploading ? (
                 <>

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { formatDate } from '../utils/dateUtils';
 
 const Students = () => {
   const [students, setStudents] = useState([]);
@@ -23,6 +24,9 @@ const Students = () => {
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
   const [completionPercentages, setCompletionPercentages] = useState({});
+  const [showFilterManagement, setShowFilterManagement] = useState(false);
+  const [availableFilterFields, setAvailableFilterFields] = useState([]);
+  const [loadingFilterFields, setLoadingFilterFields] = useState(false);
 
   // Get completion percentage for a student from backend
   const getStudentCompletionPercentage = async (admissionNumber) => {
@@ -38,6 +42,20 @@ const Students = () => {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  // Fetch filter fields when component mounts to ensure proper filter management
+  useEffect(() => {
+    fetchFilterFields();
+  }, []);
+
+  // Real-time filtering effect with server-side filtering
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      applyFilters();
+    }, 300); // Debounce API calls
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchTerm, filters]);
 
   // Fetch completion percentages when students are loaded
   useEffect(() => {
@@ -61,7 +79,8 @@ const Students = () => {
   }, [students]);
 
   useEffect(() => {
-    // Extract available fields and their unique values from students data
+    // Extract available fields and their unique values from current students data
+    // This now works with filtered data since we're doing server-side filtering
     if (students.length > 0) {
       const fieldsMap = {};
 
@@ -93,11 +112,28 @@ const Students = () => {
     }
   }, [students]);
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (filterParams = {}) => {
     setLoading(true);
     try {
-      const response = await api.get('/students');
+      // Build query parameters for server-side filtering
+      const queryParams = new URLSearchParams();
+
+      // Add filter parameters if they exist
+      Object.entries(filterParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          queryParams.append(key, value);
+        }
+      });
+
+      // Add search term if exists
+      if (searchTerm && searchTerm.trim()) {
+        queryParams.append('search', searchTerm.trim());
+      }
+
+      // Make API call with filters
+      const response = await api.get(`/students?${queryParams.toString()}`);
       setStudents(response.data.data);
+
       // Update statistics after fetching students
       setTimeout(() => {
         calculateOverallStats();
@@ -109,33 +145,33 @@ const Students = () => {
     }
   };
 
-  const handleSearch = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
+  // Apply server-side filtering
+  const applyFilters = () => {
+    // Build filter parameters for API call
+    const filterParams = {};
 
-      if (searchTerm.trim()) {
-        params.append('search', searchTerm.trim());
+    // Add date filters
+    if (filters.dateFrom) filterParams.filter_dateFrom = filters.dateFrom;
+    if (filters.dateTo) filterParams.filter_dateTo = filters.dateTo;
+
+    // Add PIN status filter
+    if (filters.pinNumberStatus) filterParams.filter_pinNumberStatus = filters.pinNumberStatus;
+
+    // Add dynamic field filters
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key.startsWith('field_') && value) {
+        const fieldName = key.replace('field_', '');
+        filterParams[`filter_field_${fieldName}`] = value;
       }
+    });
 
-      // Add filters (including date ranges) to query
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== '') {
-          params.append(`filter_${key}`, value);
-        }
-      });
+    // Fetch filtered data from server
+    fetchStudents(filterParams);
+  };
 
-      const response = await api.get(`/students?${params.toString()}`);
-      setStudents(response.data.data);
-      // Update statistics after search
-      setTimeout(() => {
-        calculateOverallStats();
-      }, 100);
-    } catch (error) {
-      toast.error('Search failed');
-    } finally {
-      setLoading(false);
-    }
+  // Legacy function for backward compatibility - now uses server-side filtering
+  const handleLocalSearch = () => {
+    applyFilters();
   };
 
   const handleFilterChange = (field, value) => {
@@ -148,11 +184,58 @@ const Students = () => {
   const clearFilters = () => {
     setFilters({});
     setSearchTerm('');
-    fetchStudents();
+    fetchStudents(); // Fetch unfiltered data from server
   };
 
-  const applyFilters = () => {
-    handleSearch();
+
+  // Fetch available filter fields for admin management
+  const fetchFilterFields = async () => {
+    setLoadingFilterFields(true);
+    try {
+      const response = await api.get('/students/filter-fields');
+      if (response.data.success) {
+        setAvailableFilterFields(response.data.data);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch filter fields');
+    } finally {
+      setLoadingFilterFields(false);
+    }
+  };
+
+  // Toggle filter field enabled/disabled status
+  const toggleFilterField = async (fieldName, enabled) => {
+    try {
+      const response = await api.put(`/students/filter-fields/${fieldName}`, {
+        enabled,
+        type: 'text',
+        required: false,
+        options: []
+      });
+
+      if (response.data.success) {
+        toast.success(`Filter field ${enabled ? 'enabled' : 'disabled'} successfully`);
+
+        // If disabling a field, remove it from active filters
+        if (!enabled) {
+          setFilters(prev => {
+            const updated = { ...prev };
+            // Remove the field filter if it exists
+            delete updated[`field_${fieldName}`];
+            return updated;
+          });
+
+          // Re-apply filters to update the students list immediately
+          setTimeout(() => {
+            applyFilters();
+          }, 100);
+        }
+
+        fetchFilterFields(); // Refresh the list
+      }
+    } catch (error) {
+      toast.error('Failed to update filter field');
+    }
   };
 
   const handleViewDetails = (student) => {
@@ -386,24 +469,40 @@ const Students = () => {
           <h1 className="text-3xl font-bold text-text-primary heading-font">Students Database</h1>
           <p className="text-text-secondary mt-2 body-font">Manage and view all student records</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link to="/students/add" className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
-            <Plus size={18} />
-            Add Student
-          </Link>
-          <button onClick={() => setShowManualRollNumber(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            <UserCog size={18} />
-            Update PIN Numbers
-          </button>
-          <button onClick={() => setShowBulkRollNumber(true)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-            <Upload size={18} />
-            Bulk Upload PIN CSV
-          </button>
-          <button onClick={handleExportCSV} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-            <Download size={18} />
-            Export CSV
-          </button>
-        </div>
+        <div className="flex items-center gap-3">
+  <Link
+    to="/students/add"
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-indigo-600 to-purple-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+  >
+    <Plus size={18} />
+    Add Student
+  </Link>
+
+  <button
+    onClick={() => setShowManualRollNumber(true)}
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-cyan-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+  >
+    <UserCog size={18} />
+    Update PIN Numbers
+  </button>
+
+  <button
+    onClick={() => setShowBulkRollNumber(true)}
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-fuchsia-600 to-pink-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+  >
+    <Upload size={18} />
+    Bulk Upload PIN CSV
+  </button>
+
+  <button
+    onClick={handleExportCSV}
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-emerald-600 to-green-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+  >
+    <Download size={18} />
+    Export CSV
+  </button>
+</div>
+
       </div>
 
       <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-4">
@@ -414,7 +513,7 @@ const Students = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
               placeholder="Search by admission number or student data..."
             />
@@ -423,84 +522,277 @@ const Students = () => {
             <Filter size={18} />
             Filters
           </button>
-          <button onClick={handleSearch} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors">
+          <button
+            onClick={() => {
+              setShowFilterManagement(!showFilterManagement);
+              if (!showFilterManagement) {
+                fetchFilterFields();
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilterManagement ? 'bg-purple-600 text-white' : 'bg-border-light text-text-primary hover:bg-accent/10'}`}
+            title="Manage Filter Fields"
+          >
+            <Settings size={18} />
+            Filter Settings
+          </button>
+          <button onClick={handleLocalSearch} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors">
             Search
           </button>
         </div>
 
         {showFilters && (
           <div className="border-t pt-4 space-y-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-text-primary">Advanced Filters</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">Quick Filters</h3>
               <button onClick={clearFilters} className="text-xs text-error hover:text-red-700 flex items-center gap-1">
                 <X size={14} />
                 Clear All
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">Created From</label>
+            {/* Horizontal Filter Pills */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {/* Date Range Filters */}
+              <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2 border border-blue-200">
+                <span className="text-xs font-medium text-blue-700">From:</span>
                 <input
                   type="date"
                   value={filters.dateFrom || ''}
                   onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-navy-600 mb-1">Created To</label>
+
+              <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2 border border-blue-200">
+                <span className="text-xs font-medium text-blue-700">To:</span>
                 <input
                   type="date"
                   value={filters.dateTo || ''}
                   onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-navy-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  className="px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-navy-600 mb-1">PIN Number Status</label>
-                <select
-                  value={filters.pinNumberStatus || ''}
-                  onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                >
-                  <option value="">All</option>
-                  <option value="assigned">With PIN Number</option>
-                  <option value="unassigned">Without PIN Number</option>
-                </select>
-              </div>
+
+              {/* PIN Status Filter */}
+              <select
+                value={filters.pinNumberStatus || ''}
+                onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.pinNumberStatus ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">PIN Status: All</option>
+                <option value="assigned">With PIN</option>
+                <option value="unassigned">Without PIN</option>
+              </select>
             </div>
 
+            {/* Dynamic Field Filters - Horizontal Layout */}
             {availableFields.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border-light">
-                <p className="text-xs font-semibold text-text-primary mb-3">Filter by Form Fields:</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {availableFields.map((field) => (
-                    <div key={field.name}>
-                      <label className="block text-xs font-medium text-text-secondary mb-1">{field.name}</label>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-text-primary">Filter by Category:</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableFields
+                    .filter(field => {
+                      // Only show fields that are enabled in the filter management
+                      // If availableFilterFields is not loaded yet, don't show any fields
+                      if (availableFilterFields.length === 0) return false;
+
+                      const managedField = availableFilterFields.find(f => f.name === field.name);
+                      // Only show if the field is explicitly enabled in filter management
+                      return managedField && managedField.enabled;
+                    })
+                    .map((field) => (
+                    <div key={field.name} className="relative">
                       <select
                         value={filters[`field_${field.name}`] || ''}
                         onChange={(e) => handleFilterChange(`field_${field.name}`, e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                        className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none min-w-[120px] ${
+                          filters[`field_${field.name}`] ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-gray-50 border-gray-300'
+                        }`}
                       >
-                        <option value="">All</option>
+                        <option value="">{field.name}: All</option>
                         {field.values.map((value, idx) => (
                           <option key={idx} value={value}>{value}</option>
                         ))}
                       </select>
+                      {filters[`field_${field.name}`] && (
+                        <button
+                          onClick={() => handleFilterChange(`field_${field.name}`, '')}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center"
+                          title="Clear this filter"
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="flex items-center gap-2 pt-2">
-              <button onClick={applyFilters} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm">
-                Apply Filters
-              </button>
-              <button onClick={clearFilters} className="px-4 py-2 border border-border-light text-text-primary rounded-lg hover:bg-accent/10 transition-colors text-sm btn-hover">
-                Reset
-              </button>
+            {/* Active Filters Display */}
+            {(searchTerm || Object.values(filters).some(value => value)) && (
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <div className="flex items-center gap-2 text-xs text-blue-700">
+                  <span className="font-medium">Active filters (applied to results):</span>
+                  <span className="text-xs text-blue-600 bg-blue-200 px-2 py-1 rounded-full">
+                    {Object.values(filters).filter(value => value).length + (searchTerm ? 1 : 0)} active
+                  </span>
+                  {searchTerm && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md border border-blue-300 font-medium">
+                      Search: "{searchTerm}"
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="ml-1 text-blue-600 hover:text-blue-900 font-bold"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )}
+                  {Object.entries(filters).map(([key, value]) => {
+                    if (value) {
+                      let label = '';
+                      switch (key) {
+                        case 'dateFrom':
+                          label = `From: ${value}`;
+                          break;
+                        case 'dateTo':
+                          label = `To: ${value}`;
+                          break;
+                        case 'pinNumberStatus':
+                          label = `PIN: ${value === 'assigned' ? 'With PIN' : 'Without PIN'}`;
+                          break;
+                        default:
+                          if (key.startsWith('field_')) {
+                            const fieldName = key.replace('field_', '');
+                            label = `${fieldName}: ${value}`;
+                          }
+                          break;
+                      }
+                      return (
+                        <span key={key} className="px-2 py-1 bg-green-100 text-green-800 rounded-md border border-green-300 font-medium">
+                          {label}
+                          <button
+                            onClick={() => handleFilterChange(key, '')}
+                            className="ml-1 text-green-600 hover:text-green-900 font-bold"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter Management Modal */}
+        {showFilterManagement && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Filter Field Management</h3>
+                  <p className="text-sm text-gray-500 mt-1">Enable or disable filter fields for the main page</p>
+                </div>
+                <button
+                  onClick={() => setShowFilterManagement(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                {loadingFilterFields ? (
+                  <div className="flex items-center justify-center py-8">
+                    <LoadingAnimation width={40} height={40} message="Loading filter fields..." />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {availableFilterFields.map((field) => (
+                      <div key={field.name} className={`rounded-lg p-4 border-2 transition-all ${
+                        field.enabled
+                          ? 'bg-green-50 border-green-200 shadow-sm'
+                          : 'bg-gray-50 border-gray-200 opacity-60'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex-1">
+                            <label className={`block text-sm font-medium ${
+                              field.enabled ? 'text-green-900' : 'text-gray-500'
+                            }`}>
+                              {field.name}
+                              {field.enabled && (
+                                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                  Enabled
+                                </span>
+                              )}
+                              {!field.enabled && (
+                                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                                  Disabled
+                                </span>
+                              )}
+                            </label>
+                            <div className={`text-xs ${field.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+                              Type: {field.type} | Required: {field.required ? 'Yes' : 'No'}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => toggleFilterField(field.name, !field.enabled)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              field.enabled
+                                ? 'text-green-600 hover:bg-green-100'
+                                : 'text-gray-400 hover:bg-gray-100'
+                            }`}
+                            title={field.enabled ? 'Disable filter field' : 'Enable filter field'}
+                          >
+                            {field.enabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                          </button>
+                        </div>
+                        {field.options && field.options.length > 0 && (
+                          <div className="mt-2">
+                            <div className={`text-xs font-medium mb-1 ${field.enabled ? 'text-green-700' : 'text-gray-500'}`}>
+                              Available Options:
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {field.options.slice(0, 3).map((option, idx) => (
+                                <span key={idx} className={`px-2 py-1 text-xs rounded ${
+                                  field.enabled
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {option}
+                                </span>
+                              ))}
+                              {field.options.length > 3 && (
+                                <span className={`px-2 py-1 text-xs rounded ${
+                                  field.enabled
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  +{field.options.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {availableFilterFields.length === 0 && !loadingFilterFields && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Settings size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>No filter fields available</p>
+                    <p className="text-sm">Filter fields are automatically detected from student data</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -662,7 +954,7 @@ const Students = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">{new Date(student.created_at).toLocaleDateString()}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{formatDate(student.created_at)}</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
@@ -862,8 +1154,7 @@ const Students = () => {
                       />
                     ) : (
                       <p className="text-sm text-gray-900 font-medium">
-                        {editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'] ?
-                          new Date(editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)']).toLocaleDateString() : '-'}
+                        {formatDate(editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'])}
                       </p>
                     )}
                   </div>
@@ -901,8 +1192,7 @@ const Students = () => {
                       />
                     ) : (
                       <p className="text-sm text-gray-900 font-medium">
-                        {editData.admission_date || editData['Admission Date'] ?
-                          new Date(editData.admission_date || editData['Admission Date']).toLocaleDateString() : '-'}
+                        {formatDate(editData.admission_date || editData['Admission Date'])}
                       </p>
                     )}
                   </div>
@@ -1389,11 +1679,11 @@ const Students = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
                   <div>
                     <span className="font-medium">Created At:</span>{' '}
-                    <span>{new Date(selectedStudent.created_at).toLocaleString()}</span>
+                    <span>{formatDate(selectedStudent.created_at)}</span>
                   </div>
                   <div>
                     <span className="font-medium">Last Updated:</span>{' '}
-                    <span>{new Date(selectedStudent.updated_at).toLocaleString()}</span>
+                    <span>{formatDate(selectedStudent.updated_at)}</span>
                   </div>
                 </div>
               </div>

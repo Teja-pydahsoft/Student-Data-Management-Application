@@ -176,5 +176,19 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   INDEX idx_created (created_at)
 );
 
+-- Filter fields configuration table
+CREATE TABLE IF NOT EXISTS filter_fields (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  field_name VARCHAR(255) UNIQUE NOT NULL,
+  field_type VARCHAR(50) DEFAULT 'text',
+  enabled BOOLEAN DEFAULT TRUE,
+  required BOOLEAN DEFAULT FALSE,
+  options JSON DEFAULT '[]',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_field_name (field_name),
+  INDEX idx_enabled (enabled)
+);
+
 -- Switch back to master DB for subsequent DDL in this file if any
 USE student_database;
