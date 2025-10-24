@@ -85,6 +85,17 @@ const Submissions = () => {
       const response = await api.get(`/submissions/${submissionId}`);
       setSelectedSubmission(response.data.data);
       setAdmissionNumber(response.data.data.admission_number || '');
+
+      // Auto-generate admission number if auto-assign is enabled and no admission number exists
+      if (globalAutoAssign && !response.data.data.admission_number) {
+        try {
+          const genResponse = await api.post('/submissions/generate-admission-series', { autoAssign: false });
+          setAdmissionNumber(genResponse.data.data.admissionNumbers[0]);
+        } catch (error) {
+          console.error('Failed to generate admission number:', error);
+        }
+      }
+
       setShowModal(true);
     } catch (error) {
       toast.error('Failed to fetch submission details');
@@ -309,12 +320,16 @@ const Submissions = () => {
                     <input
                       type="checkbox"
                       checked={selectedSubmissions.size === submissions.length && submissions.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      onChange={(e) => { e.stopPropagation(); handleSelectAll(e.target.checked); }}
                       className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                     />
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Form Name</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Student Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Pin Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Batch</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted By</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted At</th>
@@ -325,6 +340,7 @@ const Submissions = () => {
                 {submissions.map((submission) => (
                   <tr
                     key={submission.submission_id}
+                    onClick={() => handleViewDetails(submission.submission_id)}
                     className={`border-b border-gray-100 hover:bg-gray-50 ${
                       selectedSubmissions.has(submission.submission_id) ? 'bg-blue-50' : ''
                     }`}
@@ -333,12 +349,16 @@ const Submissions = () => {
                       <input
                         type="checkbox"
                         checked={selectedSubmissions.has(submission.submission_id)}
-                        onChange={(e) => handleSelectSubmission(submission.submission_id, e.target.checked)}
+                        onChange={(e) => { e.stopPropagation(); handleSelectSubmission(submission.submission_id, e.target.checked); }}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.form_name}</td>
+                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_name'] || 'N/A'}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{submission.admission_number || 'N/A'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['pin_no'] || 'N/A'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_mobile'] || 'N/A'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['batch'] || 'N/A'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['branch'] || 'N/A'}</td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : submission.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {submission.status}
@@ -352,11 +372,41 @@ const Submissions = () => {
                     <td className="py-3 px-4 text-sm text-gray-600">{formatDate(submission.submitted_at)}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleViewDetails(submission.submission_id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
-                          <Eye size={16} />
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          if (submission.admission_number) {
+                            api.get(`/submissions/${submission.submission_id}`)
+                              .then(response => {
+                                const data = response.data.data;
+                                setSelectedSubmission(data);
+                                setAdmissionNumber(data.admission_number);
+                                // Directly approve using the fetched data
+                                api.post(`/submissions/${submission.submission_id}/approve`, {
+                                  admissionNumber: data.admission_number,
+                                })
+                                  .then(() => {
+                                    toast.success('Submission approved successfully');
+                                    fetchSubmissions();
+                                  })
+                                  .catch(error => {
+                                    console.error('Approval error:', error);
+                                    toast.error('Failed to approve submission');
+                                  });
+                              })
+                              .catch(error => {
+                                toast.error('Failed to fetch submission details');
+                              });
+                          } else {
+                            handleViewDetails(submission.submission_id);
+                          }
+                        }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve">
+                          <CheckCircle size={16} />
                         </button>
-                        <button onClick={() => handleDelete(submission.submission_id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
-                          <Trash2 size={16} />
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(submission.submission_id);
+                        }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Reject">
+                          <XCircle size={16} />
                         </button>
                       </div>
                     </td>
@@ -495,18 +545,6 @@ const Submissions = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Count</label>
-                <input
-                  type="number"
-                  id="seriesCount"
-                  defaultValue="10"
-                  min="1"
-                  max="100"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                  placeholder="Number of admission numbers to generate"
-                />
-              </div>
 
               <div className="flex items-center">
                 <input
@@ -526,21 +564,14 @@ const Submissions = () => {
               <button
                 onClick={() => {
                   const prefix = document.getElementById('seriesPrefix').value;
-                  const count = parseInt(document.getElementById('seriesCount').value);
 
                   if (!prefix.trim()) {
                     toast.error('Series prefix is required');
                     return;
                   }
 
-                  if (count <= 0) {
-                    toast.error('Count must be greater than 0');
-                    return;
-                  }
-
                   api.post('/submissions/generate-admission-series', {
                     prefix: prefix.trim(),
-                    count,
                     autoAssign
                   })
                     .then(response => {

@@ -521,58 +521,10 @@ exports.getDashboardStats = async (req, res) => {
       }
     }
 
-    // Calculate completed profiles and average completion
-    let completedProfiles = 0;
-    let totalCompletion = 0;
-
-    if (studentCount[0].total > 0) {
-      // Get all students to calculate completion percentages
-      const [students] = await masterPool.query('SELECT admission_number FROM students');
-
-      for (const student of students) {
-        try {
-          // Get completion status for each student
-          const { data: completionData, error: compErr } = await supabase
-            .from('form_submissions')
-            .select('submission_id, form_id, submission_data')
-            .eq('admission_number', student.admission_number)
-            .limit(1);
-
-          if (!compErr && completionData && completionData.length > 0) {
-            const submission = completionData[0];
-            const submissionData = parseJSON(submission.submission_data);
-
-            // Get form fields to determine total fields
-            const { data: forms, error: formErr } = await supabase
-              .from('forms')
-              .select('form_fields')
-              .eq('form_id', submission.form_id)
-              .limit(1);
-
-            if (!formErr && forms && forms.length > 0) {
-              const formFields = parseJSON(forms[0].form_fields);
-              const allFields = formFields.filter(field => field.key);
-
-              const completedFields = allFields.filter(field => {
-                const value = submissionData[field.key];
-                return value !== undefined && value !== null && value !== '';
-              }).length;
-
-              const completionPercentage = allFields.length > 0 ? Math.round((completedFields / allFields.length) * 100) : 0;
-              totalCompletion += completionPercentage;
-
-              if (completionPercentage >= 80) {
-                completedProfiles++;
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Error calculating completion for student ${student.admission_number}:`, error);
-        }
-      }
-    }
-
-    const averageCompletion = studentCount[0].total > 0 ? Math.round(totalCompletion / studentCount[0].total) : 0;
+    // Note: Completion calculation moved to frontend for better performance
+    // Backend only provides basic counts, frontend calculates completion percentages in parallel
+    const completedProfiles = 0;
+    const averageCompletion = 0;
 
     res.json({
       success: true,

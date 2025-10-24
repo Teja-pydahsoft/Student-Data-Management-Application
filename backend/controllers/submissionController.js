@@ -450,7 +450,14 @@ exports.submitForm = async (req, res) => {
 
       if (!setErr && setting && setting.value === 'true') {
         // Generate next sequential number
-        const prefix = 'PYDAH2025'; // Default prefix, can be made configurable
+        // Get current prefix from settings
+        const { data: prefixSetting } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'admission_prefix')
+          .single();
+
+        const prefix = prefixSetting ? prefixSetting.value : 'PYDAH2025';
         const { data: submissions, error: subErr } = await supabase
           .from('form_submissions')
           .select('admission_number')
@@ -1631,7 +1638,18 @@ exports.bulkUploadSubmissions = async (req, res) => {
 // Generate admission number series
 exports.generateAdmissionSeries = async (req, res) => {
   try {
-    const { prefix = 'PYDAH2025', count = 10, autoAssign = false } = req.body;
+    // Get current prefix from settings
+    const { data: prefixSetting } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'admission_prefix')
+      .single();
+
+    const currentPrefix = prefixSetting ? prefixSetting.value : 'PYDAH2025';
+    const prefix = req.body.prefix || currentPrefix;
+
+    const { autoAssign = false } = req.body;
+    const count = 1; // Always generate one number
 
     if (!prefix || typeof prefix !== 'string') {
       return res.status(400).json({
@@ -1721,6 +1739,13 @@ exports.generateAdmissionSeries = async (req, res) => {
         console.error('Error auto-assigning admission numbers:', assignError);
         // Don't fail the request if auto-assignment fails
       }
+    }
+
+    // Save the prefix to settings if autoAssign is enabled
+    if (autoAssign) {
+      await supabase
+        .from('settings')
+        .upsert({ key: 'admission_prefix', value: prefix });
     }
 
     res.json({

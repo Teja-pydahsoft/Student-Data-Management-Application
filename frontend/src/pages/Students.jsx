@@ -43,6 +43,11 @@ const Students = () => {
     fetchStudents();
   }, []);
 
+  // Calculate stats when students are loaded
+  useEffect(() => {
+    calculateOverallStats();
+  }, [students]);
+
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
     fetchFilterFields();
@@ -57,21 +62,26 @@ const Students = () => {
     return () => clearTimeout(debounceTimer);
   }, [searchTerm, filters]);
 
-  // Fetch completion percentages when students are loaded
+  // Fetch completion percentages when students are loaded (in parallel)
   useEffect(() => {
     const fetchCompletionPercentages = async () => {
       if (students.length === 0) return;
 
       const percentages = {};
-      for (const student of students) {
+      const promises = students.map(async (student) => {
         try {
           const response = await api.get(`/submissions/student/${student.admission_number}/completion-status`);
-          percentages[student.admission_number] = response.data.data.completionPercentage;
+          return { admissionNumber: student.admission_number, percentage: response.data.data.completionPercentage };
         } catch (error) {
           console.error(`Failed to fetch completion for ${student.admission_number}:`, error);
-          percentages[student.admission_number] = 0;
+          return { admissionNumber: student.admission_number, percentage: 0 };
         }
-      }
+      });
+
+      const results = await Promise.all(promises);
+      results.forEach(result => {
+        percentages[result.admissionNumber] = result.percentage;
+      });
       setCompletionPercentages(percentages);
     };
 
@@ -134,10 +144,6 @@ const Students = () => {
       const response = await api.get(`/students?${queryParams.toString()}`);
       setStudents(response.data.data);
 
-      // Update statistics after fetching students
-      setTimeout(() => {
-        calculateOverallStats();
-      }, 100);
     } catch (error) {
       toast.error('Failed to fetch students');
     } finally {
@@ -375,73 +381,37 @@ const Students = () => {
   const [stats, setStats] = useState({ total: 0, completed: 0, averageCompletion: 0 });
 
   const calculateOverallStats = async () => {
-    try {
-      // Fetch dashboard statistics from backend
-      const response = await api.get('/students/dashboard-stats');
-      if (response.data.success) {
-        const data = response.data.data;
-        setStats({
-          total: data.totalStudents || 0,
-          completed: data.completedProfiles || 0,
-          averageCompletion: data.averageCompletion || 0
-        });
-      } else {
-        // Fallback to local calculation if backend stats fail
-        if (students.length === 0) {
-          setStats({ total: 0, completed: 0, averageCompletion: 0 });
-          return;
-        }
-
-        const totalStudents = students.length;
-        let completedStudents = 0;
-        let totalCompletion = 0;
-
-        // Fetch completion percentages for all students
-        for (const student of students) {
-          const percentage = await getStudentCompletionPercentage(student.admission_number);
-          totalCompletion += percentage;
-          if (percentage >= 80) {
-            completedStudents++;
-          }
-        }
-
-        const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
-
-        setStats({
-          total: totalStudents,
-          completed: completedStudents,
-          averageCompletion
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
-      // Fallback to local calculation
-      if (students.length === 0) {
-        setStats({ total: 0, completed: 0, averageCompletion: 0 });
-        return;
-      }
-
-      const totalStudents = students.length;
-      let completedStudents = 0;
-      let totalCompletion = 0;
-
-      // Fetch completion percentages for all students
-      for (const student of students) {
-        const percentage = await getStudentCompletionPercentage(student.admission_number);
-        totalCompletion += percentage;
-        if (percentage >= 80) {
-          completedStudents++;
-        }
-      }
-
-      const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
-
-      setStats({
-        total: totalStudents,
-        completed: completedStudents,
-        averageCompletion
-      });
+    if (students.length === 0) {
+      setStats({ total: 0, completed: 0, averageCompletion: 0 });
+      return;
     }
+
+    const totalStudents = students.length;
+    let completedStudents = 0;
+    let totalCompletion = 0;
+
+    // Fetch completion percentages for all students in parallel
+    const promises = students.map(async (student) => {
+      const percentage = await getStudentCompletionPercentage(student.admission_number);
+      return { percentage, admissionNumber: student.admission_number };
+    });
+
+    const results = await Promise.all(promises);
+
+    results.forEach(result => {
+      totalCompletion += result.percentage;
+      if (result.percentage >= 80) {
+        completedStudents++;
+      }
+    });
+
+    const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
+
+    setStats({
+      total: totalStudents,
+      completed: completedStudents,
+      averageCompletion
+    });
   };
 
   if (loading) {
