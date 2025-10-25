@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/auth');
 const upload = submissionController.upload;
 
 // Protected routes (admin only) - Order matters! More specific routes first
+router.post('/bulk-delete', authMiddleware, submissionController.bulkDeleteSubmissions);
 router.post('/bulk-approve', authMiddleware, submissionController.bulkApproveSubmissions);
 router.get('/template/:formId', authMiddleware, submissionController.downloadExcelTemplate);
 router.post('/generate-admission-series', authMiddleware, submissionController.generateAdmissionSeries);

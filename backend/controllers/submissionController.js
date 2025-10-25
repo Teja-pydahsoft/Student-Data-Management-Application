@@ -2204,6 +2204,111 @@ exports.downloadExcelTemplate = async (req, res) => {
   }
 };
 
+// Bulk delete submissions (admin only)
+exports.bulkDeleteSubmissions = async (req, res) => {
+  try {
+    const { submissionIds } = req.body;
+
+    if (!submissionIds || !Array.isArray(submissionIds) || submissionIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Submission IDs array is required'
+      });
+    }
+
+    console.log(`🔄 Starting bulk delete for ${submissionIds.length} submissions`);
+
+    let deletedCount = 0;
+    let failedCount = 0;
+    const results = [];
+    const errors = [];
+
+    // Process each submission
+    for (const submissionId of submissionIds) {
+      try {
+        console.log(`📋 Deleting submission: ${submissionId}`);
+
+        // Delete submission
+        const { data, error } = await supabase
+          .from('form_submissions')
+          .delete()
+          .eq('submission_id', submissionId)
+          .select('submission_id');
+
+        if (error) {
+          console.error(`❌ Error deleting submission ${submissionId}:`, error);
+          errors.push({
+            submissionId,
+            error: error.message,
+            type: 'delete_error'
+          });
+          failedCount++;
+          continue;
+        }
+
+        if (!data || data.length === 0) {
+          console.error(`❌ Submission ${submissionId} not found`);
+          errors.push({
+            submissionId,
+            error: 'Submission not found',
+            type: 'not_found'
+          });
+          failedCount++;
+          continue;
+        }
+
+        deletedCount++;
+        results.push({
+          submissionId,
+          status: 'deleted'
+        });
+
+        console.log(`✅ Deleted submission ${submissionId}`);
+
+      } catch (error) {
+        console.error(`❌ Error deleting submission ${submissionId}:`, error);
+        errors.push({
+          submissionId,
+          error: error.message,
+          type: 'delete_error'
+        });
+        failedCount++;
+      }
+    }
+
+    // Log action
+    const masterConn = await masterPool.getConnection();
+    await masterConn.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['BULK_DELETE', 'SUBMISSION', JSON.stringify(submissionIds), req.admin.id, JSON.stringify({
+        deletedCount,
+        failedCount
+      })]
+    );
+    masterConn.release();
+
+    console.log(`✅ Bulk delete completed: ${deletedCount} deleted, ${failedCount} failed`);
+
+    res.json({
+      success: true,
+      message: `Bulk delete completed: ${deletedCount} deleted, ${failedCount} failed`,
+      deletedCount,
+      failedCount,
+      results,
+      errors
+    });
+
+  } catch (error) {
+    console.error('❌ Bulk delete failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during bulk delete',
+      error: error.message
+    });
+  }
+};
+
 // Bulk approve submissions (admin only)
 exports.bulkApproveSubmissions = async (req, res) => {
   let masterConn = null;

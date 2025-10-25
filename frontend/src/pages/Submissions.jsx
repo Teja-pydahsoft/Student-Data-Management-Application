@@ -21,6 +21,9 @@ const Submissions = () => {
   const [fieldStatus, setFieldStatus] = useState(null);
   const [selectedSubmissions, setSelectedSubmissions] = useState(new Set());
   const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showDeleteProgressModal, setShowDeleteProgressModal] = useState(false);
+  const [deletingProgress, setDeletingProgress] = useState({ current: 0, total: 0, isDeleting: false });
   const [globalAutoAssign, setGlobalAutoAssign] = useState(false);
 
   useEffect(() => {
@@ -213,6 +216,51 @@ const Submissions = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const submissionIds = Array.from(selectedSubmissions);
+    if (submissionIds.length === 0) {
+      toast.error('Please select submissions to delete');
+      return;
+    }
+
+    setDeletingProgress({ current: 0, total: submissionIds.length, isDeleting: true });
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < submissionIds.length; i++) {
+      if (!deletingProgress.isDeleting) {
+        // Cancelled
+        break;
+      }
+
+      try {
+        await api.delete(`/submissions/${submissionIds[i]}`);
+        successCount++;
+        setDeletingProgress(prev => ({ ...prev, current: i + 1 }));
+      } catch (error) {
+        console.error(`Error deleting submission ${submissionIds[i]}:`, error);
+        failedCount++;
+      }
+
+      // Small delay for smooth animation
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    setDeletingProgress({ current: 0, total: 0, isDeleting: false });
+    setShowDeleteProgressModal(false);
+    setSelectedSubmissions(new Set());
+
+    if (successCount > 0) {
+      toast.success(`Successfully deleted ${successCount} submissions`);
+    }
+    if (failedCount > 0) {
+      toast.error(`Failed to delete ${failedCount} submissions`);
+    }
+
+    fetchSubmissions();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -246,11 +294,24 @@ const Submissions = () => {
         <div className="flex items-center gap-2">
           {selectedSubmissions.size > 0 && (
             <button
-              onClick={() => setShowBulkApproveModal(true)}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              onClick={() => {
+                if (filter === 'pending') {
+                  setShowBulkApproveModal(true);
+                } else {
+                  setShowBulkDeleteModal(true);
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                filter === 'pending'
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
             >
-              <CheckCircle size={18} />
-              Approve Selected ({selectedSubmissions.size})
+              {filter === 'pending' ? <CheckCircle size={18} /> : <Trash2 size={18} />}
+              {filter === 'pending'
+                ? `Approve Selected (${selectedSubmissions.size})`
+                : `Delete All Selected (${selectedSubmissions.size})`
+              }
             </button>
           )}
           <button
@@ -519,6 +580,91 @@ const Submissions = () => {
               <button
                 onClick={() => setShowBulkApproveModal(false)}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Bulk Delete Submissions</h3>
+
+            <div className="mb-6">
+              <p className="text-gray-600 mb-2">
+                You are about to delete <strong>{selectedSubmissions.size}</strong> submission{selectedSubmissions.size !== 1 ? 's' : ''}.
+              </p>
+              <p className="text-sm text-gray-500">
+                This action cannot be undone. All selected submissions will be permanently removed.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkDeleteModal(false);
+                  setDeletingProgress({ current: 0, total: selectedSubmissions.size, isDeleting: true });
+                  setShowDeleteProgressModal(true);
+                  handleBulkDelete();
+                }}
+                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Trash2 size={18} />
+                Delete All Selected
+              </button>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Progress Modal */}
+      {showDeleteProgressModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">Deleting Submissions</h3>
+
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-600">
+                  Deleting {deletingProgress.current}/{deletingProgress.total}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {Math.round((deletingProgress.current / deletingProgress.total) * 100)}%
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4 relative overflow-hidden">
+                <div
+                  className="progress-shimmer h-3 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${(deletingProgress.current / deletingProgress.total) * 100}%` }}
+                ></div>
+              </div>
+
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 pulse-glow"></div>
+                <span className="ml-2 text-gray-600">Processing...</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setDeletingProgress(prev => ({ ...prev, isDeleting: false }));
+                  setShowDeleteProgressModal(false);
+                  toast.info('Deletion cancelled');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
