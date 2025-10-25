@@ -15,7 +15,7 @@ VITE_APP_VERSION="1.0.0"
 ### Production (`frontend/.env.production`)
 ```env
 # Frontend Environment Variables - PRODUCTION
-VITE_API_URL=https://student-data-management-application.onrender.com/api
+VITE_API_URL=https://pydahsdbms.onrender.com/api
 VITE_APP_NAME="Student Database Management System"
 VITE_APP_VERSION="1.0.0"
 ```
@@ -31,7 +31,7 @@ VITE_APP_VERSION="1.0.0"
 # VITE_API_URL=https://your-backend-domain.com/api
 
 # NOTE: This configuration connects local frontend development to local backend
-# For hosted backend, change VITE_API_URL to https://student-data-management-application.onrender.com/api
+# For hosted backend, change VITE_API_URL to https://pydahsdbms.onrender.com/api
 ```
 
 ## Backend Environment Files
@@ -199,7 +199,7 @@ If you want to use local databases instead:
 
 #### Frontend (Vercel)
 1. Set environment variables in Vercel dashboard:
-   - `VITE_API_URL=https://student-data-management-application.onrender.com/api`
+   - `VITE_API_URL=https://pydahsdbms.onrender.com/api`
 
 #### Backend (Render)
 1. Set environment variables in Render dashboard with the production values from `backend/.env.production`

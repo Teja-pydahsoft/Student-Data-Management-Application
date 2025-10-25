@@ -42,7 +42,7 @@ export const getStaticFileUrlDirect = (filename) => {
   // Use proxy approach for production
   if (rawApiUrl && rawApiUrl.includes('onrender.com')) {
     // For Render backend, use direct URL construction
-    return `https://student-data-management-application.onrender.com/uploads/${filename}`;
+    return `https://pydahsdbms.onrender.com/uploads/${filename}`;
   }
 
   return `${rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000'}/uploads/${filename}`;
