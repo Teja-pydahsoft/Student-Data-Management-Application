@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
@@ -9,6 +9,7 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
 
 const Students = () => {
+  const location = useLocation();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,14 +35,29 @@ const Students = () => {
       const response = await api.get(`/submissions/student/${admissionNumber}/completion-status`);
       return response.data.data.completionPercentage;
     } catch (error) {
-      console.error('Failed to fetch completion status:', error);
+      // Silently return 0 if completion status can't be fetched
       return 0;
     }
   };
 
   useEffect(() => {
-    fetchStudents();
-  }, []);
+    const newStudent = location.state?.newStudent;
+    if (newStudent) {
+      // Add the new student to state without fetching
+      setStudents(prev => [newStudent, ...prev]);
+      // Fetch completion percentage for the new student
+      getStudentCompletionPercentage(newStudent.admission_number).then(percentage => {
+        setCompletionPercentages(prev => ({
+          ...prev,
+          [newStudent.admission_number]: percentage
+        }));
+      });
+      // Clear the state to avoid re-adding on re-renders
+      window.history.replaceState({}, document.title);
+    } else {
+      fetchStudents();
+    }
+  }, [location.state]);
 
   // Calculate stats when students are loaded
   useEffect(() => {
@@ -73,7 +89,7 @@ const Students = () => {
           const response = await api.get(`/submissions/student/${student.admission_number}/completion-status`);
           return { admissionNumber: student.admission_number, percentage: response.data.data.completionPercentage };
         } catch (error) {
-          console.error(`Failed to fetch completion for ${student.admission_number}:`, error);
+          // Silently return 0 if completion status can't be fetched
           return { admissionNumber: student.admission_number, percentage: 0 };
         }
       });
@@ -285,7 +301,23 @@ const Students = () => {
       console.log('Save successful');
       toast.success('Student data updated successfully');
       setEditMode(false);
-      fetchStudents();
+
+      // Update local state instead of refetching all data
+      setStudents(prevStudents =>
+        prevStudents.map(student =>
+          student.admission_number === selectedStudent.admission_number
+            ? { ...student, student_data: editData, ...editData }
+            : student
+        )
+      );
+
+      // Update completion percentage for the updated student
+      const updatedPercentage = await getStudentCompletionPercentage(selectedStudent.admission_number);
+      setCompletionPercentages(prev => ({
+        ...prev,
+        [selectedStudent.admission_number]: updatedPercentage
+      }));
+
     } catch (error) {
       console.error('Save failed:', error);
       toast.error('Failed to update student data');
@@ -300,7 +332,16 @@ const Students = () => {
       toast.success('PIN number updated successfully');
       setEditingRollNumber(false);
       setSelectedStudent({ ...selectedStudent, pin_no: tempRollNumber });
-      fetchStudents();
+
+      // Update local state instead of refetching all data
+      setStudents(prevStudents =>
+        prevStudents.map(student =>
+          student.admission_number === selectedStudent.admission_number
+            ? { ...student, pin_no: tempRollNumber }
+            : student
+        )
+      );
+
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update PIN number');
     }
@@ -313,7 +354,19 @@ const Students = () => {
     try {
       await api.delete(`/students/${admissionNumber}`);
       toast.success('Student deleted successfully');
-      fetchStudents();
+
+      // Update local state instead of refetching all data
+      setStudents(prevStudents =>
+        prevStudents.filter(student => student.admission_number !== admissionNumber)
+      );
+
+      // Remove from completion percentages
+      setCompletionPercentages(prev => {
+        const updated = { ...prev };
+        delete updated[admissionNumber];
+        return updated;
+      });
+
     } catch (error) {
       toast.error('Failed to delete student');
     }

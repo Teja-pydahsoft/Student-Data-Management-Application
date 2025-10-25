@@ -574,10 +574,21 @@ exports.createStudent = async (req, res) => {
     }
 
     // Insert new student
-    await masterPool.query(
+    const [result] = await masterPool.query(
       'INSERT INTO students (admission_number, student_data) VALUES (?, ?)',
       [admissionNumber, JSON.stringify(studentData)]
     );
+
+    // Fetch the created student data
+    const [createdStudents] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    const createdStudent = {
+      ...createdStudents[0],
+      student_data: parseJSON(createdStudents[0].student_data)
+    };
 
     // Log action
     await masterPool.query(
@@ -588,7 +599,8 @@ exports.createStudent = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Student created successfully'
+      message: 'Student created successfully',
+      data: createdStudent
     });
 
   } catch (error) {

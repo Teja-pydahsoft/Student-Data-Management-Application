@@ -56,7 +56,7 @@ const AddStudent = () => {
       
       if (response.data.success) {
         toast.success('Student added successfully');
-        navigate('/students');
+        navigate('/students', { state: { newStudent: response.data.data } });
       } else {
         toast.error(response.data.message || 'Failed to add student');
       }

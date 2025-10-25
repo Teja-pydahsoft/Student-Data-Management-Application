@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const submissionController = require('../controllers/submissionController');
 const authMiddleware = require('../middleware/auth');
+const upload = submissionController.upload;
 
 // Protected routes (admin only) - Order matters! More specific routes first
 router.post('/bulk-approve', authMiddleware, submissionController.bulkApproveSubmissions);
@@ -26,9 +27,9 @@ router.delete('/:submissionId', authMiddleware, submissionController.deleteSubmi
 router.post('/bulk-upload', authMiddleware, submissionController.uploadMiddleware, submissionController.bulkUploadSubmissions);
 
 // Public routes - Order matters! More specific routes first
-router.post('/:formId([0-9a-fA-F-]{36})', submissionController.submitForm);
-router.post('/:formId', submissionController.submitForm);
-router.post('/', submissionController.submitForm);
+router.post('/:formId([0-9a-fA-F-]{36})', upload.any(), submissionController.submitForm);
+router.post('/:formId', upload.any(), submissionController.submitForm);
+router.post('/', upload.any(), submissionController.submitForm);
 
 // Debug route to test form submission
 router.post('/test/:formId', submissionController.submitForm);

@@ -407,7 +407,23 @@ exports.submitForm = async (req, res) => {
 
     // Handle both URL parameter and body parameter for formId
     const formId = req.params.formId || req.body.formId;
-    const { admissionNumber, formData } = req.body;
+    const formData = req.body.formData || req.body;
+
+    // Handle uploaded files
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        let base64;
+        if (file.buffer) {
+          base64 = file.buffer.toString('base64');
+        } else if (file.path) {
+          base64 = fs.readFileSync(file.path, 'base64');
+          fs.unlinkSync(file.path); // Clean up temp file
+        }
+        if (base64) {
+          formData[file.fieldname] = `data:${file.mimetype};base64,${base64}`;
+        }
+      });
+    }
 
     console.log('Resolved formId:', formId);
 
@@ -1658,6 +1674,14 @@ exports.generateAdmissionSeries = async (req, res) => {
       });
     }
 
+    // Validate prefix format (alphanumeric, underscores, hyphens only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(prefix)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Prefix can only contain letters, numbers, underscores, and hyphens'
+      });
+    }
+
     // Find the next sequential number
     const { data: submissions, error: subErr } = await supabase
       .from('form_submissions')
@@ -1741,12 +1765,10 @@ exports.generateAdmissionSeries = async (req, res) => {
       }
     }
 
-    // Save the prefix to settings if autoAssign is enabled
-    if (autoAssign) {
-      await supabase
-        .from('settings')
-        .upsert({ key: 'admission_prefix', value: prefix });
-    }
+    // Always save the prefix to settings since the admin explicitly requested this prefix
+    await supabase
+      .from('settings')
+      .upsert({ key: 'admission_prefix', value: prefix });
 
     res.json({
       success: true,
@@ -1798,9 +1820,19 @@ exports.getFieldCompletionStatus = async (req, res) => {
 
     if (formErr) throw formErr;
     if (forms.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Form not found'
+      // Return default completion status if form is not found
+      return res.json({
+        success: true,
+        data: {
+          totalFields: 0,
+          completedFields: 0,
+          pendingFields: 0,
+          completionPercentage: 0,
+          fieldStatus: [],
+          formName: 'Unknown',
+          missingFields: [],
+          note: 'Form not found for this student'
+        }
       });
     }
 
@@ -1895,9 +1927,19 @@ exports.getStudentCompletionStatus = async (req, res) => {
     }
 
     if (!formId) {
-      return res.status(404).json({
-        success: false,
-        message: 'Could not determine form structure for this student'
+      // Return default completion status if form_id is not available
+      return res.json({
+        success: true,
+        data: {
+          totalFields: 0,
+          completedFields: 0,
+          pendingFields: 0,
+          completionPercentage: 0,
+          fieldStatus: [],
+          formName: 'Unknown',
+          missingFields: [],
+          note: 'Form structure not available for this student'
+        }
       });
     }
 
@@ -2577,3 +2619,4 @@ exports.getAutoAssignSeries = async (req, res) => {
 
 // Export multer middleware
 exports.uploadMiddleware = upload.single('file');
+exports.upload = upload;

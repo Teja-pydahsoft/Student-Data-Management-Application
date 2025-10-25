@@ -199,9 +199,16 @@ const PublicForm = () => {
     const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
     for (const field of enabledFields) {
       if (field.required) {
-        const value = formData[field.label];
-        if (!value || (Array.isArray(value) && value.length === 0) || value.trim() === '') {
-          return `${field.label} is required`;
+        if (field.key.toLowerCase().includes('photo')) {
+          // For photo fields, check if file is selected
+          if (!fileData[field.label]) {
+            return `${field.label} is required`;
+          }
+        } else {
+          const value = formData[field.label];
+          if (!value || (Array.isArray(value) && value.length === 0) || value.trim() === '') {
+            return `${field.label} is required`;
+          }
         }
       }
     }
@@ -221,29 +228,27 @@ const PublicForm = () => {
     setError(null);
 
     try {
-      // Convert form data to database field mapping
-      const submissionData = {};
+      // Create FormData for multipart submission
+      const submissionData = new FormData();
 
       // Map form fields to database columns (exclude admission_no for students)
       // Only process enabled fields
       const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
       enabledFields.forEach((field) => {
-        if (field.type === 'file') {
-          // Handle file uploads separately
+        if (field.type === 'file' || field.key.toLowerCase().includes('photo')) {
+          // Handle file uploads
           const file = fileData[field.label];
           if (file) {
-            submissionData[field.key] = file.name; // Store filename for now
+            submissionData.append(field.key, file);
           }
         } else if (formData[field.label] !== undefined && formData[field.label] !== '' && field.key !== 'admission_no') {
           // Use the field key (database column name) as the key in submission data
-          submissionData[field.key] = formData[field.label];
+          submissionData.append(field.key, formData[field.label]);
         }
       });
 
       // Don't send admission number - admin will assign it during approval
-      await api.post(`/submissions/${formId}`, {
-        formData: submissionData,
-      });
+      await api.post(`/submissions/${formId}`, submissionData);
       setSubmitted(true);
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to submit form');
@@ -328,7 +333,9 @@ const PublicForm = () => {
           <div className="space-y-2">
             <input
               type="file"
+              name={field.key}
               accept={field.accept || 'image/*'}
+              capture={field.accept && field.accept.includes('image') ? 'camera' : undefined}
               onChange={(e) => handleFileChange(field.label, e.target.files[0])}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
               required={field.required}
@@ -342,6 +349,27 @@ const PublicForm = () => {
         );
 
       default:
+        // Special handling for photo fields that might be misconfigured as text
+        if (field.key.toLowerCase().includes('photo')) {
+          return (
+            <div className="space-y-2">
+              <input
+                type="file"
+                name={field.key}
+                accept="image/*"
+                capture="camera"
+                onChange={(e) => handleFileChange(field.label, e.target.files[0])}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                required={field.required}
+              />
+              {fileData[field.label] && (
+                <p className="text-sm text-green-600">
+                  Selected: {fileData[field.label].name}
+                </p>
+              )}
+            </div>
+          );
+        }
         return (
           <input
             type={field.type}

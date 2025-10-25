@@ -541,7 +541,7 @@ const Submissions = () => {
                   id="seriesPrefix"
                   defaultValue="PYDAH2025"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                  placeholder="Enter series prefix (e.g., PYDAH2025)"
+                  placeholder="Enter series prefix (letters, numbers, _, - only)"
                 />
               </div>
 
@@ -555,7 +555,7 @@ const Submissions = () => {
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
                 <label htmlFor="autoAssign" className="ml-2 block text-sm text-gray-900">
-                  Auto-assign to pending submissions and enable global auto-assign
+                  Auto-assign to pending submissions (prefix will be saved for future use)
                 </label>
               </div>
             </div>
@@ -567,6 +567,12 @@ const Submissions = () => {
 
                   if (!prefix.trim()) {
                     toast.error('Series prefix is required');
+                    return;
+                  }
+
+                  // Validate prefix format (alphanumeric, underscores, hyphens only)
+                  if (!/^[a-zA-Z0-9_-]+$/.test(prefix.trim())) {
+                    toast.error('Prefix can only contain letters, numbers, underscores, and hyphens');
                     return;
                   }
 
@@ -585,7 +591,7 @@ const Submissions = () => {
                         toggleGlobalAutoAssign();
                       } else {
                         navigator.clipboard.writeText(numbers.join('\n'));
-                        toast.success(`${numbers.length} admission numbers generated and copied to clipboard!`);
+                        toast.success(`${numbers.length} admission numbers generated and copied to clipboard! (Prefix saved for future use)`);
                       }
                       setShowAdmissionSeries(false);
                       setAutoAssign(false);
