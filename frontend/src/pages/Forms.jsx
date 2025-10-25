@@ -10,7 +10,7 @@ import LoadingAnimation from '../components/LoadingAnimation';
 const getFrontendUrl = () => {
   // In production, use the primary frontend URL
   if (import.meta.env.PROD) {
-    return 'https://student-data-management-application.vercel.app';
+    return 'https://pydahsdbms.vercel.app';
   }
   // In development, use the current origin
   return window.location.origin;

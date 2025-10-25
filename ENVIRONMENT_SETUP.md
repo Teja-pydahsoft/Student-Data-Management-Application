@@ -63,7 +63,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin123
 
 # CORS Configuration - Allow local development and production
-FRONTEND_URL=http://localhost:3000,https://student-data-management-application.vercel.app
+FRONTEND_URL=http://localhost:3000,https://pydahsdbms.vercel.app
 
 # File Upload Configuration
 MAX_FILE_SIZE=10485760
@@ -99,8 +99,8 @@ JWT_EXPIRES_IN=24h
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your_secure_admin_password
 
-# CORS Configuration - Allow both Vercel and Render domains
-FRONTEND_URL=https://student-data-management-application.vercel.app
+# CORS Configuration - Allow production frontend domain
+FRONTEND_URL=https://pydahsdbms.vercel.app
 
 # File Upload Configuration
 MAX_FILE_SIZE=10485760

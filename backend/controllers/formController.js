@@ -31,7 +31,7 @@ exports.createForm = async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL
       ? process.env.FRONTEND_URL.split(',')[0].trim()
       : (process.env.NODE_ENV === 'production'
-          ? 'https://student-data-management-application.vercel.app'
+          ? 'https://pydahsdbms.vercel.app'
           : 'http://localhost:3000');
 
     const formUrl = `${frontendUrl}/form/${formId}`;
