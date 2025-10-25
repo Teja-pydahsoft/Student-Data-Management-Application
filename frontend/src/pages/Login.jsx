@@ -60,9 +60,12 @@ const Login = () => {
       <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-slate-200/70 shadow-xl rounded-3xl relative z-10 p-8 transition-transform duration-500 hover:scale-[1.01]">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg mb-4">
-            <Users size={26} className="text-white" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Pydah DB Logo"
+            className="h-14 w-auto max-w-full object-contain mx-auto mb-4"
+            loading="lazy"
+          />
           <h1 className="text-2xl font-semibold text-slate-800 mb-1 tracking-tight">
             Admin Login
           </h1>

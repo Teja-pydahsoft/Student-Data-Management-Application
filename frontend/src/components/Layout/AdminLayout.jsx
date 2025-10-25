@@ -55,11 +55,13 @@ const AdminLayout = () => {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-6 border-b border-border-light">
-            <h1 className="text-2xl font-bold text-primary heading-font">
-              Pydah DB
-            </h1>
-            <p className="text-sm text-text-secondary mt-1 body-font">Student Management System</p>
+          <div className="p-6 border-b border-border-light flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="Pydah DB Logo"
+              className="h-12 w-auto max-w-full object-contain"
+              loading="lazy"
+            />
           </div>
 
           {/* Navigation */}

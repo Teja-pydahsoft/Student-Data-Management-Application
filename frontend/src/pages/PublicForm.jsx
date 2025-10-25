@@ -511,7 +511,13 @@ const PublicForm = () => {
           </div>
         )}
         <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
-          <div className="mb-6">
+          <div className="mb-6 text-center">
+            <img
+              src="/logo.png"
+              alt="Pydah DB Logo"
+              className="h-16 w-auto max-w-full object-contain mx-auto mb-4"
+              loading="lazy"
+            />
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">{form.form_name}</h1>
             {form.form_description && (
               <p className="text-gray-600 text-sm sm:text-base">{form.form_description}</p>
