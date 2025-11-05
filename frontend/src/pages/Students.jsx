@@ -31,6 +31,9 @@ const Students = () => {
 
   // Get completion percentage for a student from backend
   const getStudentCompletionPercentage = async (admissionNumber) => {
+    if (!admissionNumber) {
+      return 0; // Return 0 if admission number is missing
+    }
     try {
       const response = await api.get(`/submissions/student/${admissionNumber}/completion-status`);
       return response.data.data.completionPercentage;
@@ -84,15 +87,17 @@ const Students = () => {
       if (students.length === 0) return;
 
       const percentages = {};
-      const promises = students.map(async (student) => {
-        try {
-          const response = await api.get(`/submissions/student/${student.admission_number}/completion-status`);
-          return { admissionNumber: student.admission_number, percentage: response.data.data.completionPercentage };
-        } catch (error) {
-          // Silently return 0 if completion status can't be fetched
-          return { admissionNumber: student.admission_number, percentage: 0 };
-        }
-      });
+      const promises = students
+        .filter(student => student.admission_number) // Only process students with admission numbers
+        .map(async (student) => {
+          try {
+            const response = await api.get(`/submissions/student/${student.admission_number}/completion-status`);
+            return { admissionNumber: student.admission_number, percentage: response.data.data.completionPercentage };
+          } catch (error) {
+            // Silently return 0 if completion status can't be fetched
+            return { admissionNumber: student.admission_number, percentage: 0 };
+          }
+        });
 
       const results = await Promise.all(promises);
       results.forEach(result => {
@@ -114,6 +119,9 @@ const Students = () => {
       const excludeKeywords = ['name', 'phone', 'mobile', 'contact', 'address', 'email', 'number', 'guardian', 'parent', 'information'];
 
       students.forEach(student => {
+        if (!student.student_data || typeof student.student_data !== 'object') {
+          return; // Skip students without valid student_data
+        }
         Object.entries(student.student_data).forEach(([key, value]) => {
           const keyLower = key.toLowerCase();
           const shouldExclude = excludeKeywords.some(keyword => keyLower.includes(keyword));
@@ -378,11 +386,22 @@ const Students = () => {
       return;
     }
 
-    const headers = ['Admission Number', 'PIN Number', 'Name', 'Mobile Number', ...Object.keys(students[0].student_data)];
+    const firstStudentData = students[0]?.student_data;
+    const dataKeys = firstStudentData && typeof firstStudentData === 'object' ? Object.keys(firstStudentData) : [];
+    const headers = ['Admission Number', 'PIN Number', 'Name', 'Mobile Number', ...dataKeys];
     const csvContent = [
       headers.join(','),
       ...students.map((student) => {
         const data = student.student_data;
+        if (!data || typeof data !== 'object') {
+          return [
+            student.admission_number,
+            student.pin_no || '',
+            '-',
+            '-',
+            ...Object.keys(student).filter(key => key !== 'student_data' && key !== 'admission_number' && key !== 'pin_no').map(key => student[key] || '')
+          ].join(',');
+        }
         const nameField = Object.keys(data).find(key =>
           key.toLowerCase().includes('name') ||
           key.toLowerCase().includes('student name') ||
@@ -444,10 +463,12 @@ const Students = () => {
     let totalCompletion = 0;
 
     // Fetch completion percentages for all students in parallel
-    const promises = students.map(async (student) => {
-      const percentage = await getStudentCompletionPercentage(student.admission_number);
-      return { percentage, admissionNumber: student.admission_number };
-    });
+    const promises = students
+      .filter(student => student.admission_number) // Only process students with admission numbers
+      .map(async (student) => {
+        const percentage = await getStudentCompletionPercentage(student.admission_number);
+        return { percentage, admissionNumber: student.admission_number };
+      });
 
     const results = await Promise.all(promises);
 
@@ -945,6 +966,9 @@ const Students = () => {
                       <td className="py-3 px-4 text-sm text-gray-900">
                         {(() => {
                           const data = student.student_data;
+                          if (!data || typeof data !== 'object') {
+                            return '-';
+                          }
                           const nameField = Object.keys(data).find(key =>
                             key.toLowerCase().includes('name') ||
                             key.toLowerCase().includes('student name') ||
@@ -956,6 +980,9 @@ const Students = () => {
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {(() => {
                           const data = student.student_data;
+                          if (!data || typeof data !== 'object') {
+                            return '-';
+                          }
                           const mobileField = Object.keys(data).find(key =>
                             key.toLowerCase().includes('mobile') ||
                             key.toLowerCase().includes('phone') ||
