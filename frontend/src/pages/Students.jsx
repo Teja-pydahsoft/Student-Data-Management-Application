@@ -493,30 +493,26 @@ const Students = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-6">
           <LoadingAnimation
-            width={120}
-            height={120}
+            width={32}
+            height={32}
             message="Loading students..."
           />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-text-primary">Loading Students Database</p>
-            <p className="text-sm text-text-secondary">Please wait while we fetch your data...</p>
-          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-text-primary heading-font">Students Database</h1>
-          <p className="text-text-secondary mt-2 body-font">Manage and view all student records</p>
+          <h1 className="text-3xl font-bold text-gray-900 heading-font">Students Database</h1>
+          <p className="text-gray-600 mt-2 body-font">Manage and view all student records</p>
         </div>
         <div className="flex items-center gap-3">
   <Link
     to="/students/add"
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-indigo-600 to-purple-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
   >
     <Plus size={18} />
     Add Student
@@ -524,7 +520,7 @@ const Students = () => {
 
   <button
     onClick={() => setShowManualRollNumber(true)}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-cyan-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
   >
     <UserCog size={18} />
     Update PIN Numbers
@@ -532,7 +528,7 @@ const Students = () => {
 
   <button
     onClick={() => setShowBulkRollNumber(true)}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-fuchsia-600 to-pink-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-700 to-blue-800 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
   >
     <Upload size={18} />
     Bulk Upload PIN CSV
@@ -540,7 +536,7 @@ const Students = () => {
 
   <button
     onClick={handleExportCSV}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-emerald-600 to-green-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
   >
     <Download size={18} />
     Export CSV
@@ -549,10 +545,10 @@ const Students = () => {
 
       </div>
 
-      <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex gap-2 mb-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
             <input
               type="text"
               value={searchTerm}
@@ -562,7 +558,7 @@ const Students = () => {
               placeholder="Search by admission number or student data..."
             />
           </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilters ? 'bg-primary text-white' : 'bg-border-light text-text-primary hover:bg-accent/10'}`}>
+          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilters ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900 hover:bg-blue-50'}`}>
             <Filter size={18} />
             Filters
           </button>
@@ -573,13 +569,13 @@ const Students = () => {
                 fetchFilterFields();
               }
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilterManagement ? 'bg-purple-600 text-white' : 'bg-border-light text-text-primary hover:bg-accent/10'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilterManagement ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900 hover:bg-blue-50'}`}
             title="Manage Filter Fields"
           >
             <Settings size={18} />
             Filter Settings
           </button>
-          <button onClick={handleLocalSearch} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors">
+          <button onClick={handleLocalSearch} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
             Search
           </button>
         </div>
@@ -587,8 +583,8 @@ const Students = () => {
         {showFilters && (
           <div className="border-t pt-4 space-y-3">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-text-primary">Quick Filters</h3>
-              <button onClick={clearFilters} className="text-xs text-error hover:text-red-700 flex items-center gap-1">
+              <h3 className="text-sm font-semibold text-gray-900">Quick Filters</h3>
+              <button onClick={clearFilters} className="text-xs text-gray-700 hover:text-gray-900 flex items-center gap-1">
                 <X size={14} />
                 Clear All
               </button>
@@ -622,7 +618,7 @@ const Students = () => {
                 value={filters.pinNumberStatus || ''}
                 onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
                 className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.pinNumberStatus ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-300'
+                  filters.pinNumberStatus ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
                 }`}
               >
                 <option value="">PIN Status: All</option>
@@ -634,7 +630,7 @@ const Students = () => {
             {/* Dynamic Field Filters - Horizontal Layout */}
             {availableFields.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-text-primary">Filter by Category:</p>
+                <p className="text-xs font-semibold text-gray-900">Filter by Category:</p>
                 <div className="flex flex-wrap gap-2">
                   {availableFields
                     .filter(field => {
@@ -652,7 +648,7 @@ const Students = () => {
                         value={filters[`field_${field.name}`] || ''}
                         onChange={(e) => handleFilterChange(`field_${field.name}`, e.target.value)}
                         className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none min-w-[120px] ${
-                          filters[`field_${field.name}`] ? 'bg-purple-50 border-purple-300 text-purple-700' : 'bg-gray-50 border-gray-300'
+                          filters[`field_${field.name}`] ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
                         }`}
                       >
                         <option value="">{field.name}: All</option>
@@ -663,7 +659,7 @@ const Students = () => {
                       {filters[`field_${field.name}`] && (
                         <button
                           onClick={() => handleFilterChange(`field_${field.name}`, '')}
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center"
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-gray-700 text-white rounded-full text-xs hover:bg-gray-800 flex items-center justify-center"
                           title="Clear this filter"
                         >
                           ×
@@ -715,11 +711,11 @@ const Students = () => {
                           break;
                       }
                       return (
-                        <span key={key} className="px-2 py-1 bg-green-100 text-green-800 rounded-md border border-green-300 font-medium">
+                        <span key={key} className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md border border-blue-300 font-medium">
                           {label}
                           <button
                             onClick={() => handleFilterChange(key, '')}
-                            className="ml-1 text-green-600 hover:text-green-900 font-bold"
+                            className="ml-1 text-blue-600 hover:text-blue-900 font-bold"
                           >
                             ×
                           </button>
@@ -754,24 +750,24 @@ const Students = () => {
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
                 {loadingFilterFields ? (
                   <div className="flex items-center justify-center py-8">
-                    <LoadingAnimation width={40} height={40} message="Loading filter fields..." />
+                    <LoadingAnimation width={24} height={24} message="Loading filter fields..." />
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {availableFilterFields.map((field) => (
                       <div key={field.name} className={`rounded-lg p-4 border-2 transition-all ${
                         field.enabled
-                          ? 'bg-green-50 border-green-200 shadow-sm'
+                          ? 'bg-blue-50 border-blue-200 shadow-sm'
                           : 'bg-gray-50 border-gray-200 opacity-60'
                       }`}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
                             <label className={`block text-sm font-medium ${
-                              field.enabled ? 'text-green-900' : 'text-gray-500'
+                              field.enabled ? 'text-blue-900' : 'text-gray-500'
                             }`}>
                               {field.name}
                               {field.enabled && (
-                                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                                   Enabled
                                 </span>
                               )}
@@ -781,7 +777,7 @@ const Students = () => {
                                 </span>
                               )}
                             </label>
-                            <div className={`text-xs ${field.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+                            <div className={`text-xs ${field.enabled ? 'text-blue-600' : 'text-gray-400'}`}>
                               Type: {field.type} | Required: {field.required ? 'Yes' : 'No'}
                             </div>
                           </div>
@@ -789,7 +785,7 @@ const Students = () => {
                             onClick={() => toggleFilterField(field.name, !field.enabled)}
                             className={`p-2 rounded-lg transition-colors ${
                               field.enabled
-                                ? 'text-green-600 hover:bg-green-100'
+                                ? 'text-blue-600 hover:bg-blue-100'
                                 : 'text-gray-400 hover:bg-gray-100'
                             }`}
                             title={field.enabled ? 'Disable filter field' : 'Enable filter field'}
@@ -799,14 +795,14 @@ const Students = () => {
                         </div>
                         {field.options && field.options.length > 0 && (
                           <div className="mt-2">
-                            <div className={`text-xs font-medium mb-1 ${field.enabled ? 'text-green-700' : 'text-gray-500'}`}>
+                            <div className={`text-xs font-medium mb-1 ${field.enabled ? 'text-blue-700' : 'text-gray-500'}`}>
                               Available Options:
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {field.options.slice(0, 3).map((option, idx) => (
                                 <span key={idx} className={`px-2 py-1 text-xs rounded ${
                                   field.enabled
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-blue-100 text-blue-800'
                                     : 'bg-gray-100 text-gray-600'
                                 }`}>
                                   {option}
@@ -815,7 +811,7 @@ const Students = () => {
                               {field.options.length > 3 && (
                                 <span className={`px-2 py-1 text-xs rounded ${
                                   field.enabled
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-blue-100 text-blue-800'
                                     : 'bg-gray-100 text-gray-600'
                                 }`}>
                                   +{field.options.length - 3} more
@@ -849,7 +845,7 @@ const Students = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Total Students</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-lg">
                 <Users className="text-blue-600" size={24} />
@@ -861,13 +857,13 @@ const Students = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Completed Profiles</p>
-                <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.completed}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}% of total
                 </p>
               </div>
-              <div className="bg-green-100 p-3 rounded-lg">
-                <CheckCircle className="text-green-600" size={24} />
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <CheckCircle className="text-blue-600" size={24} />
               </div>
             </div>
           </div>
@@ -876,16 +872,16 @@ const Students = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Average Completion</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.averageCompletion}%</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.averageCompletion}%</p>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                   <div 
-                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${stats.averageCompletion}%` }}
                   ></div>
                 </div>
               </div>
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <TrendingUp className="text-purple-600" size={24} />
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <TrendingUp className="text-blue-600" size={24} />
               </div>
             </div>
           </div>
@@ -995,11 +991,11 @@ const Students = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-16 bg-gray-200 rounded-full h-2">
                             <div
-                              className={`h-2 rounded-full ${completionPercentage >= 80 ? 'bg-green-500' : completionPercentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              className={`h-2 rounded-full ${completionPercentage >= 80 ? 'bg-blue-600' : completionPercentage >= 50 ? 'bg-blue-400' : 'bg-gray-400'}`}
                               style={{ width: `${completionPercentage}%` }}
                             ></div>
                           </div>
-                          <span className={`text-xs font-medium ${completionPercentage >= 80 ? 'text-green-600' : completionPercentage >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          <span className={`text-xs font-medium ${completionPercentage >= 80 ? 'text-blue-600' : completionPercentage >= 50 ? 'text-blue-500' : 'text-gray-600'}`}>
                             {completionPercentage}%
                           </span>
                         </div>
@@ -1010,7 +1006,7 @@ const Students = () => {
                           <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
                             <Eye size={16} />
                           </button>
-                          <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                          <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Delete">
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -1118,9 +1114,9 @@ const Students = () => {
                       const completionPercentage = completionPercentages[selectedStudent.admission_number] || 0;
                       return (
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          completionPercentage >= 80 ? 'bg-green-100 text-green-800' :
-                          completionPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
+                          completionPercentage >= 80 ? 'bg-blue-100 text-blue-800' :
+                          completionPercentage >= 50 ? 'bg-blue-50 text-blue-700' :
+                          'bg-gray-100 text-gray-800'
                         }`}>
                           {completionPercentage}% Complete
                         </span>
@@ -1519,8 +1515,8 @@ const Students = () => {
                   </div>
 
                   {/* Hidden Admin Fields (5 fields) - Now with photo display */}
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                       📝 Pin No (Admin)
                     </label>
                     {editMode ? (
@@ -1538,8 +1534,8 @@ const Students = () => {
                     )}
                   </div>
 
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                       📝 Previous College (Admin)
                     </label>
                     {editMode ? (
@@ -1557,8 +1553,8 @@ const Students = () => {
                     )}
                   </div>
 
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                       📝 Certificate Status (Admin)
                     </label>
                     {editMode ? (
@@ -1579,8 +1575,8 @@ const Students = () => {
                     )}
                   </div>
 
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <label className="block text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                       📝 Student Photo (Admin)
                     </label>
                     {editMode ? (

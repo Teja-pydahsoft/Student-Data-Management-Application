@@ -261,26 +261,10 @@ const Submissions = () => {
     fetchSubmissions();
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-6">
-          <LoadingAnimation
-            width={120}
-            height={120}
-            message="Loading submissions..."
-          />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-text-primary">Loading Submissions Database</p>
-            <p className="text-sm text-text-secondary">Please wait while we fetch your data...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Submissions</h1>
@@ -361,123 +345,134 @@ const Submissions = () => {
       </div>
 
 
-      {submissions.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Filter className="text-gray-400" size={32} />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No {filter} submissions</h3>
-            <p className="text-gray-600">There are no {filter} submissions at the moment.</p>
-          </div>
+      {loading? (<div className="flex items-center justify-center">
+        <div className="text-center space-y-6">
+          <LoadingAnimation
+            width={32}
+            height={32}
+            message="Loading submissions..."
+          />
         </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedSubmissions.size === submissions.length && submissions.length > 0}
-                      onChange={(e) => { e.stopPropagation(); handleSelectAll(e.target.checked); }}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                    />
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Student Name</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Pin Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Batch</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted By</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted At</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {submissions.map((submission) => (
-                  <tr
-                    key={submission.submission_id}
-                    onClick={() => handleViewDetails(submission.submission_id)}
-                    className={`border-b border-gray-100 hover:bg-gray-50 ${
-                      selectedSubmissions.has(submission.submission_id) ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <td className="py-3 px-4 text-sm">
+      </div>):(
+        <> 
+        {submissions.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <div className="max-w-md mx-auto">
+              <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Filter className="text-gray-400" size={32} />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No {filter} submissions</h3>
+              <p className="text-gray-600">There are no {filter} submissions at the moment.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-12">
                       <input
                         type="checkbox"
-                        checked={selectedSubmissions.has(submission.submission_id)}
-                        onChange={(e) => { e.stopPropagation(); handleSelectSubmission(submission.submission_id, e.target.checked); }}
+                        checked={selectedSubmissions.size === submissions.length && submissions.length > 0}
+                        onChange={(e) => { e.stopPropagation(); handleSelectAll(e.target.checked); }}
                         className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                       />
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_name'] || 'N/A'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{submission.admission_number || 'N/A'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['pin_no'] || 'N/A'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_mobile'] || 'N/A'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['batch'] || 'N/A'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['branch'] || 'N/A'}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : submission.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {submission.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${submission.submitted_by === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                        {submission.submitted_by === 'admin' ? '👤 Admin' : '🎓 Student'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{formatDate(submission.submitted_at)}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <button onClick={(e) => {
-                          e.stopPropagation();
-                          if (submission.admission_number) {
-                            api.get(`/submissions/${submission.submission_id}`)
-                              .then(response => {
-                                const data = response.data.data;
-                                setSelectedSubmission(data);
-                                setAdmissionNumber(data.admission_number);
-                                // Directly approve using the fetched data
-                                api.post(`/submissions/${submission.submission_id}/approve`, {
-                                  admissionNumber: data.admission_number,
-                                })
-                                  .then(() => {
-                                    toast.success('Submission approved successfully');
-                                    fetchSubmissions();
-                                  })
-                                  .catch(error => {
-                                    console.error('Approval error:', error);
-                                    toast.error('Failed to approve submission');
-                                  });
-                              })
-                              .catch(error => {
-                                toast.error('Failed to fetch submission details');
-                              });
-                          } else {
-                            handleViewDetails(submission.submission_id);
-                          }
-                        }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve">
-                          <CheckCircle size={16} />
-                        </button>
-                        <button onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewDetails(submission.submission_id);
-                        }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Reject">
-                          <XCircle size={16} />
-                        </button>
-                      </div>
-                    </td>
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Student Name</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Pin Number</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Batch</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted By</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Submitted At</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {submissions.map((submission) => (
+                    <tr
+                      key={submission.submission_id}
+                      onClick={() => handleViewDetails(submission.submission_id)}
+                      className={`border-b border-gray-100 hover:bg-gray-50 ${
+                        selectedSubmissions.has(submission.submission_id) ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-4 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedSubmissions.has(submission.submission_id)}
+                          onChange={(e) => { e.stopPropagation(); handleSelectSubmission(submission.submission_id, e.target.checked); }}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        />
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_name'] || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{submission.admission_number || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['pin_no'] || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['student_mobile'] || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['batch'] || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{submission.submission_data['branch'] || 'N/A'}</td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : submission.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {submission.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${submission.submitted_by === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {submission.submitted_by === 'admin' ? '👤 Admin' : '🎓 Student'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{formatDate(submission.submitted_at)}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            if (submission.admission_number) {
+                              api.get(`/submissions/${submission.submission_id}`)
+                                .then(response => {
+                                  const data = response.data.data;
+                                  setSelectedSubmission(data);
+                                  setAdmissionNumber(data.admission_number);
+                                  // Directly approve using the fetched data
+                                  api.post(`/submissions/${submission.submission_id}/approve`, {
+                                    admissionNumber: data.admission_number,
+                                  })
+                                    .then(() => {
+                                      toast.success('Submission approved successfully');
+                                      fetchSubmissions();
+                                    })
+                                    .catch(error => {
+                                      console.error('Approval error:', error);
+                                      toast.error('Failed to approve submission');
+                                    });
+                                })
+                                .catch(error => {
+                                  toast.error('Failed to fetch submission details');
+                                });
+                            } else {
+                              handleViewDetails(submission.submission_id);
+                            }
+                          }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve">
+                            <CheckCircle size={16} />
+                          </button>
+                          <button onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDetails(submission.submission_id);
+                          }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Reject">
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </>)}
 
       {showModal && selectedSubmission && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -652,7 +647,7 @@ const Submissions = () => {
               </div>
 
               <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 pulse-glow"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-200 border-t-blue-600"></div>
                 <span className="ml-2 text-gray-600">Processing...</span>
               </div>
             </div>

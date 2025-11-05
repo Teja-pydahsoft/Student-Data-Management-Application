@@ -407,15 +407,11 @@ const PublicForm = () => {
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
         <div className="text-center space-y-4">
           <LoadingAnimation
-            width={64}
-            height={64}
+            width={32}
+            height={32}
             message={fetchingForm ? "Loading form..." : "Please wait..."}
             variant="minimal"
           />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-text-primary">Loading Form</p>
-            <p className="text-sm text-text-secondary">Fetching form data...</p>
-          </div>
         </div>
       </div>
     );
@@ -560,7 +556,7 @@ const PublicForm = () => {
 
   {submitting ? (
     <>
-      <Loader2 className="animate-spin" size={20} />
+      <Loader2 className="animate-spin text-blue-600" size={20} />
       <span className="text-sm font-medium">Submitting...</span>
     </>
   ) : (

@@ -100,21 +100,17 @@ const Forms = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-6">
           <LoadingAnimation
-            width={120}
-            height={120}
+            width={32}
+            height={32}
             message="Loading forms..."
           />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-text-primary">Loading Forms Database</p>
-            <p className="text-sm text-text-secondary">Please wait while we fetch your forms...</p>
-          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-text-primary heading-font">Forms</h1>

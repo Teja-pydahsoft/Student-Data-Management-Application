@@ -1,6 +1,4 @@
 import React from 'react';
-import Lottie from 'lottie-react';
-import loadingAnimation from '../assets/loading-animation.json';
 
 const LoadingAnimation = ({
   width = 64,
@@ -14,11 +12,11 @@ const LoadingAnimation = ({
 }) => {
   // Size configurations
   const sizeConfig = {
-    xs: { width: 32, height: 32, textSize: 'text-xs' },
-    sm: { width: 48, height: 48, textSize: 'text-sm' },
-    md: { width: 64, height: 64, textSize: 'text-sm' },
-    lg: { width: 80, height: 80, textSize: 'text-base' },
-    xl: { width: 120, height: 120, textSize: 'text-lg' }
+    xs: { width: 16, height: 16, textSize: 'text-xs', borderSize: 'border-2' },
+    sm: { width: 24, height: 24, textSize: 'text-xs', borderSize: 'border-2' },
+    md: { width: 32, height: 32, textSize: 'text-sm', borderSize: 'border-3' },
+    lg: { width: 40, height: 40, textSize: 'text-sm', borderSize: 'border-3' },
+    xl: { width: 48, height: 48, textSize: 'text-base', borderSize: 'border-4' }
   };
 
   // Variant configurations
@@ -31,19 +29,27 @@ const LoadingAnimation = ({
 
   const config = sizeConfig[size] || sizeConfig.md;
   const variantClass = variantConfig[variant] || variantConfig.default;
+  const actualWidth = width || config.width;
+  const actualHeight = height || config.height;
 
   return (
     <div className={`${centered ? variantClass : 'flex flex-col items-center justify-center'} ${className}`}>
-      <div style={{ width: config.width, height: config.height }}>
-        <Lottie
-          animationData={loadingAnimation}
-          loop={true}
-          autoplay={true}
-          style={{ width: '100%', height: '100%' }}
-        />
+      <div 
+        style={{ width: actualWidth, height: actualHeight }}
+        className="relative"
+      >
+        {/* Blue Spinner */}
+        <div
+          className={`${config.borderSize} border-blue-200 border-t-blue-600 rounded-full animate-spin`}
+          style={{
+            width: actualWidth,
+            height: actualHeight,
+            borderWidth: actualWidth / 8
+          }}
+        ></div>
       </div>
       {showMessage && message && (
-        <p className={`mt-2 ${config.textSize} text-gray-600 animate-pulse`}>
+        <p className={`mt-2 ${config.textSize} text-blue-600 font-medium`}>
           {message}
         </p>
       )}

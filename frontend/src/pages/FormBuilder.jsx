@@ -212,14 +212,10 @@ const FormBuilder = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-6">
           <LoadingAnimation
-            width={120}
-            height={120}
+            width={32}
+            height={32}
             message="Loading form builder..."
           />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-text-primary">Loading Form Builder</p>
-            <p className="text-sm text-text-secondary">Please wait while we fetch your form data...</p>
-          </div>
         </div>
       </div>
     );
