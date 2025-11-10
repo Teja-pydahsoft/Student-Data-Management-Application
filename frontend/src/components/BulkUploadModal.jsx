@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
 
-const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
+const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingForms = false }) => {
    if (!isOpen) {
      return null;
    }
@@ -16,12 +16,70 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
    const [uploadResult, setUploadResult] = useState(null);
    const [uploadProgress, setUploadProgress] = useState('');
 
+  const selectedFormDetails = useMemo(() => {
+    if (!forms || forms.length === 0 || !selectedForm) {
+      return null;
+    }
+    return forms.find((form) => form.form_id === selectedForm) || null;
+  }, [forms, selectedForm]);
+
+  const resolvedFormFields = useMemo(() => {
+    if (!selectedFormDetails || !selectedFormDetails.form_fields) {
+      return [];
+    }
+    const { form_fields: rawFields } = selectedFormDetails;
+    if (Array.isArray(rawFields)) {
+      return rawFields;
+    }
+    try {
+      const parsed = JSON.parse(rawFields);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.warn('Unable to parse form fields for bulk upload template', error);
+      return [];
+    }
+  }, [selectedFormDetails]);
+
+  const normalize = (value) =>
+    value ? value.toString().toLowerCase().replace(/[\s_-]+/g, '') : '';
+
+  const stageFieldSummary = useMemo(() => {
+    if (resolvedFormFields.length === 0) {
+      return null;
+    }
+
+    const findField = (identifiers = []) =>
+      resolvedFormFields.find((field) => {
+        const key = normalize(field.key);
+        const label = normalize(field.label);
+        return identifiers.some((identifier) => key === identifier || label === identifier);
+      });
+
+    const courseField = findField(['course', 'coursename']);
+    const branchField = findField(['branch', 'branchname']);
+    const yearField = findField(['currentacademicyear', 'currentyear', 'year']);
+    const semesterField = findField(['currentsemester', 'semester']);
+
+    return {
+      courseField,
+      branchField,
+      yearField,
+      semesterField
+    };
+  }, [resolvedFormFields]);
+
    useEffect(() => {
      if (forms && forms.length > 0 && !selectedForm) {
        setSelectedForm(forms[0].form_id);
        console.log('🔄 Auto-selected form:', forms[0].form_name, forms[0].form_id);
      }
    }, [forms, selectedForm]);
+
+  useEffect(() => {
+    if (!forms || forms.length === 0) {
+      setSelectedForm('');
+    }
+  }, [forms]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -224,19 +282,28 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
             <select
               value={selectedForm}
               onChange={(e) => setSelectedForm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={isLoadingForms || !forms || forms.length === 0}
             >
-              <option value="">Choose a form...</option>
-              {forms && forms.length > 0 ? (
+              <option value="">
+                {isLoadingForms ? 'Loading forms...' : 'Choose a form...'}
+              </option>
+              {!isLoadingForms && forms && forms.length > 0 ? (
                 forms.map((form) => (
                   <option key={form.form_id} value={form.form_id}>
                     {form.form_name}
                   </option>
                 ))
               ) : (
-                <option value="" disabled>No forms available</option>
+                !isLoadingForms && <option value="" disabled>No forms available</option>
               )}
             </select>
+            {isLoadingForms && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+                <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
+                <span>Fetching available templates...</span>
+              </div>
+            )}
           </div>
 
           {/* Download Template */}
@@ -255,6 +322,48 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete }) => {
                     <Download size={16} />
                     Download Excel Template
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedForm && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="text-indigo-600 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm text-indigo-800 font-medium mb-2">
+                    Make sure your Excel file includes the required academic structure columns so students are linked to the correct course, branch, year and semester.
+                  </p>
+                  <ul className="text-sm text-indigo-700 list-disc ml-5 space-y-1">
+                    <li>
+                      <span className="font-semibold">Course</span>{' '}
+                      {stageFieldSummary?.courseField
+                        ? `→ matches form field "${stageFieldSummary.courseField.label || stageFieldSummary.courseField.key}"`
+                        : '→ add a column named "Course"'}
+                    </li>
+                    <li>
+                      <span className="font-semibold">Branch</span>{' '}
+                      {stageFieldSummary?.branchField
+                        ? `→ matches form field "${stageFieldSummary.branchField.label || stageFieldSummary.branchField.key}"`
+                        : '→ add a column named "Branch"'}
+                    </li>
+                    <li>
+                      <span className="font-semibold">Current Academic Year</span>{' '}
+                      {stageFieldSummary?.yearField
+                        ? `→ matches form field "${stageFieldSummary.yearField.label || stageFieldSummary.yearField.key}"`
+                        : '→ add a column named "Current Academic Year"'}
+                    </li>
+                    <li>
+                      <span className="font-semibold">Current Semester</span>{' '}
+                      {stageFieldSummary?.semesterField
+                        ? `→ matches form field "${stageFieldSummary.semesterField.label || stageFieldSummary.semesterField.key}"`
+                        : '→ add a column named "Current Semester"'}
+                    </li>
+                  </ul>
+                  <p className="text-xs text-indigo-600 mt-2">
+                    These columns ensure that each uploaded student is grouped under the correct course & branch and is placed in the right academic stage.
+                  </p>
                 </div>
               </div>
             </div>

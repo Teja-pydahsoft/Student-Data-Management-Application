@@ -20,6 +20,16 @@ ALTER TABLE students
 ADD COLUMN IF NOT EXISTS pin_no VARCHAR(50) NULL,
 ADD INDEX IF NOT EXISTS idx_pin_no (pin_no);
 
+ALTER TABLE students
+ADD COLUMN IF NOT EXISTS current_year TINYINT DEFAULT 1,
+ADD COLUMN IF NOT EXISTS current_semester TINYINT DEFAULT 1;
+
+USE student_staging;
+
+ALTER TABLE students
+ADD COLUMN IF NOT EXISTS current_year TINYINT DEFAULT 1,
+ADD COLUMN IF NOT EXISTS current_semester TINYINT DEFAULT 1;
+
 -- Update existing records to have 'student' as submitted_by
 UPDATE form_submissions SET submitted_by = 'student' WHERE submitted_by IS NULL;
 

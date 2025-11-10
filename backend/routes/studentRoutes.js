@@ -14,8 +14,11 @@ router.put('/filter-fields/:fieldName', authMiddleware, studentController.update
 router.get('/stats', authMiddleware, studentController.getDashboardStats);
 router.get('/dashboard-stats', authMiddleware, studentController.getDashboardStats);
 router.post('/bulk-update-pin-numbers', authMiddleware, studentController.uploadMiddleware, studentController.bulkUpdatePinNumbers);
+router.post('/bulk-delete', authMiddleware, studentController.bulkDeleteStudents);
 router.post('/upload-photo', authMiddleware, photoUpload.single('photo'), studentController.uploadStudentPhoto);
+router.post('/promotions/bulk', authMiddleware, studentController.bulkPromoteStudents);
 router.post('/', authMiddleware, studentController.createStudent);
+router.post('/:admissionNumber/promote', authMiddleware, studentController.promoteStudent);
 router.get('/:admissionNumber', authMiddleware, studentController.getStudentByAdmission);
 router.put('/:admissionNumber', authMiddleware, studentController.updateStudent);
 router.put('/:admissionNumber/pin-number', authMiddleware, studentController.updatePinNumber);

@@ -21,8 +21,11 @@ INSERT INTO forms (
     'This is a default form for student registration, created automatically on deployment.',
     JSON_ARRAY(
         JSON_OBJECT('key', 'pin_no', 'label', 'Pin No', 'type', 'text', 'required', false),
+        JSON_OBJECT('key', 'course', 'label', 'Course', 'type', 'select', 'options', JSON_ARRAY(), 'required', true),
+        JSON_OBJECT('key', 'current_year', 'label', 'Current Academic Year', 'type', 'select', 'options', JSON_ARRAY('1', '2', '3', '4'), 'required', true),
+        JSON_OBJECT('key', 'current_semester', 'label', 'Current Semester', 'type', 'select', 'options', JSON_ARRAY('1', '2'), 'required', true),
         JSON_OBJECT('key', 'batch', 'label', 'Batch', 'type', 'text', 'required', false),
-        JSON_OBJECT('key', 'branch', 'label', 'Branch', 'type', 'text', 'required', false),
+        JSON_OBJECT('key', 'branch', 'label', 'Branch', 'type', 'select', 'options', JSON_ARRAY(), 'required', true),
         JSON_OBJECT('key', 'stud_type', 'label', 'StudType', 'type', 'text', 'required', false),
         JSON_OBJECT('key', 'student_name', 'label', 'Student Name', 'type', 'text', 'required', true),
         JSON_OBJECT('key', 'student_status', 'label', 'Student Status', 'type', 'text', 'required', false),

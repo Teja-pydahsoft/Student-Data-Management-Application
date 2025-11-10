@@ -1,8 +1,12 @@
-const { masterPool } = require('../config/database');
+const { masterPool, stagingPool } = require('../config/database');
 const { supabase } = require('../config/supabase');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
+const {
+  getNextStage,
+  normalizeStage
+} = require('../services/academicProgression');
 
 // Configure multer for file uploads
 const upload = multer({ dest: 'uploads/' });
@@ -102,13 +106,227 @@ const parseJSON = (data) => {
   return data;
 };
 
+const YEAR_KEYS = [
+  'current_year',
+  'Current Year',
+  'Current Academic Year',
+  'year',
+  'Year',
+  'currentYear'
+];
+
+const SEMESTER_KEYS = [
+  'current_semester',
+  'Current Semester',
+  'semester',
+  'Semester',
+  'currentSemester'
+];
+
+const resolveStageFromData = (data, fallbackStage = { year: 1, semester: 1 }) => {
+  if (!data || typeof data !== 'object') {
+    return fallbackStage;
+  }
+
+  const yearValue = YEAR_KEYS.map(key => data[key])
+    .find(value => value !== undefined && value !== null && value !== '');
+  const semesterValue = SEMESTER_KEYS.map(key => data[key])
+    .find(value => value !== undefined && value !== null && value !== '');
+
+  if (yearValue !== undefined && semesterValue !== undefined) {
+    try {
+      return normalizeStage(yearValue, semesterValue);
+    } catch (error) {
+      if (error.message === 'INVALID_STAGE') {
+        return fallbackStage;
+      }
+      throw error;
+    }
+  }
+
+  return fallbackStage;
+};
+
+const applyStageToPayload = (payload, stage) => {
+  if (!stage) {
+    return;
+  }
+
+  payload.current_year = stage.year;
+  payload.current_semester = stage.semester;
+  payload['Current Academic Year'] = stage.year;
+  payload['Current Semester'] = stage.semester;
+};
+
+const FIELD_MAPPING = {
+  // Student form fields
+  'Student Name': 'student_name',
+  'Student Mobile Number': 'student_mobile',
+  'Father Name': 'father_name',
+  'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
+  'ADHAR No': 'adhar_no',
+  'Admission Date': 'admission_date',
+  'Admission No': 'admission_no',
+  'Batch': 'batch',
+  'Branch': 'branch',
+  'StudType': 'stud_type',
+  'Current Academic Year': 'current_year',
+  'Current Year': 'current_year',
+  current_year: 'current_year',
+  currentYear: 'current_year',
+  Course: 'course',
+  course: 'course',
+  'Current Semester': 'current_semester',
+  current_semester: 'current_semester',
+  currentSemester: 'current_semester',
+  'Parent Mobile Number 1': 'parent_mobile1',
+  'Parent Mobile Number 2': 'parent_mobile2',
+  'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
+  'City/Village': 'city_village',
+  'Mandal Name': 'mandal_name',
+  'District': 'district',
+  'Caste': 'caste',
+  'M/F': 'gender',
+  'Student Status': 'student_status',
+  'Scholar Status': 'scholar_status',
+  'Remarks': 'remarks',
+
+  // Admin-only fields
+  pin_no: 'pin_no',
+  previous_college: 'previous_college',
+  certificates_status: 'certificates_status',
+  student_photo: 'student_photo',
+  student_name: 'student_name',
+  student_mobile: 'student_mobile',
+  father_name: 'father_name',
+  dob: 'dob',
+  adhar_no: 'adhar_no',
+  admission_date: 'admission_date',
+  admission_no: 'admission_no',
+  batch: 'batch',
+  branch: 'branch',
+  stud_type: 'stud_type',
+  parent_mobile1: 'parent_mobile1',
+  parent_mobile2: 'parent_mobile2',
+  student_address: 'student_address',
+  city_village: 'city_village',
+  mandal_name: 'mandal_name',
+  district: 'district',
+  caste: 'caste',
+  gender: 'gender',
+  student_status: 'student_status',
+  scholar_status: 'scholar_status',
+  remarks: 'remarks',
+  current_year: 'current_year',
+  current_semester: 'current_semester'
+};
+
+const updateStagingStudentStage = async (admissionNumber, stage, studentData) => {
+  if (!stagingPool || !stage || !admissionNumber) {
+    return;
+  }
+
+  try {
+    await stagingPool.query(
+      `UPDATE students
+       SET current_year = ?, current_semester = ?, student_data = ?
+       WHERE admission_number = ? OR admission_no = ?`,
+      [
+        stage.year,
+        stage.semester,
+        studentData,
+        admissionNumber,
+        admissionNumber
+      ]
+    );
+  } catch (error) {
+    console.warn('Unable to update staging student stage:', error.message);
+  }
+};
+
+const performPromotion = async ({ connection, admissionNumber, targetStage, adminId }) => {
+  const [students] = await connection.query(
+    `SELECT * FROM students WHERE admission_number = ? OR admission_no = ? FOR UPDATE`,
+    [admissionNumber, admissionNumber]
+  );
+
+  if (students.length === 0) {
+    return { status: 'NOT_FOUND' };
+  }
+
+  const student = students[0];
+  const parsedStudentData = parseJSON(student.student_data) || {};
+
+  const currentStage = resolveStageFromData(parsedStudentData, {
+    year: student.current_year || 1,
+    semester: student.current_semester || 1
+  });
+
+  let nextStage = targetStage;
+
+  if (!nextStage) {
+    nextStage = getNextStage(currentStage.year, currentStage.semester);
+
+    if (!nextStage) {
+      return { status: 'MAX_STAGE', student, currentStage };
+    }
+  }
+
+  applyStageToPayload(parsedStudentData, nextStage);
+  const serializedStudentData = JSON.stringify(parsedStudentData);
+
+  await connection.query(
+    `UPDATE students
+     SET current_year = ?, current_semester = ?, student_data = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [nextStage.year, nextStage.semester, serializedStudentData, student.id]
+  );
+
+  await connection.query(
+    `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      'PROMOTE',
+      'STUDENT',
+      student.admission_number || admissionNumber,
+      adminId,
+      JSON.stringify({
+        from: currentStage,
+        to: nextStage
+      })
+    ]
+  );
+
+  return {
+    status: 'SUCCESS',
+    student,
+    currentStage,
+    nextStage,
+    serializedStudentData,
+    parsedStudentData
+  };
+};
+
 // Get all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const { search, limit = 50, offset = 0, filter_dateFrom, filter_dateTo, filter_pinNumberStatus, ...otherFilters } = req.query;
+    const {
+      search,
+      limit,
+      offset = 0,
+      filter_dateFrom,
+      filter_dateTo,
+      filter_pinNumberStatus,
+      filter_year,
+      filter_semester,
+      ...otherFilters
+    } = req.query;
 
     let query = 'SELECT * FROM students WHERE 1=1';
     const params = [];
+    const fetchAll = !limit || limit === 'all';
+    const pageSize = !fetchAll ? parseInt(limit, 10) : null;
+    const pageOffset = fetchAll ? 0 : parseInt(offset, 10);
 
     if (search) {
       query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
@@ -133,6 +351,19 @@ exports.getAllStudents = async (req, res) => {
       query += ' AND pin_no IS NULL';
     }
 
+    const parsedFilterYear = filter_year !== undefined ? parseInt(filter_year, 10) : null;
+    const parsedFilterSemester = filter_semester !== undefined ? parseInt(filter_semester, 10) : null;
+
+    if (parsedFilterYear && !isNaN(parsedFilterYear)) {
+      query += ' AND current_year = ?';
+      params.push(parsedFilterYear);
+    }
+
+    if (parsedFilterSemester && !isNaN(parsedFilterSemester)) {
+      query += ' AND current_semester = ?';
+      params.push(parsedFilterSemester);
+    }
+
     // Dynamic field filters (e.g., filter_field_Admission category)
     Object.entries(otherFilters).forEach(([key, value]) => {
       if (key.startsWith('filter_field_') && value) {
@@ -144,8 +375,11 @@ exports.getAllStudents = async (req, res) => {
       }
     });
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    query += ' ORDER BY created_at DESC';
+    if (!fetchAll) {
+      query += ' LIMIT ? OFFSET ?';
+      params.push(pageSize, pageOffset);
+    }
 
     const [students] = await masterPool.query(query, params);
 
@@ -175,6 +409,16 @@ exports.getAllStudents = async (req, res) => {
       countQuery += ' AND pin_no IS NULL';
     }
 
+    if (parsedFilterYear && !isNaN(parsedFilterYear)) {
+      countQuery += ' AND current_year = ?';
+      countParams.push(parsedFilterYear);
+    }
+
+    if (parsedFilterSemester && !isNaN(parsedFilterSemester)) {
+      countQuery += ' AND current_semester = ?';
+      countParams.push(parsedFilterSemester);
+    }
+
     // Apply dynamic field filters to count query
     Object.entries(otherFilters).forEach(([key, value]) => {
       if (key.startsWith('filter_field_') && value) {
@@ -189,18 +433,30 @@ exports.getAllStudents = async (req, res) => {
     const [countResult] = await masterPool.query(countQuery, countParams);
 
     // Parse JSON fields
-    const parsedStudents = students.map(student => ({
-      ...student,
-      student_data: parseJSON(student.student_data)
-    }));
+    const parsedStudents = students.map(student => {
+      const parsedData = parseJSON(student.student_data) || {};
+      const stage = resolveStageFromData(parsedData, {
+        year: student.current_year || 1,
+        semester: student.current_semester || 1
+      });
+
+      applyStageToPayload(parsedData, stage);
+
+      return {
+        ...student,
+        current_year: stage.year,
+        current_semester: stage.semester,
+        student_data: parsedData
+      };
+    });
 
     res.json({
       success: true,
       data: parsedStudents,
       pagination: {
         total: countResult[0].total,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
+        limit: fetchAll ? null : pageSize,
+        offset: fetchAll ? 0 : pageOffset
       }
     });
 
@@ -230,9 +486,19 @@ exports.getStudentByAdmission = async (req, res) => {
       });
     }
 
+    const parsedData = parseJSON(students[0].student_data) || {};
+    const stage = resolveStageFromData(parsedData, {
+      year: students[0].current_year || 1,
+      semester: students[0].current_semester || 1
+    });
+
+    applyStageToPayload(parsedData, stage);
+
     const student = {
       ...students[0],
-      student_data: parseJSON(students[0].student_data)
+      current_year: stage.year,
+      current_semester: stage.semester,
+      student_data: parsedData
     };
 
     res.json({
@@ -282,52 +548,53 @@ exports.updateStudent = async (req, res) => {
     console.log('Existing student data:', JSON.stringify(existingStudent, null, 2));
 
     // Map form field names to database columns
-    const fieldMapping = {
-      // Student form fields
-      'Student Name': 'student_name',
-      'Student Mobile Number': 'student_mobile',
-      'Father Name': 'father_name',
-      'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
-      'ADHAR No': 'adhar_no',
-      'Admission Date': 'admission_date',
-      'Batch': 'batch',
-      'Branch': 'branch',
-      'StudType': 'stud_type',
-      'Parent Mobile Number 1': 'parent_mobile1',
-      'Parent Mobile Number 2': 'parent_mobile2',
-      'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
-      'City/Village': 'city_village',
-      'Mandal Name': 'mandal_name',
-      'District': 'district',
-      'Caste': 'caste',
-      'M/F': 'gender',
-      'Student Status': 'student_status',
-      'Scholar Status': 'scholar_status',
-      'Remarks': 'remarks',
-
-      // Admin-only fields
-      'pin_no': 'pin_no',
-      'previous_college': 'previous_college',
-      'certificates_status': 'certificates_status',
-      'student_photo': 'student_photo'
-    };
-
     // Build update query for individual columns
     const updateFields = [];
     const updateValues = [];
 
     // Update individual columns based on the field mapping
-    Object.entries(studentData).forEach(([key, value]) => {
-      const columnName = fieldMapping[key];
-      if (columnName && value !== undefined && value !== '' && value !== '{}' && value !== null) {
+    const mutableStudentData = { ...studentData };
+
+    let resolvedStage;
+    try {
+      resolvedStage = resolveStageFromData(mutableStudentData, {
+        year: existingStudent.current_year || 1,
+        semester: existingStudent.current_semester || 1
+      });
+    } catch (error) {
+      if (error.message === 'INVALID_STAGE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.'
+        });
+      }
+      throw error;
+    }
+
+    applyStageToPayload(mutableStudentData, resolvedStage);
+
+    const updatedColumns = new Set();
+
+    Object.entries(mutableStudentData).forEach(([key, value]) => {
+      const columnName = FIELD_MAPPING[key];
+      if (
+        columnName &&
+        !updatedColumns.has(columnName) &&
+        value !== undefined &&
+        value !== '' &&
+        value !== '{}' &&
+        value !== null
+      ) {
         updateFields.push(`${columnName} = ?`);
         updateValues.push(value);
+        updatedColumns.add(columnName);
       }
     });
 
     // Always update the JSON data field
+    const serializedStudentData = JSON.stringify(mutableStudentData);
     updateFields.push('student_data = ?');
-    updateValues.push(JSON.stringify(studentData));
+    updateValues.push(serializedStudentData);
     updateValues.push(admissionNumber);
 
     // Execute the update query
@@ -358,8 +625,10 @@ exports.updateStudent = async (req, res) => {
     await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
+      ['UPDATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
     );
+
+    await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
 
     console.log('Update completed successfully');
 
@@ -436,6 +705,88 @@ exports.updatePinNumber = async (req, res) => {
   }
 };
 
+// Bulk delete students
+exports.bulkDeleteStudents = async (req, res) => {
+  try {
+    const { admissionNumbers } = req.body || {};
+
+    if (!Array.isArray(admissionNumbers) || admissionNumbers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'admissionNumbers array is required'
+      });
+    }
+
+    const normalized = Array.from(
+      new Set(
+        admissionNumbers
+          .map((value) => (value !== undefined && value !== null ? String(value).trim() : ''))
+          .filter((value) => value.length > 0)
+      )
+    );
+
+    if (normalized.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid admission numbers provided'
+      });
+    }
+
+    const placeholders = normalized.map(() => '?').join(',');
+    const [existingRows] = await masterPool.query(
+      `SELECT admission_number FROM students WHERE admission_number IN (${placeholders})`,
+      normalized
+    );
+
+    const existingNumbers = existingRows.map((row) => row.admission_number);
+    const existingSet = new Set(existingNumbers);
+    const notFound = normalized.filter((value) => !existingSet.has(value));
+
+    if (existingNumbers.length === 0) {
+      return res.json({
+        success: true,
+        deletedCount: 0,
+        notFound
+      });
+    }
+
+    const deletePlaceholders = existingNumbers.map(() => '?').join(',');
+    const [deleteResult] = await masterPool.query(
+      `DELETE FROM students WHERE admission_number IN (${deletePlaceholders})`,
+      existingNumbers
+    );
+
+    const deletedCount = deleteResult.affectedRows || 0;
+
+    if (deletedCount > 0) {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          'BULK_DELETE',
+          'STUDENT',
+          'bulk',
+          req.admin?.id || null,
+          JSON.stringify({ admissionNumbers: existingNumbers })
+        ]
+      );
+    }
+
+    return res.json({
+      success: true,
+      deletedCount,
+      notFound,
+      deletedAdmissionNumbers: existingNumbers
+    });
+  } catch (error) {
+    console.error('Bulk delete students error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during bulk delete'
+    });
+  }
+};
+
 // Delete student
 exports.deleteStudent = async (req, res) => {
   try {
@@ -475,70 +826,107 @@ exports.deleteStudent = async (req, res) => {
 };
 
 // Get dashboard statistics
-exports.getDashboardStats = async (req, res) => {
-  try {
-    // Get total students
-    const [studentCount] = await masterPool.query('SELECT COUNT(*) as total FROM students');
-
-    // Get total forms from Supabase (since forms are stored in Supabase)
-    const { count: formCountTotal, error: formErr } = await supabase
-      .from('forms')
-      .select('*', { count: 'exact', head: true });
-
-    // Get pending submissions
-    const { count: pendingTotal, error: pErr } = await supabase
-      .from('form_submissions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
-    // Get approved submissions today
-    const start = new Date();
-    start.setHours(0,0,0,0);
-    const { count: approvedTodayTotal, error: aErr } = await supabase
-      .from('form_submissions')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved')
-      .gte('reviewed_at', start.toISOString());
-
-    // Get recent submissions
-    const { data: recentSubmissions, error: rErr } = await supabase
-      .from('form_submissions')
-      .select('submission_id, admission_number, status, created_at as submitted_at, form_id')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Attach form_name via a separate query
-    let recentWithNames = recentSubmissions || [];
-    const formIds = Array.from(new Set((recentSubmissions || []).map(r => r.form_id))).filter(Boolean);
-    if (formIds.length > 0) {
-      const { data: formsRows, error: fErr } = await supabase
-        .from('forms')
-        .select('form_id, form_name')
-        .in('form_id', formIds);
-      if (!fErr && formsRows) {
-        const idToName = new Map(formsRows.map(f => [f.form_id, f.form_name]));
-        recentWithNames = recentWithNames.map(r => ({ ...r, form_name: idToName.get(r.form_id) || null, submitted_at: r.created_at }));
+exports.getDashboardStats = async (_req, res) => {
+  const safeSupabaseCount = async (promise, label) => {
+    try {
+      const { count, error } = await promise;
+      if (error) {
+        console.warn(`Dashboard stats: unable to fetch ${label}`, error.message || error);
+        return 0;
       }
+      return count || 0;
+    } catch (error) {
+      console.warn(`Dashboard stats: unexpected error while fetching ${label}`, error.message || error);
+      return 0;
+    }
+  };
+
+  try {
+    let totalStudents = 0;
+    let masterDbConnected = true;
+
+    try {
+      const [studentCount] = await masterPool.query('SELECT COUNT(*) as total FROM students');
+      totalStudents = studentCount?.[0]?.total || 0;
+    } catch (dbError) {
+      masterDbConnected = false;
+      console.warn('Dashboard stats: master database unavailable, returning fallback totals', dbError.message || dbError);
     }
 
-    // Note: Completion calculation moved to frontend for better performance
-    // Backend only provides basic counts, frontend calculates completion percentages in parallel
-    const completedProfiles = 0;
-    const averageCompletion = 0;
+    const totalForms = await safeSupabaseCount(
+      supabase.from('forms').select('*', { count: 'exact', head: true }),
+      'forms count'
+    );
+
+    const pendingSubmissions = await safeSupabaseCount(
+      supabase
+        .from('form_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending'),
+      'pending submissions count'
+    );
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const approvedToday = await safeSupabaseCount(
+      supabase
+        .from('form_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'approved')
+        .gte('reviewed_at', start.toISOString()),
+      'approved submissions count'
+    );
+
+    let recentWithNames = [];
+    try {
+      const { data: recentSubmissions, error: recentError } = await supabase
+        .from('form_submissions')
+        .select('submission_id, admission_number, status, created_at as submitted_at, form_id')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (recentError) {
+        console.warn('Dashboard stats: unable to fetch recent submissions', recentError.message || recentError);
+      } else if (recentSubmissions) {
+        recentWithNames = [...recentSubmissions];
+        const formIds = Array.from(new Set(recentSubmissions.map((r) => r.form_id))).filter(Boolean);
+
+        if (formIds.length > 0) {
+          const { data: formsRows, error: formsError } = await supabase
+            .from('forms')
+            .select('form_id, form_name')
+            .in('form_id', formIds);
+
+          if (formsError) {
+            console.warn('Dashboard stats: unable to attach form names', formsError.message || formsError);
+          } else if (formsRows) {
+            const idToName = new Map(formsRows.map((f) => [f.form_id, f.form_name]));
+            recentWithNames = recentWithNames.map((r) => ({
+              ...r,
+              form_name: idToName.get(r.form_id) || null,
+              submitted_at: r.created_at
+            }));
+          }
+        }
+      }
+    } catch (supabaseError) {
+      console.warn('Dashboard stats: unexpected error while preparing recent submissions', supabaseError.message || supabaseError);
+      recentWithNames = [];
+    }
 
     res.json({
       success: true,
       data: {
-        totalStudents: studentCount[0].total,
-        totalForms: formCountTotal || 0,
-        pendingSubmissions: pendingTotal || 0,
-        approvedToday: approvedTodayTotal || 0,
+        totalStudents,
+        totalForms,
+        pendingSubmissions,
+        approvedToday,
         recentSubmissions: recentWithNames,
-        completedProfiles,
-        averageCompletion
+        completedProfiles: 0,
+        averageCompletion: 0,
+        masterDbConnected
       }
     });
-
   } catch (error) {
     console.error('Get dashboard stats error:', error);
     res.status(500).json({
@@ -551,13 +939,31 @@ exports.getDashboardStats = async (req, res) => {
 // Create student (manual entry)
 exports.createStudent = async (req, res) => {
   try {
-    const { admissionNumber, studentData } = req.body;
+    const incomingData =
+      req.body.studentData && typeof req.body.studentData === 'object'
+        ? { ...req.body.studentData }
+        : { ...req.body };
 
-    if (!admissionNumber || !studentData || typeof studentData !== 'object') {
+    delete incomingData.studentData;
+
+    const admissionNumber =
+      req.body.admissionNumber ||
+      req.body.admission_no ||
+      incomingData.admission_number ||
+      incomingData.admission_no;
+
+    if (!admissionNumber) {
       return res.status(400).json({
         success: false,
-        message: 'Admission number and student data are required'
+        message: 'Admission number is required'
       });
+    }
+
+    delete incomingData.admissionNumber;
+
+    incomingData.admission_number = admissionNumber;
+    if (!incomingData.admission_no) {
+      incomingData.admission_no = admissionNumber;
     }
 
     // Check if student already exists
@@ -573,11 +979,51 @@ exports.createStudent = async (req, res) => {
       });
     }
 
-    // Insert new student
-    const [result] = await masterPool.query(
-      'INSERT INTO students (admission_number, student_data) VALUES (?, ?)',
-      [admissionNumber, JSON.stringify(studentData)]
-    );
+    let resolvedStage;
+    try {
+      resolvedStage = resolveStageFromData(incomingData, {
+        year: incomingData.current_year || 1,
+        semester: incomingData.current_semester || 1
+      });
+    } catch (error) {
+      if (error.message === 'INVALID_STAGE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.'
+        });
+      }
+      throw error;
+    }
+
+    applyStageToPayload(incomingData, resolvedStage);
+
+    const serializedStudentData = JSON.stringify(incomingData);
+
+    const insertColumns = ['admission_number', 'current_year', 'current_semester', 'student_data'];
+    const insertPlaceholders = ['?', '?', '?', '?'];
+    const insertValues = [admissionNumber, resolvedStage.year, resolvedStage.semester, serializedStudentData];
+
+    const updatedColumns = new Set(['admission_number', 'current_year', 'current_semester']);
+
+    Object.entries(incomingData).forEach(([key, value]) => {
+      const columnName = FIELD_MAPPING[key];
+      if (
+        columnName &&
+        !updatedColumns.has(columnName) &&
+        value !== undefined &&
+        value !== '' &&
+        value !== '{}' &&
+        value !== null
+      ) {
+        insertColumns.push(columnName);
+        insertPlaceholders.push('?');
+        insertValues.push(value);
+        updatedColumns.add(columnName);
+      }
+    });
+
+    const insertQuery = `INSERT INTO students (${insertColumns.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
+    await masterPool.query(insertQuery, insertValues);
 
     // Fetch the created student data
     const [createdStudents] = await masterPool.query(
@@ -590,11 +1036,13 @@ exports.createStudent = async (req, res) => {
       student_data: parseJSON(createdStudents[0].student_data)
     };
 
+    await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
+
     // Log action
     await masterPool.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['CREATE', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify(studentData)]
+      ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
     );
 
     res.status(201).json({
@@ -612,76 +1060,226 @@ exports.createStudent = async (req, res) => {
   }
 };
 
-// Get available filter fields configuration
-exports.getFilterFields = async (req, res) => {
+// Promote single student to next academic stage (or specified stage)
+exports.promoteStudent = async (req, res) => {
+  const connection = await masterPool.getConnection();
+  const { admissionNumber } = req.params;
+  const { targetYear, targetSemester } = req.body || {};
+
+  let targetStage = null;
+
+  if (targetYear !== undefined || targetSemester !== undefined) {
+    if (targetYear === undefined || targetSemester === undefined) {
+      connection.release();
+      return res.status(400).json({
+        success: false,
+        message: 'Both targetYear and targetSemester are required to set a specific academic stage'
+      });
+    }
+
+    try {
+      targetStage = normalizeStage(targetYear, targetSemester);
+    } catch (error) {
+      if (error.message === 'INVALID_STAGE') {
+        connection.release();
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.'
+        });
+      }
+      throw error;
+    }
+  }
+
   try {
-    // First, get all unique field names from existing student data
-    const [results] = await masterPool.query(
-      'SELECT DISTINCT student_data FROM students WHERE student_data IS NOT NULL LIMIT 100'
+    await connection.beginTransaction();
+
+    const promotionResult = await performPromotion({
+      connection,
+      admissionNumber,
+      targetStage,
+      adminId: req.admin?.id || null
+    });
+
+    if (promotionResult.status === 'NOT_FOUND') {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    if (promotionResult.status === 'MAX_STAGE') {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Student is already at the final academic stage'
+      });
+    }
+
+    await connection.commit();
+
+    await updateStagingStudentStage(
+      admissionNumber,
+      promotionResult.nextStage,
+      promotionResult.serializedStudentData
     );
 
-    // Extract all unique field names from student data
-    const fieldMap = {};
+    return res.json({
+      success: true,
+      message: 'Student promoted successfully',
+      data: {
+        admissionNumber: promotionResult.student.admission_number || admissionNumber,
+        currentYear: promotionResult.nextStage.year,
+        currentSemester: promotionResult.nextStage.semester
+      }
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Promote student error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while promoting student'
+    });
+  } finally {
+    connection.release();
+  }
+};
 
-    results.forEach(row => {
-      try {
-        const studentData = parseJSON(row.student_data);
-        Object.keys(studentData).forEach(key => {
-          if (!fieldMap[key]) {
-            fieldMap[key] = {
-              name: key,
-              type: 'text',
-              enabled: true,
-              required: false,
-              options: []
-            };
+// Bulk promotion endpoint
+exports.bulkPromoteStudents = async (req, res) => {
+  const { students } = req.body || {};
+
+  if (!Array.isArray(students) || students.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'students array is required'
+    });
+  }
+
+  const connection = await masterPool.getConnection();
+  const results = [];
+
+  try {
+    for (const entry of students) {
+      const admissionNumber = entry?.admissionNumber || entry?.admission_no;
+
+      if (!admissionNumber) {
+        results.push({
+          admissionNumber: entry?.admissionNumber || null,
+          status: 'error',
+          message: 'Admission number is required'
+        });
+        continue;
+      }
+
+      let targetStage = null;
+      if (entry.targetYear !== undefined || entry.targetSemester !== undefined) {
+        if (entry.targetYear === undefined || entry.targetSemester === undefined) {
+          results.push({
+            admissionNumber,
+            status: 'error',
+            message: 'Both targetYear and targetSemester are required for manual stage assignment'
+          });
+          continue;
+        }
+
+        try {
+          targetStage = normalizeStage(entry.targetYear, entry.targetSemester);
+        } catch (error) {
+          if (error.message === 'INVALID_STAGE') {
+            results.push({
+              admissionNumber,
+              status: 'error',
+              message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.'
+            });
+            continue;
           }
+          throw error;
+        }
+      }
+
+      try {
+        await connection.beginTransaction();
+        const promotionResult = await performPromotion({
+          connection,
+          admissionNumber,
+          targetStage,
+          adminId: req.admin?.id || null
+        });
+
+        if (promotionResult.status === 'NOT_FOUND') {
+          await connection.rollback();
+          results.push({
+            admissionNumber,
+            status: 'error',
+            message: 'Student not found'
+          });
+          continue;
+        }
+
+        if (promotionResult.status === 'MAX_STAGE') {
+          await connection.rollback();
+          results.push({
+            admissionNumber,
+            status: 'skipped',
+            message: 'Student already at final academic stage'
+          });
+          continue;
+        }
+
+        await connection.commit();
+
+        await updateStagingStudentStage(
+          admissionNumber,
+          promotionResult.nextStage,
+          promotionResult.serializedStudentData
+        );
+
+        results.push({
+          admissionNumber: promotionResult.student.admission_number || admissionNumber,
+          status: 'success',
+          currentYear: promotionResult.nextStage.year,
+          currentSemester: promotionResult.nextStage.semester
         });
       } catch (error) {
-        console.error('Error parsing student data:', error);
-      }
-    });
-
-    // Get existing filter field configurations from database
-    const [existingConfigs] = await masterPool.query(
-      'SELECT * FROM filter_fields'
-    );
-
-    // Merge dynamic fields with saved configurations
-    const fields = Object.values(fieldMap).map(field => {
-      const existingConfig = existingConfigs.find(config => config.field_name === field.name);
-      if (existingConfig) {
-        return {
-          name: existingConfig.field_name,
-          type: existingConfig.field_type,
-          enabled: existingConfig.enabled,
-          required: existingConfig.required,
-          options: parseJSON(existingConfig.options) || []
-        };
-      }
-      return field;
-    });
-
-    // Add any saved configurations for fields that might not exist in current data
-    existingConfigs.forEach(config => {
-      if (!fieldMap[config.field_name]) {
-        fields.push({
-          name: config.field_name,
-          type: config.field_type,
-          enabled: config.enabled,
-          required: config.required,
-          options: parseJSON(config.options) || []
+        await connection.rollback();
+        console.error('Bulk promotion error for student', admissionNumber, error);
+        results.push({
+          admissionNumber,
+          status: 'error',
+          message: 'Server error during promotion'
         });
       }
-    });
+    }
 
+    const hasSuccess = results.some(result => result.status === 'success');
+
+    return res.status(hasSuccess ? 200 : 400).json({
+      success: hasSuccess,
+      results
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+// Get available filter fields configuration
+exports.getFilterFields = async (_req, res) => {
+  try {
+    const [existingConfigs] = await masterPool.query('SELECT * FROM filter_fields');
     res.json({
       success: true,
-      data: fields
+      data: existingConfigs.map((config) => ({
+        name: config.field_name,
+        type: config.field_type,
+        enabled: config.enabled,
+        required: config.required,
+        options: parseJSON(config.options) || []
+      }))
     });
-
-  } catch (error) {
-    console.error('Get filter fields error:', error);
+  } catch (dbError) {
+    console.error('Get filter fields error:', dbError);
     res.status(500).json({
       success: false,
       message: 'Server error while fetching filter fields'

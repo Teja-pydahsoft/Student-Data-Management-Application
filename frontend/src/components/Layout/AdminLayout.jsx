@@ -7,7 +7,8 @@ import {
   Users,
   LogOut,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -29,6 +30,7 @@ const AdminLayout = () => {
     { path: '/forms', icon: FileText, label: 'Forms' },
     { path: '/submissions', icon: ClipboardList, label: 'Submissions' },
     { path: '/students', icon: Users, label: 'Students' },
+    { path: '/courses', icon: Settings, label: 'Courses' }
   ];
 
   return (

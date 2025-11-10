@@ -1,8 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+
+const COURSE_FIELD_IDENTIFIERS = ['course', 'course name'];
+const BRANCH_FIELD_IDENTIFIERS = ['branch', 'branch name'];
+const YEAR_FIELD_IDENTIFIERS = ['current academic year', 'current year', 'year'];
+const SEMESTER_FIELD_IDENTIFIERS = ['current semester', 'semester'];
+
+const normalizeIdentifier = (value) =>
+  value ? value.toString().toLowerCase().replace(/[_-]/g, ' ').trim() : '';
+
+const matchesFieldIdentifier = (field, identifiers = []) => {
+  const normalizedKey = normalizeIdentifier(field.key);
+  const normalizedLabel = normalizeIdentifier(field.label);
+
+  return identifiers.some((identifier) => {
+    const normalizedIdentifier = identifier.toLowerCase();
+    return (
+      normalizedKey === normalizedIdentifier ||
+      normalizedLabel === normalizedIdentifier ||
+      normalizedLabel.includes(normalizedIdentifier) ||
+      normalizedKey.includes(normalizedIdentifier)
+    );
+  });
+};
 
 const PublicForm = () => {
   const { formId } = useParams();
@@ -17,6 +40,8 @@ const PublicForm = () => {
   const [fetchingForm, setFetchingForm] = useState(false); // Prevent multiple simultaneous fetches
   const [formCache, setFormCache] = useState(new Map()); // Simple cache for form data
   const [retryCount, setRetryCount] = useState(0); // Track retry attempts
+  const [courseOptions, setCourseOptions] = useState([]);
+  const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
 
   // Mobile browser detection - moved to component level
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -49,6 +74,23 @@ const PublicForm = () => {
       }
     }
   }, []); // Empty dependency array - runs only once
+
+  useEffect(() => {
+    const loadCourseConfig = async () => {
+      try {
+        setCourseOptionsLoading(true);
+        const response = await api.get('/courses/options');
+        setCourseOptions(response.data.data || []);
+      } catch (configError) {
+        console.error('Failed to fetch course configuration', configError);
+        // non-fatal for public form - just log toasts for admin environment
+      } finally {
+        setCourseOptionsLoading(false);
+      }
+    };
+
+    loadCourseConfig();
+  }, []);
 
   // Separate useEffect for form fetching - runs only when formId changes
   useEffect(() => {
@@ -165,24 +207,194 @@ const PublicForm = () => {
     }
   };
 
+  const courseFieldLabels = useMemo(() => {
+    if (!form?.form_fields) return [];
+    return form.form_fields
+      .filter((field) => matchesFieldIdentifier(field, COURSE_FIELD_IDENTIFIERS))
+      .map((field) => field.label);
+  }, [form]);
+
+  const branchFieldLabels = useMemo(() => {
+    if (!form?.form_fields) return [];
+    return form.form_fields
+      .filter((field) => matchesFieldIdentifier(field, BRANCH_FIELD_IDENTIFIERS))
+      .map((field) => field.label);
+  }, [form]);
+
+  const availableCourses = useMemo(
+    () => courseOptions.filter((course) => course?.isActive !== false),
+    [courseOptions]
+  );
+
+  const yearFieldLabels = useMemo(() => {
+    if (!form?.form_fields) return [];
+    return form.form_fields
+      .filter((field) => matchesFieldIdentifier(field, YEAR_FIELD_IDENTIFIERS))
+      .map((field) => field.label);
+  }, [form]);
+
+  const semesterFieldLabels = useMemo(() => {
+    if (!form?.form_fields) return [];
+    return form.form_fields
+      .filter((field) => matchesFieldIdentifier(field, SEMESTER_FIELD_IDENTIFIERS))
+      .map((field) => field.label);
+  }, [form]);
+
+  const selectedCourseName = useMemo(() => {
+    for (const label of courseFieldLabels) {
+      const value = formData[label];
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }, [courseFieldLabels, formData]);
+
+  const selectedCourseOption = useMemo(() => {
+    if (!selectedCourseName) return null;
+    return (
+      availableCourses.find(
+        (course) => course.name?.toLowerCase() === selectedCourseName.toLowerCase()
+      ) || null
+    );
+  }, [availableCourses, selectedCourseName]);
+
+  const selectedBranchName = useMemo(() => {
+    for (const label of branchFieldLabels) {
+      const value = formData[label];
+      if (value) {
+        return value;
+      }
+    }
+    return '';
+  }, [branchFieldLabels, formData]);
+
+  const selectedBranchOption = useMemo(() => {
+    if (!selectedCourseOption || !selectedBranchName) return null;
+    return (
+      (selectedCourseOption.branches || []).find(
+        (branch) => branch.name?.toLowerCase() === selectedBranchName.toLowerCase()
+      ) || null
+    );
+  }, [selectedCourseOption, selectedBranchName]);
+
+  const activeStructure = useMemo(() => {
+    if (selectedBranchOption?.structure) {
+      return selectedBranchOption.structure;
+    }
+    if (selectedCourseOption?.structure) {
+      return selectedCourseOption.structure;
+    }
+    return null;
+  }, [selectedBranchOption, selectedCourseOption]);
+
+  const yearOptions = useMemo(() => {
+    if (!activeStructure?.totalYears) {
+      return ['1', '2', '3', '4'];
+    }
+    return Array.from(
+      { length: activeStructure.totalYears },
+      (_value, index) => String(index + 1)
+    );
+  }, [activeStructure]);
+
+  const semesterOptions = useMemo(() => {
+    if (!activeStructure?.semestersPerYear) {
+      return ['1', '2'];
+    }
+    return Array.from(
+      { length: activeStructure.semestersPerYear },
+      (_value, index) => String(index + 1)
+    );
+  }, [activeStructure]);
+
+  useEffect(() => {
+    if (!activeStructure) return;
+
+    const totalYears = Number(activeStructure.totalYears) || 0;
+    const semestersPerYear = Number(activeStructure.semestersPerYear) || 0;
+
+    setFormData((prev) => {
+      let changed = false;
+      const updated = { ...prev };
+
+      yearFieldLabels.forEach((label) => {
+        const value = prev[label];
+        if (!value) {
+          return;
+        }
+        const numericValue = Number(value);
+        if (
+          Number.isNaN(numericValue) ||
+          numericValue < 1 ||
+          (totalYears > 0 && numericValue > totalYears)
+        ) {
+          updated[label] = '';
+          changed = true;
+        }
+      });
+
+      semesterFieldLabels.forEach((label) => {
+        const value = prev[label];
+        if (!value) {
+          return;
+        }
+        const numericValue = Number(value);
+        if (
+          Number.isNaN(numericValue) ||
+          numericValue < 1 ||
+          (semestersPerYear > 0 && numericValue > semestersPerYear)
+        ) {
+          updated[label] = '';
+          changed = true;
+        }
+      });
+
+      return changed ? updated : prev;
+    });
+  }, [activeStructure, yearFieldLabels, semesterFieldLabels]);
+
   const handleInputChange = (label, value, type) => {
     if (type === 'checkbox') {
-      const currentValues = formData[label] || [];
-      if (currentValues.includes(value)) {
-        setFormData({
-          ...formData,
-          [label]: currentValues.filter((v) => v !== value),
-        });
-      } else {
-        setFormData({
-          ...formData,
+      setFormData((prev) => {
+        const currentValues = prev[label] || [];
+        if (currentValues.includes(value)) {
+          return {
+            ...prev,
+            [label]: currentValues.filter((v) => v !== value),
+          };
+        }
+        return {
+          ...prev,
           [label]: [...currentValues, value],
-        });
-      }
+        };
+      });
     } else {
-      setFormData({
-        ...formData,
-        [label]: value,
+      setFormData((prev) => {
+        const updated = { ...prev, [label]: value };
+
+        if (courseFieldLabels.includes(label)) {
+          branchFieldLabels.forEach((branchLabel) => {
+            updated[branchLabel] = '';
+          });
+          yearFieldLabels.forEach((yearLabel) => {
+            updated[yearLabel] = '';
+          });
+          semesterFieldLabels.forEach((semesterLabel) => {
+            updated[semesterLabel] = '';
+          });
+        }
+
+        if (branchFieldLabels.includes(label)) {
+          yearFieldLabels.forEach((yearLabel) => {
+            updated[yearLabel] = '';
+          });
+          semesterFieldLabels.forEach((semesterLabel) => {
+            updated[semesterLabel] = '';
+          });
+        }
+
+        return updated;
       });
     }
   };
@@ -259,6 +471,95 @@ const PublicForm = () => {
 
   const renderField = (field) => {
     const commonClasses = 'w-full px-4 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-base sm:text-sm';
+
+    if (matchesFieldIdentifier(field, COURSE_FIELD_IDENTIFIERS) && availableCourses.length > 0) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Course</option>
+          {availableCourses.map((course) => (
+            <option key={course.code || course.name} value={course.name}>
+              {course.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (matchesFieldIdentifier(field, BRANCH_FIELD_IDENTIFIERS) && selectedCourseOption) {
+      const availableBranches = (selectedCourseOption.branches || []).filter(
+        (branch) => branch.isActive
+      );
+
+      if (availableBranches.length === 0) {
+        return (
+          <input
+            type="text"
+            value={formData[field.label] || ''}
+            onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+            className={commonClasses}
+            placeholder="Enter branch"
+            required={field.required}
+          />
+        );
+      }
+
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Branch</option>
+          {availableBranches.map((branch) => (
+            <option key={branch.code || branch.name} value={branch.name}>
+              {branch.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (matchesFieldIdentifier(field, YEAR_FIELD_IDENTIFIERS)) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Year</option>
+          {yearOptions.map((year) => (
+            <option key={year} value={year}>
+              Year {year}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (matchesFieldIdentifier(field, SEMESTER_FIELD_IDENTIFIERS)) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Semester</option>
+          {semesterOptions.map((semester) => (
+            <option key={semester} value={semester}>
+              Semester {semester}
+            </option>
+          ))}
+        </select>
+      );
+    }
 
     switch (field.type) {
       case 'textarea':

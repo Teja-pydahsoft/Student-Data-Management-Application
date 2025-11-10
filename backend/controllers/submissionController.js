@@ -59,6 +59,72 @@ const safeJSONStringify = (data) => {
   }
 };
 
+const COLUMN_ALIAS_MAP = {
+  pin_no: 'pin_no',
+  'Pin No': 'pin_no',
+  batch: 'batch',
+  Batch: 'batch',
+  course: 'course',
+  Course: 'course',
+  branch: 'branch',
+  Branch: 'branch',
+  stud_type: 'stud_type',
+  StudType: 'stud_type',
+  student_name: 'student_name',
+  'Student Name': 'student_name',
+  student_status: 'student_status',
+  'Student Status': 'student_status',
+  scholar_status: 'scholar_status',
+  'Scholar Status': 'scholar_status',
+  student_mobile: 'student_mobile',
+  'Student Mobile Number': 'student_mobile',
+  parent_mobile1: 'parent_mobile1',
+  'Parent Mobile Number 1': 'parent_mobile1',
+  parent_mobile2: 'parent_mobile2',
+  'Parent Mobile Number 2': 'parent_mobile2',
+  caste: 'caste',
+  Caste: 'caste',
+  gender: 'gender',
+  'M/F': 'gender',
+  father_name: 'father_name',
+  'Father Name': 'father_name',
+  dob: 'dob',
+  'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
+  'DOB (Date-Month-Year)': 'dob',
+  adhar_no: 'adhar_no',
+  'AADHAR No': 'adhar_no',
+  admission_date: 'admission_date',
+  'Admission Date': 'admission_date',
+  'Admission Year (Ex: 09-Sep-2003)': 'admission_date',
+  student_address: 'student_address',
+  'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
+  'Student Address': 'student_address',
+  city_village: 'city_village',
+  'City/Village': 'city_village',
+  'CityVillage Name': 'city_village',
+  mandal_name: 'mandal_name',
+  'Mandal Name': 'mandal_name',
+  district: 'district',
+  'District': 'district',
+  'District Name': 'district',
+  previous_college: 'previous_college',
+  'Previous College Name': 'previous_college',
+  certificates_status: 'certificates_status',
+  'Certificate Status': 'certificates_status',
+  student_photo: 'student_photo',
+  remarks: 'remarks',
+  Remarks: 'remarks',
+  current_year: 'current_year',
+  currentYear: 'current_year',
+  'Current Year': 'current_year',
+  'Current Academic Year': 'current_year',
+  current_semester: 'current_semester',
+  currentSemester: 'current_semester',
+  'Current Semester': 'current_semester'
+};
+
+const getColumnNameForField = (fieldKey) => COLUMN_ALIAS_MAP[fieldKey] || null;
+
 // Comprehensive logging utility for bulk upload operations
 const logBulkUploadEvent = (level, event, data, timestamp = new Date().toISOString()) => {
   const logEntry = {
@@ -712,22 +778,6 @@ exports.approveSubmission = async (req, res) => {
 
     console.log('Final admission number:', finalAdmissionNumber);
 
-    // Separate predefined and custom fields
-    const predefinedFields = {};
-    const predefinedKeys = [
-      'pin_no', 'batch', 'branch', 'stud_type', 'student_name', 'student_status',
-      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
-      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
-      'admission_no', 'student_address', 'city_village', 'mandal_name', 'district',
-      'previous_college', 'certificates_status', 'student_photo', 'remarks'
-    ];
-
-    Object.entries(submissionData).forEach(([key, value]) => {
-      if (predefinedKeys.includes(key)) {
-        predefinedFields[key] = value;
-      }
-    });
-
     // Load form to determine dynamic table/columns in master DB
     const [forms] = await masterConn.query('SELECT * FROM forms WHERE form_id = ?', [submission.form_id]);
     const formFields = forms.length > 0 ? parseJSON(forms[0].form_fields) : [];
@@ -806,10 +856,11 @@ exports.approveSubmission = async (req, res) => {
 
       // Update individual columns for predefined fields with proper ordering (avoid duplicates)
       Object.entries(submissionData).forEach(([key, value]) => {
-        if (predefinedKeys.includes(key) && value !== undefined && value !== '' && !addedUpdateFields.has(key)) {
-          updateFields.push(`${key} = ?`);
+        const columnName = getColumnNameForField(key);
+        if (columnName && value !== undefined && value !== '' && !addedUpdateFields.has(columnName)) {
+          updateFields.push(`${columnName} = ?`);
           updateValues.push(value);
-          addedUpdateFields.add(key);
+          addedUpdateFields.add(columnName);
         }
       });
 
@@ -874,9 +925,10 @@ exports.approveSubmission = async (req, res) => {
           studentData[key] = sanitizedValue;
 
           // Add to individual columns if it's a predefined field (avoid duplicates)
-          if (predefinedKeys.includes(key) && !addedFields.has(key)) {
-            fieldValuePairs.push({ field: key, value: sanitizedValue });
-            addedFields.add(key);
+          const columnName = getColumnNameForField(key);
+          if (columnName && !addedFields.has(columnName)) {
+            fieldValuePairs.push({ field: columnName, value: sanitizedValue });
+            addedFields.add(columnName);
           }
         }
       });
@@ -1129,7 +1181,13 @@ exports.bulkUploadSubmissions = async (req, res) => {
       'Pin No': 'pin_no',
       'Batch': 'batch',
       'Branch': 'branch',
+      'Branch Name': 'branch',
+      'Course': 'course',
+      'Course Name': 'course',
       'StudType': 'stud_type',
+      'Current Academic Year': 'current_year',
+      'Current Year': 'current_year',
+      'Current Semester': 'current_semester',
       'Student Name': 'student_name',
       'Student Status': 'student_status',
       'Scholar Status': 'scholar_status',
@@ -1150,6 +1208,22 @@ exports.bulkUploadSubmissions = async (req, res) => {
       'Certificate Status': 'certificates_status',
       'Remarks': 'remarks'
     };
+
+    if (Array.isArray(formFields)) {
+      formFields.forEach((field) => {
+        const fieldKey = (field?.key || '').trim();
+        if (!fieldKey) {
+          return;
+        }
+        const fieldLabel = (field?.label || '').trim();
+        if (fieldLabel && !fieldMapping[fieldLabel]) {
+          fieldMapping[fieldLabel] = fieldKey;
+        }
+        if (!fieldMapping[fieldKey]) {
+          fieldMapping[fieldKey] = fieldKey;
+        }
+      });
+    }
 
     logBulkUploadEvent('info', 'FORM_LOADED', {
       formId: form.form_id,
@@ -2127,15 +2201,32 @@ exports.downloadExcelTemplate = async (req, res) => {
     }
 
     const form = forms[0];
-    const formFields = parseJSON(form.form_fields);
+    const formFields = parseJSON(form.form_fields) || [];
 
-    // Define headers in the same order as the frontend template
-    const headers = [
+    const normalizeHeader = (value) => {
+      const normalized = (value || '')
+        .toString()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      switch (normalized) {
+        case 'admissionno':
+        case 'admissionnum':
+        case 'admissionnumber':
+          return 'admissionnumber';
+        default:
+          return normalized;
+      }
+    };
+
+    const baseHeaders = [
       'admission_number',
       'Pin No',
       'Batch',
       'Branch',
+      'Course',
       'StudType',
+      'Current Academic Year',
+      'Current Semester',
       'Student Name',
       'Student Status',
       'Scholar Status',
@@ -2156,20 +2247,40 @@ exports.downloadExcelTemplate = async (req, res) => {
       'Certificate Status',
       'Remarks'
     ];
+    const headerSet = new Set(baseHeaders.map((header) => normalizeHeader(header)));
+    const dynamicHeaders = [];
+
+    formFields.forEach((field) => {
+      const label = (field?.label || field?.key || '').trim();
+      if (!label) {
+        return;
+      }
+      const normalized = normalizeHeader(label);
+      if (!headerSet.has(normalized)) {
+        headerSet.add(normalized);
+        dynamicHeaders.push(label);
+      }
+    });
+
+    const headers = [...baseHeaders, ...dynamicHeaders];
 
     // Create Excel workbook and worksheet
     const workbook = xlsx.utils.book_new();
     const worksheetData = [headers]; // Header row
 
     // Add a sample data row for reference
-    const sampleRow = headers.map(header => {
-      switch(header) {
+    const sampleRow = headers.map((header) => {
+      switch (header) {
         case 'admission_number': return 'ADM001';
+        case 'Course': return 'B.Tech';
+        case 'Branch': return 'Computer Science';
         case 'Student Name': return 'John Doe';
         case 'Student Mobile Number': return '9876543210';
         case 'M/F': return 'M';
         case 'DOB (Date-Month-Year)': return '01-Jan-2000';
         case 'Admission Year (Ex: 09-Sep-2003)': return '01-Sep-2023';
+        case 'Current Academic Year': return '3';
+        case 'Current Semester': return '1';
         default: return '';
       }
     });
@@ -2452,22 +2563,6 @@ exports.bulkApproveSubmissions = async (req, res) => {
 const approveSingleSubmission = async (submission, submissionData, admissionNumber, masterConn, admin) => {
   const finalAdmissionNumber = String(admissionNumber).trim();
 
-  // Separate predefined and custom fields
-  const predefinedFields = {};
-  const predefinedKeys = [
-    'pin_no', 'batch', 'branch', 'stud_type', 'student_name', 'student_status',
-    'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
-    'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
-    'admission_no', 'student_address', 'city_village', 'mandal_name', 'district',
-    'previous_college', 'certificates_status', 'student_photo', 'remarks'
-  ];
-
-  Object.entries(submissionData).forEach(([key, value]) => {
-    if (predefinedKeys.includes(key)) {
-      predefinedFields[key] = value;
-    }
-  });
-
   // Load form to determine dynamic table/columns in master DB
   const [forms] = await masterConn.query('SELECT * FROM forms WHERE form_id = ?', [submission.form_id]);
   const formFields = forms.length > 0 ? parseJSON(forms[0].form_fields) : [];
@@ -2538,10 +2633,11 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
     const addedUpdateFields = new Set();
 
     Object.entries(submissionData).forEach(([key, value]) => {
-      if (predefinedKeys.includes(key) && value !== undefined && value !== '' && !addedUpdateFields.has(key)) {
-        updateFields.push(`${key} = ?`);
+      const columnName = getColumnNameForField(key);
+      if (columnName && value !== undefined && value !== '' && !addedUpdateFields.has(columnName)) {
+        updateFields.push(`${columnName} = ?`);
         updateValues.push(value);
-        addedUpdateFields.add(key);
+        addedUpdateFields.add(columnName);
       }
     });
 
@@ -2578,9 +2674,10 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
 
         studentData[key] = sanitizedValue;
 
-        if (predefinedKeys.includes(key) && !addedFields.has(key)) {
-          fieldValuePairs.push({ field: key, value: sanitizedValue });
-          addedFields.add(key);
+        const columnName = getColumnNameForField(key);
+        if (columnName && !addedFields.has(columnName)) {
+          fieldValuePairs.push({ field: columnName, value: sanitizedValue });
+          addedFields.add(columnName);
         }
       }
     });

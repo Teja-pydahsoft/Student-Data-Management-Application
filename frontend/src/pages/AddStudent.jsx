@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import api from '../config/api';
@@ -9,9 +9,16 @@ const AddStudent = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
+  const [courseOptions, setCourseOptions] = useState([]);
+  const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
+  const [selectedCourseName, setSelectedCourseName] = useState('');
+  const [selectedBranchName, setSelectedBranchName] = useState('');
   const [studentData, setStudentData] = useState({
     pin_no: '',
+    current_year: '1',
+    current_semester: '1',
     batch: '',
+    course: '',
     branch: '',
     stud_type: '',
     student_name: '',
@@ -36,6 +43,180 @@ const AddStudent = () => {
     remarks: ''
   });
 
+  useEffect(() => {
+    const loadCourseConfig = async () => {
+      try {
+        setCourseOptionsLoading(true);
+        const response = await api.get('/courses/options');
+        setCourseOptions(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to load course configuration', error);
+        toast.error(error.response?.data?.message || 'Failed to load course configuration');
+      } finally {
+        setCourseOptionsLoading(false);
+      }
+    };
+
+    loadCourseConfig();
+  }, []);
+
+  const availableCourses = useMemo(
+    () => courseOptions.filter((course) => course?.isActive !== false),
+    [courseOptions]
+  );
+
+  const selectedCourse = useMemo(() => {
+    if (!selectedCourseName) return null;
+    return (
+      availableCourses.find(
+        (course) => course.name?.toLowerCase() === selectedCourseName.toLowerCase()
+      ) || null
+    );
+  }, [availableCourses, selectedCourseName]);
+
+  const branchOptions = useMemo(() => {
+    if (!selectedCourse) return [];
+    return (selectedCourse.branches || []).filter(
+      (branch) => branch?.isActive !== false
+    );
+  }, [selectedCourse]);
+
+  const selectedBranch = useMemo(
+    () =>
+      branchOptions.find(
+        (branch) =>
+          branch.name?.toLowerCase() === selectedBranchName.toLowerCase()
+      ) || null,
+    [branchOptions, selectedBranchName]
+  );
+
+  const activeStructure = useMemo(() => {
+    if (selectedBranch?.structure) return selectedBranch.structure;
+    if (selectedCourse?.structure) return selectedCourse.structure;
+    return null;
+  }, [selectedBranch, selectedCourse]);
+
+  const yearOptions = useMemo(() => {
+    if (!activeStructure?.totalYears) {
+      return ['1', '2', '3', '4'];
+    }
+    return Array.from(
+      { length: activeStructure.totalYears },
+      (_value, index) => String(index + 1)
+    );
+  }, [activeStructure]);
+
+  const semesterOptions = useMemo(() => {
+    if (!activeStructure?.semestersPerYear) {
+      return ['1', '2'];
+    }
+    return Array.from(
+      { length: activeStructure.semestersPerYear },
+      (_value, index) => String(index + 1)
+    );
+  }, [activeStructure]);
+
+  useEffect(() => {
+    if (!selectedCourse) {
+      if (selectedCourseName) {
+        setSelectedCourseName('');
+      }
+      if (studentData.course !== '') {
+        setStudentData((prev) => ({ ...prev, course: '' }));
+      }
+      if (selectedBranchName) {
+        setSelectedBranchName('');
+      }
+      return;
+    }
+
+    setStudentData((prev) =>
+      prev.course === selectedCourse.name
+        ? prev
+        : { ...prev, course: selectedCourse.name }
+    );
+
+    if (
+      selectedBranchName &&
+      !branchOptions.some(
+        (branch) =>
+          branch.name?.toLowerCase() === selectedBranchName.toLowerCase()
+      )
+    ) {
+      setSelectedBranchName('');
+    }
+
+    if (!selectedBranchName && branchOptions.length === 1) {
+      setSelectedBranchName(branchOptions[0].name);
+    }
+  }, [selectedCourse, branchOptions, selectedCourseName, selectedBranchName, studentData.course]);
+
+  useEffect(() => {
+    if (selectedBranch) {
+      setStudentData((prev) =>
+        prev.branch === selectedBranch.name
+          ? prev
+          : { ...prev, branch: selectedBranch.name }
+      );
+    } else if (studentData.branch) {
+      setStudentData((prev) =>
+        prev.branch === ''
+          ? prev
+          : { ...prev, branch: '' }
+      );
+    }
+  }, [selectedBranch, studentData.branch]);
+
+  useEffect(() => {
+    if (!activeStructure) {
+      return;
+    }
+
+    const totalYears = Number(activeStructure.totalYears) || 0;
+    const semestersPerYear = Number(activeStructure.semestersPerYear) || 0;
+
+    setStudentData((prev) => {
+      const updated = { ...prev };
+      let changed = false;
+
+      if (totalYears > 0) {
+        const currentYear = Number(prev.current_year) || 1;
+        if (currentYear < 1 || currentYear > totalYears) {
+          updated.current_year = String(Math.min(Math.max(1, currentYear), totalYears));
+          changed = true;
+        }
+      }
+
+      if (semestersPerYear > 0) {
+        const currentSemester = Number(prev.current_semester) || 1;
+        if (currentSemester < 1 || currentSemester > semestersPerYear) {
+          updated.current_semester = String(
+            Math.min(Math.max(1, currentSemester), semestersPerYear)
+          );
+          changed = true;
+        }
+      }
+
+      return changed ? updated : prev;
+    });
+  }, [activeStructure]);
+
+  const handleCourseSelect = (event) => {
+    const value = event.target.value;
+    setSelectedCourseName(value);
+    setSelectedBranchName('');
+    setStudentData((prev) => ({
+      ...prev,
+      course: value || '',
+      branch: ''
+    }));
+  };
+
+  const handleBranchSelect = (event) => {
+    const value = event.target.value;
+    setSelectedBranchName(value);
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setStudentData(prev => ({ ...prev, [name]: value }));
@@ -49,10 +230,19 @@ const AddStudent = () => {
       toast.error('Student name and admission number are required');
       return;
     }
+
+    if (!studentData.current_year || !studentData.current_semester) {
+      toast.error('Please select the current year and semester');
+      return;
+    }
     
     try {
       setLoading(true);
-      const response = await api.post('/students', studentData);
+      const response = await api.post('/students', {
+        ...studentData,
+        current_year: Number(studentData.current_year),
+        current_semester: Number(studentData.current_semester)
+      });
       
       if (response.data.success) {
         toast.success('Student added successfully');
@@ -185,24 +375,112 @@ const AddStudent = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Course {availableCourses.length > 0 && <span className="text-red-500">*</span>}
+                </label>
+                {courseOptionsLoading ? (
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    Loading courses...
+                  </div>
+                ) : availableCourses.length > 0 ? (
+                  <select
+                    value={selectedCourseName}
+                    onChange={handleCourseSelect}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select Course</option>
+                    {availableCourses.map((course) => (
+                      <option key={course.code || course.name} value={course.name}>
+                        {course.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name="course"
+                    value={studentData.course}
+                    onChange={handleChange}
+                    placeholder="Enter course"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Branch
+                </label>
+                {availableCourses.length > 0 && branchOptions.length > 0 ? (
+                  <select
+                    value={selectedBranchName}
+                    onChange={handleBranchSelect}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch.code || branch.name} value={branch.name}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name="branch"
+                    value={studentData.branch}
+                    onChange={handleChange}
+                    placeholder={availableCourses.length > 0 ? 'No branches configured' : 'Enter branch'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  />
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Academic Year <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="current_year"
+                  value={studentData.current_year}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                >
+                  <option value="">Select Year</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      Year {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Semester <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="current_semester"
+                  value={studentData.current_semester}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                >
+                  <option value="">Select Semester</option>
+                  {semesterOptions.map((semester) => (
+                    <option key={semester} value={semester}>
+                      Semester {semester}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Batch
                 </label>
                 <input
                   type="text"
                   name="batch"
                   value={studentData.batch}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch
-                </label>
-                <input
-                  type="text"
-                  name="branch"
-                  value={studentData.branch}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />

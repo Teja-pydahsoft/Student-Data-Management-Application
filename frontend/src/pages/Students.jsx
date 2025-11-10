@@ -1,11 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Download, Filter, Upload, X, UserCog, Plus, Users, CheckCircle, TrendingUp, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
+import {
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  Download,
+  Filter,
+  Upload,
+  X,
+  UserCog,
+  Plus,
+  Users,
+  CheckCircle,
+  TrendingUp,
+  Settings,
+  ToggleLeft,
+  ToggleRight,
+  ArrowUpCircle
+} from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
+import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import PromoteStudentModal from '../components/Students/PromoteStudentModal';
 import { formatDate } from '../utils/dateUtils';
 
 const Students = () => {
@@ -22,12 +42,19 @@ const Students = () => {
   const [availableFields, setAvailableFields] = useState([]);
   const [showBulkRollNumber, setShowBulkRollNumber] = useState(false);
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
+  const [showBulkStudentUpload, setShowBulkStudentUpload] = useState(false);
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
   const [completionPercentages, setCompletionPercentages] = useState({});
   const [showFilterManagement, setShowFilterManagement] = useState(false);
   const [availableFilterFields, setAvailableFilterFields] = useState([]);
   const [loadingFilterFields, setLoadingFilterFields] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [studentToPromote, setStudentToPromote] = useState(null);
+  const [forms, setForms] = useState([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+  const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Get completion percentage for a student from backend
   const getStudentCompletionPercentage = async (admissionNumber) => {
@@ -40,6 +67,87 @@ const Students = () => {
     } catch (error) {
       // Silently return 0 if completion status can't be fetched
       return 0;
+    }
+  };
+
+  const syncStageFields = (data, year, semester) => {
+    if (!year || !semester) {
+      return { ...data };
+    }
+    return {
+      ...data,
+      current_year: Number(year),
+      current_semester: Number(semester),
+      'Current Academic Year': Number(year),
+      'Current Semester': Number(semester)
+    };
+  };
+
+  const selectedCount = selectedAdmissionNumbers.size;
+  const isAllSelected = students.length > 0 && selectedCount === students.length;
+
+  const toggleSelectAllStudents = (checked) => {
+    if (checked) {
+      setSelectedAdmissionNumbers(new Set(students.map((student) => student.admission_number)));
+    } else {
+      setSelectedAdmissionNumbers(new Set());
+    }
+  };
+
+  const toggleSelectStudent = (admissionNumber) => {
+    setSelectedAdmissionNumbers((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(admissionNumber)) {
+        updated.delete(admissionNumber);
+      } else {
+        updated.add(admissionNumber);
+      }
+      return updated;
+    });
+  };
+
+  const openPromoteModal = (student) => {
+    setStudentToPromote(student);
+    setShowPromoteModal(true);
+  };
+
+  const handlePromotionComplete = (promotionData) => {
+    if (!promotionData?.admissionNumber) return;
+
+    setStudents((prevStudents) =>
+      prevStudents.map((student) => {
+        if (student.admission_number !== promotionData.admissionNumber) {
+          return student;
+        }
+
+        const updatedStudentData = syncStageFields(
+          student.student_data || {},
+          promotionData.currentYear,
+          promotionData.currentSemester
+        );
+
+        return {
+          ...student,
+          current_year: promotionData.currentYear,
+          current_semester: promotionData.currentSemester,
+          student_data: updatedStudentData
+        };
+      })
+    );
+
+    if (selectedStudent && selectedStudent.admission_number === promotionData.admissionNumber) {
+      const updatedSelected = {
+        ...selectedStudent,
+        current_year: promotionData.currentYear,
+        current_semester: promotionData.currentSemester,
+        student_data: syncStageFields(
+          selectedStudent.student_data || {},
+          promotionData.currentYear,
+          promotionData.currentSemester
+        )
+      };
+      setSelectedStudent(updatedSelected);
+      setEditData(updatedSelected.student_data);
     }
   };
 
@@ -110,6 +218,18 @@ const Students = () => {
   }, [students]);
 
   useEffect(() => {
+    setSelectedAdmissionNumbers((prev) => {
+      const updated = new Set();
+      students.forEach((student) => {
+        if (prev.has(student.admission_number)) {
+          updated.add(student.admission_number);
+        }
+      });
+      return updated;
+    });
+  }, [students]);
+
+  useEffect(() => {
     // Extract available fields and their unique values from current students data
     // This now works with filtered data since we're doing server-side filtering
     if (students.length > 0) {
@@ -175,6 +295,25 @@ const Students = () => {
     }
   };
 
+  const fetchForms = async () => {
+    if (loadingForms) {
+      return;
+    }
+    setLoadingForms(true);
+    try {
+      const response = await api.get('/forms');
+      if (response.data?.success) {
+        setForms(response.data.data || []);
+      } else {
+        toast.error(response.data?.message || 'Failed to load forms');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to load forms');
+    } finally {
+      setLoadingForms(false);
+    }
+  };
+
   // Apply server-side filtering
   const applyFilters = () => {
     // Build filter parameters for API call
@@ -186,6 +325,8 @@ const Students = () => {
 
     // Add PIN status filter
     if (filters.pinNumberStatus) filterParams.filter_pinNumberStatus = filters.pinNumberStatus;
+    if (filters.year) filterParams.filter_year = filters.year;
+    if (filters.semester) filterParams.filter_semester = filters.semester;
 
     // Add dynamic field filters
     Object.entries(filters).forEach(([key, value]) => {
@@ -269,8 +410,6 @@ const Students = () => {
   };
 
   const handleViewDetails = (student) => {
-    setSelectedStudent(student);
-    setEditData(student.student_data);
     setEditMode(false);
     setEditingRollNumber(false);
     setTempRollNumber(student.pin_no || '');
@@ -289,7 +428,21 @@ const Students = () => {
     console.log('Student data:', student);
     console.log('All fields being set:', allFields);
 
-    setEditData(allFields);
+    const stageSyncedFields = syncStageFields(
+      allFields,
+      student.current_year,
+      student.current_semester
+    );
+
+    const stageSyncedStudent = {
+      ...student,
+      current_year: stageSyncedFields.current_year || student.current_year,
+      current_semester: stageSyncedFields.current_semester || student.current_semester,
+      student_data: stageSyncedFields
+    };
+
+    setSelectedStudent(stageSyncedStudent);
+    setEditData(stageSyncedFields);
     setShowModal(true);
   };
 
@@ -302,19 +455,45 @@ const Students = () => {
       console.log('Saving edit data:', editData);
       console.log('Selected student:', selectedStudent);
 
+      const synchronizedData = syncStageFields(
+        editData,
+        editData.current_year || editData['Current Academic Year'],
+        editData.current_semester || editData['Current Semester']
+      );
+
       await api.put(`/students/${selectedStudent.admission_number}`, {
-        studentData: editData,
+        studentData: synchronizedData,
       });
 
       console.log('Save successful');
       toast.success('Student data updated successfully');
       setEditMode(false);
+      setEditData(synchronizedData);
+      setSelectedStudent((prev) =>
+        prev
+          ? {
+              ...prev,
+              current_year:
+                synchronizedData.current_year || prev.current_year,
+              current_semester:
+                synchronizedData.current_semester || prev.current_semester,
+              student_data: synchronizedData
+            }
+          : prev
+      );
 
       // Update local state instead of refetching all data
       setStudents(prevStudents =>
         prevStudents.map(student =>
           student.admission_number === selectedStudent.admission_number
-            ? { ...student, student_data: editData, ...editData }
+            ? {
+                ...student,
+                current_year:
+                  synchronizedData.current_year || student.current_year,
+                current_semester:
+                  synchronizedData.current_semester || student.current_semester,
+                student_data: synchronizedData
+              }
             : student
         )
       );
@@ -375,8 +554,63 @@ const Students = () => {
         return updated;
       });
 
+      setSelectedAdmissionNumbers((prev) => {
+        const updated = new Set(prev);
+        updated.delete(admissionNumber);
+        return updated;
+      });
+
     } catch (error) {
       toast.error('Failed to delete student');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedCount === 0 || bulkDeleting) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedCount} selected student${selectedCount === 1 ? '' : 's'}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    const admissionNumbers = Array.from(selectedAdmissionNumbers);
+
+    try {
+      const response = await api.post('/students/bulk-delete', { admissionNumbers });
+      const deletedCount = response.data?.deletedCount || 0;
+      const notFound = response.data?.notFound || [];
+      const deletedAdmissions = Array.isArray(response.data?.deletedAdmissionNumbers)
+        ? response.data.deletedAdmissionNumbers
+        : admissionNumbers.filter((number) => !notFound.includes(number));
+      const deletedSet = new Set(deletedAdmissions);
+
+      if (deletedCount > 0) {
+        toast.success(`Deleted ${deletedCount} student${deletedCount === 1 ? '' : 's'} successfully`);
+      }
+
+      if (notFound.length > 0) {
+        toast.error(`${notFound.length} admission number${notFound.length === 1 ? '' : 's'} not found`);
+      }
+
+      if (deletedCount > 0) {
+        setStudents((prevStudents) =>
+          prevStudents.filter((student) => !deletedSet.has(student.admission_number))
+        );
+        setCompletionPercentages((prev) => {
+          const updated = { ...prev };
+          deletedAdmissions.forEach((number) => {
+            delete updated[number];
+          });
+          return updated;
+        });
+        setSelectedAdmissionNumbers(new Set());
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete selected students');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -388,7 +622,15 @@ const Students = () => {
 
     const firstStudentData = students[0]?.student_data;
     const dataKeys = firstStudentData && typeof firstStudentData === 'object' ? Object.keys(firstStudentData) : [];
-    const headers = ['Admission Number', 'PIN Number', 'Name', 'Mobile Number', ...dataKeys];
+    const headers = [
+      'Admission Number',
+      'PIN Number',
+      'Current Year',
+      'Current Semester',
+      'Name',
+      'Mobile Number',
+      ...dataKeys
+    ];
     const csvContent = [
       headers.join(','),
       ...students.map((student) => {
@@ -397,6 +639,8 @@ const Students = () => {
           return [
             student.admission_number,
             student.pin_no || '',
+            student.current_year || '',
+            student.current_semester || '',
             '-',
             '-',
             ...Object.keys(student).filter(key => key !== 'student_data' && key !== 'admission_number' && key !== 'pin_no').map(key => student[key] || '')
@@ -416,6 +660,8 @@ const Students = () => {
         const row = [
           student.admission_number,
           student.pin_no || '',
+          student.current_year || student.student_data?.current_year || '',
+          student.current_semester || student.student_data?.current_semester || '',
           nameField ? data[nameField] : '',
           mobileField ? data[mobileField] : '',
           ...Object.values(student.student_data).map((val) =>
@@ -510,39 +756,59 @@ const Students = () => {
           <p className="text-gray-600 mt-2 body-font">Manage and view all student records</p>
         </div>
         <div className="flex items-center gap-3">
-  <Link
-    to="/students/add"
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-  >
-    <Plus size={18} />
-    Add Student
-  </Link>
+          <Link
+            to="/students/add"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          >
+            <Plus size={18} />
+            Add Student
+          </Link>
 
-  <button
-    onClick={() => setShowManualRollNumber(true)}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-  >
-    <UserCog size={18} />
-    Update PIN Numbers
-  </button>
+          <button
+            onClick={async () => {
+              await fetchForms();
+              setShowBulkStudentUpload(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+            disabled={loadingForms}
+          >
+            <Upload size={18} />
+            {loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}
+          </button>
 
-  <button
-    onClick={() => setShowBulkRollNumber(true)}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-700 to-blue-800 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-  >
-    <Upload size={18} />
-    Bulk Upload PIN CSV
-  </button>
+          <button
+            onClick={() => setShowManualRollNumber(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          >
+            <UserCog size={18} />
+            Update PIN Numbers
+          </button>
 
-  <button
-    onClick={handleExportCSV}
-    className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-  >
-    <Download size={18} />
-    Export CSV
-  </button>
-</div>
+          <button
+            onClick={() => setShowBulkRollNumber(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-700 to-blue-800 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          >
+            <Upload size={18} />
+            Bulk Upload PIN CSV
+          </button>
 
+          <button
+            onClick={handleBulkDelete}
+            disabled={selectedCount === 0 || bulkDeleting}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={18} />
+            {bulkDeleting ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          >
+            <Download size={18} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -625,6 +891,32 @@ const Students = () => {
                 <option value="assigned">With PIN</option>
                 <option value="unassigned">Without PIN</option>
               </select>
+
+              <select
+                value={filters.year || ''}
+                onChange={(e) => handleFilterChange('year', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.year ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">Year: All</option>
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
+
+              <select
+                value={filters.semester || ''}
+                onChange={(e) => handleFilterChange('semester', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.semester ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">Semester: All</option>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+              </select>
             </div>
 
             {/* Dynamic Field Filters - Horizontal Layout */}
@@ -702,6 +994,12 @@ const Students = () => {
                           break;
                         case 'pinNumberStatus':
                           label = `PIN: ${value === 'assigned' ? 'With PIN' : 'Without PIN'}`;
+                          break;
+                        case 'year':
+                          label = `Year: ${value}`;
+                          break;
+                        case 'semester':
+                          label = `Semester: ${value}`;
                           break;
                         default:
                           if (key.startsWith('field_')) {
@@ -904,9 +1202,19 @@ const Students = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="py-3 px-4 text-sm font-semibold text-gray-700 text-center w-12">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+                      disabled={students.length === 0 || bulkDeleting}
+                      checked={isAllSelected}
+                      onChange={(e) => toggleSelectAllStudents(e.target.checked)}
+                    />
+                  </th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Photo</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">PIN Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Year / Semester</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Completion</th>
@@ -919,6 +1227,15 @@ const Students = () => {
                   const completionPercentage = completionPercentages[student.admission_number] || 0;
                   return (
                     <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+                          disabled={bulkDeleting}
+                          checked={selectedAdmissionNumbers.has(student.admission_number)}
+                          onChange={() => toggleSelectStudent(student.admission_number)}
+                        />
+                      </td>
                       <td className="py-3 px-4 text-sm font-medium text-gray-900">
                         <div className="flex items-center justify-center w-10 h-10">
                           {student.student_photo &&
@@ -958,6 +1275,13 @@ const Students = () => {
                         ) : (
                           <span className="text-gray-400 text-xs">Not assigned</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-700">
+                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-medium">
+                          Year {student.current_year || student.student_data?.current_year || '-'}
+                          <span className="w-1 h-1 rounded-full bg-blue-300" />
+                          Sem {student.current_semester || student.student_data?.current_semester || '-'}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900">
                         {(() => {
@@ -1005,6 +1329,13 @@ const Students = () => {
                         <div className="flex items-center gap-2">
                           <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
                             <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => openPromoteModal(student)}
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Promote Student"
+                          >
+                            <ArrowUpCircle size={16} />
                           </button>
                           <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Delete">
                             <Trash2 size={16} />
@@ -1101,6 +1432,16 @@ const Students = () => {
                       </div>
                     )}
                   </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                    Academic Stage
+                  </label>
+                  <p className="text-lg font-semibold text-indigo-700 flex items-center gap-2">
+                    <span>Year {selectedStudent.current_year || selectedStudent.student_data?.current_year || '-'}</span>
+                    <span className="w-1 h-1 rounded-full bg-indigo-300" />
+                    <span>Semester {selectedStudent.current_semester || selectedStudent.student_data?.current_semester || '-'}</span>
+                  </p>
+                </div>
                 </div>
               </div>
 
@@ -1296,6 +1637,72 @@ const Students = () => {
                     ) : (
                       <p className="text-sm text-gray-900 font-medium">
                         {editData.stud_type || editData.StudType || '-'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      Current Academic Year
+                    </label>
+                    {editMode ? (
+                      <select
+                        value={editData.current_year || editData['Current Academic Year'] || selectedStudent.current_year || '1'}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEditData((prev) =>
+                            syncStageFields(
+                              {
+                                ...prev,
+                                current_year: value,
+                                'Current Academic Year': value
+                              },
+                              value,
+                              prev.current_semester || prev['Current Semester'] || selectedStudent.current_semester || '1'
+                            )
+                          );
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                      >
+                        <option value="1">1st Year</option>
+                        <option value="2">2nd Year</option>
+                        <option value="3">3rd Year</option>
+                        <option value="4">4th Year</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        Year {editData.current_year || editData['Current Academic Year'] || selectedStudent.current_year || '-'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      Current Semester
+                    </label>
+                    {editMode ? (
+                      <select
+                        value={editData.current_semester || editData['Current Semester'] || selectedStudent.current_semester || '1'}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEditData((prev) =>
+                            syncStageFields(
+                              {
+                                ...prev,
+                                current_semester: value,
+                                'Current Semester': value
+                              },
+                              prev.current_year || prev['Current Academic Year'] || selectedStudent.current_year || '1',
+                              value
+                            )
+                          );
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                      >
+                        <option value="1">Semester 1</option>
+                        <option value="2">Semester 2</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        Semester {editData.current_semester || editData['Current Semester'] || selectedStudent.current_semester || '-'}
                       </p>
                     )}
                   </div>
@@ -1763,10 +2170,30 @@ const Students = () => {
         onUpdateComplete={fetchStudents}
       />
 
+      <BulkUploadModal
+        isOpen={showBulkStudentUpload}
+        onClose={() => setShowBulkStudentUpload(false)}
+        forms={forms}
+        isLoadingForms={loadingForms}
+        onUploadComplete={() => {
+          fetchStudents();
+        }}
+      />
+
       <ManualRollNumberModal
         isOpen={showManualRollNumber}
         onClose={() => setShowManualRollNumber(false)}
         onUpdateComplete={fetchStudents}
+      />
+
+      <PromoteStudentModal
+        isOpen={showPromoteModal}
+        student={studentToPromote}
+        onClose={() => {
+          setShowPromoteModal(false);
+          setStudentToPromote(null);
+        }}
+        onPromoted={handlePromotionComplete}
       />
     </div>
   );

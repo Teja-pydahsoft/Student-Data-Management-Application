@@ -79,6 +79,7 @@ async function fixDatabaseSchema() {
       'dob', 'adhar_no', 'student_name', 'father_name', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
       'admission_date', 'student_address', 'city_village', 'mandal_name', 'district', 'batch', 'branch',
       'stud_type', 'student_status', 'scholar_status', 'caste', 'gender', 'remarks',
+      'current_year', 'current_semester',
       // Admin-only columns that are missing
       'pin_no', 'previous_college', 'certificates_status'
     ];
@@ -123,6 +124,10 @@ async function fixDatabaseSchema() {
           case 'gender':
           case 'remarks':
             columnDef = `${column} VARCHAR(100) NULL`;
+            break;
+          case 'current_year':
+          case 'current_semester':
+            columnDef = `${column} TINYINT NULL DEFAULT 1`;
             break;
           default:
             columnDef = `${column} VARCHAR(255) NULL`;

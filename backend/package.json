@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "init-db": "node scripts/initDatabase.js",
     "seed-staging-admin": "node scripts/seedStagingAdmin.js",
-    "init-settings": "node scripts/init_settings_table.js"
+    "init-settings": "node scripts/init_settings_table.js",
+    "migrate-academic-stage": "node scripts/addAcademicStageColumns.js"
   },
   "keywords": [
     "student",
