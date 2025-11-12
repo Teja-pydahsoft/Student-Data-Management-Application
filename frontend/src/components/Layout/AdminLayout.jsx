@@ -8,7 +8,8 @@ import {
   LogOut,
   Menu,
   X,
-  Settings
+  Settings,
+  CalendarCheck
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -30,6 +31,7 @@ const AdminLayout = () => {
     { path: '/forms', icon: FileText, label: 'Forms' },
     { path: '/submissions', icon: ClipboardList, label: 'Submissions' },
     { path: '/students', icon: Users, label: 'Students' },
+    { path: '/attendance', icon: CalendarCheck, label: 'Attendance' },
     { path: '/courses', icon: Settings, label: 'Courses' }
   ];
 

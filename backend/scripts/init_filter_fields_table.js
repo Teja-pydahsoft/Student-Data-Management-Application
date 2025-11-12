@@ -33,7 +33,7 @@ async function initFilterFieldsTable() {
     for (const fieldName of defaultFields) {
       await masterPool.query(`
         INSERT IGNORE INTO filter_fields (field_name, field_type, enabled, required, options)
-        VALUES (?, 'text', true, false, '[]')
+        VALUES (?, 'text', true, false, JSON_ARRAY())
       `, [fieldName]);
     }
 

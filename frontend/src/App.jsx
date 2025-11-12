@@ -13,6 +13,7 @@ import Students from './pages/Students';
 import AddStudent from './pages/AddStudent';
 import CourseConfig from './pages/CourseConfig';
 import PublicForm from './pages/PublicForm';
+import Attendance from './pages/Attendance';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -73,6 +74,7 @@ function App() {
           <Route path="students" element={<Students />} />
           <Route path="students/add" element={<AddStudent />} />
           <Route path="courses" element={<CourseConfig />} />
+          <Route path="attendance" element={<Attendance />} />
         </Route>
         
         {/* Fallback */}
