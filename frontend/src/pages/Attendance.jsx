@@ -6,9 +6,22 @@ import {
   RefreshCw,
   Check,
   X,
-  AlertTriangle
+  AlertTriangle,
+  BarChart3,
+  History as HistoryIcon,
+  Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend
+} from 'recharts';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
 
@@ -49,6 +62,11 @@ const Attendance = () => {
   const [initialStatusMap, setInitialStatusMap] = useState({});
   const [smsResults, setSmsResults] = useState([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [downloadingStudentId, setDownloadingStudentId] = useState(null);
 
   const effectiveStatus = (studentId) => {
     const status = statusMap[studentId];
@@ -308,6 +326,135 @@ const Attendance = () => {
     );
   };
 
+  const fetchStudentHistoryData = async (studentId) => {
+    const response = await api.get(`/attendance/student/${studentId}/history`);
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || 'Failed to fetch attendance history');
+    }
+    return response.data.data;
+  };
+
+  const handleOpenHistory = async (student) => {
+    setSelectedStudent(student);
+    setHistoryData(null);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+
+    try {
+      const data = await fetchStudentHistoryData(student.id);
+      setHistoryData(data);
+    } catch (error) {
+      console.error('Failed to load student attendance history:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to load attendance history');
+      setHistoryModalOpen(false);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleCloseHistory = () => {
+    setHistoryModalOpen(false);
+    setHistoryData(null);
+    setSelectedStudent(null);
+  };
+
+  const csvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+  const buildStudentReportCsv = (student, history) => {
+    const rows = [];
+    const weeklyTotals = history?.weekly?.totals || { present: 0, absent: 0, unmarked: 0 };
+    const monthlyTotals = history?.monthly?.totals || { present: 0, absent: 0, unmarked: 0 };
+
+    rows.push(csvValue('Student Name') + ',' + csvValue(student.studentName || 'Unknown'));
+    rows.push(csvValue('PIN Number') + ',' + csvValue(student.pinNumber || 'N/A'));
+    rows.push(csvValue('Batch') + ',' + csvValue(student.batch || 'N/A'));
+    rows.push(csvValue('Course') + ',' + csvValue(student.course || 'N/A'));
+    rows.push(csvValue('Branch') + ',' + csvValue(student.branch || 'N/A'));
+    rows.push(csvValue('Current Year') + ',' + csvValue(student.currentYear || 'N/A'));
+    rows.push(csvValue('Current Semester') + ',' + csvValue(student.currentSemester || 'N/A'));
+    rows.push('');
+
+    rows.push(csvValue('Weekly Summary'));
+    rows.push([csvValue('Present'), csvValue('Absent'), csvValue('Unmarked')].join(','));
+    rows.push(
+      [
+        csvValue(weeklyTotals.present || 0),
+        csvValue(weeklyTotals.absent || 0),
+        csvValue(weeklyTotals.unmarked || 0)
+      ].join(',')
+    );
+    rows.push('');
+
+    rows.push(csvValue('Monthly Summary'));
+    rows.push([csvValue('Present'), csvValue('Absent'), csvValue('Unmarked')].join(','));
+    rows.push(
+      [
+        csvValue(monthlyTotals.present || 0),
+        csvValue(monthlyTotals.absent || 0),
+        csvValue(monthlyTotals.unmarked || 0)
+      ].join(',')
+    );
+    rows.push('');
+
+    rows.push([csvValue('Date'), csvValue('Status')].join(','));
+    const monthlySeries = history?.monthly?.series || [];
+    monthlySeries.forEach((entry) => {
+      const status = entry.status
+        ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
+        : 'Unmarked';
+      rows.push([csvValue(entry.date), csvValue(status)].join(','));
+    });
+
+    return rows.join('\n');
+  };
+
+  const sanitizeFileName = (name) => {
+    if (!name) return 'student';
+    return name.replace(/[^a-z0-9_\-]+/gi, '_').substring(0, 60) || 'student';
+  };
+
+  const handleDownloadReport = async (student) => {
+    setDownloadingStudentId(student.id);
+    try {
+      const history =
+        selectedStudent?.id === student.id && historyData
+          ? historyData
+          : await fetchStudentHistoryData(student.id);
+
+      const csvContent = buildStudentReportCsv(student, history);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const today = new Date().toISOString().split('T')[0];
+      link.href = url;
+      link.setAttribute(
+        'download',
+        `${sanitizeFileName(student.studentName || student.pinNumber || 'student')}_attendance_${today}.csv`
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Attendance report downloaded');
+    } catch (error) {
+      console.error('Failed to download attendance report:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to download report');
+    } finally {
+      setDownloadingStudentId(null);
+    }
+  };
+
+  const buildChartSeries = (series = []) =>
+    series.map((entry) => ({
+      date: entry.date,
+      present: entry.status === 'present' ? 1 : 0,
+      absent: entry.status === 'absent' ? 1 : 0,
+      unmarked: entry.status === 'unmarked' ? 1 : 0
+    }));
+
+  const weeklyChartSeries = historyData ? buildChartSeries(historyData.weekly?.series) : [];
+  const monthlyChartSeries = historyData ? buildChartSeries(historyData.monthly?.series) : [];
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -532,6 +679,7 @@ const Attendance = () => {
                   <th className="px-4 py-3">Semester</th>
                   <th className="px-4 py-3">Parent Contact</th>
                   <th className="px-4 py-3">Attendance</th>
+                  <th className="px-4 py-3 text-right">Insights</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
@@ -589,6 +737,35 @@ const Attendance = () => {
                           </button>
                         </div>
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenHistory(student)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                          >
+                            <HistoryIcon size={16} />
+                            View history
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadReport(student)}
+                            disabled={downloadingStudentId === student.id}
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
+                              downloadingStudentId === student.id
+                                ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+                                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {downloadingStudentId === student.id ? (
+                              <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Download size={16} />
+                            )}
+                            Download
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -625,6 +802,178 @@ const Attendance = () => {
             ))}
           </ul>
         </section>
+      )}
+      {historyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-100 text-blue-600 rounded-full p-2">
+                  <BarChart3 size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Attendance History</h2>
+                  <p className="text-sm text-gray-500">
+                    {selectedStudent?.studentName} • {selectedStudent?.pinNumber || 'No PIN'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectedStudent && handleDownloadReport(selectedStudent)}
+                  disabled={!selectedStudent || downloadingStudentId === selectedStudent?.id}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
+                    downloadingStudentId === selectedStudent?.id
+                      ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {downloadingStudentId === selectedStudent?.id ? (
+                    <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  Download report
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseHistory}
+                  className="rounded-full p-2 hover:bg-gray-100 text-gray-500"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {historyLoading ? (
+              <div className="py-20 flex justify-center">
+                <LoadingAnimation message="Fetching attendance history..." />
+              </div>
+            ) : !historyData ? (
+              <div className="py-20 flex flex-col items-center gap-3 text-gray-500">
+                <AlertTriangle size={28} />
+                <p>Unable to load attendance history.</p>
+              </div>
+            ) : (
+              <div className="px-6 py-6 space-y-6">
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-blue-700 uppercase">Weekly Summary</h3>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-xs text-gray-500">Present</p>
+                        <p className="text-lg font-semibold text-green-600">
+                          {historyData.weekly?.totals?.present ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Absent</p>
+                        <p className="text-lg font-semibold text-red-500">
+                          {historyData.weekly?.totals?.absent ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Unmarked</p>
+                        <p className="text-lg font-semibold text-gray-600">
+                          {historyData.weekly?.totals?.unmarked ?? 0}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      Range: {historyData.weekly?.startDate} → {historyData.weekly?.endDate}
+                    </p>
+                  </div>
+
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-purple-700 uppercase">Monthly Summary</h3>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-xs text-gray-500">Present</p>
+                        <p className="text-lg font-semibold text-green-600">
+                          {historyData.monthly?.totals?.present ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Absent</p>
+                        <p className="text-lg font-semibold text-red-500">
+                          {historyData.monthly?.totals?.absent ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Unmarked</p>
+                        <p className="text-lg font-semibold text-gray-600">
+                          {historyData.monthly?.totals?.unmarked ?? 0}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      Range: {historyData.monthly?.startDate} → {historyData.monthly?.endDate}
+                    </p>
+                  </div>
+                </section>
+
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Weekly Status Timeline</h3>
+                    <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={weeklyChartSeries}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
+                          <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
+                          <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-800">Monthly Status Timeline</h3>
+                    <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyChartSeries}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
+                          <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
+                          <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Breakdown (Last 7 days)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                    {historyData.weekly?.series?.map((entry) => (
+                      <div
+                        key={entry.date}
+                        className={`rounded-xl border px-3 py-2 text-center ${
+                          entry.status === 'present'
+                            ? 'border-green-200 bg-green-50 text-green-700'
+                            : entry.status === 'absent'
+                            ? 'border-red-200 bg-red-50 text-red-600'
+                            : 'border-gray-200 bg-gray-50 text-gray-600'
+                        }`}
+                      >
+                        <p className="text-xs font-semibold">{entry.date}</p>
+                        <p className="text-xs capitalize">{entry.status}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

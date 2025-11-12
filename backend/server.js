@@ -15,6 +15,8 @@ const submissionRoutes = require('./routes/submissionRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const logRoutes = require('./routes/logRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -95,6 +97,8 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/logs', logRoutes);
+app.use('/api/users', userRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
@@ -103,6 +107,8 @@ app.use('/submissions', submissionRoutes);
 app.use('/students', studentRoutes);
 app.use('/courses', courseRoutes);
 app.use('/attendance', attendanceRoutes);
+app.use('/logs', logRoutes);
+app.use('/users', userRoutes);
 
 // Root API endpoint
 app.get('/api', (req, res) => {
@@ -115,7 +121,9 @@ app.get('/api', (req, res) => {
       forms: '/api/forms',
       submissions: '/api/submissions',
       students: '/api/students',
-      courses: '/api/courses'
+      courses: '/api/courses',
+      logs: '/api/logs',
+      users: '/api/users'
     }
   });
 });

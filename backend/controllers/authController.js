@@ -1,8 +1,34 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../config/supabase');
+const { masterPool } = require('../config/database');
+const {
+  ALL_OPERATION_KEYS,
+  normalizeModules,
+  parseModules
+} = require('../constants/operations');
 
-// Admin login
+const buildAdminResponse = (admin) => ({
+  id: admin.id,
+  username: admin.username,
+  email: admin.email,
+  role: 'admin',
+  modules: ALL_OPERATION_KEYS
+});
+
+const buildStaffResponse = (staffRow) => {
+  const modules = normalizeModules(staffRow.assigned_modules);
+  const resolvedModules = modules.length > 0 ? modules : ['dashboard'];
+  return {
+    id: staffRow.id,
+    username: staffRow.username,
+    email: staffRow.email,
+    role: 'staff',
+    modules: resolvedModules
+  };
+};
+
+// Admin or staff login
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -15,51 +41,108 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Find admin
-    const { data: admins, error } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('username', username)
-      .limit(1);
+    let adminAccount = null;
+    let supabaseError = null;
 
-    if (error) throw error;
-    if (!admins || admins.length === 0) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
+    try {
+      const { data: admins, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('username', username)
+        .limit(1);
+
+      if (error) {
+        supabaseError = error;
+      } else if (admins && admins.length > 0) {
+        adminAccount = admins[0];
+      }
+    } catch (error) {
+      supabaseError = error;
+    }
+
+    if (adminAccount) {
+      const isValidPassword = await bcrypt.compare(password, adminAccount.password);
+
+      if (!isValidPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials'
+        });
+      }
+
+      const tokenPayload = {
+        id: adminAccount.id,
+        username: adminAccount.username,
+        role: 'admin',
+        modules: ALL_OPERATION_KEYS
+      };
+
+      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        token,
+        user: buildAdminResponse(adminAccount)
       });
     }
 
-    const admin = admins[0];
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, admin.password);
-    
-    if (!isValidPassword) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
-      });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: admin.id, username: admin.username },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+    // Attempt staff user login if admin not found
+    const [staffRows] = await masterPool.query(
+      `
+        SELECT id, username, email, password_hash, assigned_modules, is_active
+        FROM staff_users
+        WHERE username = ?
+        LIMIT 1
+      `,
+      [username]
     );
 
-    res.json({
+    if (!staffRows || staffRows.length === 0) {
+      if (supabaseError) {
+        console.error('Admin lookup failed:', supabaseError);
+      }
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const staffUser = staffRows[0];
+
+    if (!staffUser.is_active) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is deactivated. Contact administrator.'
+      });
+    }
+
+    const validStaffPassword = await bcrypt.compare(password, staffUser.password_hash);
+
+    if (!validStaffPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const staffResponse = buildStaffResponse(staffUser);
+
+    const tokenPayload = {
+      id: staffUser.id,
+      username: staffUser.username,
+      role: 'staff',
+      modules: staffResponse.modules
+    };
+
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+    return res.json({
       success: true,
       message: 'Login successful',
       token,
-      admin: {
-        id: admin.id,
-        username: admin.username,
-        email: admin.email
-      }
+      user: staffResponse
     });
-
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ 
@@ -72,10 +155,51 @@ exports.login = async (req, res) => {
 // Verify token
 exports.verifyToken = async (req, res) => {
   try {
+    const authUser = req.user || req.admin;
+
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid session'
+      });
+    }
+
+    if (authUser.role === 'staff') {
+      const [rows] = await masterPool.query(
+        `
+          SELECT id, username, email, assigned_modules, is_active
+          FROM staff_users
+          WHERE id = ?
+          LIMIT 1
+        `,
+        [authUser.id]
+      );
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      const staffRecord = rows[0];
+      if (!staffRecord.is_active) {
+        return res.status(403).json({
+          success: false,
+          message: 'User account is inactive'
+        });
+      }
+
+      return res.json({
+        success: true,
+        user: buildStaffResponse(staffRecord)
+      });
+    }
+
     const { data: admins, error } = await supabase
       .from('admins')
       .select('id, username, email')
-      .eq('id', req.admin.id)
+      .eq('id', authUser.id)
       .limit(1);
     if (error) throw error;
     if (!admins || admins.length === 0) {
@@ -87,9 +211,8 @@ exports.verifyToken = async (req, res) => {
 
     res.json({
       success: true,
-      admin: admins[0]
+      user: buildAdminResponse(admins[0])
     });
-
   } catch (error) {
     console.error('Token verification error:', error);
     res.status(500).json({ 
@@ -102,6 +225,14 @@ exports.verifyToken = async (req, res) => {
 // Change password
 exports.changePassword = async (req, res) => {
   try {
+    const authUser = req.user || req.admin;
+    if (!authUser || authUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only administrators can change password via this endpoint'
+      });
+    }
+
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
@@ -115,7 +246,7 @@ exports.changePassword = async (req, res) => {
     const { data: admins, error: e1 } = await supabase
       .from('admins')
       .select('*')
-      .eq('id', req.admin.id)
+      .eq('id', authUser.id)
       .limit(1);
     if (e1) throw e1;
     if (!admins || admins.length === 0) {
@@ -144,7 +275,7 @@ exports.changePassword = async (req, res) => {
     const { error: e2 } = await supabase
       .from('admins')
       .update({ password: hashedPassword })
-      .eq('id', req.admin.id);
+      .eq('id', authUser.id);
     if (e2) throw e2;
 
     res.json({

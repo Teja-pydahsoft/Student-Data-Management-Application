@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,15 +9,28 @@ import {
   Menu,
   X,
   Settings,
-  CalendarCheck
+  CalendarCheck,
+  ShieldCheck,
+  BarChart3
 } from 'lucide-react';
-import useAuthStore from '../../store/authStore';
+import useAuthStore, { MODULE_ROUTE_MAP, getModuleKeyForPath } from '../../store/authStore';
 import toast from 'react-hot-toast';
+
+const NAV_ITEMS = [
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard' },
+  { path: '/forms', icon: FileText, label: 'Forms', permission: 'forms' },
+  { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: 'submissions' },
+  { path: '/students', icon: Users, label: 'Students', permission: 'students' },
+  { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: 'attendance' },
+  { path: '/courses', icon: Settings, label: 'Courses', permission: 'courses' },
+  { path: '/users', icon: ShieldCheck, label: 'User Management', permission: 'user-management' },
+  { path: '/reports', icon: BarChart3, label: 'Reports', permission: 'reports' }
+];
 
 const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { admin, logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = () => {
@@ -26,14 +39,32 @@ const AdminLayout = () => {
     navigate('/login');
   };
 
-  const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/forms', icon: FileText, label: 'Forms' },
-    { path: '/submissions', icon: ClipboardList, label: 'Submissions' },
-    { path: '/students', icon: Users, label: 'Students' },
-    { path: '/attendance', icon: CalendarCheck, label: 'Attendance' },
-    { path: '/courses', icon: Settings, label: 'Courses' }
-  ];
+  const allowedModules = useMemo(() => {
+    if (!user) return [];
+    if (user.role === 'admin') {
+      return Object.keys(MODULE_ROUTE_MAP);
+    }
+    return Array.isArray(user.modules) ? user.modules : [];
+  }, [user]);
+
+  const filteredNavItems = useMemo(() => {
+    return NAV_ITEMS.filter((item) => {
+      if (!item.permission) return true;
+      if (user?.role === 'admin') return true;
+      return allowedModules.includes(item.permission);
+    });
+  }, [allowedModules, user?.role]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === 'admin') return;
+    const currentModuleKey = getModuleKeyForPath(location.pathname);
+    if (currentModuleKey && !allowedModules.includes(currentModuleKey)) {
+      const firstAllowedRoute =
+        MODULE_ROUTE_MAP[allowedModules[0]] || MODULE_ROUTE_MAP.dashboard || '/';
+      navigate(firstAllowedRoute, { replace: true });
+    }
+  }, [user, allowedModules, location.pathname, navigate]);
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -70,7 +101,7 @@ const AdminLayout = () => {
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
 
@@ -100,15 +131,15 @@ const AdminLayout = () => {
             <div className="flex items-center gap-3 px-4 py-3 mb-2">
               <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
-                  {admin?.username?.charAt(0).toUpperCase()}
+                  {user?.username?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {admin?.username}
+                  {user?.username}
                 </p>
                 <p className="text-xs text-gray-600 truncate">
-                  {admin?.email || 'Administrator'}
+                  {user?.email || (user?.role === 'admin' ? 'Administrator' : 'Team Member')}
                 </p>
               </div>
             </div>

@@ -14,6 +14,8 @@ import AddStudent from './pages/AddStudent';
 import CourseConfig from './pages/CourseConfig';
 import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
+import UserManagement from './pages/UserManagement';
+import Reports from './pages/Reports';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -75,6 +77,8 @@ function App() {
           <Route path="students/add" element={<AddStudent />} />
           <Route path="courses" element={<CourseConfig />} />
           <Route path="attendance" element={<Attendance />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
         
         {/* Fallback */}

@@ -42,7 +42,7 @@ const Login = () => {
 
     if (result.success) {
       toast.success('Login successful!');
-      navigate('/');
+      navigate(result.redirectPath || '/');
     } else {
       toast.error(result.message);
     }
@@ -67,9 +67,9 @@ const Login = () => {
             loading="lazy"
           />
           <h1 className="text-2xl font-semibold text-text-primary mb-1 tracking-tight">
-            Admin Login
+            Portal Login
           </h1>
-          <p className="text-muted-text text-sm">Access your student management panel</p>
+          <p className="text-muted-text text-sm">Access your assigned student management modules</p>
         </div>
 
         {/* Form */}

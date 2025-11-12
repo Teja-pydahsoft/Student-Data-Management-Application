@@ -1,5 +1,6 @@
 const { masterPool, stagingPool } = require('../config/database');
 const { supabase } = require('../config/supabase');
+const { studentsCache } = require('../services/cache');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
@@ -13,6 +14,12 @@ const upload = multer({ dest: 'uploads/' });
 
 // Export multer middleware at the top level
 exports.uploadMiddleware = upload.single('file');
+
+const clearStudentsCache = () => {
+  if (studentsCache && typeof studentsCache.clear === 'function') {
+    studentsCache.clear();
+  }
+};
 
 // Upload student photo to MySQL database
 exports.uploadStudentPhoto = async (req, res) => {
@@ -67,6 +74,8 @@ exports.uploadStudentPhoto = async (req, res) => {
 
     // Clean up temporary file
     fs.unlinkSync(req.file.path);
+
+    clearStudentsCache();
 
     res.json({
       success: true,
@@ -319,14 +328,56 @@ exports.getAllStudents = async (req, res) => {
       filter_pinNumberStatus,
       filter_year,
       filter_semester,
+      filter_batch,
+      filter_course,
+      filter_branch,
       ...otherFilters
     } = req.query;
 
+    const fetchAll = !limit || limit === 'all';
+    const pageSize = fetchAll ? null : Math.max(1, parseInt(limit, 10) || 25);
+    const pageOffset = fetchAll ? 0 : Math.max(0, parseInt(offset, 10) || 0);
+    const parsedFilterYear = filter_year !== undefined ? parseInt(filter_year, 10) : null;
+    const parsedFilterSemester = filter_semester !== undefined ? parseInt(filter_semester, 10) : null;
+    const normalizedFilterBatch =
+      typeof filter_batch === 'string' && filter_batch.trim().length > 0 ? filter_batch.trim() : null;
+    const normalizedFilterCourse =
+      typeof filter_course === 'string' && filter_course.trim().length > 0 ? filter_course.trim() : null;
+    const normalizedFilterBranch =
+      typeof filter_branch === 'string' && filter_branch.trim().length > 0 ? filter_branch.trim() : null;
+    const normalizedOtherFilters = Object.keys(otherFilters)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = otherFilters[key];
+        return acc;
+      }, {});
+
+    const cacheKey = fetchAll
+      ? null
+      : JSON.stringify({
+          search: search || '',
+          limit: pageSize,
+          offset: pageOffset,
+          filter_dateFrom: filter_dateFrom || null,
+          filter_dateTo: filter_dateTo || null,
+          filter_pinNumberStatus: filter_pinNumberStatus || null,
+          filter_year: parsedFilterYear,
+          filter_semester: parsedFilterSemester,
+          filter_batch: normalizedFilterBatch,
+          filter_course: normalizedFilterCourse,
+          filter_branch: normalizedFilterBranch,
+          filters: normalizedOtherFilters
+        });
+
+    if (cacheKey) {
+      const cachedResponse = studentsCache.get(cacheKey);
+      if (cachedResponse) {
+        return res.json(cachedResponse);
+      }
+    }
+
     let query = 'SELECT * FROM students WHERE 1=1';
     const params = [];
-    const fetchAll = !limit || limit === 'all';
-    const pageSize = !fetchAll ? parseInt(limit, 10) : null;
-    const pageOffset = fetchAll ? 0 : parseInt(offset, 10);
 
     if (search) {
       query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
@@ -351,9 +402,6 @@ exports.getAllStudents = async (req, res) => {
       query += ' AND pin_no IS NULL';
     }
 
-    const parsedFilterYear = filter_year !== undefined ? parseInt(filter_year, 10) : null;
-    const parsedFilterSemester = filter_semester !== undefined ? parseInt(filter_semester, 10) : null;
-
     if (parsedFilterYear && !isNaN(parsedFilterYear)) {
       query += ' AND current_year = ?';
       params.push(parsedFilterYear);
@@ -364,8 +412,23 @@ exports.getAllStudents = async (req, res) => {
       params.push(parsedFilterSemester);
     }
 
+    if (normalizedFilterBatch) {
+      query += ' AND batch = ?';
+      params.push(normalizedFilterBatch);
+    }
+
+    if (normalizedFilterCourse) {
+      query += ' AND course = ?';
+      params.push(normalizedFilterCourse);
+    }
+
+    if (normalizedFilterBranch) {
+      query += ' AND branch = ?';
+      params.push(normalizedFilterBranch);
+    }
+
     // Dynamic field filters (e.g., filter_field_Admission category)
-    Object.entries(otherFilters).forEach(([key, value]) => {
+    Object.entries(normalizedOtherFilters).forEach(([key, value]) => {
       if (key.startsWith('filter_field_') && value) {
         const fieldName = key.replace('filter_field_', '');
         // Escape field name for JSON path (handle spaces and special chars)
@@ -419,8 +482,23 @@ exports.getAllStudents = async (req, res) => {
       countParams.push(parsedFilterSemester);
     }
 
+    if (normalizedFilterBatch) {
+      countQuery += ' AND batch = ?';
+      countParams.push(normalizedFilterBatch);
+    }
+
+    if (normalizedFilterCourse) {
+      countQuery += ' AND course = ?';
+      countParams.push(normalizedFilterCourse);
+    }
+
+    if (normalizedFilterBranch) {
+      countQuery += ' AND branch = ?';
+      countParams.push(normalizedFilterBranch);
+    }
+
     // Apply dynamic field filters to count query
-    Object.entries(otherFilters).forEach(([key, value]) => {
+    Object.entries(normalizedOtherFilters).forEach(([key, value]) => {
       if (key.startsWith('filter_field_') && value) {
         const fieldName = key.replace('filter_field_', '');
         // Escape field name for JSON path (handle spaces and special chars)
@@ -450,15 +528,23 @@ exports.getAllStudents = async (req, res) => {
       };
     });
 
-    res.json({
+    const totalCount = countResult?.[0]?.total || 0;
+
+    const responsePayload = {
       success: true,
       data: parsedStudents,
       pagination: {
-        total: countResult[0].total,
+        total: totalCount,
         limit: fetchAll ? null : pageSize,
         offset: fetchAll ? 0 : pageOffset
       }
-    });
+    };
+
+    if (cacheKey) {
+      studentsCache.set(cacheKey, responsePayload);
+    }
+
+    res.json(responsePayload);
 
   } catch (error) {
     console.error('Get students error:', error);
@@ -632,6 +718,8 @@ exports.updateStudent = async (req, res) => {
 
     console.log('Update completed successfully');
 
+    clearStudentsCache();
+
     res.json({
       success: true,
       message: 'Student data updated successfully'
@@ -690,6 +778,8 @@ exports.updatePinNumber = async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       ['UPDATE_PIN_NUMBER', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify({ pinNumber })]
     );
+
+    clearStudentsCache();
 
     res.json({
       success: true,
@@ -770,6 +860,8 @@ exports.bulkDeleteStudents = async (req, res) => {
           JSON.stringify({ admissionNumbers: existingNumbers })
         ]
       );
+
+      clearStudentsCache();
     }
 
     return res.json({
@@ -810,6 +902,8 @@ exports.deleteStudent = async (req, res) => {
        VALUES (?, ?, ?, ?)`,
       ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
     );
+
+    clearStudentsCache();
 
     res.json({
       success: true,
@@ -1045,6 +1139,8 @@ exports.createStudent = async (req, res) => {
       ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
     );
 
+    clearStudentsCache();
+
     res.status(201).json({
       success: true,
       message: 'Student created successfully',
@@ -1124,6 +1220,8 @@ exports.promoteStudent = async (req, res) => {
       promotionResult.nextStage,
       promotionResult.serializedStudentData
     );
+
+    clearStudentsCache();
 
     return res.json({
       success: true,
@@ -1254,6 +1352,10 @@ exports.bulkPromoteStudents = async (req, res) => {
     }
 
     const hasSuccess = results.some(result => result.status === 'success');
+
+    if (hasSuccess) {
+      clearStudentsCache();
+    }
 
     return res.status(hasSuccess ? 200 : 400).json({
       success: hasSuccess,
@@ -1440,6 +1542,10 @@ exports.bulkUpdatePinNumbers = async (req, res) => {
       ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
     );
+
+    if (successCount > 0) {
+      clearStudentsCache();
+    }
 
     res.json({
       success: true,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Eye,
@@ -39,6 +39,13 @@ const Students = () => {
   const [editData, setEditData] = useState({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({});
+  const [quickFilterOptions, setQuickFilterOptions] = useState({
+    batches: [],
+    courses: [],
+    branches: [],
+    years: [],
+    semesters: []
+  });
   const [availableFields, setAvailableFields] = useState([]);
   const [showBulkRollNumber, setShowBulkRollNumber] = useState(false);
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
@@ -55,6 +62,35 @@ const Students = () => {
   const [loadingForms, setLoadingForms] = useState(false);
   const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const lastQueryRef = useRef({ page: 1, limit: 25, filters: {}, search: '' });
+  const skipFilterFetchRef = useRef(false);
+  const filtersRef = useRef(filters);
+  const searchTermRef = useRef(searchTerm);
+  const pageSizeRef = useRef(pageSize);
+  const pageSizeOptions = [10, 25, 50, 100];
+
+  const safePageSize = pageSize || 1;
+  const totalPages = totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / safePageSize)) : 1;
+  const showingFromRaw = totalStudents === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
+  const showingFrom = totalStudents === 0 ? 0 : Math.min(showingFromRaw, totalStudents);
+  const showingTo = totalStudents === 0 ? 0 : Math.min(totalStudents, showingFrom + Math.max(students.length - 1, 0));
+  const isFirstPage = currentPage <= 1;
+  const isLastPage = currentPage >= totalPages;
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
+  useEffect(() => {
+    searchTermRef.current = searchTerm;
+  }, [searchTerm]);
+
+  useEffect(() => {
+    pageSizeRef.current = pageSize;
+  }, [pageSize]);
 
   // Get completion percentage for a student from backend
   const getStudentCompletionPercentage = async (admissionNumber) => {
@@ -155,7 +191,22 @@ const Students = () => {
     const newStudent = location.state?.newStudent;
     if (newStudent) {
       // Add the new student to state without fetching
-      setStudents(prev => [newStudent, ...prev]);
+      setStudents(prev => {
+        const limit = lastQueryRef.current?.limit || pageSizeRef.current || prev.length || 25;
+        const updated = [newStudent, ...prev];
+        if (limit && updated.length > limit) {
+          return updated.slice(0, limit);
+        }
+        return updated;
+      });
+      setTotalStudents(prev => prev + 1);
+      setCurrentPage(1);
+      lastQueryRef.current = {
+        page: 1,
+        limit: lastQueryRef.current?.limit || pageSizeRef.current || 25,
+        filters: { ...filtersRef.current },
+        search: searchTermRef.current
+      };
       // Fetch completion percentage for the new student
       getStudentCompletionPercentage(newStudent.admission_number).then(percentage => {
         setCompletionPercentages(prev => ({
@@ -166,7 +217,7 @@ const Students = () => {
       // Clear the state to avoid re-adding on re-renders
       window.history.replaceState({}, document.title);
     } else {
-      fetchStudents();
+      fetchStudents({ page: 1 });
     }
   }, [location.state]);
 
@@ -178,16 +229,44 @@ const Students = () => {
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
     fetchFilterFields();
+    fetchQuickFilterOptions();
   }, []);
 
   // Real-time filtering effect with server-side filtering
   useEffect(() => {
+    if (skipFilterFetchRef.current) {
+      skipFilterFetchRef.current = false;
+      return;
+    }
+
     const debounceTimer = setTimeout(() => {
       applyFilters();
     }, 300); // Debounce API calls
 
     return () => clearTimeout(debounceTimer);
   }, [searchTerm, filters]);
+
+  useEffect(() => {
+    setAvailableFields([]);
+  }, [searchTerm, filters]);
+
+  const fetchQuickFilterOptions = async () => {
+    try {
+      const response = await api.get('/attendance/filters');
+      if (response.data?.success) {
+        const data = response.data.data || {};
+        setQuickFilterOptions({
+          batches: data.batches || [],
+          courses: data.courses || [],
+          branches: data.branches || [],
+          years: data.years || [],
+          semesters: data.semesters || []
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to fetch quick filter options:', error);
+    }
+  };
 
   // Fetch completion percentages when students are loaded (in parallel)
   useEffect(() => {
@@ -230,69 +309,157 @@ const Students = () => {
   }, [students]);
 
   useEffect(() => {
+    if (students.length === 0) {
+      return;
+    }
+
     // Extract available fields and their unique values from current students data
-    // This now works with filtered data since we're doing server-side filtering
-    if (students.length > 0) {
-      const fieldsMap = {};
+    const fieldsMap = {};
 
-      // Keywords to exclude (text fields that shouldn't be filters)
-      const excludeKeywords = ['name', 'phone', 'mobile', 'contact', 'address', 'email', 'number', 'guardian', 'parent', 'information'];
+    // Keywords to exclude (text fields that shouldn't be filters)
+    const excludeKeywords = ['name', 'phone', 'mobile', 'contact', 'address', 'email', 'number', 'guardian', 'parent', 'information'];
 
-      students.forEach(student => {
-        if (!student.student_data || typeof student.student_data !== 'object') {
-          return; // Skip students without valid student_data
+    students.forEach(student => {
+      if (!student.student_data || typeof student.student_data !== 'object') {
+        return; // Skip students without valid student_data
+      }
+      Object.entries(student.student_data).forEach(([key, value]) => {
+        const keyLower = key.toLowerCase();
+        const shouldExclude = excludeKeywords.some(keyword => keyLower.includes(keyword));
+
+        if (!shouldExclude && !fieldsMap[key]) {
+          fieldsMap[key] = new Set();
         }
-        Object.entries(student.student_data).forEach(([key, value]) => {
-          const keyLower = key.toLowerCase();
-          const shouldExclude = excludeKeywords.some(keyword => keyLower.includes(keyword));
+        if (!shouldExclude && value && typeof value === 'string') {
+          fieldsMap[key].add(value);
+        }
+      });
+    });
 
-          if (!shouldExclude && !fieldsMap[key]) {
-            fieldsMap[key] = new Set();
-          }
-          if (!shouldExclude && value && typeof value === 'string') {
-            fieldsMap[key].add(value);
-          }
-        });
+    const fieldsArray = Object.entries(fieldsMap).map(([key, values]) => ({
+      name: key,
+      values: Array.from(values).sort()
+    }));
+
+    setAvailableFields(prevFields => {
+      const combinedMap = new Map();
+
+      prevFields.forEach(field => {
+        combinedMap.set(field.name, new Set(field.values));
       });
 
-      const fieldsArray = Object.entries(fieldsMap)
-        .filter(([key, values]) => values.size >= 2 && values.size <= 10)
-        .map(([key, values]) => ({
-          name: key,
-          values: Array.from(values).sort()
-        }));
+      fieldsArray.forEach(field => {
+        if (!combinedMap.has(field.name)) {
+          combinedMap.set(field.name, new Set(field.values));
+        } else {
+          const existingValues = combinedMap.get(field.name);
+          field.values.forEach(value => existingValues.add(value));
+        }
+      });
 
-      setAvailableFields(fieldsArray);
-    }
+      return Array.from(combinedMap.entries())
+        .map(([name, values]) => ({
+          name,
+          values: Array.from(values).sort()
+        }))
+        .filter(field => field.values.length >= 2 && field.values.length <= 10);
+    });
   }, [students]);
 
-  const fetchStudents = async (filterParams = {}) => {
+  const fetchStudents = async ({
+    page = 1,
+    limit,
+    filtersOverride,
+    searchOverride
+  } = {}) => {
     setLoading(true);
-    try {
-      // Build query parameters for server-side filtering
-      const queryParams = new URLSearchParams();
 
-      // Add filter parameters if they exist
-      Object.entries(filterParams).forEach(([key, value]) => {
-        if (value !== undefined && value !== '') {
-          queryParams.append(key, value);
-        }
-      });
+    const resolvedFilters =
+      filtersOverride !== undefined && filtersOverride !== null ? filtersOverride : filtersRef.current || {};
+    const resolvedSearch =
+      searchOverride !== undefined && searchOverride !== null ? searchOverride : searchTermRef.current || '';
 
-      // Add search term if exists
-      if (searchTerm && searchTerm.trim()) {
-        queryParams.append('search', searchTerm.trim());
+    const parsedLimit = parseInt(limit ?? pageSizeRef.current ?? 25, 10);
+    const effectiveLimit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 25 : parsedLimit;
+
+    const filterParams = {};
+
+    if (resolvedFilters.dateFrom) filterParams.filter_dateFrom = resolvedFilters.dateFrom;
+    if (resolvedFilters.dateTo) filterParams.filter_dateTo = resolvedFilters.dateTo;
+    if (resolvedFilters.pinNumberStatus) filterParams.filter_pinNumberStatus = resolvedFilters.pinNumberStatus;
+    if (resolvedFilters.year) filterParams.filter_year = resolvedFilters.year;
+    if (resolvedFilters.semester) filterParams.filter_semester = resolvedFilters.semester;
+    if (resolvedFilters.batch) filterParams.filter_batch = resolvedFilters.batch;
+    if (resolvedFilters.course) filterParams.filter_course = resolvedFilters.course;
+    if (resolvedFilters.branch) filterParams.filter_branch = resolvedFilters.branch;
+
+    Object.entries(resolvedFilters).forEach(([key, value]) => {
+      if (key.startsWith('field_') && value) {
+        const fieldName = key.replace('field_', '');
+        filterParams[`filter_field_${fieldName}`] = value;
       }
+    });
 
-      // Make API call with filters
+    const queryParams = new URLSearchParams();
+
+    Object.entries(filterParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value);
+      }
+    });
+
+    if (resolvedSearch && resolvedSearch.trim()) {
+      queryParams.append('search', resolvedSearch.trim());
+    }
+
+    queryParams.append('limit', effectiveLimit);
+    queryParams.append('offset', Math.max(0, (page - 1) * effectiveLimit));
+
+    let responseStudents = [];
+    let paginationData = {};
+    let requestFailed = false;
+
+    try {
       const response = await api.get(`/students?${queryParams.toString()}`);
-      setStudents(response.data.data);
-
+      responseStudents = response.data?.data || [];
+      paginationData = response.data?.pagination || {};
     } catch (error) {
-      toast.error('Failed to fetch students');
+      requestFailed = true;
+      toast.error(error.response?.data?.message || 'Failed to fetch students');
     } finally {
       setLoading(false);
     }
+
+    if (requestFailed) {
+      return;
+    }
+
+    const total = paginationData.total ?? responseStudents.length ?? 0;
+
+    if (page > 1 && responseStudents.length === 0 && total > 0) {
+      setCurrentPage(page - 1);
+      await fetchStudents({
+        page: page - 1,
+        limit: effectiveLimit,
+        filtersOverride: resolvedFilters,
+        searchOverride: resolvedSearch
+      });
+      return;
+    }
+
+    const resolvedPage = total === 0 ? 1 : page;
+
+    setStudents(responseStudents);
+    setTotalStudents(total);
+    setCurrentPage(resolvedPage);
+    setPageSize(effectiveLimit);
+
+    lastQueryRef.current = {
+      page: resolvedPage,
+      limit: effectiveLimit,
+      filters: JSON.parse(JSON.stringify(resolvedFilters || {})),
+      search: resolvedSearch
+    };
   };
 
   const fetchForms = async () => {
@@ -316,33 +483,14 @@ const Students = () => {
 
   // Apply server-side filtering
   const applyFilters = () => {
-    // Build filter parameters for API call
-    const filterParams = {};
-
-    // Add date filters
-    if (filters.dateFrom) filterParams.filter_dateFrom = filters.dateFrom;
-    if (filters.dateTo) filterParams.filter_dateTo = filters.dateTo;
-
-    // Add PIN status filter
-    if (filters.pinNumberStatus) filterParams.filter_pinNumberStatus = filters.pinNumberStatus;
-    if (filters.year) filterParams.filter_year = filters.year;
-    if (filters.semester) filterParams.filter_semester = filters.semester;
-
-    // Add dynamic field filters
-    Object.entries(filters).forEach(([key, value]) => {
-      if (key.startsWith('field_') && value) {
-        const fieldName = key.replace('field_', '');
-        filterParams[`filter_field_${fieldName}`] = value;
-      }
-    });
-
-    // Fetch filtered data from server
-    fetchStudents(filterParams);
+    setCurrentPage(1);
+    fetchStudents({ page: 1 });
   };
 
   // Legacy function for backward compatibility - now uses server-side filtering
   const handleLocalSearch = () => {
-    applyFilters();
+    setCurrentPage(1);
+    fetchStudents({ page: 1 });
   };
 
   const handleFilterChange = (field, value) => {
@@ -355,7 +503,59 @@ const Students = () => {
   const clearFilters = () => {
     setFilters({});
     setSearchTerm('');
-    fetchStudents(); // Fetch unfiltered data from server
+    setAvailableFields([]);
+    setCurrentPage(1);
+    skipFilterFetchRef.current = true;
+    fetchStudents({
+      page: 1,
+      filtersOverride: {},
+      searchOverride: ''
+    });
+  };
+
+  const handlePageChange = (newPage) => {
+    if (loading) {
+      return;
+    }
+
+    if (newPage === currentPage || newPage < 1 || newPage > totalPages) {
+      return;
+    }
+
+    fetchStudents({ page: newPage });
+  };
+
+  const handlePageSizeChange = (event) => {
+    const newSize = parseInt(event.target.value, 10);
+
+    if (loading) {
+      return;
+    }
+
+    if (Number.isNaN(newSize) || newSize <= 0 || newSize === pageSize) {
+      return;
+    }
+
+    setCurrentPage(1);
+    fetchStudents({ page: 1, limit: newSize });
+  };
+
+  const refreshStudents = (pageOverride) => {
+    const lastQuery = lastQueryRef.current || {};
+    const pageToFetch = pageOverride || lastQuery.page || currentPage || 1;
+    const limitToUse = lastQuery.limit || pageSizeRef.current || pageSize;
+    const filtersToUse = lastQuery.filters || filtersRef.current || {};
+    const searchToUse =
+      lastQuery.search !== undefined && lastQuery.search !== null
+        ? lastQuery.search
+        : searchTermRef.current || '';
+
+    fetchStudents({
+      page: pageToFetch,
+      limit: limitToUse,
+      filtersOverride: filtersToUse,
+      searchOverride: searchToUse
+    });
   };
 
 
@@ -553,12 +753,15 @@ const Students = () => {
         delete updated[admissionNumber];
         return updated;
       });
+      setTotalStudents(prev => Math.max(prev - 1, 0));
 
       setSelectedAdmissionNumbers((prev) => {
         const updated = new Set(prev);
         updated.delete(admissionNumber);
         return updated;
       });
+
+      refreshStudents();
 
     } catch (error) {
       toast.error('Failed to delete student');
@@ -606,6 +809,8 @@ const Students = () => {
           return updated;
         });
         setSelectedAdmissionNumbers(new Set());
+        setTotalStudents((prev) => Math.max(prev - deletedCount, 0));
+        refreshStudents();
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete selected students');
@@ -893,6 +1098,51 @@ const Students = () => {
               </select>
 
               <select
+                value={filters.batch || ''}
+                onChange={(e) => handleFilterChange('batch', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.batch ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">Batch: All</option>
+                {(quickFilterOptions.batches || []).map((batch) => (
+                  <option key={batch} value={batch}>
+                    {batch}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.course || ''}
+                onChange={(e) => handleFilterChange('course', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.course ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">Course: All</option>
+                {(quickFilterOptions.courses || []).map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={filters.branch || ''}
+                onChange={(e) => handleFilterChange('branch', e.target.value)}
+                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
+                  filters.branch ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
+                }`}
+              >
+                <option value="">Branch: All</option>
+                {(quickFilterOptions.branches || []).map((branch) => (
+                  <option key={branch} value={branch}>
+                    {branch}
+                  </option>
+                ))}
+              </select>
+
+              <select
                 value={filters.year || ''}
                 onChange={(e) => handleFilterChange('year', e.target.value)}
                 className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
@@ -900,10 +1150,14 @@ const Students = () => {
                 }`}
               >
                 <option value="">Year: All</option>
-                <option value="1">1st Year</option>
-                <option value="2">2nd Year</option>
-                <option value="3">3rd Year</option>
-                <option value="4">4th Year</option>
+                {((quickFilterOptions.years && quickFilterOptions.years.length > 0)
+                  ? quickFilterOptions.years
+                  : [1, 2, 3, 4]
+                ).map((year) => (
+                  <option key={year} value={String(year)}>
+                    {`Year ${year}`}
+                  </option>
+                ))}
               </select>
 
               <select
@@ -914,8 +1168,14 @@ const Students = () => {
                 }`}
               >
                 <option value="">Semester: All</option>
-                <option value="1">Semester 1</option>
-                <option value="2">Semester 2</option>
+                {((quickFilterOptions.semesters && quickFilterOptions.semesters.length > 0)
+                  ? quickFilterOptions.semesters
+                  : [1, 2]
+                ).map((semester) => (
+                  <option key={semester} value={String(semester)}>
+                    {`Semester ${semester}`}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -994,6 +1254,15 @@ const Students = () => {
                           break;
                         case 'pinNumberStatus':
                           label = `PIN: ${value === 'assigned' ? 'With PIN' : 'Without PIN'}`;
+                          break;
+                        case 'batch':
+                          label = `Batch: ${value}`;
+                          break;
+                        case 'course':
+                          label = `Course: ${value}`;
+                          break;
+                        case 'branch':
+                          label = `Branch: ${value}`;
                           break;
                         case 'year':
                           label = `Year: ${value}`;
@@ -1143,7 +1412,8 @@ const Students = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Total Students</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+                <p className="text-3xl font-bold text-blue-600">{totalStudents.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">Across current filters</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-lg">
                 <Users className="text-blue-600" size={24} />
@@ -1214,6 +1484,9 @@ const Students = () => {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Photo</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">PIN Number</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Batch</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Course</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Year / Semester</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
@@ -1276,6 +1549,9 @@ const Students = () => {
                           <span className="text-gray-400 text-xs">Not assigned</span>
                         )}
                       </td>
+                      <td className="py-3 px-4 text-sm text-gray-700">{student.batch || '-'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-700">{student.course || '-'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-700">{student.branch || '-'}</td>
                       <td className="py-3 px-4 text-sm text-gray-700">
                         <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-medium">
                           Year {student.current_year || student.student_data?.current_year || '-'}
@@ -1347,6 +1623,49 @@ const Students = () => {
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-4 py-4 border-t border-gray-100">
+            <div className="text-sm text-gray-600">
+              {totalStudents === 0
+                ? 'No students to display'
+                : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                Rows per page
+                <select
+                  value={pageSize}
+                  onChange={handlePageSizeChange}
+                  className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  disabled={loading}
+                >
+                  {pageSizeOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={isFirstPage || loading || totalStudents === 0}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-600">
+                  Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={isLastPage || loading || totalStudents === 0}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2167,7 +2486,7 @@ const Students = () => {
       <BulkRollNumberModal
         isOpen={showBulkRollNumber}
         onClose={() => setShowBulkRollNumber(false)}
-        onUpdateComplete={fetchStudents}
+        onUpdateComplete={() => refreshStudents()}
       />
 
       <BulkUploadModal
@@ -2176,14 +2495,14 @@ const Students = () => {
         forms={forms}
         isLoadingForms={loadingForms}
         onUploadComplete={() => {
-          fetchStudents();
+          refreshStudents(1);
         }}
       />
 
       <ManualRollNumberModal
         isOpen={showManualRollNumber}
         onClose={() => setShowManualRollNumber(false)}
-        onUpdateComplete={fetchStudents}
+        onUpdateComplete={() => refreshStudents()}
       />
 
       <PromoteStudentModal

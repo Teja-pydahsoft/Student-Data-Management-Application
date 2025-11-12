@@ -457,3 +457,359 @@ exports.markAttendance = async (req, res) => {
   }
 };
 
+const formatDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const safeDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const buildDailySummary = (rows, totalStudents) => {
+  const summary = { present: 0, absent: 0, total: totalStudents || 0, percentage: 0 };
+  rows.forEach((row) => {
+    if (row.status === 'present') summary.present = row.count;
+    if (row.status === 'absent') summary.absent = row.count;
+  });
+  const marked = summary.present + summary.absent;
+  summary.marked = marked;
+  summary.pending = Math.max((summary.total || 0) - marked, 0);
+  const denominator = summary.total || marked || 1;
+  summary.percentage = Math.round(((summary.present || 0) / denominator) * 100);
+  return summary;
+};
+
+const aggregateRowsByDate = (rows) => {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const dateKey = formatDateKey(new Date(row.attendance_date));
+    const entry = grouped.get(dateKey) || { date: dateKey, present: 0, absent: 0 };
+    if (row.status === 'present') entry.present += row.count;
+    if (row.status === 'absent') entry.absent += row.count;
+    grouped.set(dateKey, entry);
+  });
+  return Array.from(grouped.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
+};
+
+const ensureContinuousSeries = (rows, startDate, endDate) => {
+  const cursor = new Date(startDate);
+  const end = new Date(endDate);
+  const map = new Map(rows.map((row) => [row.date, row]));
+  const data = [];
+  while (cursor <= end) {
+    const key = formatDateKey(cursor);
+    const row = map.get(key) || { date: key, present: 0, absent: 0 };
+    data.push({
+      date: key,
+      present: row.present || 0,
+      absent: row.absent || 0,
+      total: (row.present || 0) + (row.absent || 0)
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return data;
+};
+
+const parseOptionalInteger = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const normalizeTextFilter = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
+  const prefix = alias ? `${alias}.` : '';
+  const conditions = [];
+  const params = [];
+
+  if (filters.batch) {
+    conditions.push(`${prefix}batch = ?`);
+    params.push(filters.batch);
+  }
+
+  if (filters.course) {
+    conditions.push(`${prefix}course = ?`);
+    params.push(filters.course);
+  }
+
+  if (filters.branch) {
+    conditions.push(`${prefix}branch = ?`);
+    params.push(filters.branch);
+  }
+
+  if (Number.isInteger(filters.year)) {
+    conditions.push(`${prefix}current_year = ?`);
+    params.push(filters.year);
+  }
+
+  if (Number.isInteger(filters.semester)) {
+    conditions.push(`${prefix}current_semester = ?`);
+    params.push(filters.semester);
+  }
+
+  return { conditions, params };
+};
+
+const buildWhereClause = (filters, alias) => {
+  const { conditions, params } = buildStudentFilterConditions(filters, alias);
+  const clause = conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
+  return { clause, params };
+};
+
+exports.getAttendanceSummary = async (req, res) => {
+  try {
+    const referenceDate = safeDate(req.query.date) || new Date();
+    const todayKey = formatDateKey(referenceDate);
+
+    const weekStart = new Date(referenceDate);
+    weekStart.setDate(referenceDate.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const filters = {
+      batch: normalizeTextFilter(req.query.batch),
+      course: normalizeTextFilter(req.query.course),
+      branch: normalizeTextFilter(req.query.branch),
+      year: parseOptionalInteger(req.query.year),
+      semester: parseOptionalInteger(req.query.semester)
+    };
+
+    const countFilter = buildWhereClause(filters, 's');
+
+    const [studentCountRows] = await masterPool.query(
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}`,
+      countFilter.params
+    );
+    const totalStudents = studentCountRows[0]?.totalStudents || 0;
+
+    const dailyFilter = buildWhereClause(filters, 's');
+    const [dailyRows] = await masterPool.query(
+      `
+        SELECT ar.status, COUNT(*) AS count
+        FROM attendance_records ar
+        INNER JOIN students s ON s.id = ar.student_id
+        WHERE ar.attendance_date = ?${dailyFilter.clause}
+        GROUP BY ar.status
+      `,
+      [todayKey, ...dailyFilter.params]
+    );
+
+    const windowFilter = buildWhereClause(filters, 's');
+    const [weeklyRows] = await masterPool.query(
+      `
+        SELECT ar.attendance_date, ar.status, COUNT(*) AS count
+        FROM attendance_records ar
+        INNER JOIN students s ON s.id = ar.student_id
+        WHERE ar.attendance_date BETWEEN ? AND ?${windowFilter.clause}
+        GROUP BY attendance_date, status
+        ORDER BY attendance_date ASC
+      `,
+      [formatDateKey(weekStart), todayKey, ...windowFilter.params]
+    );
+
+    const monthFilter = buildWhereClause(filters, 's');
+    const [monthlyRows] = await masterPool.query(
+      `
+        SELECT ar.attendance_date, ar.status, COUNT(*) AS count
+        FROM attendance_records ar
+        INNER JOIN students s ON s.id = ar.student_id
+        WHERE ar.attendance_date BETWEEN ? AND ?${monthFilter.clause}
+        GROUP BY attendance_date, status
+        ORDER BY attendance_date ASC
+      `,
+      [formatDateKey(monthStart), todayKey, ...monthFilter.params]
+    );
+
+    const weeklyAggregated = aggregateRowsByDate(weeklyRows);
+    const monthlyAggregated = aggregateRowsByDate(monthlyRows);
+
+    const weeklySeries = ensureContinuousSeries(weeklyAggregated, weekStart, referenceDate);
+    const monthlySeries = ensureContinuousSeries(monthlyAggregated, monthStart, referenceDate);
+
+    const weeklyTotals = weeklySeries.reduce(
+      (acc, entry) => {
+        acc.present += entry.present;
+        acc.absent += entry.absent;
+        return acc;
+      },
+      { present: 0, absent: 0 }
+    );
+    weeklyTotals.total = weeklyTotals.present + weeklyTotals.absent;
+
+    const monthlyTotals = monthlySeries.reduce(
+      (acc, entry) => {
+        acc.present += entry.present;
+        acc.absent += entry.absent;
+        return acc;
+      },
+      { present: 0, absent: 0 }
+    );
+    monthlyTotals.total = monthlyTotals.present + monthlyTotals.absent;
+
+    res.json({
+      success: true,
+      data: {
+        totalStudents,
+        referenceDate: todayKey,
+        filters: {
+          batch: filters.batch,
+          course: filters.course,
+          branch: filters.branch,
+          year: filters.year,
+          semester: filters.semester
+        },
+        daily: {
+          date: todayKey,
+          ...buildDailySummary(dailyRows, totalStudents)
+        },
+        weekly: {
+          startDate: formatDateKey(weekStart),
+          endDate: todayKey,
+          totals: weeklyTotals,
+          series: weeklySeries
+        },
+        monthly: {
+          startDate: formatDateKey(monthStart),
+          endDate: todayKey,
+          totals: monthlyTotals,
+          series: monthlySeries
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch attendance summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching attendance summary'
+    });
+  }
+};
+
+const buildStudentSeries = (rows, startDate, endDate) => {
+  const cursor = new Date(startDate);
+  const end = new Date(endDate);
+  const map = new Map(
+    rows.map((row) => [formatDateKey(new Date(row.attendance_date)), row.status])
+  );
+
+  const series = [];
+  const totals = { present: 0, absent: 0, unmarked: 0 };
+
+  while (cursor <= end) {
+    const key = formatDateKey(cursor);
+    const status = map.get(key) || 'unmarked';
+    series.push({ date: key, status });
+
+    if (status === 'present') totals.present += 1;
+    else if (status === 'absent') totals.absent += 1;
+    else totals.unmarked += 1;
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return { series, totals };
+};
+
+exports.getStudentAttendanceHistory = async (req, res) => {
+  try {
+    const studentId = Number(req.params.studentId);
+    if (!Number.isInteger(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student id'
+      });
+    }
+
+    const referenceDate = safeDate(req.query.date) || new Date();
+    const todayKey = formatDateKey(referenceDate);
+
+    const weekStart = new Date(referenceDate);
+    weekStart.setDate(referenceDate.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date(referenceDate);
+    monthStart.setDate(referenceDate.getDate() - 29);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const [studentRows] = await masterPool.query(
+      `
+        SELECT id, student_name, pin_no, batch, course, branch, current_year, current_semester
+        FROM students
+        WHERE id = ?
+      `,
+      [studentId]
+    );
+
+    if (studentRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const [historyRows] = await masterPool.query(
+      `
+        SELECT attendance_date, status
+        FROM attendance_records
+        WHERE student_id = ?
+          AND attendance_date BETWEEN ? AND ?
+        ORDER BY attendance_date ASC
+      `,
+      [studentId, formatDateKey(monthStart), todayKey]
+    );
+
+    const weeklyRows = historyRows.filter(
+      (row) => new Date(row.attendance_date) >= weekStart
+    );
+
+    const weekly = buildStudentSeries(weeklyRows, weekStart, referenceDate);
+    const monthly = buildStudentSeries(historyRows, monthStart, referenceDate);
+
+    res.json({
+      success: true,
+      data: {
+        student: {
+          id: studentRows[0].id,
+          name: studentRows[0].student_name,
+          pin: studentRows[0].pin_no,
+          batch: studentRows[0].batch,
+          course: studentRows[0].course,
+          branch: studentRows[0].branch,
+          currentYear: studentRows[0].current_year,
+          currentSemester: studentRows[0].current_semester
+        },
+        weekly: {
+          startDate: formatDateKey(weekStart),
+          endDate: todayKey,
+          totals: weekly.totals,
+          series: weekly.series
+        },
+        monthly: {
+          startDate: formatDateKey(monthStart),
+          endDate: todayKey,
+          totals: monthly.totals,
+          series: monthly.series
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch student attendance history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching student attendance history'
+    });
+  }
+};
+
