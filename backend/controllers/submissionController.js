@@ -125,6 +125,703 @@ const COLUMN_ALIAS_MAP = {
 
 const getColumnNameForField = (fieldKey) => COLUMN_ALIAS_MAP[fieldKey] || null;
 
+const normalizeHeaderKey = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const normalizeComparisonValue = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const toExcelColumn = (index) => {
+  let dividend = index + 1;
+  let columnName = '';
+  while (dividend > 0) {
+    const modulo = (dividend - 1) % 26;
+    columnName = String.fromCharCode(65 + modulo) + columnName;
+    dividend = Math.floor((dividend - modulo) / 26);
+  }
+  return columnName;
+};
+
+const BASE_TEMPLATE_FIELDS = [
+  {
+    header: 'admission_number',
+    valueKey: 'admission_number',
+    displayName: 'Admission Number',
+    category: 'Administrative',
+    required: false,
+    description: 'Existing student admission number. Leave blank for new admissions.',
+    example: 'ADM001',
+    aliases: ['Admission Number', 'Admission No', 'admissionnumber', 'admission no', 'admission_no']
+  },
+  {
+    header: 'Pin No',
+    valueKey: 'pin_no',
+    displayName: 'PIN Number',
+    category: 'Administrative',
+    required: false,
+    description: 'Internal PIN or roll number if already assigned.',
+    example: 'PIN123',
+    aliases: ['PIN', 'PIN Number', 'pinno', 'roll no', 'roll number', 'pin_number']
+  },
+  {
+    header: 'Batch',
+    valueKey: 'batch',
+    displayName: 'Batch',
+    category: 'Academic',
+    required: false,
+    description: 'Batch or academic year grouping for the student.',
+    example: '2023-24',
+    aliases: ['Batch Name', 'batchyear', 'batch year']
+  },
+  {
+    header: 'Course',
+    valueKey: 'course',
+    displayName: 'Course',
+    category: 'Academic',
+    required: true,
+    description: 'Course name exactly as configured (for example B.Tech, MBA, Diploma).',
+    example: 'B.Tech',
+    aliases: ['Course Name', 'course_name', 'program', 'programme']
+  },
+  {
+    header: 'Branch',
+    valueKey: 'branch',
+    displayName: 'Branch',
+    category: 'Academic',
+    required: true,
+    description: 'Branch / department name exactly as configured for the selected course.',
+    example: 'Computer Science',
+    aliases: ['Branch Name', 'branch_name', 'department', 'dept']
+  },
+  {
+    header: 'StudType',
+    valueKey: 'stud_type',
+    displayName: 'Student Type',
+    category: 'Academic',
+    required: false,
+    description: 'Student type such as Regular, Lateral, Management quota etc.',
+    example: 'Regular',
+    aliases: ['Student Type', 'studtype', 'studenttype']
+  },
+  {
+    header: 'Current Academic Year',
+    valueKey: 'current_year',
+    displayName: 'Current Academic Year',
+    category: 'Academic Progress',
+    required: false,
+    description: 'Numeric academic year the student currently belongs to (1, 2, 3...).',
+    example: '3',
+    aliases: ['Current Year', 'Year', 'Academic Year', 'currentyear']
+  },
+  {
+    header: 'Current Semester',
+    valueKey: 'current_semester',
+    displayName: 'Current Semester',
+    category: 'Academic Progress',
+    required: false,
+    description: 'Numeric semester the student is currently studying (1, 2, 3...).',
+    example: '1',
+    aliases: ['Semester', 'Sem', 'currentsemester']
+  },
+  {
+    header: 'Student Name',
+    valueKey: 'student_name',
+    displayName: 'Student Name',
+    category: 'Identity',
+    required: true,
+    description: 'Full name of the student as per official records.',
+    example: 'John Doe',
+    aliases: ['Name', 'Full Name', 'studentname']
+  },
+  {
+    header: 'Student Status',
+    valueKey: 'student_status',
+    displayName: 'Student Status',
+    category: 'Academic',
+    required: false,
+    description: 'Academic status such as Active, Inactive, Completed etc.',
+    example: 'Active',
+    aliases: ['Status', 'studentstatus']
+  },
+  {
+    header: 'Scholar Status',
+    valueKey: 'scholar_status',
+    displayName: 'Scholar Status',
+    category: 'Administrative',
+    required: false,
+    description: 'Scholarship or fee concession status if applicable.',
+    example: 'Scholarship',
+    aliases: ['Scholarship Status', 'scholarstatus']
+  },
+  {
+    header: 'Student Mobile Number',
+    valueKey: 'student_mobile',
+    displayName: 'Student Mobile Number',
+    category: 'Contact',
+    required: false,
+    description: 'Primary contact number of the student.',
+    example: '9876543210',
+    aliases: ['Mobile Number', 'student mobile', 'mobile', 'studentmobile']
+  },
+  {
+    header: 'Parent Mobile Number 1',
+    valueKey: 'parent_mobile1',
+    displayName: 'Parent Mobile Number 1',
+    category: 'Contact',
+    required: false,
+    description: 'Primary contact number for parent or guardian.',
+    example: '9123456789',
+    aliases: ['Parent Mobile', 'parentmobile1', 'parent mobile 1']
+  },
+  {
+    header: 'Parent Mobile Number 2',
+    valueKey: 'parent_mobile2',
+    displayName: 'Parent Mobile Number 2',
+    category: 'Contact',
+    required: false,
+    description: 'Alternate parent or guardian contact number.',
+    example: '9876501234',
+    aliases: ['Alternate Parent Mobile', 'parentmobile2', 'parent mobile 2']
+  },
+  {
+    header: 'Caste',
+    valueKey: 'caste',
+    displayName: 'Caste / Category',
+    category: 'Demographics',
+    required: false,
+    description: 'Community / category information if tracked.',
+    example: 'OC',
+    aliases: ['Category', 'community', 'castecategory']
+  },
+  {
+    header: 'M/F',
+    valueKey: 'gender',
+    displayName: 'Gender',
+    category: 'Demographics',
+    required: false,
+    description: 'Gender of the student (M, F, Other).',
+    example: 'M',
+    aliases: ['Gender', 'Sex', 'genderidentity']
+  },
+  {
+    header: 'DOB (Date-Month-Year)',
+    valueKey: 'dob',
+    displayName: 'Date of Birth',
+    category: 'Identity',
+    required: false,
+    description: 'Date of birth in DD-MMM-YYYY format (for example 01-Jan-2000).',
+    example: '01-Jan-2000',
+    aliases: ['DOB', 'Date of Birth', 'birthdate']
+  },
+  {
+    header: 'Father Name',
+    valueKey: 'father_name',
+    displayName: 'Father / Guardian Name',
+    category: 'Identity',
+    required: false,
+    description: 'Name of father or primary guardian.',
+    example: 'Mr. John Senior',
+    aliases: ['Guardian Name', 'Parent Name', 'fathername']
+  },
+  {
+    header: 'Admission Year (Ex: 09-Sep-2003)',
+    valueKey: 'admission_date',
+    displayName: 'Admission Date',
+    category: 'Administrative',
+    required: false,
+    description: 'Date of admission in DD-MMM-YYYY format.',
+    example: '01-Sep-2023',
+    aliases: ['Admission Date', 'admissionyear', 'dateofadmission']
+  },
+  {
+    header: 'AADHAR No',
+    valueKey: 'adhar_no',
+    displayName: 'AADHAR Number',
+    category: 'Identity',
+    required: false,
+    description: '12 digit AADHAR number. Numbers only, without spaces.',
+    example: '123456789012',
+    aliases: ['Aadhaar Number', 'Aadhar', 'aadhaarno', 'aadhaar']
+  },
+  {
+    header: 'Student Address',
+    valueKey: 'student_address',
+    displayName: 'Student Address',
+    category: 'Contact',
+    required: false,
+    description: 'Full postal address of the student.',
+    example: '123 Main Street',
+    aliases: ['Address', 'studentaddress']
+  },
+  {
+    header: 'CityVillage Name',
+    valueKey: 'city_village',
+    displayName: 'City / Village',
+    category: 'Contact',
+    required: false,
+    description: 'City or village name from the postal address.',
+    example: 'Hyderabad',
+    aliases: ['City', 'Village', 'city', 'cityvillage']
+  },
+  {
+    header: 'Mandal Name',
+    valueKey: 'mandal_name',
+    displayName: 'Mandal / Taluk',
+    category: 'Contact',
+    required: false,
+    description: 'Mandal or taluk from the postal address.',
+    example: 'Serilingampally',
+    aliases: ['Mandal', 'Taluk', 'mandal', 'taluk']
+  },
+  {
+    header: 'District Name',
+    valueKey: 'district',
+    displayName: 'District',
+    category: 'Contact',
+    required: false,
+    description: 'District from the postal address.',
+    example: 'Rangareddy',
+    aliases: ['District', 'districtname']
+  },
+  {
+    header: 'Previous College Name',
+    valueKey: 'previous_college',
+    displayName: 'Previous College',
+    category: 'Academic',
+    required: false,
+    description: 'Name of the previous institution attended, if any.',
+    example: 'ABC Junior College',
+    aliases: ['Previous College', 'previouscollege']
+  },
+  {
+    header: 'Certificate Status',
+    valueKey: 'certificates_status',
+    displayName: 'Certificates Status',
+    category: 'Administrative',
+    required: false,
+    description: 'Certificate verification status (Pending, Submitted, Verified...).',
+    example: 'Pending',
+    aliases: ['Certificate Status', 'certificatesstatus']
+  },
+  {
+    header: 'Remarks',
+    valueKey: 'remarks',
+    displayName: 'Remarks / Notes',
+    category: 'Administrative',
+    required: false,
+    description: 'Any additional notes for the admin team.',
+    example: 'Eligible for sports quota',
+    aliases: ['Notes', 'comments', 'remark']
+  }
+];
+
+const registerListMapValue = (map, rawKey, value) => {
+  if (!rawKey) {
+    return;
+  }
+  const key = normalizeComparisonValue(rawKey);
+  if (!key) {
+    return;
+  }
+  if (!map.has(key)) {
+    map.set(key, []);
+  }
+  const list = map.get(key);
+  if (!list.some((item) => item.id === value.id)) {
+    list.push(value);
+  }
+};
+
+const buildCourseBranchIndex = async () => {
+  try {
+    const [courseRows] = await masterPool.query(
+      'SELECT id, name, code FROM courses WHERE is_active = 1 ORDER BY name ASC'
+    );
+
+    if (!courseRows || courseRows.length === 0) {
+      return {
+        options: [],
+        courseById: new Map(),
+        courseByKey: new Map(),
+        branchByKey: new Map()
+      };
+    }
+
+    const courseIds = courseRows.map((course) => course.id);
+    let branchRows = [];
+
+    if (courseIds.length > 0) {
+      const [branches] = await masterPool.query(
+        'SELECT id, course_id, name, code FROM course_branches WHERE is_active = 1 AND course_id IN (?) ORDER BY name ASC',
+        [courseIds]
+      );
+      branchRows = branches || [];
+    }
+
+    const courseById = new Map();
+    const courseByKey = new Map();
+    const branchByKey = new Map();
+
+    const sanitizedCourses = courseRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      branches: []
+    }));
+
+    sanitizedCourses.forEach((course) => {
+      courseById.set(course.id, course);
+      const possibleKeys = [
+        course.name,
+        course.code,
+        `${course.name || ''} ${course.code || ''}`
+      ];
+      possibleKeys.forEach((value) => {
+        const key = normalizeComparisonValue(value);
+        if (key && !courseByKey.has(key)) {
+          courseByKey.set(key, course);
+        }
+      });
+    });
+
+    branchRows.forEach((row) => {
+      const branch = {
+        id: row.id,
+        courseId: row.course_id,
+        name: row.name,
+        code: row.code
+      };
+      const course = courseById.get(branch.courseId);
+      if (course) {
+        course.branches.push(branch);
+      }
+
+      const possibleKeys = [
+        branch.name,
+        branch.code,
+        `${branch.name || ''} ${branch.code || ''}`,
+        course ? `${course.name || ''} ${branch.name || ''}` : '',
+        course ? `${course.code || ''} ${branch.code || ''}` : ''
+      ];
+      possibleKeys.forEach((value) => registerListMapValue(branchByKey, value, branch));
+    });
+
+    sanitizedCourses.forEach((course) => {
+      course.branches.sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    return {
+      options: sanitizedCourses,
+      courseById,
+      courseByKey,
+      branchByKey
+    };
+  } catch (error) {
+    console.error('Failed to build course/branch index:', error);
+    return {
+      options: [],
+      courseById: new Map(),
+      courseByKey: new Map(),
+      branchByKey: new Map()
+    };
+  }
+};
+
+const resolveCourseAndBranch = (courseIndex, {
+  courseValue,
+  courseCodeValue,
+  branchValue,
+  branchCodeValue
+}) => {
+  if (!courseIndex) {
+    return {
+      course: null,
+      branch: null,
+      errors: []
+    };
+  }
+
+  const { courseByKey, branchByKey, courseById } = courseIndex;
+
+  const candidateCourseKeys = [
+    courseCodeValue,
+    courseValue
+  ]
+    .map((value) => normalizeComparisonValue(value))
+    .filter((value) => value);
+
+  let matchedCourse = null;
+  for (const key of candidateCourseKeys) {
+    if (courseByKey.has(key)) {
+      matchedCourse = courseByKey.get(key);
+      break;
+    }
+  }
+
+  const candidateBranchKeys = [
+    branchCodeValue,
+    branchValue
+  ]
+    .map((value) => normalizeComparisonValue(value))
+    .filter((value) => value);
+
+  let matchedBranch = null;
+  let candidateBranches = [];
+
+  candidateBranchKeys.forEach((key) => {
+    const branchList = branchByKey.get(key);
+    if (branchList && branchList.length > 0) {
+      candidateBranches = candidateBranches.concat(branchList);
+    }
+  });
+
+  if (candidateBranches.length === 1) {
+    matchedBranch = candidateBranches[0];
+  } else if (candidateBranches.length > 1 && matchedCourse) {
+    const filtered = candidateBranches.filter((branch) => branch.courseId === matchedCourse.id);
+    if (filtered.length === 1) {
+      matchedBranch = filtered[0];
+    } else if (filtered.length > 1) {
+      return {
+        course: matchedCourse,
+        branch: null,
+        errors: [
+          {
+            type: 'ambiguous_branch',
+            message: `Multiple branches matched "${branchValue || branchCodeValue}". Please provide the exact branch name.`,
+            details: {
+              providedValue: branchValue || branchCodeValue,
+              matchingBranches: filtered.map((branch) => branch.name)
+            }
+          }
+        ]
+      };
+    }
+  } else if (candidateBranches.length > 1 && !matchedCourse) {
+    const uniqueCourseIds = Array.from(new Set(candidateBranches.map((branch) => branch.courseId)));
+    if (uniqueCourseIds.length === 1) {
+      matchedBranch = candidateBranches[0];
+      matchedCourse = courseById.get(uniqueCourseIds[0]) || null;
+    } else {
+      return {
+        course: null,
+        branch: null,
+        errors: [
+          {
+            type: 'ambiguous_branch',
+            message: `Branch "${branchValue || branchCodeValue}" exists in multiple courses. Please specify the course as well.`,
+            details: {
+              providedValue: branchValue || branchCodeValue,
+              courses: uniqueCourseIds
+                .map((courseId) => courseById.get(courseId))
+                .filter(Boolean)
+                .map((course) => course.name)
+            }
+          }
+        ]
+      };
+    }
+  }
+
+  if (!matchedCourse && matchedBranch) {
+    matchedCourse = courseById.get(matchedBranch.courseId) || null;
+  }
+
+  if (!matchedBranch && !branchValue && matchedCourse && matchedCourse.branches.length === 1) {
+    matchedBranch = matchedCourse.branches[0];
+  }
+
+  const errors = [];
+
+  if (!matchedCourse && candidateCourseKeys.length > 0) {
+    errors.push({
+      type: 'invalid_course',
+      message: `Course "${courseValue || courseCodeValue}" was not found in the active course configuration.`,
+      details: {
+        providedValue: courseValue || courseCodeValue
+      }
+    });
+  }
+
+  if (branchValue || branchCodeValue) {
+    if (!matchedBranch) {
+      errors.push({
+        type: 'invalid_branch',
+        message: `Branch "${branchValue || branchCodeValue}" was not found in the active course configuration.`,
+        details: {
+          providedValue: branchValue || branchCodeValue,
+          course: matchedCourse ? matchedCourse.name : null
+        }
+      });
+    } else if (matchedCourse && matchedBranch.courseId !== matchedCourse.id) {
+      errors.push({
+        type: 'invalid_branch_course_combination',
+        message: `Branch "${matchedBranch.name}" does not belong to course "${matchedCourse.name}".`,
+        details: {
+          branch: matchedBranch.name,
+          course: matchedCourse.name
+        }
+      });
+    }
+  }
+
+  return {
+    course: matchedCourse || null,
+    branch: matchedBranch || null,
+    errors
+  };
+};
+
+const buildTemplateResources = async (formId) => {
+  if (!formId) {
+    const error = new Error('Form ID is required');
+    error.status = 400;
+    throw error;
+  }
+
+  const { data: forms, error } = await supabase
+    .from('forms')
+    .select('*')
+    .eq('form_id', formId)
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!forms || forms.length === 0) {
+    const notFoundError = new Error('Form not found');
+    notFoundError.status = 404;
+    throw notFoundError;
+  }
+
+  const form = forms[0];
+  const rawFormFields = parseJSON(form.form_fields) || [];
+  const formFields = Array.isArray(rawFormFields) ? rawFormFields : [];
+
+  const systemFields = BASE_TEMPLATE_FIELDS.map((field) => ({
+    ...field,
+    normalizedHeader: normalizeHeaderKey(field.header),
+    normalizedAliases: (field.aliases || []).map((alias) => normalizeHeaderKey(alias)).filter(Boolean),
+    source: 'System'
+  }));
+
+  const normalizedHeaders = new Set(systemFields.map((field) => field.normalizedHeader));
+
+  const dynamicFields = [];
+
+  formFields.forEach((field) => {
+    const label = (field?.label || field?.name || field?.key || '').toString().trim();
+    const key = (field?.key || label || '').toString().trim();
+
+    if (!label || !key) {
+      return;
+    }
+
+    const header = label;
+    const normalizedHeader = normalizeHeaderKey(header);
+
+    if (!normalizedHeader || normalizedHeaders.has(normalizedHeader)) {
+      return;
+    }
+
+    normalizedHeaders.add(normalizedHeader);
+
+    const required =
+      field?.required === true ||
+      field?.isRequired === true ||
+      field?.validation === 'required' ||
+      (Array.isArray(field?.validators) && field.validators.includes('required'));
+
+    const description =
+      field?.description ||
+      field?.helpText ||
+      field?.placeholder ||
+      '';
+
+    let example = '';
+    if (field?.example) {
+      example = field.example;
+    } else if (Array.isArray(field?.options) && field.options.length > 0) {
+      const firstOption = field.options[0];
+      example = typeof firstOption === 'string' ? firstOption : (firstOption?.label || firstOption?.value || '');
+    } else if (field?.defaultValue) {
+      example = field.defaultValue;
+    }
+
+    dynamicFields.push({
+      header,
+      valueKey: key,
+      displayName: label,
+      category: field?.category || 'Form Field',
+      required: !!required,
+      description,
+      example: example ? example.toString() : '',
+      normalizedHeader,
+      normalizedAliases: [normalizeHeaderKey(key), normalizeHeaderKey(label)],
+      source: 'Form'
+    });
+  });
+
+  const allFields = [...systemFields, ...dynamicFields];
+
+  const fieldMapping = {};
+  const normalizedFieldMapping = {};
+
+  allFields.forEach((field) => {
+    fieldMapping[field.header] = field.valueKey;
+    field.normalizedAliases
+      .concat([field.normalizedHeader])
+      .filter(Boolean)
+      .forEach((normalizedAlias) => {
+        if (!normalizedFieldMapping[normalizedAlias]) {
+          normalizedFieldMapping[normalizedAlias] = field.valueKey;
+        }
+      });
+  });
+
+  const headers = allFields.map((field) => field.header);
+
+  const sampleRow = headers.map((header) => {
+    const normalized = normalizeHeaderKey(header);
+    const field = allFields.find((item) => item.normalizedHeader === normalized);
+    return field && field.example ? field.example : '';
+  });
+
+  const sanitizedFieldSummaries = allFields.map(({ normalizedHeader, normalizedAliases, ...rest }) => rest);
+
+  const courseIndex = await buildCourseBranchIndex();
+
+  return {
+    form,
+    headers,
+    sampleRow,
+    fieldMapping,
+    normalizedFieldMapping,
+    fieldSummaries: sanitizedFieldSummaries,
+    requiredHeaders: sanitizedFieldSummaries.filter((field) => field.required).map((field) => field.header),
+    optionalHeaders: sanitizedFieldSummaries.filter((field) => !field.required).map((field) => field.header),
+    courseOptions: courseIndex.options,
+    courseIndex
+  };
+};
+
 // Comprehensive logging utility for bulk upload operations
 const logBulkUploadEvent = (level, event, data, timestamp = new Date().toISOString()) => {
   const logEntry = {
@@ -214,7 +911,7 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
     });
 
     // Check for missing critical fields that are required for processing
-    const criticalFields = ['student_name']; // Only student name is truly required
+    const criticalFields = ['student_name', 'course', 'branch'];
     const missingCriticalFields = [];
 
     criticalFields.forEach(field => {
@@ -1149,86 +1846,38 @@ exports.bulkUploadSubmissions = async (req, res) => {
       });
     }
 
-    // Verify form exists
     const formFetchStart = Date.now();
-    const { data: forms, error } = await supabase
-      .from('forms')
-      .select('*')
-      .eq('form_id', formId)
-      .limit(1);
-    if (error) throw error;
-
+    let templateResources;
+    try {
+      templateResources = await buildTemplateResources(formId);
+    } catch (error) {
+      if (error.status === 404) {
+        logBulkUploadError(null, 'FORM_NOT_FOUND', `Form with ID ${formId} not found`);
+        return res.status(404).json({
+          success: false,
+          message: 'Form not found'
+        });
+      }
+      throw error;
+    }
     const formFetchTime = Date.now() - formFetchStart;
     logPerformanceMetrics('FORM_FETCH', formFetchStart, Date.now(), {
       formFetchTime: `${formFetchTime}ms`,
-      formsFound: forms.length
+      formsFound: 1
     });
 
-    if (forms.length === 0) {
-      logBulkUploadError(null, 'FORM_NOT_FOUND', `Form with ID ${formId} not found`);
-      return res.status(404).json({
-        success: false,
-        message: 'Form not found'
-      });
-    }
-
-    const form = forms[0];
-    const formFields = parseJSON(form.form_fields);
-
-    // Create field mapping between CSV headers and form field keys
-    const fieldMapping = {
-      'admission_number': 'admission_number',
-      'Pin No': 'pin_no',
-      'Batch': 'batch',
-      'Branch': 'branch',
-      'Branch Name': 'branch',
-      'Course': 'course',
-      'Course Name': 'course',
-      'StudType': 'stud_type',
-      'Current Academic Year': 'current_year',
-      'Current Year': 'current_year',
-      'Current Semester': 'current_semester',
-      'Student Name': 'student_name',
-      'Student Status': 'student_status',
-      'Scholar Status': 'scholar_status',
-      'Student Mobile Number': 'student_mobile',
-      'Parent Mobile Number 1': 'parent_mobile1',
-      'Parent Mobile Number 2': 'parent_mobile2',
-      'Caste': 'caste',
-      'M/F': 'gender',
-      'DOB (Date-Month-Year)': 'dob',
-      'Father Name': 'father_name',
-      'Admission Year (Ex: 09-Sep-2003)': 'admission_date',
-      'AADHAR No': 'adhar_no',
-      'Student Address': 'student_address',
-      'CityVillage Name': 'city_village',
-      'Mandal Name': 'mandal_name',
-      'District Name': 'district',
-      'Previous College Name': 'previous_college',
-      'Certificate Status': 'certificates_status',
-      'Remarks': 'remarks'
-    };
-
-    if (Array.isArray(formFields)) {
-      formFields.forEach((field) => {
-        const fieldKey = (field?.key || '').trim();
-        if (!fieldKey) {
-          return;
-        }
-        const fieldLabel = (field?.label || '').trim();
-        if (fieldLabel && !fieldMapping[fieldLabel]) {
-          fieldMapping[fieldLabel] = fieldKey;
-        }
-        if (!fieldMapping[fieldKey]) {
-          fieldMapping[fieldKey] = fieldKey;
-        }
-      });
-    }
+    const {
+      form,
+      fieldMapping,
+      normalizedFieldMapping,
+      fieldSummaries,
+      courseIndex
+    } = templateResources;
 
     logBulkUploadEvent('info', 'FORM_LOADED', {
       formId: form.form_id,
       formName: form.form_name,
-      formFieldsCount: formFields.length,
+      formFieldsCount: fieldSummaries.length,
       isActive: form.is_active,
       fieldMapping: fieldMapping
     });
@@ -1402,15 +2051,167 @@ exports.bulkUploadSubmissions = async (req, res) => {
         // Build submission data from row, mapping field names to form field keys
         const submissionData = {};
 
-        // Map data using the field mapping - handle missing fields gracefully
-        Object.entries(fieldMapping).forEach(([csvHeader, fieldKey]) => {
-          if (data[csvHeader] !== undefined && data[csvHeader] !== null) {
-            // Convert Excel data to string and trim safely
-            submissionData[fieldKey] = String(data[csvHeader]).trim();
+        // Map data using normalized field mapping so header variations are supported
+        Object.entries(data || {}).forEach(([header, rawValue]) => {
+          if (rawValue === undefined || rawValue === null) {
+            return;
           }
+          const normalizedHeader = normalizeHeaderKey(header);
+          if (!normalizedHeader) {
+            return;
+          }
+          const fieldKey = normalizedFieldMapping[normalizedHeader];
+          if (!fieldKey) {
+            return;
+          }
+
+          let value = rawValue;
+          if (typeof value === 'string') {
+            value = value.trim();
+          } else if (value instanceof Date) {
+            value = value.toISOString().split('T')[0];
+          } else {
+            value = String(value).trim();
+          }
+
+          if (value === '') {
+            return;
+          }
+
+          submissionData[fieldKey] = value;
         });
 
-        // Log the final submission data for this row
+        const sanitizePhone = (value) => {
+          if (!value || typeof value !== 'string') {
+            return value;
+          }
+          const digitsOnly = value.replace(/[^\d]/g, '');
+          return digitsOnly.length > 0 ? digitsOnly : value.trim();
+        };
+
+        if (submissionData.student_mobile) {
+          submissionData.student_mobile = sanitizePhone(submissionData.student_mobile);
+        }
+        if (submissionData.parent_mobile1) {
+          submissionData.parent_mobile1 = sanitizePhone(submissionData.parent_mobile1);
+        }
+        if (submissionData.parent_mobile2) {
+          submissionData.parent_mobile2 = sanitizePhone(submissionData.parent_mobile2);
+        }
+        if (submissionData.adhar_no && typeof submissionData.adhar_no === 'string') {
+          submissionData.adhar_no = submissionData.adhar_no.replace(/\s+/g, '');
+        }
+
+        if (submissionData.gender && typeof submissionData.gender === 'string') {
+          const normalizedGender = submissionData.gender.trim().toUpperCase();
+          if (['MALE', 'M'].includes(normalizedGender)) {
+            submissionData.gender = 'M';
+          } else if (['FEMALE', 'F'].includes(normalizedGender)) {
+            submissionData.gender = 'F';
+          } else {
+            submissionData.gender = normalizedGender;
+          }
+        }
+
+        const courseResolution = resolveCourseAndBranch(courseIndex, {
+          courseValue: submissionData.course,
+          courseCodeValue: submissionData.course_code || submissionData.course,
+          branchValue: submissionData.branch,
+          branchCodeValue: submissionData.branch_code || submissionData.branch
+        });
+
+        if (courseResolution.errors && courseResolution.errors.length > 0) {
+          const courseError = courseResolution.errors[0];
+          logBulkUploadError(row, courseError.type, courseError.message, courseError.details || {});
+          errors.push({
+            row,
+            message: courseError.message,
+            type: courseError.type,
+            details: courseError.details || {}
+          });
+          failedCount++;
+          if (['invalid_course', 'invalid_branch', 'invalid_branch_course_combination', 'ambiguous_branch'].includes(courseError.type)) {
+            missingFieldCount++;
+          }
+          processedRows.push({
+            row,
+            status: 'failed',
+            reason: courseError.message,
+            type: courseError.type,
+            validationTime: '0ms'
+          });
+          continue;
+        }
+
+        if (courseResolution.course) {
+          submissionData.course = courseResolution.course.name;
+          if (courseResolution.course.code) {
+            submissionData.course_code = courseResolution.course.code;
+          }
+        }
+
+        if (courseResolution.branch) {
+          submissionData.branch = courseResolution.branch.name;
+          if (courseResolution.branch.code) {
+            submissionData.branch_code = courseResolution.branch.code;
+          }
+        }
+
+        if (!submissionData.course) {
+          const message = 'Course is required for each row in the template.';
+          logBulkUploadError(row, 'missing_course', message, {});
+          errors.push({
+            row,
+            message,
+            type: 'missing_course'
+          });
+          missingFieldCount++;
+          failedCount++;
+          processedRows.push({
+            row,
+            status: 'failed',
+            reason: message,
+            type: 'missing_course',
+            validationTime: '0ms'
+          });
+          continue;
+        }
+
+        if (!submissionData.branch) {
+          const message = 'Branch is required for each row in the template.';
+          logBulkUploadError(row, 'missing_branch', message, {});
+          errors.push({
+            row,
+            message,
+            type: 'missing_branch'
+          });
+          missingFieldCount++;
+          failedCount++;
+          processedRows.push({
+            row,
+            status: 'failed',
+            reason: message,
+            type: 'missing_branch',
+            validationTime: '0ms'
+          });
+          continue;
+        }
+
+        if (submissionData.current_year !== undefined && submissionData.current_year !== null) {
+          const parsedYear = parseInt(submissionData.current_year, 10);
+          if (!Number.isNaN(parsedYear)) {
+            submissionData.current_year = parsedYear;
+          }
+        }
+
+        if (submissionData.current_semester !== undefined && submissionData.current_semester !== null) {
+          const parsedSemester = parseInt(submissionData.current_semester, 10);
+          if (!Number.isNaN(parsedSemester)) {
+            submissionData.current_semester = parsedSemester;
+          }
+        }
+
+        // Log the final submission data for this row after normalization
         logBulkUploadEvent('info', 'SUBMISSION_DATA_MAPPED', {
           rowNumber: row,
           mappedFields: Object.keys(submissionData),
@@ -2172,132 +2973,218 @@ exports.getStudentCompletionStatus = async (req, res) => {
   }
 };
 
-// Download Excel template for bulk upload
-exports.downloadExcelTemplate = async (req, res) => {
+exports.getTemplateMetadata = async (req, res) => {
   try {
     const { formId } = req.params;
+    const resources = await buildTemplateResources(formId);
 
-    if (!formId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Form ID is required'
-      });
-    }
+    const {
+      form,
+      headers,
+      fieldSummaries,
+      requiredHeaders,
+      optionalHeaders,
+      sampleRow,
+      courseOptions
+    } = resources;
 
-    // Verify form exists
-    const { data: forms, error } = await supabase
-      .from('forms')
-      .select('*')
-      .eq('form_id', formId)
-      .limit(1);
-
-    if (error) throw error;
-
-    if (forms.length === 0) {
+    res.json({
+      success: true,
+      data: {
+        formId,
+        formName: form.form_name,
+        headers,
+        requiredHeaders,
+        optionalHeaders,
+        fields: fieldSummaries,
+        sampleRow,
+        courseOptions,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    if (error.status === 404) {
       return res.status(404).json({
         success: false,
         message: 'Form not found'
       });
     }
-
-    const form = forms[0];
-    const formFields = parseJSON(form.form_fields) || [];
-
-    const normalizeHeader = (value) => {
-      const normalized = (value || '')
-        .toString()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-      switch (normalized) {
-        case 'admissionno':
-        case 'admissionnum':
-        case 'admissionnumber':
-          return 'admissionnumber';
-        default:
-          return normalized;
-      }
-    };
-
-    const baseHeaders = [
-      'admission_number',
-      'Pin No',
-      'Batch',
-      'Branch',
-      'Course',
-      'StudType',
-      'Current Academic Year',
-      'Current Semester',
-      'Student Name',
-      'Student Status',
-      'Scholar Status',
-      'Student Mobile Number',
-      'Parent Mobile Number 1',
-      'Parent Mobile Number 2',
-      'Caste',
-      'M/F',
-      'DOB (Date-Month-Year)',
-      'Father Name',
-      'Admission Year (Ex: 09-Sep-2003)',
-      'AADHAR No',
-      'Student Address',
-      'CityVillage Name',
-      'Mandal Name',
-      'District Name',
-      'Previous College Name',
-      'Certificate Status',
-      'Remarks'
-    ];
-    const headerSet = new Set(baseHeaders.map((header) => normalizeHeader(header)));
-    const dynamicHeaders = [];
-
-    formFields.forEach((field) => {
-      const label = (field?.label || field?.key || '').trim();
-      if (!label) {
-        return;
-      }
-      const normalized = normalizeHeader(label);
-      if (!headerSet.has(normalized)) {
-        headerSet.add(normalized);
-        dynamicHeaders.push(label);
-      }
+    console.error('Template metadata error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while preparing template metadata'
     });
+  }
+};
 
-    const headers = [...baseHeaders, ...dynamicHeaders];
+// Download Excel template for bulk upload
+exports.downloadExcelTemplate = async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const {
+      course: courseQuery,
+      courseCode: courseCodeQuery,
+      branch: branchQuery,
+      branchCode: branchCodeQuery
+    } = req.query || {};
 
-    // Create Excel workbook and worksheet
+    const resources = await buildTemplateResources(formId);
+    const {
+      form,
+      headers,
+      sampleRow,
+      fieldSummaries,
+      courseOptions,
+      courseIndex
+    } = resources;
+
     const workbook = xlsx.utils.book_new();
-    const worksheetData = [headers]; // Header row
 
-    // Add a sample data row for reference
-    const sampleRow = headers.map((header) => {
-      switch (header) {
-        case 'admission_number': return 'ADM001';
-        case 'Course': return 'B.Tech';
-        case 'Branch': return 'Computer Science';
-        case 'Student Name': return 'John Doe';
-        case 'Student Mobile Number': return '9876543210';
-        case 'M/F': return 'M';
-        case 'DOB (Date-Month-Year)': return '01-Jan-2000';
-        case 'Admission Year (Ex: 09-Sep-2003)': return '01-Sep-2023';
-        case 'Current Academic Year': return '3';
-        case 'Current Semester': return '1';
-        default: return '';
+    const templateData = [headers];
+    const templateSampleRow = [...sampleRow];
+
+    if (courseQuery || courseCodeQuery || branchQuery || branchCodeQuery) {
+      const resolution = resolveCourseAndBranch(courseIndex, {
+        courseValue: courseQuery,
+        courseCodeValue: courseCodeQuery || courseQuery,
+        branchValue: branchQuery,
+        branchCodeValue: branchCodeQuery || branchQuery
+      });
+
+      if (resolution.errors && resolution.errors.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: resolution.errors[0]?.message || 'Invalid course or branch supplied',
+          errors: resolution.errors
+        });
+      }
+
+      const courseHeaderIndex = headers.findIndex(
+        (header) => normalizeHeaderKey(header) === normalizeHeaderKey('Course')
+      );
+      if (resolution.course && courseHeaderIndex !== -1) {
+        templateSampleRow[courseHeaderIndex] = resolution.course.name;
+      }
+
+      const branchHeaderIndex = headers.findIndex(
+        (header) => normalizeHeaderKey(header) === normalizeHeaderKey('Branch')
+      );
+      if (resolution.branch && branchHeaderIndex !== -1) {
+        templateSampleRow[branchHeaderIndex] = resolution.branch.name;
+      }
+    }
+
+    templateData.push(templateSampleRow);
+
+    const templateSheet = xlsx.utils.aoa_to_sheet(templateData);
+    templateSheet['!cols'] = headers.map((header) => ({ wch: Math.max(header.length + 4, 18) }));
+    templateSheet['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    const courseColumnIndex = headers.findIndex(
+      (header) => normalizeHeaderKey(header) === normalizeHeaderKey('Course')
+    );
+    const branchColumnIndex = headers.findIndex(
+      (header) => normalizeHeaderKey(header) === normalizeHeaderKey('Branch')
+    );
+
+    const totalBranchCount = courseOptions.reduce(
+      (total, course) => total + (Array.isArray(course.branches) ? course.branches.length : 0),
+      0
+    );
+
+    if (courseColumnIndex !== -1 && courseOptions.length > 0) {
+      const courseColumnLetter = toExcelColumn(courseColumnIndex);
+      templateSheet['!dataValidation'] = templateSheet['!dataValidation'] || [];
+      templateSheet['!dataValidation'].push({
+        type: 'list',
+        allowBlank: true,
+        showInputMessage: true,
+        promptTitle: 'Course',
+        prompt: 'Select a course from the reference sheet.',
+        sqref: `${courseColumnLetter}2:${courseColumnLetter}5000`,
+        formulas: [`'Course Branch Reference'!$A$2:$A$${courseOptions.length + 1}`]
+      });
+    }
+
+    if (branchColumnIndex !== -1 && totalBranchCount > 0) {
+      const branchColumnLetter = toExcelColumn(branchColumnIndex);
+      templateSheet['!dataValidation'] = templateSheet['!dataValidation'] || [];
+      templateSheet['!dataValidation'].push({
+        type: 'list',
+        allowBlank: true,
+        showInputMessage: true,
+        promptTitle: 'Branch',
+        prompt: 'Select a branch that matches the chosen course.',
+        sqref: `${branchColumnLetter}2:${branchColumnLetter}5000`,
+        formulas: [`'Course Branch Reference'!$C$2:$C$${totalBranchCount + 1}`]
+      });
+    }
+
+    xlsx.utils.book_append_sheet(workbook, templateSheet, 'Template');
+
+    const requiredCount = fieldSummaries.filter((field) => field.required).length;
+    const optionalCount = fieldSummaries.length - requiredCount;
+
+    const instructionsData = [
+      ['Template Information'],
+      ['Form Name', form.form_name],
+      ['Total Columns', headers.length],
+      ['Required Columns', requiredCount],
+      ['Optional Columns', optionalCount],
+      [''],
+      ['Field Name', 'Column Header', 'Required', 'Category', 'Example', 'Description']
+    ];
+
+    fieldSummaries.forEach((field) => {
+      instructionsData.push([
+        field.displayName || field.header,
+        field.header,
+        field.required ? 'Yes' : 'No',
+        field.category || '',
+        field.example || '',
+        field.description || ''
+      ]);
+    });
+
+    const instructionsSheet = xlsx.utils.aoa_to_sheet(instructionsData);
+    instructionsSheet['!cols'] = [
+      { wch: 32 },
+      { wch: 32 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 24 },
+      { wch: 70 }
+    ];
+    instructionsSheet['!freeze'] = { xSplit: 0, ySplit: 7 };
+    xlsx.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions');
+
+    const referenceData = [['Course Name', 'Course Code', 'Branch Name', 'Branch Code']];
+    courseOptions.forEach((course) => {
+      if (Array.isArray(course.branches) && course.branches.length > 0) {
+        course.branches.forEach((branch) => {
+          referenceData.push([
+            course.name,
+            course.code || '',
+            branch.name,
+            branch.code || ''
+          ]);
+        });
+      } else {
+        referenceData.push([course.name, course.code || '', '', '']);
       }
     });
-    worksheetData.push(sampleRow);
 
-    const worksheet = xlsx.utils.aoa_to_sheet(worksheetData);
+    const referenceSheet = xlsx.utils.aoa_to_sheet(referenceData);
+    referenceSheet['!cols'] = [
+      { wch: 32 },
+      { wch: 16 },
+      { wch: 38 },
+      { wch: 16 }
+    ];
+    xlsx.utils.book_append_sheet(workbook, referenceSheet, 'Course Branch Reference');
 
-    // Set column widths for better readability
-    const columnWidths = headers.map(header => ({ wch: Math.max(header.length, 15) }));
-    worksheet['!cols'] = columnWidths;
-
-    xlsx.utils.book_append_sheet(workbook, worksheet, 'Template');
-
-    // Generate buffer
     const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-    // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${form.form_name}_template.xlsx"`);
     res.setHeader('Content-Length', buffer.length);
@@ -2307,6 +3194,12 @@ exports.downloadExcelTemplate = async (req, res) => {
     console.log(`✅ Excel template downloaded for form: ${form.form_name}`);
 
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
+      });
+    }
     console.error('Download Excel template error:', error);
     res.status(500).json({
       success: false,

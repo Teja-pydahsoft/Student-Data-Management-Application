@@ -3,6 +3,7 @@ const { supabase } = require('../config/supabase');
 const { studentsCache } = require('../services/cache');
 const multer = require('multer');
 const csv = require('csv-parser');
+const xlsx = require('xlsx');
 const fs = require('fs');
 const {
   getNextStage,
@@ -176,15 +177,23 @@ const FIELD_MAPPING = {
   'ADHAR No': 'adhar_no',
   'Admission Date': 'admission_date',
   'Admission No': 'admission_no',
+  'Admission Number': 'admission_number',
   'Batch': 'batch',
   'Branch': 'branch',
+  'Branch Name': 'branch',
+  branch_name: 'branch',
+  'Branch Code': 'branch_code',
   'StudType': 'stud_type',
   'Current Academic Year': 'current_year',
   'Current Year': 'current_year',
   current_year: 'current_year',
   currentYear: 'current_year',
   Course: 'course',
+  'Course Name': 'course',
   course: 'course',
+  course_name: 'course',
+  'Course Code': 'course_code',
+  course_code: 'course_code',
   'Current Semester': 'current_semester',
   current_semester: 'current_semester',
   currentSemester: 'current_semester',
@@ -212,8 +221,10 @@ const FIELD_MAPPING = {
   adhar_no: 'adhar_no',
   admission_date: 'admission_date',
   admission_no: 'admission_no',
+  admission_number: 'admission_number',
   batch: 'batch',
   branch: 'branch',
+  branch_code: 'branch_code',
   stud_type: 'stud_type',
   parent_mobile1: 'parent_mobile1',
   parent_mobile2: 'parent_mobile2',
@@ -230,8 +241,363 @@ const FIELD_MAPPING = {
   current_semester: 'current_semester'
 };
 
+const normalizeIdentifier = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+};
+
+const normalizeHeaderKeyForLookup = (header) => {
+  if (header === undefined || header === null) {
+    return '';
+  }
+  return header
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[\s._-]+/g, '_');
+};
+
+const FIELD_LOOKUP = Object.entries(FIELD_MAPPING).reduce((acc, [header, key]) => {
+  const normalized = normalizeHeaderKeyForLookup(header);
+  if (normalized && !acc[normalized]) {
+    acc[normalized] = key;
+  }
+  return acc;
+}, {});
+
+const buildNormalizedSet = (...values) => {
+  const set = new Set();
+  values
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .forEach((value) => {
+      const normalized = normalizeIdentifier(value);
+      if (normalized) {
+        set.add(normalized);
+      }
+    });
+  return set;
+};
+
+const sanitizeCellValue = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0];
+  }
+  if (typeof value === 'number') {
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    return value.toString();
+  }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  return value.toString().trim();
+};
+
+const normalizeAdmissionNumber = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return value.toString().trim().toUpperCase();
+};
+
+const getFirstNonEmpty = (...values) =>
+  values.find((value) => value !== undefined && value !== null && `${value}`.trim() !== '');
+
+const mapRowToStudentRecord = (row, rowNumber) => {
+  const raw = {};
+  const sanitized = {};
+
+  Object.entries(row || {}).forEach(([header, rawValue]) => {
+    if (!header || header.toString().trim() === '') {
+      return;
+    }
+    const cleanedValue = sanitizeCellValue(rawValue);
+    raw[header] = cleanedValue;
+
+    const normalizedHeader = normalizeHeaderKeyForLookup(header);
+    const mappedKey = FIELD_LOOKUP[normalizedHeader];
+    if (mappedKey && cleanedValue !== '') {
+      sanitized[mappedKey] = cleanedValue;
+    }
+  });
+
+  if (sanitized.admission_no && !sanitized.admission_number) {
+    sanitized.admission_number = sanitized.admission_no;
+  }
+  if (!sanitized.admission_no && sanitized.admission_number) {
+    sanitized.admission_no = sanitized.admission_number;
+  }
+
+  Object.keys(sanitized).forEach((key) => {
+    const value = sanitized[key];
+    if (typeof value === 'string') {
+      sanitized[key] = value.trim();
+      if (sanitized[key] === '') {
+        delete sanitized[key];
+      }
+    }
+  });
+
+  return {
+    rowNumber,
+    raw,
+    sanitized
+  };
+};
+
+const fetchExistingAdmissionNumbers = async (admissionNumbers = []) => {
+  const normalized = Array.from(
+    new Set(
+      admissionNumbers
+        .map((value) => normalizeAdmissionNumber(value))
+        .filter((value) => value !== '')
+    )
+  );
+
+  if (normalized.length === 0) {
+    return new Set();
+  }
+
+  const existingSet = new Set();
+  const chunkSize = 100;
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    if (chunk.length === 0) {
+      continue;
+    }
+    const placeholders = chunk.map(() => '?').join(', ');
+    const [rows] = await masterPool.query(
+      `SELECT admission_number FROM students WHERE UPPER(admission_number) IN (${placeholders})`,
+      chunk
+    );
+    rows.forEach((row) => {
+      if (row && row.admission_number) {
+        existingSet.add(normalizeAdmissionNumber(row.admission_number));
+      }
+    });
+  }
+
+  return existingSet;
+};
+
+const buildCourseBranchIndex = async () => {
+  const [courses] = await masterPool.query(
+    'SELECT id, name, code FROM courses WHERE is_active = 1'
+  );
+
+  const baseIndex = {
+    courses: [],
+    courseLookup: new Map()
+  };
+
+  if (!courses || courses.length === 0) {
+    return {
+      ...baseIndex,
+      findCourse: () => null,
+      findBranch: () => null
+    };
+  }
+
+  const courseMap = new Map();
+
+  courses.forEach((course) => {
+    const entry = {
+      id: course.id,
+      name: course.name,
+      code: course.code,
+      normalizedKeys: buildNormalizedSet(course.name, course.code),
+      branchLookup: new Map(),
+      branches: []
+    };
+
+    courseMap.set(course.id, entry);
+    baseIndex.courses.push(entry);
+
+    entry.normalizedKeys.forEach((key) => {
+      if (key) {
+        baseIndex.courseLookup.set(key, entry);
+      }
+    });
+  });
+
+  const courseIds = courses.map((course) => course.id);
+  let branchRows = [];
+  if (courseIds.length > 0) {
+    const [branches] = await masterPool.query(
+      'SELECT id, course_id, name, code FROM course_branches WHERE is_active = 1 AND course_id IN (?)',
+      [courseIds]
+    );
+    branchRows = branches || [];
+  }
+
+  branchRows.forEach((branch) => {
+    const courseEntry = courseMap.get(branch.course_id);
+    if (!courseEntry) {
+      return;
+    }
+
+    const branchEntry = {
+      id: branch.id,
+      courseId: branch.course_id,
+      name: branch.name,
+      code: branch.code,
+      normalizedKeys: buildNormalizedSet(branch.name, branch.code)
+    };
+
+    courseEntry.branches.push(branchEntry);
+
+    branchEntry.normalizedKeys.forEach((key) => {
+      if (key) {
+        courseEntry.branchLookup.set(key, branchEntry);
+      }
+    });
+  });
+
+  return {
+    ...baseIndex,
+    findCourse: (value) => {
+      const normalized = normalizeIdentifier(value);
+      if (!normalized) {
+        return null;
+      }
+      return baseIndex.courseLookup.get(normalized) || null;
+    },
+    findBranch: (courseEntry, value) => {
+      if (!courseEntry) {
+        return null;
+      }
+      const normalized = normalizeIdentifier(value);
+      if (!normalized) {
+        return null;
+      }
+      return courseEntry.branchLookup.get(normalized) || null;
+    }
+  };
+};
+
+const validateCourseBranch = (payload, courseIndex) => {
+  const issues = [];
+
+  if (!payload || typeof payload !== 'object') {
+    return {
+      issues: ['Invalid student payload'],
+      course: null,
+      branch: null
+    };
+  }
+
+  const courseIdentifier = getFirstNonEmpty(
+    payload.course,
+    payload.course_name,
+    payload.course_code
+  );
+  const branchIdentifier = getFirstNonEmpty(
+    payload.branch,
+    payload.branch_name,
+    payload.branch_code
+  );
+
+  let resolvedCourse = null;
+  if (!courseIdentifier) {
+    issues.push('Course is required');
+  } else {
+    resolvedCourse =
+      courseIndex.findCourse(courseIdentifier) ||
+      courseIndex.findCourse(payload.course_code);
+    if (!resolvedCourse) {
+      issues.push(
+        `Course "${courseIdentifier}" does not match any active course`
+      );
+    }
+  }
+
+  let resolvedBranch = null;
+  if (!branchIdentifier) {
+    issues.push('Branch is required');
+  } else if (resolvedCourse) {
+    resolvedBranch =
+      courseIndex.findBranch(resolvedCourse, branchIdentifier) ||
+      courseIndex.findBranch(resolvedCourse, payload.branch_code);
+    if (!resolvedBranch) {
+      issues.push(
+        `Branch "${branchIdentifier}" is not configured for course "${resolvedCourse.name}"`
+      );
+    }
+  } else if (branchIdentifier) {
+    issues.push('Branch could not be validated because course is invalid');
+  }
+
+  if (resolvedCourse) {
+    payload.course = resolvedCourse.name;
+    if (resolvedCourse.code) {
+      payload.course_code = resolvedCourse.code;
+    }
+  }
+
+  if (resolvedBranch) {
+    payload.branch = resolvedBranch.name;
+    if (resolvedBranch.code) {
+      payload.branch_code = resolvedBranch.code;
+    }
+  }
+
+  return {
+    issues,
+    course: resolvedCourse,
+    branch: resolvedBranch
+  };
+};
+
+const sanitizeStudentPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  const sanitized = {};
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed !== '') {
+        sanitized[key] = trimmed;
+      }
+      return;
+    }
+    if (value instanceof Date) {
+      sanitized[key] = value.toISOString().split('T')[0];
+      return;
+    }
+    sanitized[key] = value;
+  });
+
+  if (sanitized.admission_no && !sanitized.admission_number) {
+    sanitized.admission_number = sanitized.admission_no;
+  }
+  if (!sanitized.admission_no && sanitized.admission_number) {
+    sanitized.admission_no = sanitized.admission_number;
+  }
+
+  return sanitized;
+};
+
+let stagingSyncDisabled = false;
+let stagingSyncWarningLogged = false;
+
 const updateStagingStudentStage = async (admissionNumber, stage, studentData) => {
-  if (!stagingPool || !stage || !admissionNumber) {
+  if (!stagingPool || !stage || !admissionNumber || stagingSyncDisabled) {
     return;
   }
 
@@ -249,6 +615,22 @@ const updateStagingStudentStage = async (admissionNumber, stage, studentData) =>
       ]
     );
   } catch (error) {
+    const databaseMissing =
+      error?.code === 'ER_BAD_DB_ERROR' ||
+      error?.code === 'ER_NO_DB_ERROR' ||
+      /unknown database/i.test(error?.message || '');
+
+    if (databaseMissing) {
+      stagingSyncDisabled = true;
+      if (!stagingSyncWarningLogged) {
+        stagingSyncWarningLogged = true;
+        console.warn(
+          'Staging database not available. Student staging updates will be skipped for this session.'
+        );
+      }
+      return;
+    }
+
     console.warn('Unable to update staging student stage:', error.message);
   }
 };
@@ -314,6 +696,468 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     serializedStudentData,
     parsedStudentData
   };
+};
+
+exports.previewBulkUploadStudents = async (req, res) => {
+  let filePath = null;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Excel or CSV file is required'
+      });
+    }
+
+    filePath = req.file.path;
+
+    const workbook = xlsx.readFile(filePath, { cellDates: true });
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No sheets found in the uploaded file'
+      });
+    }
+
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: true });
+
+    if (!rows || rows.length <= 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'No student rows found in the uploaded file'
+      });
+    }
+
+    const headerRow = rows[0] || [];
+    const headers = headerRow
+      .map((header) => sanitizeCellValue(header))
+      .filter((header) => header && header !== '__EMPTY');
+
+    if (headers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'The uploaded file does not contain recognizable headers'
+      });
+    }
+
+    const processedRows = [];
+    for (let i = 1; i < rows.length; i++) {
+      const rowValues = rows[i];
+      if (!Array.isArray(rowValues)) {
+        continue;
+      }
+      const rowData = {};
+      headers.forEach((header, index) => {
+        rowData[header] = rowValues[index];
+      });
+      const hasData = Object.values(rowData).some(
+        (value) => sanitizeCellValue(value) !== ''
+      );
+      if (!hasData) {
+        continue;
+      }
+      processedRows.push(mapRowToStudentRecord(rowData, i + 1));
+    }
+
+    if (processedRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'The uploaded file does not contain any student data rows'
+      });
+    }
+
+    const uniqueAdmissionsForLookup = Array.from(
+      new Set(
+        processedRows
+          .map((record) => normalizeAdmissionNumber(record.sanitized.admission_number))
+          .filter((value) => value)
+      )
+    );
+
+    const existingAdmissions = await fetchExistingAdmissionNumbers(uniqueAdmissionsForLookup);
+    const courseIndex = await buildCourseBranchIndex();
+
+    const seenAdmissions = new Map();
+    const duplicateAdmissions = new Map();
+
+    processedRows.forEach((record) => {
+      const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
+      if (!normalizedAdmission) {
+        return;
+      }
+      if (!seenAdmissions.has(normalizedAdmission)) {
+        seenAdmissions.set(normalizedAdmission, record.rowNumber);
+        return;
+      }
+      const duplicateSet =
+        duplicateAdmissions.get(normalizedAdmission) ||
+        new Set([seenAdmissions.get(normalizedAdmission)]);
+      duplicateSet.add(record.rowNumber);
+      duplicateAdmissions.set(normalizedAdmission, duplicateSet);
+    });
+
+    const duplicateAdmissionMap = new Map();
+    duplicateAdmissions.forEach((set, admission) => {
+      duplicateAdmissionMap.set(
+        admission,
+        Array.from(set).sort((a, b) => a - b)
+      );
+    });
+
+    const validRecords = [];
+    const invalidRecords = [];
+
+    processedRows.forEach((record) => {
+      const sanitized = { ...record.sanitized };
+      Object.keys(sanitized).forEach((key) => {
+        if (typeof sanitized[key] === 'string') {
+          sanitized[key] = sanitized[key].trim();
+        }
+      });
+
+      const issues = [];
+      const normalizedAdmission = normalizeAdmissionNumber(sanitized.admission_number);
+
+      if (!sanitized.admission_number) {
+        issues.push('Admission number is required');
+      }
+
+      if (normalizedAdmission && duplicateAdmissionMap.has(normalizedAdmission)) {
+        const rowsWithDuplicate = duplicateAdmissionMap.get(normalizedAdmission);
+        issues.push(
+          `Admission number appears multiple times in upload (rows: ${rowsWithDuplicate.join(', ')})`
+        );
+      }
+
+      if (normalizedAdmission && existingAdmissions.has(normalizedAdmission)) {
+        issues.push('Admission number already exists in the master database');
+      }
+
+      if (!sanitized.student_name) {
+        issues.push('Student name is required');
+      }
+
+      const courseValidation = validateCourseBranch(sanitized, courseIndex);
+      if (courseValidation.issues.length > 0) {
+        issues.push(...courseValidation.issues);
+      }
+
+      const resultBase = {
+        rowNumber: record.rowNumber,
+        rawData: record.raw,
+        sanitizedData: sanitized
+      };
+
+      if (issues.length === 0) {
+        validRecords.push({
+          ...resultBase,
+          course: courseValidation.course
+            ? {
+                id: courseValidation.course.id,
+                name: courseValidation.course.name,
+                code: courseValidation.course.code || null
+              }
+            : null,
+          branch: courseValidation.branch
+            ? {
+                id: courseValidation.branch.id,
+                name: courseValidation.branch.name,
+                code: courseValidation.branch.code || null
+              }
+            : null
+        });
+      } else {
+        invalidRecords.push({
+          ...resultBase,
+          issues
+        });
+      }
+    });
+
+    const summary = {
+      totalRows: processedRows.length,
+      validCount: validRecords.length,
+      invalidCount: invalidRecords.length,
+      existingAdmissionCount: existingAdmissions.size,
+      duplicateAdmissionCount: duplicateAdmissionMap.size
+    };
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        headers,
+        validRecords,
+        invalidRecords
+      }
+    });
+  } catch (error) {
+    console.error('Bulk student upload preview error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to preview bulk upload data',
+      error: error.message
+    });
+  } finally {
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.warn('Unable to remove uploaded file after preview:', unlinkError.message);
+      }
+    }
+  }
+};
+
+exports.commitBulkUploadStudents = async (req, res) => {
+  const records = Array.isArray(req.body?.records) ? req.body.records : [];
+
+  if (records.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'No student records provided for upload'
+    });
+  }
+
+  const preparedRecords = records
+    .map((record) => ({
+      rowNumber: record?.rowNumber,
+      sanitizedData: sanitizeStudentPayload(
+        record?.sanitizedData || record?.payload || record?.studentData || {}
+      )
+    }))
+    .filter(
+      (record) =>
+        record.rowNumber !== undefined && Object.keys(record.sanitizedData).length > 0
+    );
+
+  if (preparedRecords.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'No valid student records were provided'
+    });
+  }
+
+  const admissionsForLookup = Array.from(
+    new Set(
+      preparedRecords
+        .map((record) => normalizeAdmissionNumber(record.sanitizedData.admission_number))
+        .filter((value) => value)
+    )
+  );
+
+  const existingAdmissions = await fetchExistingAdmissionNumbers(admissionsForLookup);
+  const courseIndex = await buildCourseBranchIndex();
+
+  let connection;
+  const successDetails = [];
+  const failedDetails = [];
+
+  let successCount = 0;
+  let failedCount = 0;
+
+  try {
+    connection = await masterPool.getConnection();
+
+    for (const record of preparedRecords) {
+      const { rowNumber } = record;
+      const sanitized = { ...record.sanitizedData };
+      const errors = [];
+
+      Object.keys(sanitized).forEach((key) => {
+        if (typeof sanitized[key] === 'string') {
+          sanitized[key] = sanitized[key].trim();
+        }
+      });
+
+      if (sanitized.admission_no && !sanitized.admission_number) {
+        sanitized.admission_number = sanitized.admission_no;
+      }
+      if (!sanitized.admission_no && sanitized.admission_number) {
+        sanitized.admission_no = sanitized.admission_number;
+      }
+
+      const normalizedAdmission = normalizeAdmissionNumber(sanitized.admission_number);
+
+      if (!sanitized.admission_number) {
+        errors.push('Admission number is required');
+      }
+
+      if (normalizedAdmission && existingAdmissions.has(normalizedAdmission)) {
+        errors.push('Admission number already exists in the master database');
+      }
+
+      if (!sanitized.student_name) {
+        errors.push('Student name is required');
+      }
+
+      const courseValidation = validateCourseBranch(sanitized, courseIndex);
+      if (courseValidation.issues.length > 0) {
+        errors.push(...courseValidation.issues);
+      }
+
+      const rawYear = getFirstNonEmpty(
+        sanitized.current_year,
+        sanitized['Current Academic Year']
+      );
+      if (rawYear !== undefined && rawYear !== null && rawYear !== '') {
+        const parsedYear = parseInt(rawYear, 10);
+        if (Number.isNaN(parsedYear)) {
+          errors.push('Current academic year must be a number');
+        } else {
+          sanitized.current_year = parsedYear;
+          sanitized['Current Academic Year'] = parsedYear;
+        }
+      }
+
+      const rawSemester = getFirstNonEmpty(
+        sanitized.current_semester,
+        sanitized['Current Semester']
+      );
+      if (rawSemester !== undefined && rawSemester !== null && rawSemester !== '') {
+        const parsedSemester = parseInt(rawSemester, 10);
+        if (Number.isNaN(parsedSemester)) {
+          errors.push('Current semester must be a number');
+        } else {
+          sanitized.current_semester = parsedSemester;
+          sanitized['Current Semester'] = parsedSemester;
+        }
+      }
+
+      let resolvedStage = null;
+
+      if (errors.length === 0) {
+        try {
+          resolvedStage = resolveStageFromData(sanitized, {
+            year: sanitized.current_year || 1,
+            semester: sanitized.current_semester || 1
+          });
+        } catch (stageError) {
+          if (stageError.message === 'INVALID_STAGE') {
+            errors.push(
+              'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.'
+            );
+          } else {
+            throw stageError;
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        failedCount++;
+        failedDetails.push({
+          rowNumber,
+          admissionNumber: sanitized.admission_number || null,
+          errors
+        });
+        continue;
+      }
+
+      applyStageToPayload(sanitized, resolvedStage);
+
+      const studentDataJson = JSON.stringify(sanitized);
+      const insertColumns = ['admission_number', 'current_year', 'current_semester', 'student_data'];
+      const insertPlaceholders = ['?', '?', '?', '?'];
+      const insertValues = [
+        sanitized.admission_number,
+        resolvedStage.year,
+        resolvedStage.semester,
+        studentDataJson
+      ];
+      const updatedColumns = new Set(['admission_number', 'current_year', 'current_semester']);
+
+      Object.entries(sanitized).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '' || value === '{}') {
+          return;
+        }
+        const columnName = FIELD_MAPPING[key];
+        if (!columnName || updatedColumns.has(columnName)) {
+          return;
+        }
+        insertColumns.push(columnName);
+        insertPlaceholders.push('?');
+        insertValues.push(value);
+        updatedColumns.add(columnName);
+      });
+
+      const insertQuery = `INSERT INTO students (${insertColumns.join(
+        ', '
+      )}) VALUES (${insertPlaceholders.join(', ')})`;
+
+      try {
+        await connection.query(insertQuery, insertValues);
+      } catch (dbError) {
+        if (dbError.code === 'ER_DUP_ENTRY') {
+          failedCount++;
+          failedDetails.push({
+            rowNumber,
+            admissionNumber: sanitized.admission_number,
+            errors: ['Admission number already exists in the master database']
+          });
+          existingAdmissions.add(normalizedAdmission);
+          continue;
+        }
+        throw dbError;
+      }
+
+      await connection.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, req.admin.id, studentDataJson]
+      );
+
+      await updateStagingStudentStage(
+        sanitized.admission_number,
+        resolvedStage,
+        studentDataJson
+      );
+
+      successCount++;
+      successDetails.push({
+        rowNumber,
+        admissionNumber: sanitized.admission_number
+      });
+
+      if (normalizedAdmission) {
+        existingAdmissions.add(normalizedAdmission);
+      }
+    }
+
+    res.json({
+      success: true,
+      message:
+        successCount > 0
+          ? `${successCount} student record${successCount === 1 ? '' : 's'} uploaded successfully${
+              failedCount > 0
+                ? `, ${failedCount} record${failedCount === 1 ? '' : 's'} skipped`
+                : ''
+            }`
+          : 'No student records were uploaded',
+      successCount,
+      failedCount,
+      skippedCount: failedCount,
+      details: {
+        successes: successDetails,
+        failures: failedDetails
+      }
+    });
+  } catch (error) {
+    console.error('Bulk student upload commit error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while saving student records',
+      error: error.message
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+    if (successCount > 0) {
+      clearStudentsCache();
+    }
+  }
 };
 
 // Get all students

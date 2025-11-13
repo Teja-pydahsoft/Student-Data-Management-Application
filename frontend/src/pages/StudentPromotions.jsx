@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   TrendingUp,
   Filter,
@@ -6,20 +6,16 @@ import {
   CheckCircle,
   RefreshCw,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
 
-const PROMOTION_MODES = {
-  AUTO: 'auto',
-  MANUAL: 'manual'
-};
-
-const ACADEMIC_YEARS = [1, 2, 3, 4];
-const ACADEMIC_SEMESTERS = [1, 2];
+const DEFAULT_MAX_YEAR = 10;
+const DEFAULT_SEMESTERS_PER_YEAR = 2;
 
 const syncStageFields = (data = {}, year, semester) => {
   if (!year || !semester) {
@@ -53,11 +49,12 @@ const StudentPromotions = () => {
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
-  const [promotionMode, setPromotionMode] = useState(PROMOTION_MODES.AUTO);
-  const [targetYear, setTargetYear] = useState(1);
-  const [targetSemester, setTargetSemester] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [promotionResults, setPromotionResults] = useState(null);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [promotionPlan, setPromotionPlan] = useState([]);
+  const [hasStageConflicts, setHasStageConflicts] = useState(false);
+  const latestRequestRef = useRef(0);
 
   const selectedCount = selectedAdmissionNumbers.size;
   const isAllSelected = students.length > 0 && selectedCount === students.length;
@@ -117,33 +114,60 @@ const StudentPromotions = () => {
     return params;
   };
 
-  const loadStudents = async () => {
-    setLoadingStudents(true);
-    setPromotionResults(null);
-    setSelectedAdmissionNumbers(new Set());
-    try {
-      const response = await api.get('/students', {
-        params: buildStudentQueryParams()
-      });
-      if (response.data?.success) {
-        const data = Array.isArray(response.data.data) ? response.data.data : [];
-        setStudents(data);
-        if (data.length === 0) {
-          toast('No students found for selected criteria', { icon: 'ℹ️' });
-        } else {
-          toast.success(`Loaded ${data.length} student${data.length === 1 ? '' : 's'}`);
+  const loadStudents = useCallback(
+    async ({ showToast = false } = {}) => {
+      const requestId = Date.now();
+      latestRequestRef.current = requestId;
+      setLoadingStudents(true);
+      setPromotionResults(null);
+      setSelectedAdmissionNumbers(new Set());
+      try {
+        const response = await api.get('/students', {
+          params: buildStudentQueryParams()
+        });
+
+        if (latestRequestRef.current !== requestId) {
+          return;
         }
-      } else {
-        toast.error(response.data?.message || 'Failed to load students');
-        setStudents([]);
+
+        if (response.data?.success) {
+          const data = Array.isArray(response.data.data) ? response.data.data : [];
+          setStudents(data);
+          if (showToast) {
+            if (data.length === 0) {
+              toast('No students found for selected criteria', { icon: 'ℹ️' });
+            } else {
+              toast.success(`Loaded ${data.length} student${data.length === 1 ? '' : 's'}`);
+            }
+          }
+        } else {
+          setStudents([]);
+          if (showToast) {
+            toast.error(response.data?.message || 'Failed to load students');
+          }
+        }
+      } catch (error) {
+        if (latestRequestRef.current === requestId) {
+          setStudents([]);
+        }
+        if (showToast) {
+          toast.error(error.response?.data?.message || 'Failed to load students');
+        }
+      } finally {
+        if (latestRequestRef.current === requestId) {
+          setLoadingStudents(false);
+        }
       }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to load students');
-      setStudents([]);
-    } finally {
-      setLoadingStudents(false);
-    }
-  };
+    },
+    [filters]
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadStudents({ showToast: false });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [filters, loadStudents]);
 
   const toggleSelectAllStudents = (checked) => {
     setSelectedAdmissionNumbers(checked ? new Set(students.map((s) => s.admission_number)) : new Set());
@@ -190,32 +214,122 @@ const StudentPromotions = () => {
     );
   }, [promotionResults]);
 
-  const handlePromoteSelected = async () => {
+  const getCurrentStageFromStudent = (student) => {
+    if (!student) {
+      return null;
+    }
+
+    const data = student.student_data || {};
+    const year =
+      Number(student.current_year) ||
+      Number(data.current_year) ||
+      Number(data['Current Academic Year']);
+    const semester =
+      Number(student.current_semester) ||
+      Number(data.current_semester) ||
+      Number(data['Current Semester']);
+
+    if (!Number.isFinite(year) || !Number.isFinite(semester)) {
+      return null;
+    }
+
+    return { year, semester };
+  };
+
+  const getNextStage = (year, semester) => {
+    const normalizedYear = Number(year);
+    const normalizedSemester = Number(semester);
+
+    if (
+      !Number.isInteger(normalizedYear) ||
+      !Number.isInteger(normalizedSemester) ||
+      normalizedYear < 1 ||
+      normalizedSemester < 1
+    ) {
+      return null;
+    }
+
+    if (normalizedSemester < DEFAULT_SEMESTERS_PER_YEAR) {
+      return {
+        year: normalizedYear,
+        semester: normalizedSemester + 1
+      };
+    }
+
+    if (normalizedYear >= DEFAULT_MAX_YEAR) {
+      return null;
+    }
+
+    return {
+      year: normalizedYear + 1,
+      semester: 1
+    };
+  };
+
+  const handlePromoteSelected = () => {
     if (selectedAdmissionNumbers.size === 0) {
       toast.error('Select at least one student to promote');
       return;
     }
 
-    if (promotionMode === PROMOTION_MODES.MANUAL && (!targetYear || !targetSemester)) {
-      toast.error('Select both academic year and semester for manual promotion');
+    const plan = Array.from(selectedAdmissionNumbers).map((admissionNumber) => {
+      const student = students.find((entry) => entry.admission_number === admissionNumber);
+      const currentStage = getCurrentStageFromStudent(student);
+      const nextStage = currentStage ? getNextStage(currentStage.year, currentStage.semester) : null;
+
+      const issues = [];
+
+      if (!student) {
+        issues.push('Student record not found');
+      }
+
+      if (!currentStage) {
+        issues.push('Missing current academic stage');
+      }
+
+      if (currentStage && !nextStage) {
+        issues.push('Student is already at the final configured stage');
+      }
+
+      let hasConflict = false;
+      if (nextStage) {
+        hasConflict = students.some(
+          (candidate) =>
+            candidate.admission_number !== admissionNumber &&
+            Number(candidate.current_year) === Number(nextStage.year) &&
+            Number(candidate.current_semester) === Number(nextStage.semester)
+        );
+      }
+
+      return {
+        admissionNumber,
+        studentName: getStudentName(student),
+        currentStage,
+        nextStage,
+        issues,
+        hasConflict
+      };
+    });
+
+    setPromotionPlan(plan);
+    setHasStageConflicts(plan.some((item) => item.hasConflict));
+    setConfirmationOpen(true);
+  };
+
+  const executePromotion = async () => {
+    const promotableStudents = promotionPlan.filter(
+      (item) => item.nextStage && item.issues.length === 0
+    );
+
+    if (promotableStudents.length === 0) {
+      toast.error('No eligible students to promote');
       return;
     }
 
     setSubmitting(true);
     try {
-      const studentsPayload = Array.from(selectedAdmissionNumbers).map((admissionNumber) => {
-        if (promotionMode === PROMOTION_MODES.MANUAL) {
-          return {
-            admissionNumber,
-            targetYear: Number(targetYear),
-            targetSemester: Number(targetSemester)
-          };
-        }
-        return { admissionNumber };
-      });
-
       const response = await api.post('/students/promotions/bulk', {
-        students: studentsPayload
+        students: promotableStudents.map((item) => ({ admissionNumber: item.admissionNumber }))
       });
 
       const results = response.data?.results || [];
@@ -253,6 +367,7 @@ const StudentPromotions = () => {
           })
         );
       }
+      setConfirmationOpen(false);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to promote students');
     } finally {
@@ -268,10 +383,6 @@ const StudentPromotions = () => {
             <TrendingUp className="text-indigo-600" size={28} />
             Student Promotions
           </h1>
-          <p className="text-gray-600 mt-2 body-font max-w-2xl">
-            Bulk promote students by selecting batches, courses, branches, academic years, and semesters.
-            Apply the desired criteria, review the matched students, and promote them in one action.
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -380,7 +491,7 @@ const StudentPromotions = () => {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
           <div className="text-sm text-gray-600">
-            Select one or more filters to load the matching students for promotion.
+            Adjust the filters to refresh the matching students automatically.
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -389,97 +500,22 @@ const StudentPromotions = () => {
             >
               Clear Filters
             </button>
-            <button
-              onClick={loadStudents}
-              className="px-5 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700 transition-transform hover:-translate-y-0.5 text-sm"
-              disabled={loadingStudents}
-            >
-              {loadingStudents ? 'Loading Students...' : 'Load Students'}
-            </button>
           </div>
         </div>
       </div>
 
       {/* Promotion Controls */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <TrendingUp size={18} className="text-indigo-600" />
-              Promotion Settings
-            </h2>
-            <p className="text-sm text-gray-600">
-              Choose how the selected students should advance in their academic stage.
-            </p>
-          </div>
-
-          <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
-            <button
-              type="button"
-              onClick={() => setPromotionMode(PROMOTION_MODES.AUTO)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                promotionMode === PROMOTION_MODES.AUTO
-                  ? 'bg-white text-indigo-600 shadow border border-indigo-100'
-                  : 'text-gray-600 hover:text-indigo-600'
-              }`}
-            >
-              Automatic
-            </button>
-            <button
-              type="button"
-              onClick={() => setPromotionMode(PROMOTION_MODES.MANUAL)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                promotionMode === PROMOTION_MODES.MANUAL
-                  ? 'bg-white text-indigo-600 shadow border border-indigo-100'
-                  : 'text-gray-600 hover:text-indigo-600'
-              }`}
-            >
-              Manual
-            </button>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <TrendingUp size={18} className="text-indigo-600" />
+            Promotion Review
+          </h2>
+          <p className="text-sm text-gray-600">
+            Selected students will be moved to their next academic stage. Confirm the summary before
+            continuing.
+          </p>
         </div>
-
-        {promotionMode === PROMOTION_MODES.MANUAL ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                Target Year
-              </label>
-              <select
-                value={targetYear}
-                onChange={(e) => setTargetYear(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              >
-                {ACADEMIC_YEARS.map((year) => (
-                  <option key={year} value={year}>
-                    Year {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                Target Semester
-              </label>
-              <select
-                value={targetSemester}
-                onChange={(e) => setTargetSemester(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              >
-                {ACADEMIC_SEMESTERS.map((semester) => (
-                  <option key={semester} value={semester}>
-                    Semester {semester}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-indigo-50 border border-indigo-100 text-sm text-indigo-700 rounded-lg px-4 py-3">
-            Automatic promotion moves each student to their immediate next academic stage
-            (Year/Semester) following the standard progression ladder.
-          </div>
-        )}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
           <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -552,7 +588,7 @@ const StudentPromotions = () => {
           </div>
         ) : students.length === 0 ? (
           <div className="py-12 text-center text-gray-500 border border-dashed border-gray-200 rounded-lg">
-            Load students using the filters above to begin a promotion cycle.
+            Adjust the filters to find the students you want to promote.
           </div>
         ) : (
           <>
@@ -690,6 +726,95 @@ const StudentPromotions = () => {
           </>
         )}
       </div>
+
+      {confirmationOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Promotion</h3>
+              <button
+                onClick={() => setConfirmationOpen(false)}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+              {hasStageConflicts && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-4 py-3 text-sm">
+                  Some selected students already have peers in the target stage. Confirm that you want
+                  to proceed before continuing.
+                </div>
+              )}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wide">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Admission No</th>
+                      <th className="px-4 py-3 text-left">Student Name</th>
+                      <th className="px-4 py-3 text-left">Current Stage</th>
+                      <th className="px-4 py-3 text-left">Next Stage</th>
+                      <th className="px-4 py-3 text-left">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {promotionPlan.map((item) => {
+                      const issueText = item.issues.join(', ');
+                      return (
+                        <tr key={item.admissionNumber} className="bg-white">
+                          <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                            {item.admissionNumber}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">{item.studentName || '-'}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {item.currentStage
+                              ? `Year ${item.currentStage.year} • Sem ${item.currentStage.semester}`
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            {item.nextStage ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-semibold">
+                                <ArrowRight size={14} />
+                                Year {item.nextStage.year} • Sem {item.nextStage.semester}
+                              </span>
+                            ) : (
+                              <span className="text-red-600 text-xs font-semibold">Not eligible</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">
+                            {issueText || (item.hasConflict ? 'Target stage already contains students' : '—')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-gray-600">
+                Only students marked as eligible will be promoted. Others will remain unchanged.
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setConfirmationOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-sm"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executePromotion}
+                  className="px-5 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700 transition-transform hover:-translate-y-0.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Promoting...' : 'Confirm Promotion'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

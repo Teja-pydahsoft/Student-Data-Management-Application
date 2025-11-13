@@ -14,7 +14,14 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
    const [file, setFile] = useState(null);
    const [uploading, setUploading] = useState(false);
    const [uploadResult, setUploadResult] = useState(null);
-   const [uploadProgress, setUploadProgress] = useState('');
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [previewData, setPreviewData] = useState(null);
+  const [confirmingUpload, setConfirmingUpload] = useState(false);
+  const [templateMetadata, setTemplateMetadata] = useState(null);
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState(null);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
 
   const selectedFormDetails = useMemo(() => {
     if (!forms || forms.length === 0 || !selectedForm) {
@@ -81,6 +88,112 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     }
   }, [forms]);
 
+  useEffect(() => {
+    if (!selectedForm) {
+      setTemplateMetadata(null);
+      setMetadataError(null);
+      setSelectedCourseId('');
+      setSelectedBranchId('');
+      return;
+    }
+
+    let isCancelled = false;
+
+    const fetchTemplateMetadata = async () => {
+      setMetadataLoading(true);
+      setMetadataError(null);
+      try {
+        const response = await api.get(`/submissions/template/${selectedForm}/metadata`);
+        if (!isCancelled) {
+          const metadata = response.data?.data || null;
+          setTemplateMetadata(metadata);
+
+          if (metadata?.courseOptions?.length === 1) {
+            const defaultCourseId = String(metadata.courseOptions[0].id);
+            setSelectedCourseId(defaultCourseId);
+            const branches = metadata.courseOptions[0].branches || [];
+            if (branches.length === 1) {
+              setSelectedBranchId(String(branches[0].id));
+            } else {
+              setSelectedBranchId('');
+            }
+          } else {
+            setSelectedCourseId('');
+            setSelectedBranchId('');
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error('Template metadata fetch failed:', error);
+          setTemplateMetadata(null);
+          setSelectedCourseId('');
+          setSelectedBranchId('');
+          setMetadataError(error.response?.data?.message || 'Failed to load template details');
+        }
+      } finally {
+        if (!isCancelled) {
+          setMetadataLoading(false);
+        }
+      }
+    };
+
+    fetchTemplateMetadata();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedForm]);
+
+  useEffect(() => {
+    setPreviewData(null);
+    setUploadResult(null);
+  }, [selectedForm]);
+
+  const courseOptions = useMemo(
+    () => (templateMetadata?.courseOptions ? templateMetadata.courseOptions : []),
+    [templateMetadata]
+  );
+
+  const selectedCourseOption = useMemo(() => {
+    if (!selectedCourseId) {
+      return null;
+    }
+    return courseOptions.find((course) => String(course.id) === String(selectedCourseId)) || null;
+  }, [courseOptions, selectedCourseId]);
+
+  const branchOptions = useMemo(
+    () => (selectedCourseOption?.branches ? selectedCourseOption.branches : []),
+    [selectedCourseOption]
+  );
+
+  useEffect(() => {
+    if (!selectedCourseOption) {
+      if (selectedBranchId) {
+        setSelectedBranchId('');
+      }
+      return;
+    }
+
+    if (branchOptions.length === 1) {
+      const onlyBranchId = String(branchOptions[0].id);
+      if (selectedBranchId !== onlyBranchId) {
+        setSelectedBranchId(onlyBranchId);
+      }
+    } else if (selectedBranchId) {
+      const branchExists = branchOptions.some((branch) => String(branch.id) === String(selectedBranchId));
+      if (!branchExists) {
+        setSelectedBranchId('');
+      }
+    }
+  }, [selectedCourseOption, branchOptions, selectedBranchId]);
+
+  const selectedBranchOption = useMemo(() => {
+    if (!selectedBranchId) {
+      return null;
+    }
+    return branchOptions.find((branch) => String(branch.id) === String(selectedBranchId)) || null;
+  }, [branchOptions, selectedBranchId]);
+
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     console.log('📁 File selected:', {
@@ -93,6 +206,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     if (selectedFile && validTypes.includes(selectedFile.type)) {
       setFile(selectedFile);
       setUploadResult(null);
+      setPreviewData(null);
       console.log('✅ Valid file selected:', selectedFile.name, 'Type:', selectedFile.type);
     } else {
       toast.error('Please select a valid CSV or Excel file');
@@ -108,8 +222,28 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     }
 
     try {
+      const queryParams = new URLSearchParams();
+
+      if (selectedCourseOption) {
+        queryParams.append('course', selectedCourseOption.name);
+        if (selectedCourseOption.code) {
+          queryParams.append('courseCode', selectedCourseOption.code);
+        }
+      }
+
+      if (selectedBranchOption) {
+        queryParams.append('branch', selectedBranchOption.name);
+        if (selectedBranchOption.code) {
+          queryParams.append('branchCode', selectedBranchOption.code);
+        }
+      }
+
+      const endpoint = queryParams.toString()
+        ? `/submissions/template/${selectedForm}?${queryParams.toString()}`
+        : `/submissions/template/${selectedForm}`;
+
       // Download Excel template from backend
-      const response = await api.get(`/submissions/template/${selectedForm}`, {
+      const response = await api.get(endpoint, {
         responseType: 'blob' // Important for binary data
       });
 
@@ -126,13 +260,12 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
       toast.success('Excel template downloaded successfully');
     } catch (error) {
       console.error('Download template error:', error);
-      toast.error('Failed to download template');
+      const message = error.response?.data?.message || 'Failed to download template';
+      toast.error(message);
     }
   };
 
   const handleUpload = async () => {
-    console.log('🔘 Upload button clicked');
-
     if (!file) {
       toast.error('Please select a CSV or Excel file');
       return;
@@ -140,113 +273,92 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
 
     setUploading(true);
     setUploadResult(null);
-    setUploadProgress('Initializing upload...');
+    setPreviewData(null);
+    setUploadProgress('Preparing preview...');
 
     try {
-      console.log('🚀 Starting bulk upload...');
-      console.log('📁 File in state:', file ? {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      } : 'No file in state');
-
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('formId', selectedForm);
+      if (selectedForm) {
+        formData.append('formId', selectedForm);
+      }
 
-      console.log('📋 Using selected form ID:', selectedForm);
-
-      console.log('📦 FormData contents:', {
-        hasFile: formData.has('file'),
-        hasFormId: formData.has('formId'),
-        formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
-          key,
-          value: value instanceof File ? `File: ${value.name} (${value.size} bytes)` : value
-        }))
-      });
-
-      setUploadProgress('Uploading file and processing data...');
-      console.log('📡 Making API request to:', '/submissions/bulk-upload');
-
-      const response = await api.post('/submissions/bulk-upload', formData);
-      console.log('✅ API request successful, response status:', response.status);
-      console.log('✅ Response data:', response.data);
-
-      setUploadProgress('Processing completed, displaying results...');
-
-      console.log('✅ Upload response:', response.data);
-      setUploadResult(response.data);
-
-      // Enhanced toast notification with detailed results
-      const { successCount = 0, failedCount = 0, duplicateCount = 0, missingFieldCount = 0 } = response?.data || {};
-
-      let toastMessage = `✅ Enhanced bulk upload completed: ${successCount} success, ${failedCount} failed`;
-      if (duplicateCount > 0) toastMessage += `, ${duplicateCount} duplicates`;
-      if (missingFieldCount > 0) toastMessage += `, ${missingFieldCount} missing fields`;
-
-      toast.success(toastMessage, {
-        duration: 6000, // Longer duration for detailed message
-        style: {
-          maxWidth: '500px',
-          whiteSpace: 'normal',
+      const response = await api.post('/students/bulk-upload/preview', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
         }
       });
+
+      const preview = response?.data?.data || null;
+      setPreviewData(preview);
+      setUploadProgress('');
+
+      if (preview?.summary) {
+        toast.success(
+          `Preview ready: ${preview.summary.validCount} valid, ${preview.summary.invalidCount} invalid`
+        );
+      } else {
+        toast.success('Preview generated successfully');
+      }
+    } catch (error) {
+      console.error('❌ Preview generation error:', error);
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to prepare upload preview';
+      toast.error(message);
+      setPreviewData(null);
+      setUploadResult(null);
+    } finally {
+      setUploading(false);
+      setUploadProgress('');
+    }
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!previewData || !Array.isArray(previewData?.validRecords) || previewData.validRecords.length === 0) {
+      toast.error('No valid records available to upload');
+      return;
+    }
+
+    setConfirmingUpload(true);
+    setUploadResult(null);
+
+    try {
+      const payload = {
+        records: previewData.validRecords.map((record) => ({
+          rowNumber: record.rowNumber,
+          sanitizedData: record.sanitizedData
+        }))
+      };
+
+      const response = await api.post('/students/bulk-upload/commit', payload);
+      setUploadResult(response.data);
+
+      if (response?.data?.message) {
+        toast.success(response.data.message);
+      } else {
+        toast.success('Students uploaded successfully');
+      }
 
       if (onUploadComplete) {
         onUploadComplete();
       }
     } catch (error) {
-       console.error('❌ Upload error occurred:');
-       console.error('❌ Error type:', error.constructor.name);
-       console.error('❌ Error message:', error.message);
-       console.error('❌ Error response:', error.response);
-       console.error('❌ Error request:', error.request);
-       console.error('❌ Full error object:', error);
-
-       if (error.response) {
-         console.error('❌ Response status:', error.response.status);
-         console.error('❌ Response data:', error.response.data);
-         console.error('❌ Response headers:', error.response.headers);
-       } else if (error.request) {
-         console.error('❌ No response received. Network error?');
-         console.error('❌ Request details:', error.request);
-       } else {
-         console.error('❌ Request setup error:', error.message);
-       }
-
-       // Set error result for detailed display in modal
-       const errorResult = error.response?.data || {
-         success: false,
-         message: error.response?.data?.message || error.message || 'Failed to upload file',
-         successCount: 0,
-         failedCount: 0,
-         duplicateCount: 0,
-         missingFieldCount: 0,
-         errors: []
-       };
-       setUploadResult(errorResult);
-
-       // Enhanced error toast with detailed information
-       let errorMessage = '❌ Upload failed: ';
-       if (error.response) {
-         errorMessage += `Server error (${error.response.status})`;
-       } else if (error.request) {
-         errorMessage += 'Network error - check connection';
-       } else {
-         errorMessage += error.message || 'Unknown error';
-       }
-
-       toast.error(errorMessage, {
-         duration: 6000,
-         style: {
-           maxWidth: '500px',
-           whiteSpace: 'normal',
-         }
-       });
-     } finally {
-       console.log('🔄 Upload process finished, setting uploading to false');
-       setUploading(false);
-     }
+      console.error('❌ Commit upload error:', error);
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to upload student records';
+      toast.error(message);
+      setUploadResult({
+        success: false,
+        message,
+        error: error.response?.data || null
+      });
+    } finally {
+      setConfirmingUpload(false);
+    }
   };
 
   const handleClose = () => {
@@ -254,6 +366,12 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     setFile(null);
     setUploadResult(null);
     setUploadProgress('');
+    setTemplateMetadata(null);
+    setMetadataError(null);
+    setSelectedCourseId('');
+    setSelectedBranchId('');
+    setPreviewData(null);
+    setConfirmingUpload(false);
     onClose();
   };
 
@@ -308,12 +426,12 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
 
           {/* Download Template */}
           {selectedForm && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
                 <div className="flex-1">
                   <p className="text-sm text-blue-800 mb-2">
-                    Download the Excel template for the selected form and fill it with student data.
+                    Download the Excel template for the selected form. You can optionally pre-select a course and branch to pre-fill the sample row in the sheet.
                   </p>
                   <button
                     onClick={downloadTemplate}
@@ -324,6 +442,77 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                   </button>
                 </div>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">
+                    Course for sample row
+                  </label>
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    disabled={metadataLoading || courseOptions.length === 0}
+                    className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white disabled:bg-blue-100 disabled:text-blue-500"
+                  >
+                    <option value="">
+                      {metadataLoading
+                        ? 'Loading courses...'
+                        : courseOptions.length > 0
+                        ? 'Select a course (optional)'
+                        : 'No active courses found'}
+                    </option>
+                    {courseOptions.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                        {course.code ? ` (${course.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!metadataLoading && courseOptions.length === 0 && (
+                    <p className="text-xs text-blue-700 mt-1">
+                      Configure courses in the Course Configuration page to enable quick selections.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">
+                    Branch for sample row
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    disabled={
+                      metadataLoading ||
+                      !selectedCourseOption ||
+                      branchOptions.length === 0
+                    }
+                    className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white disabled:bg-blue-100 disabled:text-blue-500"
+                  >
+                    <option value="">
+                      {!selectedCourseOption
+                        ? 'Select a course first'
+                        : branchOptions.length > 0
+                        ? 'Select a branch (optional)'
+                        : 'No branches available'}
+                    </option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                        {branch.code ? ` (${branch.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedCourseOption && branchOptions.length === 0 && !metadataLoading && (
+                    <p className="text-xs text-blue-700 mt-1">
+                      This course does not have active branches. Update the course configuration to add branches.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {metadataError && (
+                <div className="bg-red-100 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+                  {metadataError}
+                </div>
+              )}
             </div>
           )}
 
@@ -369,6 +558,40 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
             </div>
           )}
 
+          {templateMetadata && (
+            <div className="bg-white border border-indigo-100 rounded-lg p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-indigo-800">Template Columns Overview</h4>
+                  <p className="text-xs text-indigo-600">
+                    {templateMetadata.requiredHeaders?.length || 0} required • {templateMetadata.optionalHeaders?.length || 0} optional • {templateMetadata.headers?.length || 0} total columns
+                  </p>
+                </div>
+                {metadataLoading && (
+                  <div className="flex items-center gap-2 text-xs text-indigo-600">
+                    <LoadingAnimation width={14} height={14} variant="inline" showMessage={false} />
+                    <span>Refreshing details…</span>
+                  </div>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-2">
+                {templateMetadata.fields?.map((field) => (
+                  <div key={`${field.header}-${field.displayName || field.header}`} className="bg-indigo-50 border border-indigo-100 rounded-md p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-indigo-900">{field.displayName || field.header}</span>
+                      <span className={`text-xs font-semibold ${field.required ? 'text-red-600' : 'text-indigo-500'}`}>
+                        {field.required ? 'Required' : 'Optional'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-700 mt-1">Column: {field.header}</p>
+                    {field.description && <p className="text-xs text-indigo-600 mt-1">{field.description}</p>}
+                    {field.example && <p className="text-xs text-indigo-500 italic mt-1">Example: {field.example}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* File Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -395,6 +618,127 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
               </label>
             </div>
           </div>
+
+          {previewData && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-800">Upload Preview</h4>
+                    <p className="text-sm text-gray-600">
+                      Review valid and invalid student records before committing them to the master database.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-green-700 font-semibold flex items-center gap-1">
+                      <CheckCircle size={18} />
+                      {previewData.summary?.validCount || 0} valid
+                    </span>
+                    <span className="text-sm text-red-700 font-semibold flex items-center gap-1">
+                      <AlertCircle size={18} />
+                      {previewData.summary?.invalidCount || 0} invalid
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="text-md font-semibold text-green-800 flex items-center gap-2">
+                      <CheckCircle size={18} />
+                      Valid Students
+                    </h5>
+                    <span className="text-sm text-green-700">
+                      {previewData.summary?.validCount || 0} ready
+                    </span>
+                  </div>
+                  {previewData.validRecords?.length > 0 ? (
+                    <div className="overflow-x-auto max-h-72">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-green-700 uppercase text-xs tracking-wide">
+                            <th className="py-2 pr-4">Row</th>
+                            <th className="py-2 pr-4">Admission #</th>
+                            <th className="py-2 pr-4">Name</th>
+                            <th className="py-2 pr-4">Course</th>
+                            <th className="py-2">Branch</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-green-900">
+                          {previewData.validRecords.slice(0, 20).map((record) => (
+                            <tr key={`valid-${record.rowNumber}`} className="border-t border-green-100">
+                              <td className="py-2 pr-4 font-medium">{record.rowNumber}</td>
+                              <td className="py-2 pr-4">{record.sanitizedData?.admission_number || '-'}</td>
+                              <td className="py-2 pr-4">{record.sanitizedData?.student_name || '-'}</td>
+                              <td className="py-2 pr-4">{record.sanitizedData?.course || '-'}</td>
+                              <td className="py-2">{record.sanitizedData?.branch || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {previewData.validRecords.length > 20 && (
+                        <p className="text-xs text-green-700 mt-2">
+                          Showing first 20 of {previewData.validRecords.length} valid records.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-green-700">No valid records detected.</p>
+                  )}
+                </div>
+
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="text-md font-semibold text-red-800 flex items-center gap-2">
+                      <AlertCircle size={18} />
+                      Invalid Students
+                    </h5>
+                    <span className="text-sm text-red-700">
+                      {previewData.summary?.invalidCount || 0} need attention
+                    </span>
+                  </div>
+                  {previewData.invalidRecords?.length > 0 ? (
+                    <div className="overflow-x-auto max-h-72">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-red-700 uppercase text-xs tracking-wide">
+                            <th className="py-2 pr-4">Row</th>
+                            <th className="py-2 pr-4">Admission #</th>
+                            <th className="py-2 pr-4">Name</th>
+                            <th className="py-2 pr-4">Issues</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-red-900">
+                          {previewData.invalidRecords.slice(0, 20).map((record) => (
+                            <tr key={`invalid-${record.rowNumber}`} className="border-t border-red-100 align-top">
+                              <td className="py-2 pr-4 font-medium">{record.rowNumber}</td>
+                              <td className="py-2 pr-4">{record.sanitizedData?.admission_number || '-'}</td>
+                              <td className="py-2 pr-4">{record.sanitizedData?.student_name || '-'}</td>
+                              <td className="py-2 pr-4">
+                                <ul className="list-disc list-inside space-y-1 text-xs">
+                                  {record.issues.map((issue, idx) => (
+                                    <li key={idx}>{issue}</li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {previewData.invalidRecords.length > 20 && (
+                        <p className="text-xs text-red-700 mt-2">
+                          Showing first 20 of {previewData.invalidRecords.length} invalid records.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-red-700">Great! No invalid records detected.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Upload Progress Indicator */}
           {uploading && (
@@ -448,14 +792,18 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
             </div>
           )}
 
-          {/* Professional Upload Results Dashboard */}
           {uploadResult && (
-            <div className={`border rounded-xl p-6 ${uploadResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              {/* Header with Status Icon and Message */}
-              <div className="flex items-center gap-4 mb-6">
-                <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
-                  uploadResult.success ? 'bg-green-100' : 'bg-red-100'
-                }`}>
+            <div
+              className={`border rounded-xl p-6 ${
+                uploadResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    uploadResult.success ? 'bg-green-100' : 'bg-red-100'
+                  }`}
+                >
                   {uploadResult.success ? (
                     <CheckCircle className="text-green-600" size={24} />
                   ) : (
@@ -463,236 +811,90 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                   )}
                 </div>
                 <div className="flex-1">
-                  <h4 className={`text-lg font-semibold ${uploadResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                    {uploadResult.success ? 'Upload Completed Successfully' : 'Upload Completed with Issues'}
+                  <h4
+                    className={`text-lg font-semibold ${
+                      uploadResult.success ? 'text-green-800' : 'text-red-800'
+                    }`}
+                  >
+                    {uploadResult.success ? 'Upload Completed' : 'Upload Failed'}
                   </h4>
-                  <p className={`text-sm ${uploadResult.success ? 'text-green-700' : 'text-red-700'} mb-2`}>
-                    {uploadResult.message || 'No message available'}
+                  <p className="text-sm text-gray-700 mt-1">
+                    {uploadResult.message || 'No additional information provided.'}
                   </p>
-
-                  {/* Compact Results Summary */}
-                  <div className={`text-sm font-medium p-3 rounded-lg ${
-                    uploadResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    📊 <strong>Summary:</strong> {uploadResult.successCount || 0} success
-                    {(uploadResult.failedCount > 0) && `, ${uploadResult.failedCount} failed`}
-                    {(uploadResult.duplicateCount > 0) && `, ${uploadResult.duplicateCount} duplicates`}
-                    {(uploadResult.missingFieldCount > 0) && `, ${uploadResult.missingFieldCount} missing fields`}
-                    {uploadResult.totalRows && ` • Total: ${uploadResult.totalRows} processed`}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                    <div className="bg-white rounded-lg border border-green-200 p-4 text-center shadow-sm">
+                      <div className="text-2xl font-bold text-green-600">
+                        {uploadResult.successCount ?? 0}
+                      </div>
+                      <div className="text-sm text-gray-600">Uploaded</div>
+                    </div>
+                    <div className="bg-white rounded-lg border border-yellow-200 p-4 text-center shadow-sm">
+                      <div className="text-2xl font-bold text-yellow-600">
+                        {uploadResult.skippedCount ?? uploadResult.failedCount ?? 0}
+                      </div>
+                      <div className="text-sm text-gray-600">Skipped</div>
+                    </div>
+                    {previewData?.summary && (
+                      <div className="bg-white rounded-lg border border-blue-200 p-4 text-center shadow-sm">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {previewData.summary.invalidCount || 0}
+                        </div>
+                        <div className="text-sm text-gray-600">Invalid in Preview</div>
+                      </div>
+                    )}
                   </div>
+
+                  {Array.isArray(uploadResult.details?.failures) &&
+                    uploadResult.details.failures.length > 0 && (
+                      <div className="mt-4">
+                        <h5 className="text-sm font-semibold text-red-800 mb-2 flex items-center gap-2">
+                          <AlertCircle size={16} />
+                          Records not uploaded
+                        </h5>
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {uploadResult.details.failures.slice(0, 10).map((failure, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-red-100 border border-red-200 rounded-lg p-3 text-sm text-red-800"
+                            >
+                              <div className="font-semibold">
+                                Row {failure.rowNumber || '-'}
+                              </div>
+                              <div>Admission #: {failure.admissionNumber || 'N/A'}</div>
+                              {Array.isArray(failure.errors) && failure.errors.length > 0 && (
+                                <ul className="list-disc list-inside mt-1 space-y-1">
+                                  {failure.errors.map((err, errIdx) => (
+                                    <li key={errIdx}>{err}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                          {uploadResult.details.failures.length > 10 && (
+                            <p className="text-xs text-red-700">
+                              Showing first 10 of {uploadResult.details.failures.length} skipped records.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                 </div>
               </div>
-
-              {/* Statistics Cards */}
-              {uploadResult && uploadResult.successCount !== undefined && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  {/* Success Card */}
-                  <div className="bg-white rounded-lg border border-green-200 p-4 text-center">
-                    <div className="text-2xl font-bold text-green-600 mb-1">{uploadResult.successCount || 0}</div>
-                    <div className="text-sm text-green-700 font-medium">Successful</div>
-                  </div>
-
-                  {/* Total Processed Card */}
-                  {uploadResult.totalRows && (
-                    <div className="bg-white rounded-lg border border-blue-200 p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600 mb-1">{uploadResult.totalRows}</div>
-                      <div className="text-sm text-blue-700 font-medium">Total Processed</div>
-                    </div>
-                  )}
-
-                  {/* Duplicates Card */}
-                  {uploadResult.duplicateCount > 0 && (
-                    <div className="bg-white rounded-lg border border-orange-200 p-4 text-center">
-                      <div className="text-2xl font-bold text-orange-600 mb-1">{uploadResult.duplicateCount}</div>
-                      <div className="text-sm text-orange-700 font-medium">Duplicates</div>
-                    </div>
-                  )}
-
-                  {/* Failed Card */}
-                  {uploadResult.failedCount > 0 && (
-                    <div className={`bg-white rounded-lg border p-4 text-center ${
-                      uploadResult.failedCount > 0 ? 'border-red-200' : 'border-gray-200'
-                    }`}>
-                      <div className={`text-2xl font-bold mb-1 ${
-                        uploadResult.failedCount > 0 ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {uploadResult.failedCount}
-                      </div>
-                      <div className={`text-sm font-medium ${
-                        uploadResult.failedCount > 0 ? 'text-red-700' : 'text-gray-700'
-                      }`}>
-                        Failed
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Error Analysis Section */}
-              {uploadResult && uploadResult.errors && uploadResult.errors.length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <AlertCircle className="text-red-600" size={20} />
-                    <h5 className="text-lg font-semibold text-gray-800">Error Analysis</h5>
-                  </div>
-
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {uploadResult.errors.map((error, index) => (
-                      <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-800">Row {error.row}</span>
-                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              error.type === 'duplicate'
-                                ? 'bg-orange-100 text-orange-800'
-                                : error.type === 'missing_fields'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {error.type === 'duplicate' && 'Duplicate Entry'}
-                              {error.type === 'missing_fields' && 'Missing Required Fields'}
-                              {error.type === 'processing_error' && 'Processing Error'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <p className="text-sm text-gray-700 mb-2">{error.message || 'Unknown error'}</p>
-
-                        {/* Detailed Error Information */}
-                        {error.details && (
-                          <div className="text-xs text-gray-600 bg-white rounded border p-2">
-                            {error.type === 'duplicate' && error.details.duplicates && (
-                              <div>
-                                <div className="font-medium text-gray-700 mb-1">Duplicate Conflicts:</div>
-                                <div className="space-y-1">
-                                  {error.details.duplicates.map((dup, idx) => (
-                                    <div key={idx} className="flex justify-between">
-                                      <span>{dup.field}:</span>
-                                      <span className="font-medium">{dup.value}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {error.type === 'missing_fields' && error.details.missingFields && (
-                              <div>
-                                <div className="font-medium text-gray-700 mb-1">Missing Fields:</div>
-                                <div className="flex flex-wrap gap-1">
-                                  {error.details.missingFields.map((field, idx) => (
-                                    <span key={idx} className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs">
-                                      {field}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Processing Summary */}
-              {uploadResult && uploadResult.processedRows && uploadResult.processedRows.length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <CheckCircle className="text-blue-600" size={20} />
-                    <h5 className="text-lg font-semibold text-gray-800">Processing Summary</h5>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h6 className="text-sm font-medium text-gray-700 mb-2">Successful Rows (First 10):</h6>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {uploadResult.processedRows.filter(row => row.status === 'success').slice(0, 10).map((row, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm bg-green-50 text-green-700 p-2 rounded">
-                            <span>Row {row.row}</span>
-                            <span className="flex items-center gap-1">
-                              <CheckCircle size={14} />
-                              Success
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h6 className="text-sm font-medium text-gray-700 mb-2">Failed Rows (First 10):</h6>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {uploadResult.processedRows.filter(row => row.status === 'failed').slice(0, 10).map((row, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm bg-red-50 text-red-700 p-2 rounded">
-                            <span>Row {row.row}</span>
-                            <span className="flex items-center gap-1">
-                              <AlertCircle size={14} />
-                              {row.reason?.substring(0, 20) || 'Unknown error'}...
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Success Message and Quick Actions */}
-              {uploadResult && uploadResult.success && uploadResult.successCount > 0 && (
-                <div className="mt-6 space-y-4">
-                  <div className="p-4 bg-green-100 border border-green-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="text-green-600" size={20} />
-                      <span className="text-green-800 font-medium">
-                        {uploadResult.successCount} student record{uploadResult.successCount !== 1 ? 's' : ''} uploaded successfully and {uploadResult.successCount !== 1 ? 'are' : 'is'} ready for admin approval.
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <h6 className="text-sm font-semibold text-gray-800 mb-3">Quick Actions</h6>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          handleClose();
-                          // Could trigger navigation to submissions page
-                          window.location.href = '/submissions';
-                        }}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
-                      >
-                        <CheckCircle size={16} />
-                        View Submissions
-                      </button>
-                      <button
-                        onClick={handleClose}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
-                      >
-                        Upload Another File
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3 pt-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-4">
             <button
               onClick={handleUpload}
               disabled={!selectedForm || !file || uploading}
-              className="flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
+              className="w-full md:flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
             >
               {uploading ? (
                 <>
-                  <LoadingAnimation
-                    width={20}
-                    height={20}
-                    variant="inline"
-                    showMessage={false}
-                  />
+                  <LoadingAnimation width={20} height={20} variant="inline" showMessage={false} />
                   <div className="flex flex-col items-start">
-                    <span>Uploading...</span>
+                    <span>Generating Preview...</span>
                     {uploadProgress && (
                       <span className="text-xs opacity-90">{uploadProgress}</span>
                     )}
@@ -701,13 +903,34 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
               ) : (
                 <>
                   <Upload size={20} />
-                  Upload Submissions
+                  {previewData ? 'Regenerate Preview' : 'Generate Preview'}
                 </>
               )}
             </button>
+
+            {previewData?.validRecords?.length > 0 && (
+              <button
+                onClick={handleConfirmUpload}
+                disabled={confirmingUpload}
+                className="w-full md:flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
+              >
+                {confirmingUpload ? (
+                  <>
+                    <LoadingAnimation width={20} height={20} variant="inline" showMessage={false} />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={20} />
+                    Confirm Upload ({previewData.summary?.validCount || 0})
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               onClick={handleClose}
-              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full md:w-auto px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Close
             </button>
