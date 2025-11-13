@@ -6,6 +6,7 @@ export const MODULE_ROUTE_MAP = {
   forms: '/forms',
   submissions: '/submissions',
   students: '/students',
+  promotions: '/promotions',
   attendance: '/attendance',
   courses: '/courses',
   reports: '/reports',
@@ -17,6 +18,7 @@ export const getModuleKeyForPath = (path = '/') => {
   if (path.startsWith('/forms')) return 'forms';
   if (path.startsWith('/submissions')) return 'submissions';
   if (path.startsWith('/students')) return 'students';
+  if (path.startsWith('/promotions')) return 'promotions';
   if (path.startsWith('/attendance')) return 'attendance';
   if (path.startsWith('/courses')) return 'courses';
   if (path.startsWith('/reports')) return 'reports';

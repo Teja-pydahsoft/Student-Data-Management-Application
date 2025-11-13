@@ -12,11 +12,7 @@ import {
   Plus,
   Users,
   CheckCircle,
-  TrendingUp,
-  Settings,
-  ToggleLeft,
-  ToggleRight,
-  ArrowUpCircle
+  TrendingUp
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -25,7 +21,6 @@ import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
 import LoadingAnimation from '../components/LoadingAnimation';
-import PromoteStudentModal from '../components/Students/PromoteStudentModal';
 import { formatDate } from '../utils/dateUtils';
 
 const Students = () => {
@@ -53,11 +48,6 @@ const Students = () => {
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
   const [completionPercentages, setCompletionPercentages] = useState({});
-  const [showFilterManagement, setShowFilterManagement] = useState(false);
-  const [availableFilterFields, setAvailableFilterFields] = useState([]);
-  const [loadingFilterFields, setLoadingFilterFields] = useState(false);
-  const [showPromoteModal, setShowPromoteModal] = useState(false);
-  const [studentToPromote, setStudentToPromote] = useState(null);
   const [forms, setForms] = useState([]);
   const [loadingForms, setLoadingForms] = useState(false);
   const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
@@ -142,51 +132,6 @@ const Students = () => {
     });
   };
 
-  const openPromoteModal = (student) => {
-    setStudentToPromote(student);
-    setShowPromoteModal(true);
-  };
-
-  const handlePromotionComplete = (promotionData) => {
-    if (!promotionData?.admissionNumber) return;
-
-    setStudents((prevStudents) =>
-      prevStudents.map((student) => {
-        if (student.admission_number !== promotionData.admissionNumber) {
-          return student;
-        }
-
-        const updatedStudentData = syncStageFields(
-          student.student_data || {},
-          promotionData.currentYear,
-          promotionData.currentSemester
-        );
-
-        return {
-          ...student,
-          current_year: promotionData.currentYear,
-          current_semester: promotionData.currentSemester,
-          student_data: updatedStudentData
-        };
-      })
-    );
-
-    if (selectedStudent && selectedStudent.admission_number === promotionData.admissionNumber) {
-      const updatedSelected = {
-        ...selectedStudent,
-        current_year: promotionData.currentYear,
-        current_semester: promotionData.currentSemester,
-        student_data: syncStageFields(
-          selectedStudent.student_data || {},
-          promotionData.currentYear,
-          promotionData.currentSemester
-        )
-      };
-      setSelectedStudent(updatedSelected);
-      setEditData(updatedSelected.student_data);
-    }
-  };
-
   useEffect(() => {
     const newStudent = location.state?.newStudent;
     if (newStudent) {
@@ -228,7 +173,6 @@ const Students = () => {
 
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
-    fetchFilterFields();
     fetchQuickFilterOptions();
   }, []);
 
@@ -557,58 +501,6 @@ const Students = () => {
       searchOverride: searchToUse
     });
   };
-
-
-  // Fetch available filter fields for admin management
-  const fetchFilterFields = async () => {
-    setLoadingFilterFields(true);
-    try {
-      const response = await api.get('/students/filter-fields');
-      if (response.data.success) {
-        setAvailableFilterFields(response.data.data);
-      }
-    } catch (error) {
-      toast.error('Failed to fetch filter fields');
-    } finally {
-      setLoadingFilterFields(false);
-    }
-  };
-
-  // Toggle filter field enabled/disabled status
-  const toggleFilterField = async (fieldName, enabled) => {
-    try {
-      const response = await api.put(`/students/filter-fields/${fieldName}`, {
-        enabled,
-        type: 'text',
-        required: false,
-        options: []
-      });
-
-      if (response.data.success) {
-        toast.success(`Filter field ${enabled ? 'enabled' : 'disabled'} successfully`);
-
-        // If disabling a field, remove it from active filters
-        if (!enabled) {
-          setFilters(prev => {
-            const updated = { ...prev };
-            // Remove the field filter if it exists
-            delete updated[`field_${fieldName}`];
-            return updated;
-          });
-
-          // Re-apply filters to update the students list immediately
-          setTimeout(() => {
-            applyFilters();
-          }, 100);
-        }
-
-        fetchFilterFields(); // Refresh the list
-      }
-    } catch (error) {
-      toast.error('Failed to update filter field');
-    }
-  };
-
   const handleViewDetails = (student) => {
     setEditMode(false);
     setEditingRollNumber(false);
@@ -1033,19 +925,6 @@ const Students = () => {
             <Filter size={18} />
             Filters
           </button>
-          <button
-            onClick={() => {
-              setShowFilterManagement(!showFilterManagement);
-              if (!showFilterManagement) {
-                fetchFilterFields();
-              }
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilterManagement ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900 hover:bg-blue-50'}`}
-            title="Manage Filter Fields"
-          >
-            <Settings size={18} />
-            Filter Settings
-          </button>
           <button onClick={handleLocalSearch} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
             Search
           </button>
@@ -1184,17 +1063,7 @@ const Students = () => {
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-gray-900">Filter by Category:</p>
                 <div className="flex flex-wrap gap-2">
-                  {availableFields
-                    .filter(field => {
-                      // Only show fields that are enabled in the filter management
-                      // If availableFilterFields is not loaded yet, don't show any fields
-                      if (availableFilterFields.length === 0) return false;
-
-                      const managedField = availableFilterFields.find(f => f.name === field.name);
-                      // Only show if the field is explicitly enabled in filter management
-                      return managedField && managedField.enabled;
-                    })
-                    .map((field) => (
+                  {availableFields.map((field) => (
                     <div key={field.name} className="relative">
                       <select
                         value={filters[`field_${field.name}`] || ''}
@@ -1297,112 +1166,6 @@ const Students = () => {
           </div>
         )}
 
-        {/* Filter Management Modal */}
-        {showFilterManagement && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Filter Field Management</h3>
-                  <p className="text-sm text-gray-500 mt-1">Enable or disable filter fields for the main page</p>
-                </div>
-                <button
-                  onClick={() => setShowFilterManagement(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                {loadingFilterFields ? (
-                  <div className="flex items-center justify-center py-8">
-                    <LoadingAnimation width={24} height={24} message="Loading filter fields..." />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {availableFilterFields.map((field) => (
-                      <div key={field.name} className={`rounded-lg p-4 border-2 transition-all ${
-                        field.enabled
-                          ? 'bg-blue-50 border-blue-200 shadow-sm'
-                          : 'bg-gray-50 border-gray-200 opacity-60'
-                      }`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex-1">
-                            <label className={`block text-sm font-medium ${
-                              field.enabled ? 'text-blue-900' : 'text-gray-500'
-                            }`}>
-                              {field.name}
-                              {field.enabled && (
-                                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                                  Enabled
-                                </span>
-                              )}
-                              {!field.enabled && (
-                                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                                  Disabled
-                                </span>
-                              )}
-                            </label>
-                            <div className={`text-xs ${field.enabled ? 'text-blue-600' : 'text-gray-400'}`}>
-                              Type: {field.type} | Required: {field.required ? 'Yes' : 'No'}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => toggleFilterField(field.name, !field.enabled)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              field.enabled
-                                ? 'text-blue-600 hover:bg-blue-100'
-                                : 'text-gray-400 hover:bg-gray-100'
-                            }`}
-                            title={field.enabled ? 'Disable filter field' : 'Enable filter field'}
-                          >
-                            {field.enabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                          </button>
-                        </div>
-                        {field.options && field.options.length > 0 && (
-                          <div className="mt-2">
-                            <div className={`text-xs font-medium mb-1 ${field.enabled ? 'text-blue-700' : 'text-gray-500'}`}>
-                              Available Options:
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {field.options.slice(0, 3).map((option, idx) => (
-                                <span key={idx} className={`px-2 py-1 text-xs rounded ${
-                                  field.enabled
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {option}
-                                </span>
-                              ))}
-                              {field.options.length > 3 && (
-                                <span className={`px-2 py-1 text-xs rounded ${
-                                  field.enabled
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  +{field.options.length - 3} more
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {availableFilterFields.length === 0 && !loadingFilterFields && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Settings size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>No filter fields available</p>
-                    <p className="text-sm">Filter fields are automatically detected from student data</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Statistics Cards */}
@@ -1605,13 +1368,6 @@ const Students = () => {
                         <div className="flex items-center gap-2">
                           <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
                             <Eye size={16} />
-                          </button>
-                          <button
-                            onClick={() => openPromoteModal(student)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Promote Student"
-                          >
-                            <ArrowUpCircle size={16} />
                           </button>
                           <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Delete">
                             <Trash2 size={16} />
@@ -2503,16 +2259,6 @@ const Students = () => {
         isOpen={showManualRollNumber}
         onClose={() => setShowManualRollNumber(false)}
         onUpdateComplete={() => refreshStudents()}
-      />
-
-      <PromoteStudentModal
-        isOpen={showPromoteModal}
-        student={studentToPromote}
-        onClose={() => {
-          setShowPromoteModal(false);
-          setStudentToPromote(null);
-        }}
-        onPromoted={handlePromotionComplete}
       />
     </div>
   );

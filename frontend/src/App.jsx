@@ -16,6 +16,7 @@ import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import StudentPromotions from './pages/StudentPromotions';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -75,6 +76,7 @@ function App() {
           <Route path="submissions" element={<Submissions />} />
           <Route path="students" element={<Students />} />
           <Route path="students/add" element={<AddStudent />} />
+          <Route path="promotions" element={<StudentPromotions />} />
           <Route path="courses" element={<CourseConfig />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="users" element={<UserManagement />} />

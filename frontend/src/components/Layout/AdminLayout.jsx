@@ -11,7 +11,8 @@ import {
   Settings,
   CalendarCheck,
   ShieldCheck,
-  BarChart3
+  BarChart3,
+  TrendingUp
 } from 'lucide-react';
 import useAuthStore, { MODULE_ROUTE_MAP, getModuleKeyForPath } from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { path: '/forms', icon: FileText, label: 'Forms', permission: 'forms' },
   { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: 'submissions' },
   { path: '/students', icon: Users, label: 'Students', permission: 'students' },
+  { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: 'promotions' },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: 'attendance' },
   { path: '/courses', icon: Settings, label: 'Courses', permission: 'courses' },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: 'user-management' },

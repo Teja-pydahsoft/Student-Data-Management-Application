@@ -10,6 +10,11 @@ const AVAILABLE_OPERATIONS = [
     description: 'Manage student profiles, enrollment data, and filters.'
   },
   {
+    key: 'promotions',
+    label: 'Promotions',
+    description: 'Promote students in bulk across academic stages.'
+  },
+  {
     key: 'attendance',
     label: 'Attendance',
     description: 'Mark daily attendance and review student attendance history.'
