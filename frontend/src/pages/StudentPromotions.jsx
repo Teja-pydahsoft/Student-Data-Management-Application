@@ -754,12 +754,15 @@ const StudentPromotions = () => {
                       <th className="px-4 py-3 text-left">Student Name</th>
                       <th className="px-4 py-3 text-left">Current Stage</th>
                       <th className="px-4 py-3 text-left">Next Stage</th>
-                      <th className="px-4 py-3 text-left">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {promotionPlan.map((item) => {
-                      const issueText = item.issues.join(', ');
+                      const issueText = item.issues.filter(Boolean).join(', ');
+                      const conflictText = item.hasConflict
+                        ? 'Target stage already contains students'
+                        : '';
+                      const noteText = [issueText, conflictText].filter(Boolean).join('. ');
                       return (
                         <tr key={item.admissionNumber} className="bg-white">
                           <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
@@ -780,9 +783,9 @@ const StudentPromotions = () => {
                             ) : (
                               <span className="text-red-600 text-xs font-semibold">Not eligible</span>
                             )}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
-                            {issueText || (item.hasConflict ? 'Target stage already contains students' : '—')}
+                            {noteText && (
+                              <p className="mt-1 text-xs text-gray-500">{noteText}</p>
+                            )}
                           </td>
                         </tr>
                       );

@@ -148,13 +148,47 @@ const Reports = () => {
 
   const hasActiveFilters = activeFilterEntries.length > 0;
 
-  const dailyStats = useMemo(() => summary?.daily || { present: 0, absent: 0, pending: 0, percentage: 0 }, [summary]);
+  const dailyStats = useMemo(() => {
+    const base = {
+      present: 0,
+      absent: 0,
+      pending: 0,
+      percentage: 0,
+      isHoliday: false,
+      holiday: null
+    };
+    return summary?.daily ? { ...base, ...summary.daily } : base;
+  }, [summary]);
 
-  const weeklySeries = useMemo(() => summary?.weekly?.series || [], [summary]);
-  const monthlySeries = useMemo(() => summary?.monthly?.series || [], [summary]);
+  const dailyPercentageLabel = dailyStats.isHoliday
+    ? 'Holiday'
+    : formatPercentage(dailyStats.percentage);
 
-  const weeklyTotals = summary?.weekly?.totals || { present: 0, absent: 0, total: 0 };
-  const monthlyTotals = summary?.monthly?.totals || { present: 0, absent: 0, total: 0 };
+  const weeklySeries = useMemo(
+    () =>
+      (summary?.weekly?.series || []).map((entry) => ({
+        ...entry,
+        holiday: entry.isHoliday ? 1 : 0
+      })),
+    [summary]
+  );
+  const monthlySeries = useMemo(
+    () =>
+      (summary?.monthly?.series || []).map((entry) => ({
+        ...entry,
+        holiday: entry.isHoliday ? 1 : 0
+      })),
+    [summary]
+  );
+
+  const weeklyTotals = useMemo(() => {
+    const base = { present: 0, absent: 0, total: 0, holidays: 0, workingDays: 0 };
+    return summary?.weekly?.totals ? { ...base, ...summary.weekly.totals } : base;
+  }, [summary]);
+  const monthlyTotals = useMemo(() => {
+    const base = { present: 0, absent: 0, total: 0, holidays: 0, workingDays: 0 };
+    return summary?.monthly?.totals ? { ...base, ...summary.monthly.totals } : base;
+  }, [summary]);
 
   return (
     <div className="p-6 space-y-6">
@@ -346,7 +380,7 @@ const Reports = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs uppercase text-gray-500">Daily Attendance</p>
-                  <p className="text-2xl font-semibold text-gray-900">{formatPercentage(dailyStats.percentage)}</p>
+                  <p className="text-2xl font-semibold text-gray-900">{dailyPercentageLabel}</p>
                 </div>
                 <div className="rounded-full bg-green-100 text-green-600 p-3">
                   <CalendarDays size={22} />
@@ -362,6 +396,11 @@ const Reports = () => {
                 <p>
                   Pending: <span className="font-semibold text-gray-600">{dailyStats.pending}</span>
                 </p>
+                {dailyStats.isHoliday && (
+                  <p className="text-xs text-amber-600">
+                    Holiday: {dailyStats.holiday?.reasons?.join(', ') || 'Institute break'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -382,6 +421,14 @@ const Reports = () => {
                 </p>
                 <p>
                   Absent: <span className="font-semibold text-red-500">{weeklyTotals.absent || 0}</span>
+                </p>
+                <p>
+                  Holidays:{' '}
+                  <span className="font-semibold text-amber-600">{weeklyTotals.holidays || 0}</span>
+                </p>
+                <p>
+                  Working days:{' '}
+                  <span className="font-semibold text-gray-700">{weeklyTotals.workingDays || 0}</span>
                 </p>
                 <p className="text-xs text-gray-500">
                   Range: {summary.weekly.startDate} → {summary.weekly.endDate}
@@ -407,6 +454,14 @@ const Reports = () => {
                 <p>
                   Absent: <span className="font-semibold text-red-500">{monthlyTotals.absent || 0}</span>
                 </p>
+                <p>
+                  Holidays:{' '}
+                  <span className="font-semibold text-amber-600">{monthlyTotals.holidays || 0}</span>
+                </p>
+                <p>
+                  Working days:{' '}
+                  <span className="font-semibold text-gray-700">{monthlyTotals.workingDays || 0}</span>
+                </p>
                 <p className="text-xs text-gray-500">
                   Range: {summary.monthly.startDate} → {summary.monthly.endDate}
                 </p>
@@ -430,6 +485,14 @@ const Reports = () => {
                     <Legend />
                     <Line type="monotone" dataKey="present" stroke="#16a34a" strokeWidth={2} name="Present" />
                     <Line type="monotone" dataKey="absent" stroke="#ef4444" strokeWidth={2} name="Absent" />
+                    <Line
+                      type="monotone"
+                      dataKey="holiday"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      name="Holiday"
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -463,6 +526,14 @@ const Reports = () => {
                       stroke="#ef4444"
                       fill="#fca5a5"
                       name="Absent"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="holiday"
+                      stackId="1"
+                      stroke="#f59e0b"
+                      fill="#fcd34d"
+                      name="Holiday"
                     />
                   </AreaChart>
                 </ResponsiveContainer>

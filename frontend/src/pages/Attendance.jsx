@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarCheck,
+  CalendarDays,
   Search,
   Filter,
   RefreshCw,
@@ -24,6 +25,8 @@ import {
 } from 'recharts';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
+import useAuthStore from '../store/authStore';
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -35,6 +38,61 @@ const formatDateInput = (date) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const computeSundaysForMonthKey = (monthKey) => {
+  if (typeof monthKey !== 'string') return [];
+  const match = monthKey.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return [];
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+
+  if (Number.isNaN(year) || Number.isNaN(month)) return [];
+
+  const sundays = [];
+  const cursor = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
+
+  while (cursor <= end) {
+    if (cursor.getUTCDay() === 0) {
+      const y = cursor.getUTCFullYear();
+      const m = String(cursor.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(cursor.getUTCDate()).padStart(2, '0');
+      sundays.push(`${y}-${m}-${d}`);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return sundays;
+};
+
+const formatFriendlyDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
+const createEmptyCalendarData = (monthKey) => ({
+  month: monthKey,
+  countryCode: 'IN',
+  regionCode: null,
+  sundays: computeSundaysForMonthKey(monthKey),
+  publicHolidays: [],
+  customHolidays: [],
+  attendanceStatus: {},
+  fetchedAt: new Date().toISOString(),
+  fromCache: false
+});
+
+const getMonthKeyFromDate = (dateString) => {
+  if (!dateString || typeof dateString !== 'string') return null;
+  return dateString.slice(0, 7);
 };
 
 const Attendance = () => {
@@ -67,6 +125,127 @@ const Attendance = () => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [historyData, setHistoryData] = useState(null);
   const [downloadingStudentId, setDownloadingStudentId] = useState(null);
+  const [calendarInfo, setCalendarInfo] = useState({
+    month: '',
+    countryCode: 'IN',
+    sundays: [],
+    publicHolidays: [],
+    customHolidays: [],
+    fetchedAt: null,
+    fromCache: false,
+    attendanceStatus: {}
+  });
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState(null);
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(null);
+  const [calendarViewData, setCalendarViewData] = useState(null);
+  const [calendarViewLoading, setCalendarViewLoading] = useState(false);
+  const [calendarViewError, setCalendarViewError] = useState(null);
+  const [calendarMutationLoading, setCalendarMutationLoading] = useState(false);
+  const [selectedDateHolidayInfo, setSelectedDateHolidayInfo] = useState(null);
+  const calendarCacheRef = useRef(new Map());
+  const searchEffectInitialized = useRef(false);
+
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === 'admin';
+
+  const setCachedCalendarData = (monthKey, updater) => {
+    if (!monthKey) return null;
+    const previous = calendarCacheRef.current.get(monthKey) || createEmptyCalendarData(monthKey);
+    const nextValue = typeof updater === 'function' ? updater(previous) : updater;
+    calendarCacheRef.current.set(monthKey, nextValue);
+    setCalendarInfo((prev) => (prev.month === monthKey ? nextValue : prev));
+    setCalendarViewData((prev) => (prev?.month === monthKey ? nextValue : prev));
+    return nextValue;
+  };
+
+  const fetchCalendarMonth = async (monthKey, options = {}) => {
+    if (!monthKey) return null;
+    const { force = false, applyToHeader = false, applyToModal = false } = options;
+
+    if (!force && calendarCacheRef.current.has(monthKey)) {
+      const cached = calendarCacheRef.current.get(monthKey);
+      if (applyToHeader) {
+        setCalendarInfo(cached);
+      }
+      if (applyToModal) {
+        setCalendarViewData(cached);
+      }
+      return cached;
+    }
+
+    const loadingSetter = applyToHeader
+      ? setCalendarLoading
+      : applyToModal
+      ? setCalendarViewLoading
+      : null;
+    const errorSetter = applyToHeader
+      ? setCalendarError
+      : applyToModal
+      ? setCalendarViewError
+      : null;
+
+    if (loadingSetter) loadingSetter(true);
+    if (errorSetter) errorSetter(null);
+
+    try {
+      const response = await api.get('/calendar/non-working-days', {
+        params: {
+          month: monthKey,
+          countryCode: 'IN'
+        }
+      });
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Unable to load calendar data');
+      }
+
+      const payload = response.data.data || {};
+      const normalized = {
+        month: payload.month || monthKey,
+        countryCode: payload.countryCode || 'IN',
+        regionCode: payload.regionCode || null,
+        sundays:
+          Array.isArray(payload.sundays) && payload.sundays.length > 0
+            ? payload.sundays
+            : computeSundaysForMonthKey(monthKey),
+        publicHolidays: Array.isArray(payload.publicHolidays) ? payload.publicHolidays : [],
+        customHolidays: Array.isArray(payload.customHolidays) ? payload.customHolidays : [],
+        attendanceStatus:
+          payload.attendanceStatus && typeof payload.attendanceStatus === 'object'
+            ? payload.attendanceStatus
+            : {},
+        fetchedAt: payload.fetchedAt || new Date().toISOString(),
+        fromCache: Boolean(payload.fromCache)
+      };
+
+      calendarCacheRef.current.set(normalized.month, normalized);
+      if (applyToHeader) {
+        setCalendarInfo(normalized);
+      }
+      if (applyToModal) {
+        setCalendarViewData(normalized);
+      }
+      return normalized;
+    } catch (error) {
+      if (errorSetter) {
+        errorSetter(error.response?.data?.message || error.message || 'Unable to load calendar information');
+      }
+      throw error;
+    } finally {
+      if (loadingSetter) loadingSetter(false);
+    }
+  };
+
+  const ensureCalendarFallback = (monthKey) => {
+    if (!monthKey) return null;
+    const fallback = createEmptyCalendarData(monthKey);
+    calendarCacheRef.current.set(monthKey, fallback);
+    setCalendarInfo((prev) => (prev.month === monthKey ? fallback : prev));
+    setCalendarViewData((prev) => (prev?.month === monthKey ? fallback : prev));
+    return fallback;
+  };
 
   const effectiveStatus = (studentId) => {
     const status = statusMap[studentId];
@@ -97,6 +276,170 @@ const Attendance = () => {
     });
   }, [students, statusMap, initialStatusMap]);
 
+  const calendarMonthKey = useMemo(() => {
+    if (!attendanceDate || typeof attendanceDate !== 'string') return null;
+    return attendanceDate.slice(0, 7);
+  }, [attendanceDate]);
+
+  const selectedDateIsSunday = useMemo(() => {
+    if (!attendanceDate) return false;
+    if (selectedDateHolidayInfo?.isSunday) return true;
+    if (Array.isArray(calendarInfo.sundays) && calendarInfo.sundays.includes(attendanceDate)) {
+      return true;
+    }
+    const selectedDate = new Date(`${attendanceDate}T00:00:00`);
+    return selectedDate.getDay() === 0;
+  }, [attendanceDate, calendarInfo.sundays, selectedDateHolidayInfo]);
+
+  const publicHolidayMatches = useMemo(() => {
+    if (!attendanceDate) {
+      return [];
+    }
+    const calendarMatches = Array.isArray(calendarInfo.publicHolidays)
+      ? calendarInfo.publicHolidays.filter((holiday) => holiday.date === attendanceDate)
+      : [];
+
+    if (calendarMatches.length > 0) {
+      return calendarMatches;
+    }
+
+    if (selectedDateHolidayInfo?.publicHoliday) {
+      return [selectedDateHolidayInfo.publicHoliday];
+    }
+
+    return [];
+  }, [attendanceDate, calendarInfo.publicHolidays, selectedDateHolidayInfo]);
+
+  const customHolidayForDate = useMemo(() => {
+    if (!attendanceDate) {
+      return null;
+    }
+    const calendarMatch = Array.isArray(calendarInfo.customHolidays)
+      ? calendarInfo.customHolidays.find((holiday) => holiday.date === attendanceDate)
+      : null;
+
+    if (calendarMatch) {
+      return calendarMatch;
+    }
+
+    return selectedDateHolidayInfo?.customHoliday || null;
+  }, [attendanceDate, calendarInfo.customHolidays, selectedDateHolidayInfo]);
+
+  const nonWorkingDayDetails = useMemo(() => {
+    const reasons = [];
+
+    if (selectedDateIsSunday) {
+      reasons.push('Sunday');
+    }
+
+    if (publicHolidayMatches.length > 0) {
+      const labels = publicHolidayMatches
+        .map((holiday) => holiday.localName || holiday.name)
+        .filter(Boolean);
+      const labelText =
+        labels.length > 0
+          ? `Public holiday${labels.length > 1 ? 's' : ''}: ${labels.join(', ')}`
+          : 'Public holiday';
+      reasons.push(labelText);
+    }
+
+    if (customHolidayForDate) {
+      reasons.push(
+        customHolidayForDate.title
+          ? `Institute holiday: ${customHolidayForDate.title}`
+          : 'Institute holiday'
+      );
+    }
+
+    if (Array.isArray(selectedDateHolidayInfo?.reasons)) {
+      selectedDateHolidayInfo.reasons.forEach((reason) => {
+        if (reason && !reasons.includes(reason)) {
+          reasons.push(reason);
+        }
+      });
+    }
+
+    return {
+      isNonWorkingDay:
+        selectedDateIsSunday || publicHolidayMatches.length > 0 || !!customHolidayForDate,
+      reasons,
+      holidays: publicHolidayMatches,
+      customHoliday: customHolidayForDate,
+      backend: selectedDateHolidayInfo
+    };
+  }, [selectedDateIsSunday, publicHolidayMatches, customHolidayForDate, selectedDateHolidayInfo]);
+
+  const upcomingHolidays = useMemo(() => {
+    const todayKey = attendanceDate || formatDateInput(new Date());
+
+    const combined = [
+      ...(Array.isArray(calendarInfo.publicHolidays)
+        ? calendarInfo.publicHolidays.map((holiday) => ({
+            date: holiday.date,
+            label: holiday.localName || holiday.name,
+            type: 'public',
+            details: holiday
+          }))
+        : []),
+      ...(Array.isArray(calendarInfo.customHolidays)
+        ? calendarInfo.customHolidays.map((holiday) => ({
+            date: holiday.date,
+            label: holiday.title || 'Institute Holiday',
+            type: 'custom',
+            details: holiday
+          }))
+        : [])
+    ].filter((entry) => entry.date >= todayKey);
+
+    combined.sort((a, b) => a.date.localeCompare(b.date));
+
+    return combined.slice(0, 4);
+  }, [calendarInfo.publicHolidays, calendarInfo.customHolidays, attendanceDate]);
+
+  const todayKey = useMemo(() => formatDateInput(new Date()), []);
+  const calendarMonthLoaded = calendarInfo.month === calendarMonthKey;
+  const attendanceDateLabel = useMemo(() => {
+    if (!attendanceDate) return 'Select date';
+    const date = new Date(`${attendanceDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return attendanceDate;
+    return date.toLocaleDateString(undefined, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  }, [attendanceDate]);
+  const selectedDateStatus = useMemo(
+    () => calendarInfo.attendanceStatus?.[attendanceDate] || null,
+    [calendarInfo.attendanceStatus, attendanceDate]
+  );
+  const isToday = attendanceDate === todayKey;
+  const editingLocked =
+    nonWorkingDayDetails.isNonWorkingDay || !isToday;
+  const editingLockReason = nonWorkingDayDetails.isNonWorkingDay
+    ? 'Attendance is disabled on holidays.'
+    : !isToday
+    ? 'Attendance can only be recorded for today.'
+    : null;
+  const statusSummaryMeta = {
+    submitted: {
+      message: 'Attendance already submitted for this date.',
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    },
+    not_marked: {
+      message: 'Attendance was not marked on this date.',
+      className: 'border-rose-200 bg-rose-50 text-rose-700'
+    },
+    pending: {
+      message: 'Attendance is pending submission today.',
+      className: 'border-amber-200 bg-amber-50 text-amber-700'
+    },
+    upcoming: {
+      message: 'This is an upcoming day. Attendance opens on the selected date.',
+      className: 'border-blue-200 bg-blue-50 text-blue-700'
+    }
+  };
+
   const loadFilterOptions = async () => {
     try {
       const response = await api.get('/attendance/filters');
@@ -117,6 +460,7 @@ const Attendance = () => {
 
   const loadAttendance = async () => {
     setLoading(true);
+    setSelectedDateHolidayInfo(null);
     try {
       const params = new URLSearchParams();
       params.append('date', attendanceDate);
@@ -151,16 +495,36 @@ const Attendance = () => {
       setStatusMap(statusSnapshot);
       setInitialStatusMap({ ...statusSnapshot });
       setSmsResults([]);
+
+      if (response.data?.data?.holiday) {
+        setSelectedDateHolidayInfo(response.data.data.holiday);
+      }
     } catch (error) {
       console.error('Attendance fetch failed:', error);
       toast.error(error.response?.data?.message || 'Unable to load attendance');
       setStudents([]);
       setStatusMap({});
       setInitialStatusMap({});
+      setSelectedDateHolidayInfo(null);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!calendarMonthKey) return;
+    fetchCalendarMonth(calendarMonthKey, { applyToHeader: true }).catch(() => {
+      ensureCalendarFallback(calendarMonthKey);
+    });
+  }, [calendarMonthKey]);
+
+  useEffect(() => {
+    if (!calendarModalOpen) return;
+    if (!calendarViewMonthKey) return;
+    fetchCalendarMonth(calendarViewMonthKey, { applyToModal: true }).catch(() => {
+      ensureCalendarFallback(calendarViewMonthKey);
+    });
+  }, [calendarModalOpen, calendarViewMonthKey]);
 
   useEffect(() => {
     loadFilterOptions();
@@ -177,8 +541,6 @@ const Attendance = () => {
     filters.currentYear,
     filters.currentSemester
   ]);
-
-  const searchEffectInitialized = useRef(false);
 
   useEffect(() => {
     if (!searchEffectInitialized.current) {
@@ -202,6 +564,10 @@ const Attendance = () => {
   };
 
   const handleStatusChange = (studentId, status) => {
+    if (editingLocked) {
+      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+      return;
+    }
     setStatusMap((prev) => {
       const current = prev[studentId] || null;
       if (current === status) {
@@ -226,7 +592,170 @@ const Attendance = () => {
     });
   };
 
+  const handleRetryCalendarFetch = () => {
+    if (!calendarMonthKey) return;
+    fetchCalendarMonth(calendarMonthKey, { applyToHeader: true, force: true }).catch(() => {
+      ensureCalendarFallback(calendarMonthKey);
+    });
+  };
+
+  const handleOpenCalendarModal = async () => {
+    const monthKey = calendarMonthKey || getMonthKeyFromDate(formatDateInput(new Date()));
+    setCalendarModalOpen(true);
+    setCalendarViewError(null);
+    setCalendarViewMonthKey(monthKey);
+    try {
+      await fetchCalendarMonth(monthKey, { applyToModal: true });
+    } catch (error) {
+      ensureCalendarFallback(monthKey);
+    }
+  };
+
+  const handleCloseCalendarModal = () => {
+    setCalendarModalOpen(false);
+    setCalendarViewError(null);
+  };
+
+  const handleCalendarMonthChange = (newMonthKey) => {
+    if (!newMonthKey) return;
+    setCalendarViewError(null);
+    setCalendarViewMonthKey(newMonthKey);
+  };
+
+  const handleCalendarDateSelect = (date) => {
+    if (!date) return;
+    setAttendanceDate(date);
+    const nextMonthKey = getMonthKeyFromDate(date);
+    if (nextMonthKey && nextMonthKey !== calendarViewMonthKey) {
+      setCalendarViewMonthKey(nextMonthKey);
+    }
+  };
+
+  const handleCreateInstituteHoliday = async ({ date, title, description }) => {
+    if (!date) return;
+    setCalendarMutationLoading(true);
+    try {
+      const response = await api.post('/calendar/custom-holidays', {
+        date,
+        title,
+        description
+      });
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Unable to save holiday');
+      }
+
+      const savedHoliday = response.data.data;
+      const monthKey = getMonthKeyFromDate(savedHoliday?.date || date);
+
+      await fetchCalendarMonth(monthKey, {
+        applyToHeader: monthKey === calendarMonthKey,
+        applyToModal: calendarModalOpen && monthKey === (calendarViewMonthKey || monthKey),
+        force: true
+      });
+
+      toast.success('Institute holiday saved');
+
+      if (attendanceDate === savedHoliday?.date) {
+        const reasons = [];
+        if (selectedDateIsSunday) {
+          reasons.push('Sunday');
+        }
+        if (selectedDateHolidayInfo?.publicHoliday) {
+          reasons.push(
+            selectedDateHolidayInfo.publicHoliday.localName ||
+              selectedDateHolidayInfo.publicHoliday.name ||
+              'Public holiday'
+          );
+        }
+        reasons.push(
+          savedHoliday.title ? `Institute holiday: ${savedHoliday.title}` : 'Institute holiday'
+        );
+
+        setSelectedDateHolidayInfo({
+          date: savedHoliday.date,
+          isNonWorkingDay: true,
+          isSunday: selectedDateIsSunday,
+          publicHoliday: selectedDateHolidayInfo?.publicHoliday || null,
+          customHoliday: savedHoliday,
+          reasons
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save custom holiday:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to save holiday');
+    } finally {
+      setCalendarMutationLoading(false);
+    }
+  };
+
+  const handleRemoveInstituteHoliday = async (date) => {
+    if (!date) return;
+    setCalendarMutationLoading(true);
+    try {
+      const response = await api.delete(`/calendar/custom-holidays/${date}`);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Unable to remove holiday');
+      }
+
+      const monthKey = getMonthKeyFromDate(date);
+
+      await fetchCalendarMonth(monthKey, {
+        applyToHeader: monthKey === calendarMonthKey,
+        applyToModal: calendarModalOpen && monthKey === (calendarViewMonthKey || monthKey),
+        force: true
+      });
+
+      toast.success('Institute holiday removed');
+
+      if (attendanceDate === date) {
+        const reasons = [];
+        if (selectedDateIsSunday) {
+          reasons.push('Sunday');
+        }
+        if (selectedDateHolidayInfo?.publicHoliday) {
+          reasons.push(
+            selectedDateHolidayInfo.publicHoliday.localName ||
+              selectedDateHolidayInfo.publicHoliday.name ||
+              'Public holiday'
+          );
+        }
+
+        const isStillHoliday = reasons.length > 0;
+
+        setSelectedDateHolidayInfo(
+          isStillHoliday
+            ? {
+                date,
+                isNonWorkingDay: true,
+                isSunday: selectedDateIsSunday,
+                publicHoliday: selectedDateHolidayInfo?.publicHoliday || null,
+                customHoliday: null,
+                reasons
+              }
+            : null
+        );
+      }
+    } catch (error) {
+      console.error('Failed to delete custom holiday:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to delete holiday');
+    } finally {
+      setCalendarMutationLoading(false);
+    }
+  };
+
+  const handleCalendarModalRetry = () => {
+    if (!calendarViewMonthKey) return;
+    fetchCalendarMonth(calendarViewMonthKey, { applyToModal: true, force: true }).catch(() => {
+      ensureCalendarFallback(calendarViewMonthKey);
+    });
+  };
+
   const handleSave = async () => {
+    if (editingLocked) {
+      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+      return;
+    }
     const records = students
       .map((student) => {
         const current = effectiveStatus(student.id);
@@ -375,23 +904,29 @@ const Attendance = () => {
     rows.push('');
 
     rows.push(csvValue('Weekly Summary'));
-    rows.push([csvValue('Present'), csvValue('Absent'), csvValue('Unmarked')].join(','));
+    rows.push(
+      [csvValue('Present'), csvValue('Absent'), csvValue('Unmarked'), csvValue('Holidays')].join(',')
+    );
     rows.push(
       [
         csvValue(weeklyTotals.present || 0),
         csvValue(weeklyTotals.absent || 0),
-        csvValue(weeklyTotals.unmarked || 0)
+        csvValue(weeklyTotals.unmarked || 0),
+        csvValue(weeklyTotals.holidays || 0)
       ].join(',')
     );
     rows.push('');
 
     rows.push(csvValue('Monthly Summary'));
-    rows.push([csvValue('Present'), csvValue('Absent'), csvValue('Unmarked')].join(','));
+    rows.push(
+      [csvValue('Present'), csvValue('Absent'), csvValue('Unmarked'), csvValue('Holidays')].join(',')
+    );
     rows.push(
       [
         csvValue(monthlyTotals.present || 0),
         csvValue(monthlyTotals.absent || 0),
-        csvValue(monthlyTotals.unmarked || 0)
+        csvValue(monthlyTotals.unmarked || 0),
+        csvValue(monthlyTotals.holidays || 0)
       ].join(',')
     );
     rows.push('');
@@ -449,7 +984,8 @@ const Attendance = () => {
       date: entry.date,
       present: entry.status === 'present' ? 1 : 0,
       absent: entry.status === 'absent' ? 1 : 0,
-      unmarked: entry.status === 'unmarked' ? 1 : 0
+      unmarked: entry.status === 'unmarked' ? 1 : 0,
+      holiday: entry.status === 'holiday' ? 1 : 0
     }));
 
   const weeklyChartSeries = historyData ? buildChartSeries(historyData.weekly?.series) : [];
@@ -469,16 +1005,107 @@ const Attendance = () => {
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-gray-600 lg:text-right">
-          <label className="flex items-center gap-2 text-gray-700 font-medium">
-            <span>Date</span>
-            <input
-              type="date"
-              value={attendanceDate}
-              onChange={(event) => setAttendanceDate(event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </label>
+        <div className="flex flex-col gap-2 text-sm text-gray-600 lg:text-right max-w-sm">
+          <div className="flex flex-col gap-2 text-left lg:text-right">
+            <span className="text-gray-700 font-medium">Date</span>
+            <button
+              type="button"
+              onClick={handleOpenCalendarModal}
+              className={`relative flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                nonWorkingDayDetails.isNonWorkingDay
+                  ? 'border-amber-400 bg-amber-50 text-amber-800 hover:border-amber-500 hover:bg-amber-100'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:bg-blue-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`rounded-full p-2 ${
+                    nonWorkingDayDetails.isNonWorkingDay ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
+                  }`}
+                >
+                  <CalendarDays size={18} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">{attendanceDateLabel}</span>
+                  <span className="text-xs text-gray-500">
+                    {nonWorkingDayDetails.isNonWorkingDay
+                      ? 'Holiday — attendance disabled'
+                      : 'Tap to open academic calendar'}
+                  </span>
+                </div>
+              </div>
+              {calendarLoading && (
+                <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin text-blue-500" />
+              )}
+            </button>
+          </div>
+          {nonWorkingDayDetails.isNonWorkingDay && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 text-left lg:text-right">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+              <div className="space-y-0.5">
+                <div className="font-semibold uppercase tracking-wide text-amber-800">
+                  Non-working day
+                </div>
+                <div>{nonWorkingDayDetails.reasons.join('. ')}</div>
+              </div>
+            </div>
+          )}
+          {calendarError && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 text-left lg:text-right">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <div className="font-semibold uppercase tracking-wide text-red-800">
+                  Calendar sync unavailable
+                </div>
+                <div>{calendarError}</div>
+                <button
+                  type="button"
+                  onClick={handleRetryCalendarFetch}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 underline decoration-dotted"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+          {!calendarError && calendarMonthLoaded && upcomingHolidays.length > 0 && (
+            <div className="rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-700 text-left lg:text-right">
+              <div className="font-semibold uppercase tracking-wide text-blue-800">Upcoming holidays</div>
+              <div className="mt-1 space-y-1">
+                {upcomingHolidays.map((holiday) => (
+                  <div key={`${holiday.type}-${holiday.date}`} className="flex items-center justify-between gap-3">
+                    <span>{formatFriendlyDate(holiday.date)}</span>
+                    <span className="flex items-center gap-2 font-medium">
+                      {holiday.label}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          holiday.type === 'public'
+                            ? 'bg-red-100 text-red-600'
+                            : 'bg-purple-100 text-purple-600'
+                        }`}
+                      >
+                        {holiday.type === 'public' ? 'Public' : 'Institute'}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!nonWorkingDayDetails.isNonWorkingDay && editingLockReason && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
+              {editingLockReason}
+            </div>
+          )}
+          {selectedDateStatus &&
+            selectedDateStatus !== 'holiday' &&
+            statusSummaryMeta[selectedDateStatus] && (
+              <div
+                className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusSummaryMeta[selectedDateStatus].className}`}
+              >
+                {statusSummaryMeta[selectedDateStatus].message}
+              </div>
+            )}
           <div>
             <span className="font-semibold text-gray-800">Summary: </span>
             <span className="text-green-600 font-medium">{presentCount} present</span>,{' '}
@@ -635,9 +1262,9 @@ const Attendance = () => {
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasChanges || saving}
+            disabled={!hasChanges || saving || editingLocked}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-              hasChanges && !saving
+              hasChanges && !saving && !editingLocked
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
@@ -655,6 +1282,11 @@ const Attendance = () => {
             )}
           </button>
         </div>
+        {editingLocked && (
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
+            {editingLockReason || 'Attendance is read-only for this date.'}
+          </div>
+        )}
 
         {loading ? (
           <div className="py-12 flex justify-center">
@@ -714,8 +1346,11 @@ const Attendance = () => {
                           <button
                             type="button"
                             onClick={() => handleStatusChange(student.id, 'present')}
+                            disabled={editingLocked}
                             className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                              status === 'present'
+                              editingLocked
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                : status === 'present'
                                 ? 'bg-green-100 border-green-500 text-green-700'
                                 : 'bg-white border-gray-300 text-gray-600 hover:bg-green-50 hover:border-green-400'
                             }`}
@@ -726,8 +1361,11 @@ const Attendance = () => {
                           <button
                             type="button"
                             onClick={() => handleStatusChange(student.id, 'absent')}
+                            disabled={editingLocked}
                             className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                              status === 'absent'
+                              editingLocked
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                : status === 'absent'
                                 ? 'bg-red-100 border-red-500 text-red-700'
                                 : 'bg-white border-gray-300 text-gray-600 hover:bg-red-50 hover:border-red-400'
                             }`}
@@ -803,6 +1441,22 @@ const Attendance = () => {
           </ul>
         </section>
       )}
+      <HolidayCalendarModal
+        isOpen={calendarModalOpen}
+        onClose={handleCloseCalendarModal}
+        monthKey={calendarViewMonthKey || calendarMonthKey || getMonthKeyFromDate(attendanceDate)}
+        onMonthChange={handleCalendarMonthChange}
+        selectedDate={attendanceDate}
+        onSelectDate={handleCalendarDateSelect}
+        calendarData={calendarViewData}
+        loading={calendarViewLoading}
+        error={calendarViewError}
+        onRetry={handleCalendarModalRetry}
+        onCreateHoliday={handleCreateInstituteHoliday}
+        onRemoveHoliday={handleRemoveInstituteHoliday}
+        mutationLoading={calendarMutationLoading}
+        isAdmin={isAdmin}
+      />
       {historyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-gray-200">
@@ -860,7 +1514,7 @@ const Attendance = () => {
                 <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-blue-700 uppercase">Weekly Summary</h3>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                       <div>
                         <p className="text-xs text-gray-500">Present</p>
                         <p className="text-lg font-semibold text-green-600">
@@ -879,6 +1533,12 @@ const Attendance = () => {
                           {historyData.weekly?.totals?.unmarked ?? 0}
                         </p>
                       </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Holidays</p>
+                        <p className="text-lg font-semibold text-amber-600">
+                          {historyData.weekly?.totals?.holidays ?? 0}
+                        </p>
+                      </div>
                     </div>
                     <p className="mt-3 text-xs text-gray-500">
                       Range: {historyData.weekly?.startDate} → {historyData.weekly?.endDate}
@@ -887,7 +1547,7 @@ const Attendance = () => {
 
                   <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-purple-700 uppercase">Monthly Summary</h3>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                       <div>
                         <p className="text-xs text-gray-500">Present</p>
                         <p className="text-lg font-semibold text-green-600">
@@ -904,6 +1564,12 @@ const Attendance = () => {
                         <p className="text-xs text-gray-500">Unmarked</p>
                         <p className="text-lg font-semibold text-gray-600">
                           {historyData.monthly?.totals?.unmarked ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Holidays</p>
+                        <p className="text-lg font-semibold text-amber-600">
+                          {historyData.monthly?.totals?.holidays ?? 0}
                         </p>
                       </div>
                     </div>
@@ -926,6 +1592,7 @@ const Attendance = () => {
                           <Legend />
                           <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
                           <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
+                          <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
                           <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
                         </BarChart>
                       </ResponsiveContainer>
@@ -943,6 +1610,7 @@ const Attendance = () => {
                           <Legend />
                           <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
                           <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
+                          <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
                           <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
                         </BarChart>
                       </ResponsiveContainer>
@@ -961,11 +1629,15 @@ const Attendance = () => {
                             ? 'border-green-200 bg-green-50 text-green-700'
                             : entry.status === 'absent'
                             ? 'border-red-200 bg-red-50 text-red-600'
+                            : entry.status === 'holiday'
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
                             : 'border-gray-200 bg-gray-50 text-gray-600'
                         }`}
                       >
                         <p className="text-xs font-semibold">{entry.date}</p>
-                        <p className="text-xs capitalize">{entry.status}</p>
+                        <p className="text-xs capitalize">
+                          {entry.status === 'holiday' ? 'Holiday' : entry.status}
+                        </p>
                       </div>
                     ))}
                   </div>

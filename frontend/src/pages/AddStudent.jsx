@@ -391,7 +391,7 @@ const AddStudent = () => {
                   >
                     <option value="">Select Course</option>
                     {availableCourses.map((course) => (
-                      <option key={course.code || course.name} value={course.name}>
+                      <option key={course.name} value={course.name}>
                         {course.name}
                       </option>
                     ))}
@@ -419,7 +419,7 @@ const AddStudent = () => {
                   >
                     <option value="">Select Branch</option>
                     {branchOptions.map((branch) => (
-                      <option key={branch.code || branch.name} value={branch.name}>
+                      <option key={branch.name} value={branch.name}>
                         {branch.name}
                       </option>
                     ))}

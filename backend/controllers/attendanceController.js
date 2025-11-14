@@ -1,5 +1,9 @@
 const { masterPool } = require('../config/database');
 const { sendAbsenceNotification } = require('../services/smsService');
+const {
+  getNonWorkingDayInfo,
+  getNonWorkingDaysForRange
+} = require('../services/nonWorkingDayService');
 
 const VALID_STATUSES = new Set(['present', 'absent']);
 
@@ -82,6 +86,20 @@ exports.getAttendance = async (req, res) => {
         success: false,
         message: 'Invalid attendance date supplied'
       });
+    }
+
+    let holidayInfo = null;
+    try {
+      holidayInfo = await getNonWorkingDayInfo(attendanceDate);
+    } catch (error) {
+      holidayInfo = {
+        date: attendanceDate,
+        isNonWorkingDay: false,
+        isSunday: false,
+        publicHoliday: null,
+        customHoliday: null,
+        reasons: []
+      };
     }
 
     const {
@@ -247,7 +265,8 @@ exports.getAttendance = async (req, res) => {
       success: true,
       data: {
         date: attendanceDate,
-        students
+        students,
+        holiday: holidayInfo
       }
     });
   } catch (error) {
@@ -275,6 +294,18 @@ exports.markAttendance = async (req, res) => {
       success: false,
       message: 'Attendance records are required'
     });
+  }
+
+  try {
+    const holidayInfo = await getNonWorkingDayInfo(normalizedDate);
+    if (holidayInfo?.isNonWorkingDay) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attendance cannot be recorded on holidays'
+      });
+    }
+  } catch (error) {
+    console.warn('Holiday check failed during attendance mark:', error.message || error);
   }
 
   const normalizedRecords = records
@@ -470,17 +501,34 @@ const safeDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const buildDailySummary = (rows, totalStudents) => {
-  const summary = { present: 0, absent: 0, total: totalStudents || 0, percentage: 0 };
+const buildDailySummary = (rows, totalStudents, options = {}) => {
+  const summary = {
+    present: 0,
+    absent: 0,
+    marked: 0,
+    pending: 0,
+    totalStudents: totalStudents || 0,
+    total: totalStudents || 0,
+    percentage: 0,
+    isHoliday: Boolean(options.isHoliday),
+    holiday: options.holiday || null
+  };
+
+  if (summary.isHoliday) {
+    return summary;
+  }
+
   rows.forEach((row) => {
     if (row.status === 'present') summary.present = row.count;
     if (row.status === 'absent') summary.absent = row.count;
   });
-  const marked = summary.present + summary.absent;
-  summary.marked = marked;
-  summary.pending = Math.max((summary.total || 0) - marked, 0);
-  const denominator = summary.total || marked || 1;
+
+  summary.marked = summary.present + summary.absent;
+  summary.pending = Math.max((summary.totalStudents || 0) - summary.marked, 0);
+
+  const denominator = summary.totalStudents || summary.marked || 1;
   summary.percentage = Math.round(((summary.present || 0) / denominator) * 100);
+
   return summary;
 };
 
@@ -496,19 +544,25 @@ const aggregateRowsByDate = (rows) => {
   return Array.from(grouped.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
 };
 
-const ensureContinuousSeries = (rows, startDate, endDate) => {
+const ensureContinuousSeries = (rows, startDate, endDate, holidayInfo) => {
   const cursor = new Date(startDate);
   const end = new Date(endDate);
   const map = new Map(rows.map((row) => [row.date, row]));
   const data = [];
+  const holidayDates = holidayInfo?.dates || new Set();
+  const holidayDetails = holidayInfo?.details || new Map();
   while (cursor <= end) {
     const key = formatDateKey(cursor);
     const row = map.get(key) || { date: key, present: 0, absent: 0 };
+    const isHoliday = holidayDates.has(key);
+    const details = holidayDetails.get(key) || null;
     data.push({
       date: key,
       present: row.present || 0,
       absent: row.absent || 0,
-      total: (row.present || 0) + (row.absent || 0)
+      total: (row.present || 0) + (row.absent || 0),
+      isHoliday,
+      holiday: details
     });
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -632,31 +686,74 @@ exports.getAttendanceSummary = async (req, res) => {
       [formatDateKey(monthStart), todayKey, ...monthFilter.params]
     );
 
+    let todayHolidayInfo = null;
+    let weeklyHolidayInfo = { dates: new Set(), details: new Map() };
+    let monthlyHolidayInfo = { dates: new Set(), details: new Map() };
+
+    try {
+      todayHolidayInfo = await getNonWorkingDayInfo(todayKey);
+    } catch (error) {
+      todayHolidayInfo = null;
+      console.warn('Unable to determine holiday status for daily summary:', error.message || error);
+    }
+
+    try {
+      weeklyHolidayInfo = await getNonWorkingDaysForRange(formatDateKey(weekStart), todayKey);
+    } catch (error) {
+      console.warn('Failed to resolve weekly holiday range:', error.message || error);
+    }
+
+    try {
+      monthlyHolidayInfo = await getNonWorkingDaysForRange(formatDateKey(monthStart), todayKey);
+    } catch (error) {
+      console.warn('Failed to resolve monthly holiday range:', error.message || error);
+    }
+
     const weeklyAggregated = aggregateRowsByDate(weeklyRows);
     const monthlyAggregated = aggregateRowsByDate(monthlyRows);
 
-    const weeklySeries = ensureContinuousSeries(weeklyAggregated, weekStart, referenceDate);
-    const monthlySeries = ensureContinuousSeries(monthlyAggregated, monthStart, referenceDate);
+    const weeklySeries = ensureContinuousSeries(
+      weeklyAggregated,
+      weekStart,
+      referenceDate,
+      weeklyHolidayInfo
+    );
+    const monthlySeries = ensureContinuousSeries(
+      monthlyAggregated,
+      monthStart,
+      referenceDate,
+      monthlyHolidayInfo
+    );
 
     const weeklyTotals = weeklySeries.reduce(
       (acc, entry) => {
+        if (entry.isHoliday) {
+          acc.holidays += 1;
+          return acc;
+        }
         acc.present += entry.present;
         acc.absent += entry.absent;
         return acc;
       },
-      { present: 0, absent: 0 }
+      { present: 0, absent: 0, holidays: 0 }
     );
     weeklyTotals.total = weeklyTotals.present + weeklyTotals.absent;
+    weeklyTotals.workingDays = weeklySeries.length - weeklyTotals.holidays;
 
     const monthlyTotals = monthlySeries.reduce(
       (acc, entry) => {
+        if (entry.isHoliday) {
+          acc.holidays += 1;
+          return acc;
+        }
         acc.present += entry.present;
         acc.absent += entry.absent;
         return acc;
       },
-      { present: 0, absent: 0 }
+      { present: 0, absent: 0, holidays: 0 }
     );
     monthlyTotals.total = monthlyTotals.present + monthlyTotals.absent;
+    monthlyTotals.workingDays = monthlySeries.length - monthlyTotals.holidays;
 
     res.json({
       success: true,
@@ -672,19 +769,24 @@ exports.getAttendanceSummary = async (req, res) => {
         },
         daily: {
           date: todayKey,
-          ...buildDailySummary(dailyRows, totalStudents)
+          ...buildDailySummary(dailyRows, totalStudents, {
+            isHoliday: todayHolidayInfo?.isNonWorkingDay,
+            holiday: todayHolidayInfo
+          })
         },
         weekly: {
           startDate: formatDateKey(weekStart),
           endDate: todayKey,
           totals: weeklyTotals,
-          series: weeklySeries
+          series: weeklySeries,
+          holidays: weeklySeries.filter((entry) => entry.isHoliday)
         },
         monthly: {
           startDate: formatDateKey(monthStart),
           endDate: todayKey,
           totals: monthlyTotals,
-          series: monthlySeries
+          series: monthlySeries,
+          holidays: monthlySeries.filter((entry) => entry.isHoliday)
         }
       }
     });
@@ -697,7 +799,7 @@ exports.getAttendanceSummary = async (req, res) => {
   }
 };
 
-const buildStudentSeries = (rows, startDate, endDate) => {
+const buildStudentSeries = (rows, startDate, endDate, holidayInfo) => {
   const cursor = new Date(startDate);
   const end = new Date(endDate);
   const map = new Map(
@@ -705,16 +807,30 @@ const buildStudentSeries = (rows, startDate, endDate) => {
   );
 
   const series = [];
-  const totals = { present: 0, absent: 0, unmarked: 0 };
+  const totals = { present: 0, absent: 0, unmarked: 0, holidays: 0 };
+  const holidayDates = holidayInfo?.dates || new Set();
+  const holidayDetails = holidayInfo?.details || new Map();
 
   while (cursor <= end) {
     const key = formatDateKey(cursor);
-    const status = map.get(key) || 'unmarked';
-    series.push({ date: key, status });
+    const recordedStatus = map.get(key) || null;
+    const isHoliday = holidayDates.has(key);
+    const holiday = holidayDetails.get(key) || null;
 
-    if (status === 'present') totals.present += 1;
-    else if (status === 'absent') totals.absent += 1;
-    else totals.unmarked += 1;
+    let status = recordedStatus || 'unmarked';
+
+    if (isHoliday) {
+      status = 'holiday';
+      totals.holidays += 1;
+    } else if (status === 'present') {
+      totals.present += 1;
+    } else if (status === 'absent') {
+      totals.absent += 1;
+    } else {
+      totals.unmarked += 1;
+    }
+
+    series.push({ date: key, status, isHoliday, holiday });
 
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -774,8 +890,15 @@ exports.getStudentAttendanceHistory = async (req, res) => {
       (row) => new Date(row.attendance_date) >= weekStart
     );
 
-    const weekly = buildStudentSeries(weeklyRows, weekStart, referenceDate);
-    const monthly = buildStudentSeries(historyRows, monthStart, referenceDate);
+    let holidayRangeInfo = { dates: new Set(), details: new Map() };
+    try {
+      holidayRangeInfo = await getNonWorkingDaysForRange(formatDateKey(monthStart), todayKey);
+    } catch (error) {
+      console.warn('Failed to fetch holiday range for student history:', error.message || error);
+    }
+
+    const weekly = buildStudentSeries(weeklyRows, weekStart, referenceDate, holidayRangeInfo);
+    const monthly = buildStudentSeries(historyRows, monthStart, referenceDate, holidayRangeInfo);
 
     res.json({
       success: true,
@@ -794,13 +917,15 @@ exports.getStudentAttendanceHistory = async (req, res) => {
           startDate: formatDateKey(weekStart),
           endDate: todayKey,
           totals: weekly.totals,
-          series: weekly.series
+          series: weekly.series,
+          holidays: weekly.series.filter((entry) => entry.isHoliday)
         },
         monthly: {
           startDate: formatDateKey(monthStart),
           endDate: todayKey,
           totals: monthly.totals,
-          series: monthly.series
+          series: monthly.series,
+          holidays: monthly.series.filter((entry) => entry.isHoliday)
         }
       }
     });

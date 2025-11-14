@@ -73,23 +73,25 @@ const buildStructure = (courseConfig, branchConfig) => {
   };
 };
 
+const serializeBranchRow = (branchRow) => ({
+  id: branchRow.id,
+  courseId: branchRow.course_id,
+  name: branchRow.name,
+  isActive: branchRow.is_active === 1 || branchRow.is_active === true,
+  totalYears: branchRow.total_years ?? null,
+  semestersPerYear: branchRow.semesters_per_year ?? null,
+  metadata: branchRow.metadata ? JSON.parse(branchRow.metadata) : null
+});
+
 const formatCourse = (courseRow, branchRows = []) => {
   const branches = branchRows.map((branch) => ({
-    id: branch.id,
-    courseId: branch.course_id,
-    name: branch.name,
-    code: branch.code,
-    isActive: branch.is_active === 1 || branch.is_active === true,
-    totalYears: branch.total_years ?? null,
-    semestersPerYear: branch.semesters_per_year ?? null,
-    metadata: branch.metadata ? JSON.parse(branch.metadata) : null,
+    ...serializeBranchRow(branch),
     structure: buildStructure(courseRow, branch)
   }));
 
   return {
     id: courseRow.id,
     name: courseRow.name,
-    code: courseRow.code,
     isActive: courseRow.is_active === 1 || courseRow.is_active === true,
     totalYears: courseRow.total_years,
     semestersPerYear: courseRow.semesters_per_year,
@@ -130,7 +132,6 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
   const errors = [];
 
   const name = payload.name?.trim();
-  const code = payload.code?.trim() || null;
 
   if (!isUpdate || name !== undefined) {
     if (!name) {
@@ -138,10 +139,6 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     } else if (name.length > 255) {
       errors.push('Course name must be less than 255 characters');
     }
-  }
-
-  if (code && code.length > 50) {
-    errors.push('Course code must be less than 50 characters');
   }
 
   const totalYears = toInt(payload.totalYears ?? payload.total_years, 0);
@@ -181,7 +178,6 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     errors,
     sanitized: {
       name,
-      code,
       totalYears,
       semestersPerYear,
       isActive: parseBoolean(payload.isActive ?? payload.is_active, true),
@@ -205,10 +201,6 @@ const validateBranchPayload = (
     branchPayload.name !== undefined
       ? branchPayload.name?.trim()
       : undefined;
-  const code =
-    branchPayload.code !== undefined
-      ? branchPayload.code?.trim() || null
-      : undefined;
 
   if (!isUpdate || name !== undefined) {
     if (!name) {
@@ -216,10 +208,6 @@ const validateBranchPayload = (
     } else if (name.length > 255) {
       errors.push('Branch name must be less than 255 characters');
     }
-  }
-
-  if (code && code.length > 50) {
-    errors.push('Branch code must be less than 50 characters');
   }
 
   const totalYears = toInt(
@@ -256,7 +244,6 @@ const validateBranchPayload = (
     errors,
     sanitized: {
       name,
-      code,
       totalYears,
       semestersPerYear,
       metadata: branchPayload.metadata ?? null,
@@ -292,13 +279,11 @@ exports.getCourseOptions = async (_req, res) => {
 
     const sanitized = courses.map((course) => ({
       name: course.name,
-      code: course.code,
       isActive: course.isActive,
       structure: course.structure,
       metadata: course.metadata || null,
       branches: (course.branches || []).map((branch) => ({
         name: branch.name,
-        code: branch.code,
         isActive: branch.isActive,
         structure: branch.structure,
         metadata: branch.metadata || null
@@ -355,11 +340,10 @@ exports.createCourse = async (req, res) => {
     await connection.beginTransaction();
 
     const [courseResult] = await connection.query(
-      `INSERT INTO courses (name, code, total_years, semesters_per_year, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO courses (name, total_years, semesters_per_year, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         sanitized.name,
-        sanitized.code,
         sanitized.totalYears,
         sanitized.semestersPerYear,
         metadataJson || null,
@@ -378,7 +362,6 @@ exports.createCourse = async (req, res) => {
         return [
           courseId,
           branch.name.trim(),
-          branch.code?.trim() || null,
           branch.totalYears,
           branch.semestersPerYear,
           branchMetadata || null,
@@ -388,7 +371,7 @@ exports.createCourse = async (req, res) => {
 
       await connection.query(
         `INSERT INTO course_branches
-          (course_id, name, code, total_years, semesters_per_year, metadata, is_active)
+          (course_id, name, total_years, semesters_per_year, metadata, is_active)
          VALUES ?`,
         [branchValues]
       );
@@ -417,7 +400,7 @@ exports.createCourse = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Course with the same name or code already exists'
+        ? 'Course with the same name already exists'
         : 'Failed to create course'
     });
   } finally {
@@ -453,11 +436,6 @@ exports.updateCourse = async (req, res) => {
     if (sanitized.name !== undefined) {
       fields.push('name = ?');
       values.push(sanitized.name);
-    }
-
-    if (sanitized.code !== undefined) {
-      fields.push('code = ?');
-      values.push(sanitized.code);
     }
 
     if (
@@ -534,7 +512,7 @@ exports.updateCourse = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Course with the same name or code already exists'
+        ? 'Course with the same name already exists'
         : 'Failed to update course'
     });
   }
@@ -621,12 +599,11 @@ exports.createBranch = async (req, res) => {
 
     const [result] = await masterPool.query(
       `INSERT INTO course_branches
-        (course_id, name, code, total_years, semesters_per_year, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (course_id, name, total_years, semesters_per_year, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         courseId,
         sanitized.name?.trim(),
-        sanitized.code?.trim() || null,
         sanitized.totalYears,
         sanitized.semestersPerYear,
         branchMetadata || null,
@@ -644,14 +621,14 @@ exports.createBranch = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Branch created successfully',
-      data: branchRows[0]
+      data: serializeBranchRow(branchRows[0])
     });
   } catch (error) {
     console.error('createBranch error:', error);
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Branch with the same name or code already exists for this course'
+        ? 'Branch with the same name already exists for this course'
         : 'Failed to create branch'
     });
   }
@@ -679,16 +656,7 @@ exports.getBranches = async (req, res) => {
 
     res.json({
       success: true,
-      data: rows.map((branch) => ({
-        id: branch.id,
-        courseId: branch.course_id,
-        name: branch.name,
-        code: branch.code,
-        isActive: branch.is_active === 1 || branch.is_active === true,
-        totalYears: branch.total_years ?? null,
-        semestersPerYear: branch.semesters_per_year ?? null,
-        metadata: branch.metadata ? JSON.parse(branch.metadata) : null
-      }))
+      data: rows.map(serializeBranchRow)
     });
   } catch (error) {
     console.error('getBranches error:', error);
@@ -759,11 +727,6 @@ exports.updateBranch = async (req, res) => {
       values.push(sanitized.name?.trim());
     }
 
-    if (sanitized.code !== undefined) {
-      fields.push('code = ?');
-      values.push(sanitized.code?.trim() || null);
-    }
-
     if (req.body.totalYears !== undefined || req.body.total_years !== undefined) {
       fields.push('total_years = ?');
       values.push(sanitized.totalYears);
@@ -815,14 +778,14 @@ exports.updateBranch = async (req, res) => {
     res.json({
       success: true,
       message: 'Branch updated successfully',
-      data: branchRows[0]
+      data: serializeBranchRow(branchRows[0])
     });
   } catch (error) {
     console.error('updateBranch error:', error);
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Branch with the same name or code already exists for this course'
+        ? 'Branch with the same name already exists for this course'
         : 'Failed to update branch'
     });
   }

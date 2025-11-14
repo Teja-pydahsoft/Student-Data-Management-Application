@@ -226,16 +226,10 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
 
       if (selectedCourseOption) {
         queryParams.append('course', selectedCourseOption.name);
-        if (selectedCourseOption.code) {
-          queryParams.append('courseCode', selectedCourseOption.code);
-        }
       }
 
       if (selectedBranchOption) {
         queryParams.append('branch', selectedBranchOption.name);
-        if (selectedBranchOption.code) {
-          queryParams.append('branchCode', selectedBranchOption.code);
-        }
       }
 
       const endpoint = queryParams.toString()
@@ -462,8 +456,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                     </option>
                     {courseOptions.map((course) => (
                       <option key={course.id} value={course.id}>
-                        {course.name}
-                        {course.code ? ` (${course.code})` : ''}
+                    {course.name}
                       </option>
                     ))}
                   </select>
@@ -497,7 +490,6 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                     {branchOptions.map((branch) => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name}
-                        {branch.code ? ` (${branch.code})` : ''}
                       </option>
                     ))}
                   </select>
