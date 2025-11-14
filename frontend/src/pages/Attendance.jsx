@@ -144,6 +144,8 @@ const Attendance = () => {
   const [calendarViewError, setCalendarViewError] = useState(null);
   const [calendarMutationLoading, setCalendarMutationLoading] = useState(false);
   const [selectedDateHolidayInfo, setSelectedDateHolidayInfo] = useState(null);
+  const [holidayAlertShown, setHolidayAlertShown] = useState(false);
+  const [showHolidayAlert, setShowHolidayAlert] = useState(false);
   const calendarCacheRef = useRef(new Map());
   const searchEffectInitialized = useRef(false);
 
@@ -421,6 +423,66 @@ const Attendance = () => {
     : !isToday
     ? 'Attendance can only be recorded for today.'
     : null;
+
+  // Show holiday alert when date is a holiday (show every time page loads on a holiday)
+  useEffect(() => {
+    if (!isAdmin || !attendanceDate) {
+      setShowHolidayAlert(false);
+      return;
+    }
+
+    // Check multiple sources for holiday status
+    // Priority: selectedDateHolidayInfo (from attendance API) > nonWorkingDayDetails > calendarInfo
+    const isHoliday = 
+      selectedDateHolidayInfo?.isNonWorkingDay ||
+      !!selectedDateHolidayInfo?.customHoliday ||
+      !!selectedDateHolidayInfo?.publicHoliday ||
+      nonWorkingDayDetails.isNonWorkingDay || 
+      selectedDateIsSunday ||
+      !!customHolidayForDate ||
+      publicHolidayMatches.length > 0;
+
+    // Show alert if it's a holiday and attendance data has loaded
+    // Don't wait for calendar data if we have holiday info from attendance API
+    const hasHolidayInfoFromAPI = !!selectedDateHolidayInfo?.isNonWorkingDay || 
+                                   !!selectedDateHolidayInfo?.customHoliday ||
+                                   !!selectedDateHolidayInfo?.publicHoliday;
+    const calendarReady = hasHolidayInfoFromAPI || calendarMonthLoaded || calendarInfo.month === calendarMonthKey;
+    
+    if (isHoliday && !loading && calendarReady) {
+      // Small delay to ensure UI is ready
+      const timer = setTimeout(() => {
+        if (!holidayAlertShown) {
+          setShowHolidayAlert(true);
+          setHolidayAlertShown(true);
+        }
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setShowHolidayAlert(false);
+    }
+  }, [
+    isAdmin, 
+    nonWorkingDayDetails.isNonWorkingDay, 
+    selectedDateHolidayInfo,
+    selectedDateIsSunday,
+    customHolidayForDate,
+    publicHolidayMatches,
+    attendanceDate, 
+    holidayAlertShown,
+    loading,
+    calendarMonthLoaded,
+    calendarInfo.month,
+    calendarMonthKey
+  ]);
+
+  // Reset holiday alert when date changes
+  useEffect(() => {
+    setHolidayAlertShown(false);
+    setShowHolidayAlert(false);
+  }, [attendanceDate]);
+
   const statusSummaryMeta = {
     submitted: {
       message: 'Attendance already submitted for this date.',
@@ -646,13 +708,24 @@ const Attendance = () => {
       }
 
       const savedHoliday = response.data.data;
-      const monthKey = getMonthKeyFromDate(savedHoliday?.date || date);
+      const holidayMonthKey = getMonthKeyFromDate(savedHoliday?.date || date);
+      const modalMonthKey = calendarViewMonthKey || (calendarModalOpen ? getMonthKeyFromDate(attendanceDate) : null);
 
-      await fetchCalendarMonth(monthKey, {
-        applyToHeader: monthKey === calendarMonthKey,
-        applyToModal: calendarModalOpen && monthKey === (calendarViewMonthKey || monthKey),
+      // Refresh the month where the holiday was saved
+      await fetchCalendarMonth(holidayMonthKey, {
+        applyToHeader: holidayMonthKey === calendarMonthKey,
+        applyToModal: calendarModalOpen && holidayMonthKey === modalMonthKey,
         force: true
       });
+
+      // If modal is viewing a different month, refresh that month too
+      if (calendarModalOpen && modalMonthKey && modalMonthKey !== holidayMonthKey) {
+        await fetchCalendarMonth(modalMonthKey, {
+          applyToHeader: false,
+          applyToModal: true,
+          force: true
+        });
+      }
 
       toast.success('Institute holiday saved');
 
@@ -1005,118 +1078,35 @@ const Attendance = () => {
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-gray-600 lg:text-right max-w-sm">
-          <div className="flex flex-col gap-2 text-left lg:text-right">
-            <span className="text-gray-700 font-medium">Date</span>
-            <button
-              type="button"
-              onClick={handleOpenCalendarModal}
-              className={`relative flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
-                nonWorkingDayDetails.isNonWorkingDay
-                  ? 'border-amber-400 bg-amber-50 text-amber-800 hover:border-amber-500 hover:bg-amber-100'
-                  : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:bg-blue-50'
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleOpenCalendarModal}
+            className={`relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
+              nonWorkingDayDetails.isNonWorkingDay
+                ? 'border-amber-400 bg-amber-50 text-amber-800 hover:border-amber-500 hover:bg-amber-100'
+                : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:bg-blue-50'
+            }`}
+          >
+            <div
+              className={`rounded-full p-2 ${
+                nonWorkingDayDetails.isNonWorkingDay ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`rounded-full p-2 ${
-                    nonWorkingDayDetails.isNonWorkingDay ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
-                  }`}
-                >
-                  <CalendarDays size={18} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-semibold">{attendanceDateLabel}</span>
-                  <span className="text-xs text-gray-500">
-                    {nonWorkingDayDetails.isNonWorkingDay
-                      ? 'Holiday — attendance disabled'
-                      : 'Tap to open academic calendar'}
-                  </span>
-                </div>
-              </div>
-              {calendarLoading && (
-                <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin text-blue-500" />
-              )}
-            </button>
-          </div>
-          {nonWorkingDayDetails.isNonWorkingDay && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 text-left lg:text-right">
-              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-              <div className="space-y-0.5">
-                <div className="font-semibold uppercase tracking-wide text-amber-800">
-                  Non-working day
-                </div>
-                <div>{nonWorkingDayDetails.reasons.join('. ')}</div>
-              </div>
+              <CalendarDays size={18} />
             </div>
-          )}
-          {calendarError && (
-            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 text-left lg:text-right">
-              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
-              <div className="space-y-1">
-                <div className="font-semibold uppercase tracking-wide text-red-800">
-                  Calendar sync unavailable
-                </div>
-                <div>{calendarError}</div>
-                <button
-                  type="button"
-                  onClick={handleRetryCalendarFetch}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 underline decoration-dotted"
-                >
-                  Retry
-                </button>
-              </div>
+            <div className="flex flex-col text-left">
+              <span className="text-sm font-semibold">{attendanceDateLabel}</span>
+              <span className="text-xs text-gray-500">
+                {nonWorkingDayDetails.isNonWorkingDay
+                  ? 'Holiday — attendance disabled'
+                  : 'Tap to open academic calendar'}
+              </span>
             </div>
-          )}
-          {!calendarError && calendarMonthLoaded && upcomingHolidays.length > 0 && (
-            <div className="rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-700 text-left lg:text-right">
-              <div className="font-semibold uppercase tracking-wide text-blue-800">Upcoming holidays</div>
-              <div className="mt-1 space-y-1">
-                {upcomingHolidays.map((holiday) => (
-                  <div key={`${holiday.type}-${holiday.date}`} className="flex items-center justify-between gap-3">
-                    <span>{formatFriendlyDate(holiday.date)}</span>
-                    <span className="flex items-center gap-2 font-medium">
-                      {holiday.label}
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                          holiday.type === 'public'
-                            ? 'bg-red-100 text-red-600'
-                            : 'bg-purple-100 text-purple-600'
-                        }`}
-                      >
-                        {holiday.type === 'public' ? 'Public' : 'Institute'}
-                      </span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {!nonWorkingDayDetails.isNonWorkingDay && editingLockReason && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
-              {editingLockReason}
-            </div>
-          )}
-          {selectedDateStatus &&
-            selectedDateStatus !== 'holiday' &&
-            statusSummaryMeta[selectedDateStatus] && (
-              <div
-                className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusSummaryMeta[selectedDateStatus].className}`}
-              >
-                {statusSummaryMeta[selectedDateStatus].message}
-              </div>
+            {calendarLoading && (
+              <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin text-blue-500" />
             )}
-          <div>
-            <span className="font-semibold text-gray-800">Summary: </span>
-            <span className="text-green-600 font-medium">{presentCount} present</span>,{' '}
-            <span className="text-red-600 font-medium">{absentCount} absent</span>,{' '}
-            <span className="text-gray-600 font-medium">{unmarkedCount} pending</span>
-          </div>
-          {lastUpdatedAt && (
-            <div className="text-xs text-gray-500">
-              Last updated at {new Date(lastUpdatedAt).toLocaleTimeString()}
-            </div>
-          )}
+          </button>
         </div>
       </header>
 
@@ -1441,6 +1431,115 @@ const Attendance = () => {
           </ul>
         </section>
       )}
+      {/* Holiday Alert Modal - Shows for both Public and Institute Holidays */}
+      {showHolidayAlert && (nonWorkingDayDetails.isNonWorkingDay || customHolidayForDate || publicHolidayMatches.length > 0 || selectedDateIsSunday) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 py-6">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="rounded-full bg-amber-100 p-3 flex-shrink-0">
+                <AlertTriangle className="text-amber-600" size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Today is a Holiday</h3>
+                <div className="space-y-2">
+                  {/* Institute Holiday Section - Show prominently */}
+                  {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday) && (
+                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-purple-800 mb-1">
+                        Institute Holiday
+                      </div>
+                      <div className="text-sm font-semibold text-purple-900">
+                        {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.title || 'Institute Holiday'}
+                      </div>
+                      {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.description && (
+                        <div className="text-xs text-purple-700 mt-1">
+                          {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday).description}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Public Holiday Section */}
+                  {(() => {
+                    const publicHolidays = [];
+                    if (nonWorkingDayDetails.holidays && nonWorkingDayDetails.holidays.length > 0) {
+                      publicHolidays.push(...nonWorkingDayDetails.holidays);
+                    }
+                    if (publicHolidayMatches.length > 0) {
+                      publicHolidays.push(...publicHolidayMatches);
+                    }
+                    if (selectedDateHolidayInfo?.publicHoliday) {
+                      publicHolidays.push(selectedDateHolidayInfo.publicHoliday);
+                    }
+                    
+                    return publicHolidays.length > 0 ? (
+                      <div className="space-y-2">
+                        {publicHolidays.map((holiday, index) => (
+                          <div key={index} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-orange-800 mb-1">
+                              Public Holiday
+                            </div>
+                            <div className="text-sm font-semibold text-orange-900">
+                              {holiday.localName || holiday.name}
+                            </div>
+                            {holiday.name && holiday.localName && holiday.localName !== holiday.name && (
+                              <div className="text-xs text-orange-700 mt-1">
+                                {holiday.name}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* Sunday Section */}
+                  {selectedDateIsSunday && !nonWorkingDayDetails.customHoliday && !customHolidayForDate && publicHolidayMatches.length === 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-amber-800 mb-1">
+                        Weekly Holiday
+                      </div>
+                      <div className="text-sm font-semibold text-amber-900">
+                        Sunday
+                      </div>
+                    </div>
+                  )}
+
+                  {/* General reasons list if available */}
+                  {nonWorkingDayDetails.reasons && nonWorkingDayDetails.reasons.length > 0 && (
+                    <div className="space-y-1 text-sm text-gray-600">
+                      {nonWorkingDayDetails.reasons.map((reason, index) => (
+                        <div key={index} className="text-xs">
+                          • {reason}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="text-sm text-amber-800">
+                      <strong>Note:</strong> Attendance cannot be marked on holidays. Please select a working day to mark attendance.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHolidayAlert(false);
+                  setHolidayAlertShown(true);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <HolidayCalendarModal
         isOpen={calendarModalOpen}
         onClose={handleCloseCalendarModal}
@@ -1456,6 +1555,17 @@ const Attendance = () => {
         onRemoveHoliday={handleRemoveInstituteHoliday}
         mutationLoading={calendarMutationLoading}
         isAdmin={isAdmin}
+        upcomingHolidays={upcomingHolidays}
+        nonWorkingDayDetails={nonWorkingDayDetails}
+        selectedDateStatus={selectedDateStatus}
+        statusSummaryMeta={statusSummaryMeta}
+        presentCount={presentCount}
+        absentCount={absentCount}
+        unmarkedCount={unmarkedCount}
+        lastUpdatedAt={lastUpdatedAt}
+        editingLockReason={editingLockReason}
+        calendarError={calendarError}
+        onRetryCalendarFetch={handleRetryCalendarFetch}
       />
       {historyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">

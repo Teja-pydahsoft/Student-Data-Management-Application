@@ -5,9 +5,11 @@ import {
   Clock,
   RefreshCw,
   Users as UsersIcon,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import DownloadReportsModal from '../components/Reports/DownloadReportsModal';
 import {
   Area,
   AreaChart,
@@ -46,6 +48,7 @@ const Reports = () => {
     years: [],
     semesters: []
   });
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   const loadSummary = useCallback(
     async (overrideFilters) => {
@@ -312,18 +315,28 @@ const Reports = () => {
               ? `${activeFilterEntries.length} filter${activeFilterEntries.length > 1 ? 's' : ''} applied`
               : 'Showing metrics for all students'}
           </div>
-          <button
-            type="button"
-            onClick={clearFilters}
-            disabled={!hasActiveFilters}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${
-              hasActiveFilters
-                ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
-                : 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-            }`}
-          >
-            Clear Filters
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDownloadModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-green-500 text-green-600 hover:bg-green-50 text-sm transition-colors font-medium"
+            >
+              <Download size={16} />
+              Download Reports
+            </button>
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${
+                hasActiveFilters
+                  ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
+                  : 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+              }`}
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
 
         {hasActiveFilters && (
@@ -542,6 +555,12 @@ const Reports = () => {
           </section>
         </>
       )}
+
+      <DownloadReportsModal
+        isOpen={downloadModalOpen}
+        onClose={() => setDownloadModalOpen(false)}
+        filters={filters}
+      />
     </div>
   );
 };
