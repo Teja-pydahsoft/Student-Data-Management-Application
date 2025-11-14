@@ -2066,7 +2066,17 @@ exports.bulkUploadSubmissions = async (req, res) => {
           }
 
           let value = rawValue;
-          if (typeof value === 'string') {
+          
+          // Special handling for batch field - preserve exact value, especially numeric values like "2025"
+          if (fieldKey === 'batch') {
+            if (typeof value === 'number') {
+              value = value.toString();
+            } else if (typeof value === 'string') {
+              value = value.trim();
+            } else {
+              value = String(value).trim();
+            }
+          } else if (typeof value === 'string') {
             value = value.trim();
           } else if (value instanceof Date) {
             value = value.toISOString().split('T')[0];

@@ -169,26 +169,49 @@ const applyStageToPayload = (payload, stage) => {
 };
 
 const FIELD_MAPPING = {
-  // Student form fields
-  'Student Name': 'student_name',
-  'Student Mobile Number': 'student_mobile',
-  'Father Name': 'father_name',
-  'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
-  'ADHAR No': 'adhar_no',
-  'Admission Date': 'admission_date',
-  'Admission No': 'admission_no',
-  'Admission Number': 'admission_number',
+  // Exact field names from Excel template
+  'Pin Number': 'pin_no',
   'Batch': 'batch',
   'Branch': 'branch',
+  'StudType': 'stud_type',
+  'Student Name': 'student_name',
+  'Student Status': 'student_status',
+  'Student Mobile number': 'student_mobile',
+  'Parent Mobile Number 1': 'parent_mobile1',
+  'Parent Mobile Number 2': 'parent_mobile2',
+  'Caste': 'caste',
+  'M/F': 'gender',
+  'Father Name': 'father_name',
+  'DOB (Date-Month-Year) Ex: 09-Sep-2003)': 'dob',
+  'DOB (Date of Birth - DD-MM-YYYY)': 'dob',
+  'ADHAR No': 'adhar_no',
+  'Admission No': 'admission_no',
+  'Admission Number': 'admission_number',
+  'Student Address (D.no,Street name,village,mandal,Dist)': 'student_address',
+  'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
+  'City/Village Name': 'city_village',
+  'City/Village': 'city_village',
+  'Mandal Name': 'mandal_name',
+  'District': 'district',
+  'Previous College Name': 'previous_college',
+  'Certificates Status': 'certificates_status',
+  'Student Photo': 'student_photo',
+  'Remarks': 'remarks',
+  'Course': 'course',
+  'Year': 'current_year',
+  'Semister': 'current_semester',
+  'Semester': 'current_semester',
+  
+  // Alternative field names (for backward compatibility)
+  'Student Mobile Number': 'student_mobile',
+  'Admission Date': 'admission_date',
   'Branch Name': 'branch',
   branch_name: 'branch',
   'Branch Code': 'branch_code',
-  'StudType': 'stud_type',
   'Current Academic Year': 'current_year',
   'Current Year': 'current_year',
   current_year: 'current_year',
   currentYear: 'current_year',
-  Course: 'course',
   'Course Name': 'course',
   course: 'course',
   course_name: 'course',
@@ -197,19 +220,9 @@ const FIELD_MAPPING = {
   'Current Semester': 'current_semester',
   current_semester: 'current_semester',
   currentSemester: 'current_semester',
-  'Parent Mobile Number 1': 'parent_mobile1',
-  'Parent Mobile Number 2': 'parent_mobile2',
-  'Student Address (D.No, Str name, Village, Mandal, Dist)': 'student_address',
-  'City/Village': 'city_village',
-  'Mandal Name': 'mandal_name',
-  'District': 'district',
-  'Caste': 'caste',
-  'M/F': 'gender',
-  'Student Status': 'student_status',
   'Scholar Status': 'scholar_status',
-  'Remarks': 'remarks',
 
-  // Admin-only fields
+  // Database field names (direct mapping)
   pin_no: 'pin_no',
   previous_college: 'previous_college',
   certificates_status: 'certificates_status',
@@ -236,9 +249,7 @@ const FIELD_MAPPING = {
   gender: 'gender',
   student_status: 'student_status',
   scholar_status: 'scholar_status',
-  remarks: 'remarks',
-  current_year: 'current_year',
-  current_semester: 'current_semester'
+  remarks: 'remarks'
 };
 
 const normalizeIdentifier = (value) => {
@@ -252,6 +263,7 @@ const normalizeIdentifier = (value) => {
     .replace(/[^a-z0-9]/g, '');
 };
 
+// Enhanced normalization that handles more variations
 const normalizeHeaderKeyForLookup = (header) => {
   if (header === undefined || header === null) {
     return '';
@@ -260,16 +272,71 @@ const normalizeHeaderKeyForLookup = (header) => {
     .toString()
     .trim()
     .toLowerCase()
-    .replace(/[\s._-]+/g, '_');
+    .replace(/[^a-z0-9]/g, '') // Remove all non-alphanumeric characters
+    .replace(/\s+/g, ''); // Remove all spaces
 };
 
-const FIELD_LOOKUP = Object.entries(FIELD_MAPPING).reduce((acc, [header, key]) => {
-  const normalized = normalizeHeaderKeyForLookup(header);
-  if (normalized && !acc[normalized]) {
-    acc[normalized] = key;
-  }
-  return acc;
-}, {});
+// Create a comprehensive field mapping with all possible variations
+const createComprehensiveFieldMapping = () => {
+  const mapping = {};
+  
+  // Define all possible field name variations for each database field
+  const fieldVariations = {
+    pin_no: ['pinnumber', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'pinno', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'rollnumber', 'roll_number', 'rollno', 'roll_no'],
+    batch: ['batch', 'batchyear', 'batch_year', 'year', 'academicyear', 'academic_year', 'batch', 'batchyear', 'batch_year', 'year', 'academicyear', 'academic_year', 'batchyear', 'batch_year', 'academicyear', 'academic_year'],
+    branch: ['branch', 'branchname', 'branch_name', 'department', 'dept', 'specialization', 'branch', 'branchname', 'branch_name', 'department', 'dept', 'specialization', 'specialisation', 'stream', 'discipline'],
+    stud_type: ['studtype', 'studenttype', 'student_type', 'type', 'category', 'studentcategory', 'studtype', 'studenttype', 'student_type', 'type', 'category', 'studentcategory', 'studentcategory', 'student_category'],
+    student_name: ['studentname', 'name', 'student', 'fullname', 'full_name', 'studentfullname', 'student_name', 'studentname', 'nameofstudent', 'name_of_student', 'sname', 's_name'],
+    student_status: ['studentstatus', 'student_status', 'status', 'currentstatus', 'current_status', 'studentstatus', 'student_status', 'status', 'currentstatus', 'current_status', 'studstatus', 'stud_status'],
+    student_mobile: ['studentmobilenumber', 'studentmobile', 'mobile', 'phone', 'studentphone', 'contact', 'studentcontact', 'mobilenumber', 'phonenumber', 'student_mobile', 'studentmobile', 'studentphone', 'student_phone', 'contactnumber', 'contact_number', 'mob', 'mobile_no', 'phone_no'],
+    parent_mobile1: ['parentmobilenumber1', 'parentmobile1', 'parent_mobile1', 'parentmobile', 'parentphone', 'parentcontact', 'guardianmobile', 'guardianphone', 'fathermobile', 'fatherphone', 'parentmobile1', 'parent_mobile1', 'parentmobile', 'parentphone', 'parentcontact', 'guardianmobile', 'guardianphone', 'fathermobile', 'fatherphone', 'parent1mobile', 'parent1_mobile', 'parent1phone', 'parent1_phone'],
+    parent_mobile2: ['parentmobilenumber2', 'parentmobile2', 'parent_mobile2', 'parentmobile2', 'mothermobile', 'motherphone', 'alternatemobile', 'alternatephone', 'parentmobile2', 'parent_mobile2', 'parentmobile2', 'mothermobile', 'motherphone', 'alternatemobile', 'alternatephone', 'parent2mobile', 'parent2_mobile', 'parent2phone', 'parent2_phone'],
+    caste: ['caste', 'category', 'socialcategory', 'social_category', 'cast', 'caste', 'category', 'socialcategory', 'social_category', 'cast', 'socialcategory', 'social_category', 'castecategory', 'caste_category'],
+    gender: ['mf', 'm/f', 'gender', 'sex', 'maleorfemale', 'male_or_female', 'gender', 'sex', 'mf', 'm/f', 'maleorfemale', 'male_or_female', 'gend', 'sex', 'maleorfemale', 'male_or_female'],
+    father_name: ['fathername', 'father', 'fathersname', 'fathers_name', 'parentname', 'guardianname', 'father_name', 'fathername', 'fathersname', 'fathers_name', 'fname', 'f_name', 'guardian', 'guardian_name'],
+    dob: ['dobdatemonthyearex09sep2003', 'dateofbirth', 'birthdate', 'birth_date', 'dob', 'date_of_birth', 'birthday', 'bdate', 'dateofbirth', 'dob', 'birthdate', 'birth_date', 'date_of_birth', 'birthday', 'bdate', 'date', 'birth'],
+    adhar_no: ['adharno', 'adharnumber', 'aadhar', 'aadharno', 'aadharnumber', 'aadhaarno', 'aadhaarnumber', 'uid', 'uidnumber', 'adhar_no', 'adharno', 'adharnumber', 'aadhar', 'aadharno', 'aadharnumber', 'aadhaar', 'aadhaarno', 'aadhaarnumber', 'uid', 'uidnumber', 'uidai'],
+    admission_no: ['admissionno', 'admissionnumber', 'admission_no', 'admission_number', 'admitno', 'admitnumber', 'enrollmentno', 'enrollmentnumber', 'admissionno', 'admissionnumber', 'admission_no', 'admission_number', 'admitno', 'admitnumber', 'enrollmentno', 'enrollmentnumber', 'admno', 'adm_no', 'regno', 'reg_no'],
+    admission_number: ['admissionno', 'admissionnumber', 'admission_no', 'admission_number', 'admitno', 'admitnumber', 'enrollmentno', 'enrollmentnumber', 'admissionno', 'admissionnumber', 'admission_no', 'admission_number', 'admitno', 'admitnumber', 'enrollmentno', 'enrollmentnumber', 'admno', 'adm_no', 'regno', 'reg_no'],
+    student_address: ['studentaddressdnostreetnamevillagemandaldist', 'studentaddress', 'address', 'fulladdress', 'full_address', 'permanentaddress', 'permanent_address', 'residentialaddress', 'studentaddress', 'address', 'fulladdress', 'full_address', 'permanentaddress', 'permanent_address', 'residentialaddress', 'homeaddress', 'home_address', 'localaddress', 'local_address'],
+    city_village: ['cityvillagename', 'cityvillage', 'city_village', 'city', 'village', 'town', 'cityortown', 'cityvillage', 'city_village', 'city', 'village', 'town', 'cityortown', 'cityvillage', 'city_or_village'],
+    mandal_name: ['mandalname', 'mandal_name', 'mandal', 'taluk', 'taluka', 'block', 'mandalname', 'mandal_name', 'mandal', 'taluk', 'taluka', 'block', 'tehsil', 'tehsilname', 'tehsil_name'],
+    district: ['district', 'dist', 'districtname', 'district_name', 'district', 'dist', 'districtname', 'district_name', 'districtname', 'district_name'],
+    previous_college: ['previouscollegename', 'previouscollege', 'previous_college', 'lastcollege', 'last_college', 'previousinstitution', 'previouscollege', 'previous_college', 'lastcollege', 'last_college', 'previousinstitution', 'previousinstitution', 'previous_institution', 'lastinstitution', 'last_institution'],
+    certificates_status: ['certificatesstatus', 'certificates_status', 'certstatus', 'cert_status', 'documentstatus', 'certificatesstatus', 'certificates_status', 'certstatus', 'cert_status', 'documentstatus', 'certstatus', 'cert_status', 'documentstatus', 'document_status'],
+    student_photo: ['studentphoto', 'student_photo', 'photo', 'picture', 'image', 'profilephoto', 'studentphoto', 'student_photo', 'photo', 'picture', 'image', 'profilephoto', 'photograph', 'profilepicture', 'profile_picture'],
+    remarks: ['remarks', 'remark', 'notes', 'note', 'comments', 'comment', 'remarks', 'remark', 'notes', 'note', 'comments', 'comment', 'note', 'notes'],
+    course: ['course', 'coursename', 'course_name', 'program', 'programme', 'degree', 'course', 'coursename', 'course_name', 'program', 'programme', 'degree', 'programname', 'program_name', 'degreeprogram', 'degree_program'],
+    current_year: ['year', 'currentyear', 'current_year', 'academicyear', 'academic_year', 'currentacademicyear', 'currentyear', 'current_year', 'year', 'academicyear', 'academic_year', 'currentacademicyear', 'academicyear', 'academic_year'],
+    current_semester: ['semister', 'semester', 'currentsemester', 'current_semester', 'sem', 'currentsem', 'currentsemester', 'current_semester', 'semester', 'sem', 'currentsem', 'semester', 'sem'],
+    admission_date: ['admissiondate', 'admission_date', 'admitdate', 'admit_date', 'enrollmentdate', 'enrollment_date', 'admissiondate', 'admission_date', 'admitdate', 'admit_date', 'enrollmentdate', 'enrollment_date', 'dateofadmission', 'date_of_admission'],
+    branch_code: ['branchcode', 'branch_code', 'deptcode', 'dept_code', 'departmentcode', 'department_code', 'branchcode', 'branch_code', 'deptcode', 'dept_code', 'departmentcode', 'department_code'],
+    course_code: ['coursecode', 'course_code', 'programcode', 'program_code', 'coursecode', 'course_code', 'programcode', 'program_code'],
+    scholar_status: ['scholarstatus', 'scholar_status', 'scholarshipstatus', 'scholarship_status', 'scholarship', 'scholarstatus', 'scholar_status', 'scholarshipstatus', 'scholarship_status', 'scholarship', 'scholarshipstatus', 'scholarship_status']
+  };
+
+  // Build mapping from variations to database fields
+  Object.entries(fieldVariations).forEach(([dbField, variations]) => {
+    variations.forEach(variation => {
+      const normalized = normalizeHeaderKeyForLookup(variation);
+      if (normalized && !mapping[normalized]) {
+        mapping[normalized] = dbField;
+      }
+    });
+  });
+
+  // Also add the original FIELD_MAPPING entries
+  Object.entries(FIELD_MAPPING).forEach(([header, key]) => {
+    const normalized = normalizeHeaderKeyForLookup(header);
+    if (normalized && !mapping[normalized]) {
+      mapping[normalized] = key;
+    }
+  });
+
+  return mapping;
+};
+
+const FIELD_LOOKUP = createComprehensiveFieldMapping();
 
 const buildNormalizedSet = (...values) => {
   const set = new Set();
@@ -313,6 +380,279 @@ const normalizeAdmissionNumber = (value) => {
 const getFirstNonEmpty = (...values) =>
   values.find((value) => value !== undefined && value !== null && `${value}`.trim() !== '');
 
+// Data conversion functions to handle various input formats
+const convertDate = (value) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim();
+  if (!str) return '';
+
+  // Handle Excel date serial numbers
+  if (typeof value === 'number' && value > 25569) {
+    // Excel date serial number (days since 1900-01-01)
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
+    return date.toISOString().split('T')[0];
+  }
+
+  // Handle Date objects
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0];
+  }
+
+  // Handle DD-Month-YYYY format (e.g., 09-Sep-2003)
+  const monthNames = {
+    'jan': '01', 'january': '01',
+    'feb': '02', 'february': '02',
+    'mar': '03', 'march': '03',
+    'apr': '04', 'april': '04',
+    'may': '05',
+    'jun': '06', 'june': '06',
+    'jul': '07', 'july': '07',
+    'aug': '08', 'august': '08',
+    'sep': '09', 'september': '09',
+    'oct': '10', 'october': '10',
+    'nov': '11', 'november': '11',
+    'dec': '12', 'december': '12'
+  };
+  
+  const ddmonyyyy = str.match(/^(\d{1,2})[-/.\s]+([a-z]+)[-/.\s]+(\d{4})$/i);
+  if (ddmonyyyy) {
+    const day = ddmonyyyy[1].padStart(2, '0');
+    const monthName = ddmonyyyy[2].toLowerCase();
+    const year = ddmonyyyy[3];
+    const month = monthNames[monthName];
+    if (month) {
+      const date = new Date(`${year}-${month}-${day}`);
+      if (!isNaN(date.getTime()) && date.getFullYear() == year) {
+        return `${year}-${month}-${day}`;
+      }
+    }
+  }
+
+  // Handle YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD (ISO format - highest priority)
+  const yyyymmdd = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (yyyymmdd) {
+    const year = yyyymmdd[1];
+    const month = yyyymmdd[2].padStart(2, '0');
+    const day = yyyymmdd[3].padStart(2, '0');
+    // Validate date
+    const date = new Date(`${year}-${month}-${day}`);
+    if (!isNaN(date.getTime()) && date.getFullYear() == year) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // Handle DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY (Indian format - second priority)
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (ddmmyyyy) {
+    const day = ddmmyyyy[1].padStart(2, '0');
+    const month = ddmmyyyy[2].padStart(2, '0');
+    const year = ddmmyyyy[3];
+    // Validate date (check if day <= 31 and month <= 12)
+    const dayNum = parseInt(day, 10);
+    const monthNum = parseInt(month, 10);
+    if (dayNum <= 31 && monthNum <= 12) {
+      const date = new Date(`${year}-${month}-${day}`);
+      if (!isNaN(date.getTime()) && date.getFullYear() == year) {
+        return `${year}-${month}-${day}`;
+      }
+    }
+  }
+
+  // Handle MM-DD-YYYY, MM/DD/YYYY, MM.DD.YYYY (US format - last priority)
+  // Only try if DD-MM-YYYY didn't match or was invalid
+  const mmddyyyy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (mmddyyyy && !ddmmyyyy) {
+    const month = mmddyyyy[1].padStart(2, '0');
+    const day = mmddyyyy[2].padStart(2, '0');
+    const year = mmddyyyy[3];
+    const date = new Date(`${year}-${month}-${day}`);
+    if (!isNaN(date.getTime()) && date.getFullYear() == year) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // Try parsing as ISO date
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
+  return str; // Return as-is if can't parse
+};
+
+const convertGender = (value) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim().toUpperCase();
+  
+  // Handle various gender formats
+  if (str === 'M' || str === 'MALE' || str === 'BOY' || str === '1') {
+    return 'M';
+  }
+  if (str === 'F' || str === 'FEMALE' || str === 'GIRL' || str === '2') {
+    return 'F';
+  }
+  if (str === 'OTHER' || str === 'O' || str === '3') {
+    return 'Other';
+  }
+  
+  return str; // Return as-is if not recognized
+};
+
+const convertPhoneNumber = (value) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim();
+  
+  // Remove common phone number formatting characters
+  let cleaned = str.replace(/[\s\-\(\)\.]/g, '');
+  
+  // Handle Excel number formatting (remove scientific notation)
+  if (typeof value === 'number') {
+    cleaned = value.toString().replace(/\.0+$/, ''); // Remove trailing .0
+  }
+  
+  // Remove leading + or 0 if present
+  if (cleaned.startsWith('+')) {
+    cleaned = cleaned.substring(1);
+  }
+  if (cleaned.startsWith('0') && cleaned.length > 10) {
+    cleaned = cleaned.substring(1);
+  }
+  
+  return cleaned;
+};
+
+const convertAdmissionNumber = (value) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim();
+  
+  // Handle Excel number formatting
+  if (typeof value === 'number') {
+    return value.toString().replace(/\.0+$/, ''); // Remove trailing .0
+  }
+  
+  return str.toUpperCase(); // Convert to uppercase
+};
+
+const convertText = (value, capitalize = false) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim();
+  
+  if (capitalize) {
+    // Capitalize first letter of each word
+    return str
+      .toLowerCase()
+      .split(/\s+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+  
+  return str;
+};
+
+const convertNumber = (value) => {
+  if (value === undefined || value === null || value === '') return '';
+  
+  if (typeof value === 'number') {
+    return value.toString();
+  }
+  
+  const str = value.toString().trim();
+  if (str === '') return '';
+  
+  // Remove non-numeric characters except decimal point
+  const cleaned = str.replace(/[^\d.]/g, '');
+  
+  // If it's a whole number, remove decimal point
+  if (cleaned.includes('.') && cleaned.endsWith('.0')) {
+    return cleaned.replace(/\.0+$/, '');
+  }
+  
+  return cleaned || str;
+};
+
+// Field-specific conversion function
+const convertFieldValue = (fieldName, value) => {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+
+  const field = fieldName.toLowerCase();
+  
+  // Date fields
+  if (field.includes('dob') || field.includes('date') || field.includes('birth')) {
+    return convertDate(value);
+  }
+  
+  // Gender field
+  if (field.includes('gender') || field === 'sex' || field === 'mf' || field === 'm/f') {
+    return convertGender(value);
+  }
+  
+  // Phone number fields
+  if (field.includes('mobile') || field.includes('phone') || field.includes('contact')) {
+    return convertPhoneNumber(value);
+  }
+  
+  // Admission number fields
+  if (field.includes('admission') || field.includes('admit') || field.includes('enrollment')) {
+    return convertAdmissionNumber(value);
+  }
+  
+  // Name fields - capitalize
+  if (field.includes('name') && !field.includes('number')) {
+    return convertText(value, true);
+  }
+  
+  // Number fields
+  if (field.includes('year') || field.includes('semester') || field.includes('sem')) {
+    return convertNumber(value);
+  }
+  
+  // Aadhar number - remove spaces and convert to uppercase
+  if (field.includes('adhar') || field.includes('aadhar') || field.includes('uid')) {
+    return value.toString().trim().replace(/\s+/g, '').toUpperCase();
+  }
+  
+  // Batch field - preserve exact value, especially numeric values like "2025"
+  if (field === 'batch') {
+    // If it's a number, convert to string to preserve it exactly
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    // If it's a string, just trim it
+    return value.toString().trim();
+  }
+  
+  // Default: trim and return
+  return convertText(value);
+};
+
+// Helper function to count filled fields in a record
+const countFilledFields = (sanitized) => {
+  if (!sanitized || typeof sanitized !== 'object') {
+    return 0;
+  }
+  
+  let count = 0;
+  Object.values(sanitized).forEach((value) => {
+    if (value !== null && value !== undefined && value !== '') {
+      if (typeof value === 'string' && value.trim() !== '') {
+        count++;
+      } else if (typeof value !== 'string') {
+        count++;
+      }
+    }
+  });
+  
+  return count;
+};
+
 const mapRowToStudentRecord = (row, rowNumber) => {
   const raw = {};
   const sanitized = {};
@@ -321,16 +661,25 @@ const mapRowToStudentRecord = (row, rowNumber) => {
     if (!header || header.toString().trim() === '') {
       return;
     }
+    
+    // Store raw value
     const cleanedValue = sanitizeCellValue(rawValue);
     raw[header] = cleanedValue;
 
+    // Normalize header and find matching database field
     const normalizedHeader = normalizeHeaderKeyForLookup(header);
     const mappedKey = FIELD_LOOKUP[normalizedHeader];
+    
     if (mappedKey && cleanedValue !== '') {
-      sanitized[mappedKey] = cleanedValue;
+      // Convert value based on field type
+      const convertedValue = convertFieldValue(mappedKey, rawValue);
+      if (convertedValue !== '') {
+        sanitized[mappedKey] = convertedValue;
+      }
     }
   });
 
+  // Handle admission number aliases
   if (sanitized.admission_no && !sanitized.admission_number) {
     sanitized.admission_number = sanitized.admission_no;
   }
@@ -338,6 +687,7 @@ const mapRowToStudentRecord = (row, rowNumber) => {
     sanitized.admission_no = sanitized.admission_number;
   }
 
+  // Final cleanup - remove empty values
   Object.keys(sanitized).forEach((key) => {
     const value = sanitized[key];
     if (typeof value === 'string') {
@@ -345,6 +695,8 @@ const mapRowToStudentRecord = (row, rowNumber) => {
       if (sanitized[key] === '') {
         delete sanitized[key];
       }
+    } else if (value === null || value === undefined) {
+      delete sanitized[key];
     }
   });
 
@@ -779,31 +1131,53 @@ exports.previewBulkUploadStudents = async (req, res) => {
     const existingAdmissions = await fetchExistingAdmissionNumbers(uniqueAdmissionsForLookup);
     const courseIndex = await buildCourseBranchIndex();
 
-    const seenAdmissions = new Map();
-    const duplicateAdmissions = new Map();
+    // Track duplicates: for each admission number, find the row with most filled fields
+    const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
+    const duplicateRowNumbers = new Set(); // row numbers that are duplicates (not the best one)
+    const bestRowMap = new Map(); // admission -> best row number
 
+    // Group records by admission number
     processedRows.forEach((record) => {
       const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
       if (!normalizedAdmission) {
         return;
       }
-      if (!seenAdmissions.has(normalizedAdmission)) {
-        seenAdmissions.set(normalizedAdmission, record.rowNumber);
-        return;
+      
+      if (!admissionGroups.has(normalizedAdmission)) {
+        admissionGroups.set(normalizedAdmission, []);
       }
-      const duplicateSet =
-        duplicateAdmissions.get(normalizedAdmission) ||
-        new Set([seenAdmissions.get(normalizedAdmission)]);
-      duplicateSet.add(record.rowNumber);
-      duplicateAdmissions.set(normalizedAdmission, duplicateSet);
+      
+      const filledCount = countFilledFields(record.sanitized);
+      admissionGroups.get(normalizedAdmission).push({
+        rowNumber: record.rowNumber,
+        record: record,
+        filledCount: filledCount
+      });
     });
 
-    const duplicateAdmissionMap = new Map();
-    duplicateAdmissions.forEach((set, admission) => {
-      duplicateAdmissionMap.set(
-        admission,
-        Array.from(set).sort((a, b) => a - b)
-      );
+    // For each admission number, find the row with most filled fields
+    admissionGroups.forEach((rows, normalizedAdmission) => {
+      if (rows.length > 1) {
+        // Multiple rows with same admission number - find the one with most filled fields
+        // Sort by filled count (descending), then by row number (ascending) as tiebreaker
+        rows.sort((a, b) => {
+          if (b.filledCount !== a.filledCount) {
+            return b.filledCount - a.filledCount;
+          }
+          return a.rowNumber - b.rowNumber;
+        });
+        
+        const bestRow = rows[0];
+        bestRowMap.set(normalizedAdmission, bestRow.rowNumber);
+        
+        // Mark all other rows as duplicates
+        for (let i = 1; i < rows.length; i++) {
+          duplicateRowNumbers.add(rows[i].rowNumber);
+        }
+      } else {
+        // Only one row with this admission number - it's the best one
+        bestRowMap.set(normalizedAdmission, rows[0].rowNumber);
+      }
     });
 
     const validRecords = [];
@@ -824,10 +1198,15 @@ exports.previewBulkUploadStudents = async (req, res) => {
         issues.push('Admission number is required');
       }
 
-      if (normalizedAdmission && duplicateAdmissionMap.has(normalizedAdmission)) {
-        const rowsWithDuplicate = duplicateAdmissionMap.get(normalizedAdmission);
+      // Check if this row is a duplicate (not the one with most filled fields)
+      if (normalizedAdmission && duplicateRowNumbers.has(record.rowNumber)) {
+        const bestRowNumber = bestRowMap.get(normalizedAdmission);
+        const currentFilledCount = countFilledFields(sanitized);
+        const bestRecord = processedRows.find(r => r.rowNumber === bestRowNumber);
+        const bestFilledCount = bestRecord ? countFilledFields(bestRecord.sanitized) : 0;
+        
         issues.push(
-          `Admission number appears multiple times in upload (rows: ${rowsWithDuplicate.join(', ')})`
+          `Admission number already appears in row ${bestRowNumber} (${bestFilledCount} fields filled). This row (${currentFilledCount} fields filled) will be skipped - the row with most filled fields is kept.`
         );
       }
 
@@ -881,7 +1260,7 @@ exports.previewBulkUploadStudents = async (req, res) => {
       validCount: validRecords.length,
       invalidCount: invalidRecords.length,
       existingAdmissionCount: existingAdmissions.size,
-      duplicateAdmissionCount: duplicateAdmissionMap.size
+      duplicateAdmissionCount: duplicateRowNumbers.size
     };
 
     res.json({
@@ -951,6 +1330,55 @@ exports.commitBulkUploadStudents = async (req, res) => {
   const existingAdmissions = await fetchExistingAdmissionNumbers(admissionsForLookup);
   const courseIndex = await buildCourseBranchIndex();
 
+  // Track duplicates: for each admission number, find the row with most filled fields
+  const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
+  const duplicateRowNumbers = new Set(); // row numbers that are duplicates (not the best one)
+  const bestRowMap = new Map(); // admission -> best row number
+
+  // Group records by admission number
+  preparedRecords.forEach((record) => {
+    const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
+    if (!normalizedAdmission) {
+      return;
+    }
+    
+    if (!admissionGroups.has(normalizedAdmission)) {
+      admissionGroups.set(normalizedAdmission, []);
+    }
+    
+    const filledCount = countFilledFields(record.sanitizedData);
+    admissionGroups.get(normalizedAdmission).push({
+      rowNumber: record.rowNumber,
+      record: record,
+      filledCount: filledCount
+    });
+  });
+
+  // For each admission number, find the row with most filled fields
+  admissionGroups.forEach((rows, normalizedAdmission) => {
+    if (rows.length > 1) {
+      // Multiple rows with same admission number - find the one with most filled fields
+      // Sort by filled count (descending), then by row number (ascending) as tiebreaker
+      rows.sort((a, b) => {
+        if (b.filledCount !== a.filledCount) {
+          return b.filledCount - a.filledCount;
+        }
+        return a.rowNumber - b.rowNumber;
+      });
+      
+      const bestRow = rows[0];
+      bestRowMap.set(normalizedAdmission, bestRow.rowNumber);
+      
+      // Mark all other rows as duplicates
+      for (let i = 1; i < rows.length; i++) {
+        duplicateRowNumbers.add(rows[i].rowNumber);
+      }
+    } else {
+      // Only one row with this admission number - it's the best one
+      bestRowMap.set(normalizedAdmission, rows[0].rowNumber);
+    }
+  });
+
   let connection;
   const successDetails = [];
   const failedDetails = [];
@@ -983,6 +1411,19 @@ exports.commitBulkUploadStudents = async (req, res) => {
 
       if (!sanitized.admission_number) {
         errors.push('Admission number is required');
+      }
+
+      // Check for duplicates within the upload batch
+      if (normalizedAdmission && duplicateRowNumbers.has(rowNumber)) {
+        // This row is a duplicate - skip it
+        const bestRowNumber = bestRowMap.get(normalizedAdmission);
+        const currentFilledCount = countFilledFields(sanitized);
+        const bestRecord = preparedRecords.find(r => r.rowNumber === bestRowNumber);
+        const bestFilledCount = bestRecord ? countFilledFields(bestRecord.sanitizedData) : 0;
+        
+        errors.push(
+          `Admission number already appears in row ${bestRowNumber} (${bestFilledCount} fields filled). This row (${currentFilledCount} fields filled) will be skipped - the row with most filled fields is kept.`
+        );
       }
 
       if (normalizedAdmission && existingAdmissions.has(normalizedAdmission)) {
@@ -1196,6 +1637,15 @@ exports.getAllStudents = async (req, res) => {
         return acc;
       }, {});
 
+    // Student database field filters - defined once for reuse
+    const studentFieldFilters = [
+      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status',
+      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
+      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
+      'student_address', 'city_village', 'mandal_name', 'district',
+      'previous_college', 'certificates_status', 'remarks'
+    ];
+
     const cacheKey = fetchAll
       ? null
       : JSON.stringify({
@@ -1271,6 +1721,22 @@ exports.getAllStudents = async (req, res) => {
       params.push(normalizedFilterBranch);
     }
 
+    // Student database field filters
+    studentFieldFilters.forEach(field => {
+      const filterKey = `filter_${field}`;
+      const filterValue = normalizedOtherFilters[filterKey];
+      if (filterValue && typeof filterValue === 'string' && filterValue.trim().length > 0) {
+        query += ` AND ${field} LIKE ?`;
+        params.push(`%${filterValue.trim()}%`);
+      }
+    });
+
+    // Created at date filter
+    if (normalizedOtherFilters.filter_created_at) {
+      query += ' AND DATE(created_at) = ?';
+      params.push(normalizedOtherFilters.filter_created_at);
+    }
+
     // Dynamic field filters (e.g., filter_field_Admission category)
     Object.entries(normalizedOtherFilters).forEach(([key, value]) => {
       if (key.startsWith('filter_field_') && value) {
@@ -1339,6 +1805,22 @@ exports.getAllStudents = async (req, res) => {
     if (normalizedFilterBranch) {
       countQuery += ' AND branch = ?';
       countParams.push(normalizedFilterBranch);
+    }
+
+    // Student database field filters for count query
+    studentFieldFilters.forEach(field => {
+      const filterKey = `filter_${field}`;
+      const filterValue = normalizedOtherFilters[filterKey];
+      if (filterValue && typeof filterValue === 'string' && filterValue.trim().length > 0) {
+        countQuery += ` AND ${field} LIKE ?`;
+        countParams.push(`%${filterValue.trim()}%`);
+      }
+    });
+
+    // Created at date filter for count query
+    if (normalizedOtherFilters.filter_created_at) {
+      countQuery += ' AND DATE(created_at) = ?';
+      countParams.push(normalizedOtherFilters.filter_created_at);
     }
 
     // Apply dynamic field filters to count query
@@ -2229,6 +2711,53 @@ exports.getFilterFields = async (_req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching filter fields'
+    });
+  }
+};
+
+// Get all unique filter values for dropdown filters
+exports.getFilterOptions = async (_req, res) => {
+  try {
+    // Get unique values for all dropdown filter fields
+    const [studTypeRows] = await masterPool.query(
+      `SELECT DISTINCT stud_type FROM students WHERE stud_type IS NOT NULL AND stud_type <> '' ORDER BY stud_type ASC`
+    );
+    const [studentStatusRows] = await masterPool.query(
+      `SELECT DISTINCT student_status FROM students WHERE student_status IS NOT NULL AND student_status <> '' ORDER BY student_status ASC`
+    );
+    const [scholarStatusRows] = await masterPool.query(
+      `SELECT DISTINCT scholar_status FROM students WHERE scholar_status IS NOT NULL AND scholar_status <> '' ORDER BY scholar_status ASC`
+    );
+    const [casteRows] = await masterPool.query(
+      `SELECT DISTINCT caste FROM students WHERE caste IS NOT NULL AND caste <> '' ORDER BY caste ASC`
+    );
+    const [genderRows] = await masterPool.query(
+      `SELECT DISTINCT gender FROM students WHERE gender IS NOT NULL AND gender <> '' ORDER BY gender ASC`
+    );
+    const [certificatesStatusRows] = await masterPool.query(
+      `SELECT DISTINCT certificates_status FROM students WHERE certificates_status IS NOT NULL AND certificates_status <> '' ORDER BY certificates_status ASC`
+    );
+    const [remarksRows] = await masterPool.query(
+      `SELECT DISTINCT remarks FROM students WHERE remarks IS NOT NULL AND remarks <> '' ORDER BY remarks ASC`
+    );
+
+    res.json({
+      success: true,
+      data: {
+        stud_type: studTypeRows.map((row) => row.stud_type),
+        student_status: studentStatusRows.map((row) => row.student_status),
+        scholar_status: scholarStatusRows.map((row) => row.scholar_status),
+        caste: casteRows.map((row) => row.caste),
+        gender: genderRows.map((row) => row.gender),
+        certificates_status: certificatesStatusRows.map((row) => row.certificates_status),
+        remarks: remarksRows.map((row) => row.remarks)
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch filter options:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching filter options'
     });
   }
 };

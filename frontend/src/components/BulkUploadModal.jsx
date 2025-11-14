@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, X, Download, AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
@@ -22,6 +22,10 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
   const [metadataError, setMetadataError] = useState(null);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [showAllErrors, setShowAllErrors] = useState(false);
+  const [validRecordsPage, setValidRecordsPage] = useState(1);
+  const [invalidRecordsPage, setInvalidRecordsPage] = useState(1);
+  const recordsPerPage = 50;
 
   const selectedFormDetails = useMemo(() => {
     if (!forms || forms.length === 0 || !selectedForm) {
@@ -369,26 +373,74 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     onClose();
   };
 
+  // Pagination calculations
+  const validRecordsTotalPages = useMemo(() => {
+    if (!previewData?.validRecords) return 1;
+    return Math.ceil(previewData.validRecords.length / recordsPerPage);
+  }, [previewData?.validRecords]);
+
+  const invalidRecordsTotalPages = useMemo(() => {
+    if (!previewData?.invalidRecords) return 1;
+    return Math.ceil(previewData.invalidRecords.length / recordsPerPage);
+  }, [previewData?.invalidRecords]);
+
+  const paginatedValidRecords = useMemo(() => {
+    if (!previewData?.validRecords) return [];
+    const start = (validRecordsPage - 1) * recordsPerPage;
+    const end = start + recordsPerPage;
+    return previewData.validRecords.slice(start, end);
+  }, [previewData?.validRecords, validRecordsPage]);
+
+  const paginatedInvalidRecords = useMemo(() => {
+    if (!previewData?.invalidRecords) return [];
+    const start = (invalidRecordsPage - 1) * recordsPerPage;
+    const end = start + recordsPerPage;
+    return previewData.invalidRecords.slice(start, end);
+  }, [previewData?.invalidRecords, invalidRecordsPage]);
+
+  // Get all unique column keys from valid records
+  const allColumns = useMemo(() => {
+    if (!previewData?.validRecords || previewData.validRecords.length === 0) {
+      return [];
+    }
+    const columnSet = new Set();
+    previewData.validRecords.forEach(record => {
+      if (record.rawData) {
+        Object.keys(record.rawData).forEach(key => columnSet.add(key));
+      }
+      if (record.sanitizedData) {
+        Object.keys(record.sanitizedData).forEach(key => columnSet.add(key));
+      }
+    });
+    return Array.from(columnSet).sort();
+  }, [previewData?.validRecords]);
+
+  // Reset pagination when preview data changes
+  useEffect(() => {
+    setValidRecordsPage(1);
+    setInvalidRecordsPage(1);
+  }, [previewData]);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
+       <div className="bg-white rounded-xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] overflow-hidden">
+         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4">
            <div className="flex items-center justify-between">
              <div>
-               <h3 className="text-2xl font-bold">Bulk Upload Dashboard</h3>
-               <p className="text-blue-100 text-sm mt-1">Upload and manage student data in bulk</p>
+               <h3 className="text-xl font-bold">Bulk Upload Dashboard</h3>
+               <p className="text-blue-100 text-xs mt-1">Upload and manage student data in bulk</p>
              </div>
              <button onClick={handleClose} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors">
-               <X size={24} />
+               <X size={20} />
              </button>
            </div>
          </div>
-         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+         <div className="p-4 overflow-y-auto max-h-[calc(95vh-100px)] text-xs">
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Form Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
               Select Form *
             </label>
             <select
@@ -586,7 +638,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
 
           {/* File Upload */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
               Upload CSV File *
             </label>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-500 transition-colors">
@@ -612,123 +664,241 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
           </div>
 
           {previewData && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h4 className="text-lg font-semibold text-gray-800">Upload Preview</h4>
-                    <p className="text-sm text-gray-600">
+                    <h4 className="text-sm font-semibold text-gray-800">Upload Preview</h4>
+                    <p className="text-xs text-gray-600">
                       Review valid and invalid student records before committing them to the master database.
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-green-700 font-semibold flex items-center gap-1">
-                      <CheckCircle size={18} />
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-green-700 font-semibold flex items-center gap-1">
+                      <CheckCircle size={14} />
                       {previewData.summary?.validCount || 0} valid
                     </span>
-                    <span className="text-sm text-red-700 font-semibold flex items-center gap-1">
-                      <AlertCircle size={18} />
+                    <span className="text-xs text-red-700 font-semibold flex items-center gap-1">
+                      <AlertCircle size={14} />
                       {previewData.summary?.invalidCount || 0} invalid
                     </span>
+                    {previewData.invalidRecords?.length > 0 && (
+                      <button
+                        onClick={() => setShowAllErrors(!showAllErrors)}
+                        className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition-colors flex items-center gap-1"
+                      >
+                        <AlertCircle size={12} />
+                        {showAllErrors ? 'Hide' : 'Show'} All Errors
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h5 className="text-md font-semibold text-green-800 flex items-center gap-2">
-                      <CheckCircle size={18} />
-                      Valid Students
+              {showAllErrors && previewData.invalidRecords?.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-sm font-semibold text-red-800 flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      All Invalid Records ({previewData.invalidRecords.length})
                     </h5>
-                    <span className="text-sm text-green-700">
-                      {previewData.summary?.validCount || 0} ready
-                    </span>
+                    <button
+                      onClick={() => setShowAllErrors(false)}
+                      className="text-xs text-red-700 hover:text-red-900"
+                    >
+                      Close
+                    </button>
                   </div>
-                  {previewData.validRecords?.length > 0 ? (
-                    <div className="overflow-x-auto max-h-72">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-green-700 uppercase text-xs tracking-wide">
-                            <th className="py-2 pr-4">Row</th>
-                            <th className="py-2 pr-4">Admission #</th>
-                            <th className="py-2 pr-4">Name</th>
-                            <th className="py-2 pr-4">Course</th>
-                            <th className="py-2">Branch</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-green-900">
-                          {previewData.validRecords.slice(0, 20).map((record) => (
-                            <tr key={`valid-${record.rowNumber}`} className="border-t border-green-100">
-                              <td className="py-2 pr-4 font-medium">{record.rowNumber}</td>
-                              <td className="py-2 pr-4">{record.sanitizedData?.admission_number || '-'}</td>
-                              <td className="py-2 pr-4">{record.sanitizedData?.student_name || '-'}</td>
-                              <td className="py-2 pr-4">{record.sanitizedData?.course || '-'}</td>
-                              <td className="py-2">{record.sanitizedData?.branch || '-'}</td>
-                            </tr>
+                  <div className="overflow-x-auto max-h-[60vh]">
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead className="sticky top-0 bg-red-200 z-10">
+                        <tr className="text-left text-red-800 uppercase tracking-wide">
+                          <th className="px-2 py-1.5 border border-red-300 font-semibold">Row</th>
+                          <th className="px-2 py-1.5 border border-red-300 font-semibold">Admission #</th>
+                          <th className="px-2 py-1.5 border border-red-300 font-semibold">Name</th>
+                          {allColumns.slice(0, 10).map((col) => (
+                            <th key={col} className="px-2 py-1.5 border border-red-300 font-semibold whitespace-nowrap">
+                              {col}
+                            </th>
                           ))}
-                        </tbody>
-                      </table>
-                      {previewData.validRecords.length > 20 && (
-                        <p className="text-xs text-green-700 mt-2">
-                          Showing first 20 of {previewData.validRecords.length} valid records.
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-green-700">No valid records detected.</p>
-                  )}
-                </div>
-
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h5 className="text-md font-semibold text-red-800 flex items-center gap-2">
-                      <AlertCircle size={18} />
-                      Invalid Students
-                    </h5>
-                    <span className="text-sm text-red-700">
-                      {previewData.summary?.invalidCount || 0} need attention
-                    </span>
-                  </div>
-                  {previewData.invalidRecords?.length > 0 ? (
-                    <div className="overflow-x-auto max-h-72">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-red-700 uppercase text-xs tracking-wide">
-                            <th className="py-2 pr-4">Row</th>
-                            <th className="py-2 pr-4">Admission #</th>
-                            <th className="py-2 pr-4">Name</th>
-                            <th className="py-2 pr-4">Issues</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-red-900">
-                          {previewData.invalidRecords.slice(0, 20).map((record) => (
-                            <tr key={`invalid-${record.rowNumber}`} className="border-t border-red-100 align-top">
-                              <td className="py-2 pr-4 font-medium">{record.rowNumber}</td>
-                              <td className="py-2 pr-4">{record.sanitizedData?.admission_number || '-'}</td>
-                              <td className="py-2 pr-4">{record.sanitizedData?.student_name || '-'}</td>
-                              <td className="py-2 pr-4">
-                                <ul className="list-disc list-inside space-y-1 text-xs">
-                                  {record.issues.map((issue, idx) => (
-                                    <li key={idx}>{issue}</li>
-                                  ))}
-                                </ul>
+                          <th className="px-2 py-1.5 border border-red-300 font-semibold">Issues</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-red-900">
+                        {previewData.invalidRecords.map((record) => (
+                          <tr key={`invalid-all-${record.rowNumber}`} className="border-t border-red-200 hover:bg-red-100">
+                            <td className="px-2 py-1.5 border border-red-200 font-medium">{record.rowNumber}</td>
+                            <td className="px-2 py-1.5 border border-red-200">{record.sanitizedData?.admission_number || '-'}</td>
+                            <td className="px-2 py-1.5 border border-red-200">{record.sanitizedData?.student_name || '-'}</td>
+                            {allColumns.slice(0, 10).map((col) => (
+                              <td key={col} className="px-2 py-1.5 border border-red-200 whitespace-nowrap">
+                                {record.rawData?.[col] || record.sanitizedData?.[col] || '-'}
                               </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {previewData.invalidRecords.length > 20 && (
-                        <p className="text-xs text-red-700 mt-2">
-                          Showing first 20 of {previewData.invalidRecords.length} invalid records.
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-red-700">Great! No invalid records detected.</p>
-                  )}
+                            ))}
+                            <td className="px-2 py-1.5 border border-red-200">
+                              <ul className="list-disc list-inside space-y-0.5 text-[10px]">
+                                {record.issues.map((issue, idx) => (
+                                  <li key={idx}>{issue}</li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {!showAllErrors && (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-xs font-semibold text-green-800 flex items-center gap-1">
+                        <CheckCircle size={14} />
+                        Valid Students
+                      </h5>
+                      <span className="text-xs text-green-700">
+                        {previewData.summary?.validCount || 0} ready
+                      </span>
+                    </div>
+                    {previewData.validRecords?.length > 0 ? (
+                      <>
+                        <div className="overflow-x-auto max-h-[50vh]">
+                          <table className="min-w-full text-xs border-collapse">
+                            <thead className="sticky top-0 bg-green-200 z-10">
+                              <tr className="text-left text-green-800 uppercase tracking-wide">
+                                <th className="px-2 py-1 border border-green-300 font-semibold">Row</th>
+                                {allColumns.map((col) => (
+                                  <th key={col} className="px-2 py-1 border border-green-300 font-semibold whitespace-nowrap">
+                                    {col}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="text-green-900">
+                              {paginatedValidRecords.map((record) => (
+                                <tr key={`valid-${record.rowNumber}`} className="border-t border-green-200 hover:bg-green-100">
+                                  <td className="px-2 py-1 border border-green-200 font-medium">{record.rowNumber}</td>
+                                  {allColumns.map((col) => (
+                                    <td key={col} className="px-2 py-1 border border-green-200 whitespace-nowrap">
+                                      {record.rawData?.[col] || record.sanitizedData?.[col] || '-'}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {validRecordsTotalPages > 1 && (
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-green-200">
+                            <button
+                              onClick={() => setValidRecordsPage(p => Math.max(1, p - 1))}
+                              disabled={validRecordsPage === 1}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              <ChevronLeft size={12} />
+                              Previous
+                            </button>
+                            <span className="text-xs text-green-700">
+                              Page {validRecordsPage} of {validRecordsTotalPages} ({previewData.validRecords.length} total)
+                            </span>
+                            <button
+                              onClick={() => setValidRecordsPage(p => Math.min(validRecordsTotalPages, p + 1))}
+                              disabled={validRecordsPage === validRecordsTotalPages}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              Next
+                              <ChevronRight size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-green-700">No valid records detected.</p>
+                    )}
+                  </div>
+
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-xs font-semibold text-red-800 flex items-center gap-1">
+                        <AlertCircle size={14} />
+                        Invalid Students
+                      </h5>
+                      <span className="text-xs text-red-700">
+                        {previewData.summary?.invalidCount || 0} need attention
+                      </span>
+                    </div>
+                    {previewData.invalidRecords?.length > 0 ? (
+                      <>
+                        <div className="overflow-x-auto max-h-[50vh]">
+                          <table className="min-w-full text-xs border-collapse">
+                            <thead className="sticky top-0 bg-red-200 z-10">
+                              <tr className="text-left text-red-800 uppercase tracking-wide">
+                                <th className="px-2 py-1 border border-red-300 font-semibold">Row</th>
+                                <th className="px-2 py-1 border border-red-300 font-semibold">Admission #</th>
+                                <th className="px-2 py-1 border border-red-300 font-semibold">Name</th>
+                                {allColumns.slice(0, 5).map((col) => (
+                                  <th key={col} className="px-2 py-1 border border-red-300 font-semibold whitespace-nowrap">
+                                    {col}
+                                  </th>
+                                ))}
+                                <th className="px-2 py-1 border border-red-300 font-semibold">Issues</th>
+                              </tr>
+                            </thead>
+                            <tbody className="text-red-900">
+                              {paginatedInvalidRecords.map((record) => (
+                                <tr key={`invalid-${record.rowNumber}`} className="border-t border-red-200 hover:bg-red-100 align-top">
+                                  <td className="px-2 py-1 border border-red-200 font-medium">{record.rowNumber}</td>
+                                  <td className="px-2 py-1 border border-red-200">{record.sanitizedData?.admission_number || '-'}</td>
+                                  <td className="px-2 py-1 border border-red-200">{record.sanitizedData?.student_name || '-'}</td>
+                                  {allColumns.slice(0, 5).map((col) => (
+                                    <td key={col} className="px-2 py-1 border border-red-200 whitespace-nowrap">
+                                      {record.rawData?.[col] || record.sanitizedData?.[col] || '-'}
+                                    </td>
+                                  ))}
+                                  <td className="px-2 py-1 border border-red-200">
+                                    <ul className="list-disc list-inside space-y-0.5 text-[10px]">
+                                      {record.issues.map((issue, idx) => (
+                                        <li key={idx}>{issue}</li>
+                                      ))}
+                                    </ul>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {invalidRecordsTotalPages > 1 && (
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-200">
+                            <button
+                              onClick={() => setInvalidRecordsPage(p => Math.max(1, p - 1))}
+                              disabled={invalidRecordsPage === 1}
+                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              <ChevronLeft size={12} />
+                              Previous
+                            </button>
+                            <span className="text-xs text-red-700">
+                              Page {invalidRecordsPage} of {invalidRecordsTotalPages} ({previewData.invalidRecords.length} total)
+                            </span>
+                            <button
+                              onClick={() => setInvalidRecordsPage(p => Math.min(invalidRecordsTotalPages, p + 1))}
+                              disabled={invalidRecordsPage === invalidRecordsTotalPages}
+                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              Next
+                              <ChevronRight size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-red-700">Great! No invalid records detected.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -876,25 +1046,25 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 pt-4">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 pt-3">
             <button
               onClick={handleUpload}
               disabled={!selectedForm || !file || uploading}
-              className="w-full md:flex-1 bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
+              className="w-full md:flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs font-semibold shadow-lg"
             >
               {uploading ? (
                 <>
-                  <LoadingAnimation width={20} height={20} variant="inline" showMessage={false} />
+                  <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
                   <div className="flex flex-col items-start">
-                    <span>Generating Preview...</span>
+                    <span className="text-xs">Generating Preview...</span>
                     {uploadProgress && (
-                      <span className="text-xs opacity-90">{uploadProgress}</span>
+                      <span className="text-[10px] opacity-90">{uploadProgress}</span>
                     )}
                   </div>
                 </>
               ) : (
                 <>
-                  <Upload size={20} />
+                  <Upload size={14} />
                   {previewData ? 'Regenerate Preview' : 'Generate Preview'}
                 </>
               )}
@@ -904,16 +1074,16 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
               <button
                 onClick={handleConfirmUpload}
                 disabled={confirmingUpload}
-                className="w-full md:flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold shadow-lg"
+                className="w-full md:flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs font-semibold shadow-lg"
               >
                 {confirmingUpload ? (
                   <>
-                    <LoadingAnimation width={20} height={20} variant="inline" showMessage={false} />
+                    <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
                     <span>Uploading...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle size={20} />
+                    <CheckCircle size={14} />
                     Confirm Upload ({previewData.summary?.validCount || 0})
                   </>
                 )}
@@ -922,7 +1092,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
 
             <button
               onClick={handleClose}
-              className="w-full md:w-auto px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full md:w-auto px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs"
             >
               Close
             </button>

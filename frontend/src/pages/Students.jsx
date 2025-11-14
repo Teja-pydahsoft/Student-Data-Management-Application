@@ -27,6 +27,7 @@ const Students = () => {
   const location = useLocation();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -42,6 +43,15 @@ const Students = () => {
     semesters: []
   });
   const [availableFields, setAvailableFields] = useState([]);
+  const [dropdownFilterOptions, setDropdownFilterOptions] = useState({
+    stud_type: [],
+    student_status: [],
+    scholar_status: [],
+    caste: [],
+    gender: [],
+    certificates_status: [],
+    remarks: []
+  });
   const [showBulkRollNumber, setShowBulkRollNumber] = useState(false);
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
   const [showBulkStudentUpload, setShowBulkStudentUpload] = useState(false);
@@ -174,21 +184,11 @@ const Students = () => {
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
     fetchQuickFilterOptions();
+    fetchDropdownFilterOptions();
   }, []);
 
-  // Real-time filtering effect with server-side filtering
-  useEffect(() => {
-    if (skipFilterFetchRef.current) {
-      skipFilterFetchRef.current = false;
-      return;
-    }
-
-    const debounceTimer = setTimeout(() => {
-      applyFilters();
-    }, 300); // Debounce API calls
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchTerm, filters]);
+  // Remove auto-search - only search on button click
+  // useEffect removed - search will only trigger on button click
 
   useEffect(() => {
     setAvailableFields([]);
@@ -209,6 +209,26 @@ const Students = () => {
       }
     } catch (error) {
       console.warn('Failed to fetch quick filter options:', error);
+    }
+  };
+
+  const fetchDropdownFilterOptions = async () => {
+    try {
+      const response = await api.get('/students/filter-options');
+      if (response.data?.success) {
+        const data = response.data.data || {};
+        setDropdownFilterOptions({
+          stud_type: data.stud_type || [],
+          student_status: data.student_status || [],
+          scholar_status: data.scholar_status || [],
+          caste: data.caste || [],
+          gender: data.gender || [],
+          certificates_status: data.certificates_status || [],
+          remarks: data.remarks || []
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to fetch dropdown filter options:', error);
     }
   };
 
@@ -328,6 +348,7 @@ const Students = () => {
 
     const filterParams = {};
 
+    // Standard filters
     if (resolvedFilters.dateFrom) filterParams.filter_dateFrom = resolvedFilters.dateFrom;
     if (resolvedFilters.dateTo) filterParams.filter_dateTo = resolvedFilters.dateTo;
     if (resolvedFilters.pinNumberStatus) filterParams.filter_pinNumberStatus = resolvedFilters.pinNumberStatus;
@@ -337,6 +358,22 @@ const Students = () => {
     if (resolvedFilters.course) filterParams.filter_course = resolvedFilters.course;
     if (resolvedFilters.branch) filterParams.filter_branch = resolvedFilters.branch;
 
+    // All student database fields
+    const studentFields = [
+      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status', 
+      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2', 
+      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
+      'student_address', 'city_village', 'mandal_name', 'district', 
+      'previous_college', 'certificates_status', 'remarks', 'created_at'
+    ];
+
+    studentFields.forEach(field => {
+      if (resolvedFilters[field]) {
+        filterParams[`filter_${field}`] = resolvedFilters[field];
+      }
+    });
+
+    // Dynamic field filters (for fields in student_data JSON)
     Object.entries(resolvedFilters).forEach(([key, value]) => {
       if (key.startsWith('field_') && value) {
         const fieldName = key.replace('field_', '');
@@ -397,6 +434,11 @@ const Students = () => {
     setTotalStudents(total);
     setCurrentPage(resolvedPage);
     setPageSize(effectiveLimit);
+    
+    // Mark initial load as complete after first successful fetch
+    if (initialLoad) {
+      setInitialLoad(false);
+    }
 
     lastQueryRef.current = {
       page: resolvedPage,
@@ -438,10 +480,22 @@ const Students = () => {
   };
 
   const handleFilterChange = (field, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFilters(prev => {
+      const newFilters = {
+        ...prev,
+        [field]: value || '' // Clear filter if empty value
+      };
+      // Remove empty filters
+      if (!newFilters[field] || newFilters[field] === '') {
+        delete newFilters[field];
+      }
+      // Update ref immediately for fetchStudents to use
+      filtersRef.current = newFilters;
+      // Automatically apply filter when changed
+      setCurrentPage(1);
+      fetchStudents({ page: 1, filtersOverride: newFilters });
+      return newFilters;
+    });
   };
 
   const clearFilters = () => {
@@ -831,7 +885,8 @@ const Students = () => {
     });
   };
 
-  if (loading) {
+  // Only show full-page loader on initial load
+  if (loading && initialLoad) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-6">
@@ -852,7 +907,22 @@ const Students = () => {
           <h1 className="text-3xl font-bold text-gray-900 heading-font">Students Database</h1>
           <p className="text-gray-600 mt-2 body-font">Manage and view all student records</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 relative min-w-[300px]">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+              placeholder="Search by admission number or student data..."
+            />
+          </div>
+          <button onClick={handleLocalSearch} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+            Search
+          </button>
+          
           <Link
             to="/students/add"
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
@@ -882,14 +952,6 @@ const Students = () => {
           </button>
 
           <button
-            onClick={() => setShowBulkRollNumber(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-700 to-blue-800 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-          >
-            <Upload size={18} />
-            Bulk Upload PIN CSV
-          </button>
-
-          <button
             onClick={handleBulkDelete}
             disabled={selectedCount === 0 || bulkDeleting}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -908,311 +970,51 @@ const Students = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-              placeholder="Search by admission number or student data..."
-            />
-          </div>
-          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${showFilters ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900 hover:bg-blue-50'}`}>
-            <Filter size={18} />
-            Filters
-          </button>
-          <button onClick={handleLocalSearch} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            Search
-          </button>
-        </div>
-
-        {showFilters && (
-          <div className="border-t pt-4 space-y-3">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Quick Filters</h3>
-              <button onClick={clearFilters} className="text-xs text-gray-700 hover:text-gray-900 flex items-center gap-1">
-                <X size={14} />
-                Clear All
-              </button>
-            </div>
-
-            {/* Horizontal Filter Pills */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {/* Date Range Filters */}
-              <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2 border border-blue-200">
-                <span className="text-xs font-medium text-blue-700">From:</span>
-                <input
-                  type="date"
-                  value={filters.dateFrom || ''}
-                  onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-                  className="px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 bg-blue-50 rounded-lg p-2 border border-blue-200">
-                <span className="text-xs font-medium text-blue-700">To:</span>
-                <input
-                  type="date"
-                  value={filters.dateTo || ''}
-                  onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                  className="px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              {/* PIN Status Filter */}
-              <select
-                value={filters.pinNumberStatus || ''}
-                onChange={(e) => handleFilterChange('pinNumberStatus', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.pinNumberStatus ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">PIN Status: All</option>
-                <option value="assigned">With PIN</option>
-                <option value="unassigned">Without PIN</option>
-              </select>
-
-              <select
-                value={filters.batch || ''}
-                onChange={(e) => handleFilterChange('batch', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.batch ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">Batch: All</option>
-                {(quickFilterOptions.batches || []).map((batch) => (
-                  <option key={batch} value={batch}>
-                    {batch}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.course || ''}
-                onChange={(e) => handleFilterChange('course', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.course ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">Course: All</option>
-                {(quickFilterOptions.courses || []).map((course) => (
-                  <option key={course} value={course}>
-                    {course}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.branch || ''}
-                onChange={(e) => handleFilterChange('branch', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.branch ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">Branch: All</option>
-                {(quickFilterOptions.branches || []).map((branch) => (
-                  <option key={branch} value={branch}>
-                    {branch}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.year || ''}
-                onChange={(e) => handleFilterChange('year', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.year ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">Year: All</option>
-                {((quickFilterOptions.years && quickFilterOptions.years.length > 0)
-                  ? quickFilterOptions.years
-                  : [1, 2, 3, 4]
-                ).map((year) => (
-                  <option key={year} value={String(year)}>
-                    {`Year ${year}`}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={filters.semester || ''}
-                onChange={(e) => handleFilterChange('semester', e.target.value)}
-                className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${
-                  filters.semester ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                }`}
-              >
-                <option value="">Semester: All</option>
-                {((quickFilterOptions.semesters && quickFilterOptions.semesters.length > 0)
-                  ? quickFilterOptions.semesters
-                  : [1, 2]
-                ).map((semester) => (
-                  <option key={semester} value={String(semester)}>
-                    {`Semester ${semester}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Dynamic Field Filters - Horizontal Layout */}
-            {availableFields.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-gray-900">Filter by Category:</p>
-                <div className="flex flex-wrap gap-2">
-                  {availableFields.map((field) => (
-                    <div key={field.name} className="relative">
-                      <select
-                        value={filters[`field_${field.name}`] || ''}
-                        onChange={(e) => handleFilterChange(`field_${field.name}`, e.target.value)}
-                        className={`px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none min-w-[120px] ${
-                          filters[`field_${field.name}`] ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-300'
-                        }`}
-                      >
-                        <option value="">{field.name}: All</option>
-                        {field.values.map((value, idx) => (
-                          <option key={idx} value={value}>{value}</option>
-                        ))}
-                      </select>
-                      {filters[`field_${field.name}`] && (
-                        <button
-                          onClick={() => handleFilterChange(`field_${field.name}`, '')}
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-gray-700 text-white rounded-full text-xs hover:bg-gray-800 flex items-center justify-center"
-                          title="Clear this filter"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Active Filters Display */}
-            {(searchTerm || Object.values(filters).some(value => value)) && (
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="flex items-center gap-2 text-xs text-blue-700">
-                  <span className="font-medium">Active filters (applied to results):</span>
-                  <span className="text-xs text-blue-600 bg-blue-200 px-2 py-1 rounded-full">
-                    {Object.values(filters).filter(value => value).length + (searchTerm ? 1 : 0)} active
-                  </span>
-                  {searchTerm && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md border border-blue-300 font-medium">
-                      Search: "{searchTerm}"
-                      <button
-                        onClick={() => setSearchTerm('')}
-                        className="ml-1 text-blue-600 hover:text-blue-900 font-bold"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  {Object.entries(filters).map(([key, value]) => {
-                    if (value) {
-                      let label = '';
-                      switch (key) {
-                        case 'dateFrom':
-                          label = `From: ${value}`;
-                          break;
-                        case 'dateTo':
-                          label = `To: ${value}`;
-                          break;
-                        case 'pinNumberStatus':
-                          label = `PIN: ${value === 'assigned' ? 'With PIN' : 'Without PIN'}`;
-                          break;
-                        case 'batch':
-                          label = `Batch: ${value}`;
-                          break;
-                        case 'course':
-                          label = `Course: ${value}`;
-                          break;
-                        case 'branch':
-                          label = `Branch: ${value}`;
-                          break;
-                        case 'year':
-                          label = `Year: ${value}`;
-                          break;
-                        case 'semester':
-                          label = `Semester: ${value}`;
-                          break;
-                        default:
-                          if (key.startsWith('field_')) {
-                            const fieldName = key.replace('field_', '');
-                            label = `${fieldName}: ${value}`;
-                          }
-                          break;
-                      }
-                      return (
-                        <span key={key} className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md border border-blue-300 font-medium">
-                          {label}
-                          <button
-                            onClick={() => handleFilterChange(key, '')}
-                            className="ml-1 text-blue-600 hover:text-blue-900 font-bold"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-      </div>
-
       {/* Statistics Cards */}
       {students.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Total Students</p>
-                <p className="text-3xl font-bold text-blue-600">{totalStudents.toLocaleString()}</p>
+                <p className="text-xs font-medium text-gray-600 mb-1">Total Students</p>
+                <p className="text-xl font-bold text-blue-600">{totalStudents.toLocaleString()}</p>
                 <p className="text-xs text-gray-500 mt-1">Across current filters</p>
               </div>
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <Users className="text-blue-600" size={24} />
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <Users className="text-blue-600" size={18} />
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Completed Profiles</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.completed}</p>
+                <p className="text-xs font-medium text-gray-600 mb-1">Completed Profiles</p>
+                <p className="text-xl font-bold text-blue-600">{stats.completed}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}% of total
                 </p>
               </div>
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <CheckCircle className="text-blue-600" size={24} />
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <CheckCircle className="text-blue-600" size={18} />
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 mb-1">Average Completion</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.averageCompletion}%</p>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                <p className="text-xs font-medium text-gray-600 mb-1">Average Completion</p>
+                <p className="text-xl font-bold text-blue-600">{stats.averageCompletion}%</p>
+                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
                   <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
                     style={{ width: `${stats.averageCompletion}%` }}
                   ></div>
                 </div>
               </div>
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <TrendingUp className="text-blue-600" size={24} />
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <TrendingUp className="text-blue-600" size={18} />
               </div>
             </div>
           </div>
@@ -1230,12 +1032,21 @@ const Students = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
+          {loading && !initialLoad && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 rounded-xl">
+              <LoadingAnimation
+                width={24}
+                height={24}
+                message="Loading..."
+              />
+            </div>
+          )}
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+            <table className="w-full" style={{ tableLayout: 'auto' }}>
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
-                  <th className="py-3 px-4 text-sm font-semibold text-gray-700 text-center w-12">
+                  <th className="py-2 px-3 text-xs font-semibold text-gray-700 text-center w-12 sticky left-0 bg-gray-50 z-20 border-r border-gray-200">
                     <input
                       type="checkbox"
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded"
@@ -1244,26 +1055,171 @@ const Students = () => {
                       onChange={(e) => toggleSelectAllStudents(e.target.checked)}
                     />
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Photo</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Admission Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">PIN Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Batch</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Course</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Year / Semester</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Mobile Number</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Completion</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Created At</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
+                  <th className="py-2 px-3 text-xs font-semibold text-gray-700 text-left min-w-[80px] sticky left-12 bg-gray-50 z-20 border-r border-gray-200">
+                    <div className="font-semibold mb-1">Photo</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">Student Name</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">PIN Number</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">Admission Number</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Course</div>
+                    <select
+                      value={filters.course || ''}
+                      onChange={(e) => handleFilterChange('course', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(quickFilterOptions.courses || []).map((course) => (
+                        <option key={course} value={course}>{course}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Branch</div>
+                    <select
+                      value={filters.branch || ''}
+                      onChange={(e) => handleFilterChange('branch', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(quickFilterOptions.branches || []).map((branch) => (
+                        <option key={branch} value={branch}>{branch}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Student Type</div>
+                    <select
+                      value={filters.stud_type || ''}
+                      onChange={(e) => handleFilterChange('stud_type', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.stud_type || []).map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Status</div>
+                    <select
+                      value={filters.student_status || ''}
+                      onChange={(e) => handleFilterChange('student_status', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.student_status || []).map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Scholar Status</div>
+                    <select
+                      value={filters.scholar_status || ''}
+                      onChange={(e) => handleFilterChange('scholar_status', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.scholar_status || []).map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Caste</div>
+                    <select
+                      value={filters.caste || ''}
+                      onChange={(e) => handleFilterChange('caste', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.caste || []).map((caste) => (
+                        <option key={caste} value={caste}>{caste}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Gender</div>
+                    <select
+                      value={filters.gender || ''}
+                      onChange={(e) => handleFilterChange('gender', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.gender || []).map((gender) => (
+                        <option key={gender} value={gender}>{gender}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Certificate Status</div>
+                    <select
+                      value={filters.certificates_status || ''}
+                      onChange={(e) => handleFilterChange('certificates_status', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.certificates_status || []).map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Year</div>
+                    <select
+                      value={filters.year || ''}
+                      onChange={(e) => handleFilterChange('year', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(quickFilterOptions.years || []).map((year) => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Sem</div>
+                    <select
+                      value={filters.semester || ''}
+                      onChange={(e) => handleFilterChange('semester', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(quickFilterOptions.semesters || []).map((sem) => (
+                        <option key={sem} value={sem}>{sem}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Remarks</div>
+                    <select
+                      value={filters.remarks || ''}
+                      onChange={(e) => handleFilterChange('remarks', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(dropdownFilterOptions.remarks || []).map((remark) => (
+                        <option key={remark} value={remark}>{remark}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left sticky right-0 bg-gray-50 z-20">
+                    <div className="font-semibold whitespace-nowrap">Actions</div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {students.map((student) => {
-                  const completionPercentage = completionPercentages[student.admission_number] || 0;
                   return (
                     <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2 px-3 text-center sticky left-0 bg-white z-10 border-r border-gray-200">
                         <input
                           type="checkbox"
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded"
@@ -1272,7 +1228,7 @@ const Students = () => {
                           onChange={() => toggleSelectStudent(student.admission_number)}
                         />
                       </td>
-                      <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                      <td className="py-2 px-3 sticky left-12 bg-white z-10 border-r border-gray-200">
                         <div className="flex items-center justify-center w-10 h-10">
                           {student.student_photo &&
                            student.student_photo !== '{}' &&
@@ -1284,93 +1240,47 @@ const Students = () => {
                               alt="Student Photo"
                               className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 shadow-sm"
                               onError={(e) => {
-                                console.error('Photo failed to load:', student.student_photo);
                                 if (e.target && e.target.style) {
                                   e.target.style.display = 'none';
-                                }
-                                // Find the fallback div and show it
-                                const fallbackDiv = e.target && e.target.parentNode ? e.target.parentNode.querySelector('.photo-fallback') : null;
-                                if (fallbackDiv) {
-                                  fallbackDiv.style.display = 'flex';
                                 }
                               }}
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
-                              <span className="text-gray-400 text-xs font-medium">No Photo</span>
+                              <span className="text-gray-400 text-xs">No Photo</span>
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{student.admission_number}</td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
+                      <td className="py-2 px-1.5 text-xs text-gray-900">{student.student_name || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-600">
                         {student.pin_no ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
                             {student.pin_no}
                           </span>
                         ) : (
-                          <span className="text-gray-400 text-xs">Not assigned</span>
+                          <span className="text-gray-400 text-xs">-</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-700">{student.batch || '-'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-700">{student.course || '-'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-700">{student.branch || '-'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-700">
-                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-medium">
-                          Year {student.current_year || student.student_data?.current_year || '-'}
-                          <span className="w-1 h-1 rounded-full bg-blue-300" />
-                          Sem {student.current_semester || student.student_data?.current_semester || '-'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-900">
-                        {(() => {
-                          const data = student.student_data;
-                          if (!data || typeof data !== 'object') {
-                            return '-';
-                          }
-                          const nameField = Object.keys(data).find(key =>
-                            key.toLowerCase().includes('name') ||
-                            key.toLowerCase().includes('student name') ||
-                            key.toLowerCase() === 'name'
-                          );
-                          return nameField ? data[nameField] : '-';
-                        })()}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {(() => {
-                          const data = student.student_data;
-                          if (!data || typeof data !== 'object') {
-                            return '-';
-                          }
-                          const mobileField = Object.keys(data).find(key =>
-                            key.toLowerCase().includes('mobile') ||
-                            key.toLowerCase().includes('phone') ||
-                            key.toLowerCase().includes('contact')
-                          );
-                          return mobileField ? data[mobileField] : '-';
-                        })()}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${completionPercentage >= 80 ? 'bg-blue-600' : completionPercentage >= 50 ? 'bg-blue-400' : 'bg-gray-400'}`}
-                              style={{ width: `${completionPercentage}%` }}
-                            ></div>
-                          </div>
-                          <span className={`text-xs font-medium ${completionPercentage >= 80 ? 'text-blue-600' : completionPercentage >= 50 ? 'text-blue-500' : 'text-gray-600'}`}>
-                            {completionPercentage}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">{formatDate(student.created_at)}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleViewDetails(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
-                            <Eye size={16} />
+                      <td className="py-2 px-1.5 text-xs font-medium text-gray-900">{student.admission_number || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.student_status || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.scholar_status || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.caste || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.gender || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.certificates_status || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 truncate" title={student.remarks || ''}>{student.remarks || '-'}</td>
+                      <td className="py-2 px-1.5 sticky right-0 bg-white z-10">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleViewDetails(student)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View Details">
+                            <Eye size={14} />
                           </button>
-                          <button onClick={() => handleDelete(student.admission_number)} className="p-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Delete">
-                            <Trash2 size={16} />
+                          <button onClick={() => handleDelete(student.admission_number)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
