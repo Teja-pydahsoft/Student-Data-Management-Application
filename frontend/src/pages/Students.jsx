@@ -1068,6 +1068,19 @@ const Students = () => {
                     <div className="font-semibold whitespace-nowrap">Admission Number</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold mb-1 whitespace-nowrap">Batch</div>
+                    <select
+                      value={filters.batch || ''}
+                      onChange={(e) => handleFilterChange('batch', e.target.value)}
+                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">All</option>
+                      {(quickFilterOptions.batches || []).map((batch) => (
+                        <option key={batch} value={batch}>{batch}</option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold mb-1 whitespace-nowrap">Course</div>
                     <select
                       value={filters.course || ''}
@@ -1263,6 +1276,7 @@ const Students = () => {
                         )}
                       </td>
                       <td className="py-2 px-1.5 text-xs font-medium text-gray-900">{student.admission_number || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.batch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
