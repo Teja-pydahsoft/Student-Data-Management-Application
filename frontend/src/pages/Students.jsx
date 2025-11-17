@@ -12,7 +12,9 @@ import {
   Plus,
   Users,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -65,6 +67,7 @@ const Students = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalStudents, setTotalStudents] = useState(0);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const lastQueryRef = useRef({ page: 1, limit: 25, filters: {}, search: '' });
   const skipFilterFetchRef = useRef(false);
   const filtersRef = useRef(filters);
@@ -520,6 +523,11 @@ const Students = () => {
       if (field === 'course') {
         // If course changes (or is cleared), clear branch to avoid invalid selections
         delete newFilters.branch;
+      }
+      
+      // Auto-expand filters when a filter is applied
+      if (value && !filtersExpanded) {
+        setFiltersExpanded(true);
       }
       
       // Update ref immediately for fetchStudents to use
@@ -1054,6 +1062,217 @@ const Students = () => {
         </div>
       )}
 
+      {/* Filter Section - Always Visible and Expandable */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setFiltersExpanded(!filtersExpanded)}
+              className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              <Filter size={18} />
+              <span>Filters</span>
+              {filtersExpanded ? (
+                <ChevronUp size={18} className="text-gray-500" />
+              ) : (
+                <ChevronDown size={18} className="text-gray-500" />
+              )}
+            </button>
+            <div className="flex items-center gap-3">
+              {!filtersExpanded && Object.keys(filters).length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-gray-500">Active:</span>
+                  {Object.entries(filters).map(([key, value]) => {
+                    if (!value) return null;
+                    const displayKey = key
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, l => l.toUpperCase());
+                    return (
+                      <span
+                        key={key}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded"
+                      >
+                        {displayKey}: {value}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {(Object.keys(filters).length > 0 || searchTerm) && (
+                <button
+                  onClick={clearFilters}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {filtersExpanded && (
+          <div className="px-4 py-4 border-t border-gray-200">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Batch</label>
+                <select
+                  value={filters.batch || ''}
+                  onChange={(e) => handleFilterChange('batch', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(quickFilterOptions.batches || []).map((batch) => (
+                    <option key={batch} value={batch}>{batch}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Course</label>
+                <select
+                  value={filters.course || ''}
+                  onChange={(e) => handleFilterChange('course', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(quickFilterOptions.courses || []).map((course) => (
+                    <option key={course} value={course}>{course}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Branch</label>
+                <select
+                  value={filters.branch || ''}
+                  onChange={(e) => handleFilterChange('branch', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(quickFilterOptions.branches || []).map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Student Type</label>
+                <select
+                  value={filters.stud_type || ''}
+                  onChange={(e) => handleFilterChange('stud_type', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.stud_type || []).map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select
+                  value={filters.student_status || ''}
+                  onChange={(e) => handleFilterChange('student_status', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.student_status || []).map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Scholar Status</label>
+                <select
+                  value={filters.scholar_status || ''}
+                  onChange={(e) => handleFilterChange('scholar_status', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.scholar_status || []).map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Caste</label>
+                <select
+                  value={filters.caste || ''}
+                  onChange={(e) => handleFilterChange('caste', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.caste || []).map((caste) => (
+                    <option key={caste} value={caste}>{caste}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Gender</label>
+                <select
+                  value={filters.gender || ''}
+                  onChange={(e) => handleFilterChange('gender', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.gender || []).map((gender) => (
+                    <option key={gender} value={gender}>{gender}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Certificate Status</label>
+                <select
+                  value={filters.certificates_status || ''}
+                  onChange={(e) => handleFilterChange('certificates_status', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.certificates_status || []).map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Year</label>
+                <select
+                  value={filters.year || ''}
+                  onChange={(e) => handleFilterChange('year', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(quickFilterOptions.years || []).map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Semester</label>
+                <select
+                  value={filters.semester || ''}
+                  onChange={(e) => handleFilterChange('semester', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(quickFilterOptions.semesters || []).map((sem) => (
+                    <option key={sem} value={sem}>{sem}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Remarks</label>
+                <select
+                  value={filters.remarks || ''}
+                  onChange={(e) => handleFilterChange('remarks', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  {(dropdownFilterOptions.remarks || []).map((remark) => (
+                    <option key={remark} value={remark}>{remark}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {students.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <div className="max-w-md mx-auto">
@@ -1061,7 +1280,11 @@ const Students = () => {
               <Search className="text-gray-400" size={32} />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No students found</h3>
-            <p className="text-gray-600">There are no student records in the database yet.</p>
+            <p className="text-gray-600">
+              {Object.keys(filters).length > 0 || searchTerm
+                ? 'No students match the current filters. Try adjusting your search criteria.'
+                : 'There are no student records in the database yet.'}
+            </p>
           </div>
         </div>
       ) : (
@@ -1089,7 +1312,7 @@ const Students = () => {
                     />
                   </th>
                   <th className="py-2 px-3 text-xs font-semibold text-gray-700 text-left min-w-[80px] sticky left-12 bg-gray-50 z-20 border-r border-gray-200">
-                    <div className="font-semibold mb-1">Photo</div>
+                    <div className="font-semibold">Photo</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Student Name</div>
@@ -1101,160 +1324,40 @@ const Students = () => {
                     <div className="font-semibold whitespace-nowrap">Admission Number</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Batch</div>
-                    <select
-                      value={filters.batch || ''}
-                      onChange={(e) => handleFilterChange('batch', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(quickFilterOptions.batches || []).map((batch) => (
-                        <option key={batch} value={batch}>{batch}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Batch</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Course</div>
-                    <select
-                      value={filters.course || ''}
-                      onChange={(e) => handleFilterChange('course', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(quickFilterOptions.courses || []).map((course) => (
-                        <option key={course} value={course}>{course}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Course</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Branch</div>
-                    <select
-                      value={filters.branch || ''}
-                      onChange={(e) => handleFilterChange('branch', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(quickFilterOptions.branches || []).map((branch) => (
-                        <option key={branch} value={branch}>{branch}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Branch</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Student Type</div>
-                    <select
-                      value={filters.stud_type || ''}
-                      onChange={(e) => handleFilterChange('stud_type', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.stud_type || []).map((type) => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Student Type</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Status</div>
-                    <select
-                      value={filters.student_status || ''}
-                      onChange={(e) => handleFilterChange('student_status', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.student_status || []).map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Scholar Status</div>
-                    <select
-                      value={filters.scholar_status || ''}
-                      onChange={(e) => handleFilterChange('scholar_status', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.scholar_status || []).map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Scholar Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Caste</div>
-                    <select
-                      value={filters.caste || ''}
-                      onChange={(e) => handleFilterChange('caste', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.caste || []).map((caste) => (
-                        <option key={caste} value={caste}>{caste}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Caste</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Gender</div>
-                    <select
-                      value={filters.gender || ''}
-                      onChange={(e) => handleFilterChange('gender', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.gender || []).map((gender) => (
-                        <option key={gender} value={gender}>{gender}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Gender</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Certificate Status</div>
-                    <select
-                      value={filters.certificates_status || ''}
-                      onChange={(e) => handleFilterChange('certificates_status', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.certificates_status || []).map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Certificate Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Year</div>
-                    <select
-                      value={filters.year || ''}
-                      onChange={(e) => handleFilterChange('year', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(quickFilterOptions.years || []).map((year) => (
-                        <option key={year} value={year}>{year}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Year</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Sem</div>
-                    <select
-                      value={filters.semester || ''}
-                      onChange={(e) => handleFilterChange('semester', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(quickFilterOptions.semesters || []).map((sem) => (
-                        <option key={sem} value={sem}>{sem}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Sem</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold mb-1 whitespace-nowrap">Remarks</div>
-                    <select
-                      value={filters.remarks || ''}
-                      onChange={(e) => handleFilterChange('remarks', e.target.value)}
-                      className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    >
-                      <option value="">All</option>
-                      {(dropdownFilterOptions.remarks || []).map((remark) => (
-                        <option key={remark} value={remark}>{remark}</option>
-                      ))}
-                    </select>
+                    <div className="font-semibold whitespace-nowrap">Remarks</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left sticky right-0 bg-gray-50 z-20">
                     <div className="font-semibold whitespace-nowrap">Actions</div>
@@ -2150,7 +2253,7 @@ const Students = () => {
                               />
                             )
                           ) : (
-                            <p className="text-sm text-gray-900 break-words font-mono text-xs">
+                            <p className="text-xs text-gray-900 break-words font-mono">
                               {key === 'student_photo' ?
                                 (value && value !== '{}' && value !== null && value !== '' ? String(value) : 'No Photo') :
                                 (key === 'student_photo_preview' ?
