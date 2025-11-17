@@ -44,20 +44,54 @@ const getDateOnlyString = (input) => {
 
 exports.getFilterOptions = async (req, res) => {
   try {
+    // Get filter parameters from query string
+    const { course, branch, batch, year, semester } = req.query;
+    
+    // Build WHERE clause based on applied filters
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    
+    if (course) {
+      whereClause += ' AND course = ?';
+      params.push(course);
+    }
+    if (branch) {
+      whereClause += ' AND branch = ?';
+      params.push(branch);
+    }
+    if (batch) {
+      whereClause += ' AND batch = ?';
+      params.push(batch);
+    }
+    if (year) {
+      whereClause += ' AND current_year = ?';
+      params.push(parseInt(year, 10));
+    }
+    if (semester) {
+      whereClause += ' AND current_semester = ?';
+      params.push(parseInt(semester, 10));
+    }
+    
+    // Fetch distinct values for each filter, applying cascading filters
     const [batchRows] = await masterPool.query(
-      `SELECT DISTINCT batch FROM students WHERE batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`
+      `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+      params
     );
     const [yearRows] = await masterPool.query(
-      `SELECT DISTINCT current_year AS currentYear FROM students WHERE current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`
+      `SELECT DISTINCT current_year AS currentYear FROM students ${whereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
+      params
     );
     const [semesterRows] = await masterPool.query(
-      `SELECT DISTINCT current_semester AS currentSemester FROM students WHERE current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`
+      `SELECT DISTINCT current_semester AS currentSemester FROM students ${whereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
+      params
     );
     const [courseRows] = await masterPool.query(
-      `SELECT DISTINCT course FROM students WHERE course IS NOT NULL AND course <> '' ORDER BY course ASC`
+      `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+      params
     );
     const [branchRows] = await masterPool.query(
-      `SELECT DISTINCT branch FROM students WHERE branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`
+      `SELECT DISTINCT branch FROM students ${whereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+      params
     );
 
     res.json({

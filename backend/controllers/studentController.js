@@ -501,6 +501,32 @@ const convertGender = (value) => {
   return str; // Return as-is if not recognized
 };
 
+const convertStudentType = (value) => {
+  if (!value || value === '') return '';
+  
+  const str = value.toString().trim().toUpperCase();
+  
+  // Normalize equivalent student types
+  // CQ and CONV are the same - store as CONV
+  if (str === 'CQ') {
+    return 'CONV';
+  }
+  if (str === 'CONV') {
+    return 'CONV';
+  }
+  
+  // MQ and MANG are the same - store as MANG
+  if (str === 'MQ') {
+    return 'MANG';
+  }
+  if (str === 'MANG') {
+    return 'MANG';
+  }
+  
+  // Return as-is (uppercase) for other types like LSPOT, LATER, SPOT, etc.
+  return str;
+};
+
 const convertPhoneNumber = (value) => {
   if (!value || value === '') return '';
   
@@ -594,6 +620,11 @@ const convertFieldValue = (fieldName, value) => {
     return convertGender(value);
   }
   
+  // Student type field - check for stud_type field
+  if (field === 'stud_type' || field.includes('stud_type') || field.includes('studtype') || field.includes('studenttype') || field === 'type' || field === 'category') {
+    return convertStudentType(value);
+  }
+  
   // Phone number fields
   if (field.includes('mobile') || field.includes('phone') || field.includes('contact')) {
     return convertPhoneNumber(value);
@@ -672,7 +703,13 @@ const mapRowToStudentRecord = (row, rowNumber) => {
     
     if (mappedKey && cleanedValue !== '') {
       // Convert value based on field type
-      const convertedValue = convertFieldValue(mappedKey, rawValue);
+      let convertedValue = convertFieldValue(mappedKey, rawValue);
+      
+      // Ensure student type conversion is applied (double-check)
+      if (mappedKey === 'stud_type' && convertedValue) {
+        convertedValue = convertStudentType(convertedValue);
+      }
+      
       if (convertedValue !== '') {
         sanitized[mappedKey] = convertedValue;
       }
@@ -924,7 +961,12 @@ const sanitizeStudentPayload = (payload) => {
     if (typeof value === 'string') {
       const trimmed = value.trim();
       if (trimmed !== '') {
-        sanitized[key] = trimmed;
+        // Apply student type conversion if this is a stud_type field
+        if (key === 'stud_type' || key.toLowerCase().includes('stud_type') || key.toLowerCase().includes('studtype')) {
+          sanitized[key] = convertStudentType(trimmed);
+        } else {
+          sanitized[key] = trimmed;
+        }
       }
       return;
     }
@@ -2716,29 +2758,64 @@ exports.getFilterFields = async (_req, res) => {
 };
 
 // Get all unique filter values for dropdown filters
-exports.getFilterOptions = async (_req, res) => {
+exports.getFilterOptions = async (req, res) => {
   try {
-    // Get unique values for all dropdown filter fields
+    // Get filter parameters from query string
+    const { course, branch, batch, year, semester } = req.query;
+    
+    // Build WHERE clause based on applied filters
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    
+    if (course) {
+      whereClause += ' AND course = ?';
+      params.push(course);
+    }
+    if (branch) {
+      whereClause += ' AND branch = ?';
+      params.push(branch);
+    }
+    if (batch) {
+      whereClause += ' AND batch = ?';
+      params.push(batch);
+    }
+    if (year) {
+      whereClause += ' AND current_year = ?';
+      params.push(parseInt(year, 10));
+    }
+    if (semester) {
+      whereClause += ' AND current_semester = ?';
+      params.push(parseInt(semester, 10));
+    }
+    
+    // Get unique values for all dropdown filter fields, applying cascading filters
     const [studTypeRows] = await masterPool.query(
-      `SELECT DISTINCT stud_type FROM students WHERE stud_type IS NOT NULL AND stud_type <> '' ORDER BY stud_type ASC`
+      `SELECT DISTINCT stud_type FROM students ${whereClause} AND stud_type IS NOT NULL AND stud_type <> '' ORDER BY stud_type ASC`,
+      params
     );
     const [studentStatusRows] = await masterPool.query(
-      `SELECT DISTINCT student_status FROM students WHERE student_status IS NOT NULL AND student_status <> '' ORDER BY student_status ASC`
+      `SELECT DISTINCT student_status FROM students ${whereClause} AND student_status IS NOT NULL AND student_status <> '' ORDER BY student_status ASC`,
+      params
     );
     const [scholarStatusRows] = await masterPool.query(
-      `SELECT DISTINCT scholar_status FROM students WHERE scholar_status IS NOT NULL AND scholar_status <> '' ORDER BY scholar_status ASC`
+      `SELECT DISTINCT scholar_status FROM students ${whereClause} AND scholar_status IS NOT NULL AND scholar_status <> '' ORDER BY scholar_status ASC`,
+      params
     );
     const [casteRows] = await masterPool.query(
-      `SELECT DISTINCT caste FROM students WHERE caste IS NOT NULL AND caste <> '' ORDER BY caste ASC`
+      `SELECT DISTINCT caste FROM students ${whereClause} AND caste IS NOT NULL AND caste <> '' ORDER BY caste ASC`,
+      params
     );
     const [genderRows] = await masterPool.query(
-      `SELECT DISTINCT gender FROM students WHERE gender IS NOT NULL AND gender <> '' ORDER BY gender ASC`
+      `SELECT DISTINCT gender FROM students ${whereClause} AND gender IS NOT NULL AND gender <> '' ORDER BY gender ASC`,
+      params
     );
     const [certificatesStatusRows] = await masterPool.query(
-      `SELECT DISTINCT certificates_status FROM students WHERE certificates_status IS NOT NULL AND certificates_status <> '' ORDER BY certificates_status ASC`
+      `SELECT DISTINCT certificates_status FROM students ${whereClause} AND certificates_status IS NOT NULL AND certificates_status <> '' ORDER BY certificates_status ASC`,
+      params
     );
     const [remarksRows] = await masterPool.query(
-      `SELECT DISTINCT remarks FROM students WHERE remarks IS NOT NULL AND remarks <> '' ORDER BY remarks ASC`
+      `SELECT DISTINCT remarks FROM students ${whereClause} AND remarks IS NOT NULL AND remarks <> '' ORDER BY remarks ASC`,
+      params
     );
 
     res.json({

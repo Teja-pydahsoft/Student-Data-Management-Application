@@ -183,9 +183,15 @@ const Students = () => {
 
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
-    fetchQuickFilterOptions();
-    fetchDropdownFilterOptions();
+    fetchQuickFilterOptions(filters);
+    fetchDropdownFilterOptions(filters);
   }, []);
+
+  // Refetch filter options when filters change (for cascading filters)
+  useEffect(() => {
+    fetchQuickFilterOptions(filters);
+    fetchDropdownFilterOptions(filters);
+  }, [filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
 
   // Remove auto-search - only search on button click
   // useEffect removed - search will only trigger on button click
@@ -194,9 +200,19 @@ const Students = () => {
     setAvailableFields([]);
   }, [searchTerm, filters]);
 
-  const fetchQuickFilterOptions = async () => {
+  const fetchQuickFilterOptions = async (currentFilters = {}) => {
     try {
-      const response = await api.get('/attendance/filters');
+      // Build query params from current filters
+      const params = new URLSearchParams();
+      if (currentFilters.course) params.append('course', currentFilters.course);
+      if (currentFilters.branch) params.append('branch', currentFilters.branch);
+      if (currentFilters.batch) params.append('batch', currentFilters.batch);
+      if (currentFilters.year) params.append('year', currentFilters.year);
+      if (currentFilters.semester) params.append('semester', currentFilters.semester);
+      
+      const queryString = params.toString();
+      const url = `/attendance/filters${queryString ? `?${queryString}` : ''}`;
+      const response = await api.get(url);
       if (response.data?.success) {
         const data = response.data.data || {};
         setQuickFilterOptions({
@@ -212,9 +228,19 @@ const Students = () => {
     }
   };
 
-  const fetchDropdownFilterOptions = async () => {
+  const fetchDropdownFilterOptions = async (currentFilters = {}) => {
     try {
-      const response = await api.get('/students/filter-options');
+      // Build query params from current filters
+      const params = new URLSearchParams();
+      if (currentFilters.course) params.append('course', currentFilters.course);
+      if (currentFilters.branch) params.append('branch', currentFilters.branch);
+      if (currentFilters.batch) params.append('batch', currentFilters.batch);
+      if (currentFilters.year) params.append('year', currentFilters.year);
+      if (currentFilters.semester) params.append('semester', currentFilters.semester);
+      
+      const queryString = params.toString();
+      const url = `/students/filter-options${queryString ? `?${queryString}` : ''}`;
+      const response = await api.get(url);
       if (response.data?.success) {
         const data = response.data.data || {};
         setDropdownFilterOptions({
@@ -489,6 +515,13 @@ const Students = () => {
       if (!newFilters[field] || newFilters[field] === '') {
         delete newFilters[field];
       }
+      
+      // Clear dependent filters when parent filter changes
+      if (field === 'course') {
+        // If course changes (or is cleared), clear branch to avoid invalid selections
+        delete newFilters.branch;
+      }
+      
       // Update ref immediately for fetchStudents to use
       filtersRef.current = newFilters;
       // Automatically apply filter when changed
@@ -1119,7 +1152,7 @@ const Students = () => {
                       ))}
                     </select>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold mb-1 whitespace-nowrap">Status</div>
                     <select
                       value={filters.student_status || ''}
@@ -1132,7 +1165,7 @@ const Students = () => {
                       ))}
                     </select>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold mb-1 whitespace-nowrap">Scholar Status</div>
                     <select
                       value={filters.scholar_status || ''}
@@ -1171,7 +1204,7 @@ const Students = () => {
                       ))}
                     </select>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold mb-1 whitespace-nowrap">Certificate Status</div>
                     <select
                       value={filters.certificates_status || ''}
@@ -1210,7 +1243,7 @@ const Students = () => {
                       ))}
                     </select>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold mb-1 whitespace-nowrap">Remarks</div>
                     <select
                       value={filters.remarks || ''}
@@ -1280,14 +1313,22 @@ const Students = () => {
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.student_status || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.scholar_status || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.student_status || ''}>
+                        <span className="block truncate">{student.student_status || '-'}</span>
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.scholar_status || ''}>
+                        <span className="block truncate">{student.scholar_status || '-'}</span>
+                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.caste || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.gender || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.certificates_status || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.certificates_status || ''}>
+                        <span className="block truncate">{student.certificates_status || '-'}</span>
+                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 truncate" title={student.remarks || ''}>{student.remarks || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
+                        <span className="block truncate">{student.remarks || '-'}</span>
+                      </td>
                       <td className="py-2 px-1.5 sticky right-0 bg-white z-10">
                         <div className="flex items-center gap-1">
                           <button onClick={() => handleViewDetails(student)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View Details">
