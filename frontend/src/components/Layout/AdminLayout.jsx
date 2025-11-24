@@ -19,12 +19,12 @@ import toast from 'react-hot-toast';
 
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard' },
-  { path: '/forms', icon: FileText, label: 'Forms', permission: 'forms' },
+  { path: '/forms', icon: FileText, label: 'Pre Registration', permission: 'forms' },
   { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: 'submissions' },
-  { path: '/students', icon: Users, label: 'Students', permission: 'students' },
+  { path: '/students', icon: Users, label: 'Student Management', permission: 'students' },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: 'promotions' },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: 'attendance' },
-  { path: '/courses', icon: Settings, label: 'Courses', permission: 'courses' },
+  { path: '/courses', icon: Settings, label: 'Settings', permission: 'courses' },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: 'user-management' },
   { path: '/reports', icon: BarChart3, label: 'Reports', permission: 'reports' }
 ];

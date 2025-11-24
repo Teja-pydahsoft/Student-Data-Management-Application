@@ -118,6 +118,10 @@ const Attendance = () => {
   const [saving, setSaving] = useState(false);
   const [statusMap, setStatusMap] = useState({});
   const [initialStatusMap, setInitialStatusMap] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const pageSizeOptions = [10, 25, 50, 100];
   const [smsResults, setSmsResults] = useState([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -146,6 +150,8 @@ const Attendance = () => {
   const [selectedDateHolidayInfo, setSelectedDateHolidayInfo] = useState(null);
   const [holidayAlertShown, setHolidayAlertShown] = useState(false);
   const [showHolidayAlert, setShowHolidayAlert] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [attendanceReport, setAttendanceReport] = useState(null);
   const calendarCacheRef = useRef(new Map());
   const searchEffectInitialized = useRef(false);
 
@@ -251,18 +257,21 @@ const Attendance = () => {
 
   const effectiveStatus = (studentId) => {
     const status = statusMap[studentId];
-    return status ? status.toLowerCase() : null;
+    // Default to 'present' if no status is set
+    return status ? status.toLowerCase() : 'present';
   };
 
   const presentCount = useMemo(() => {
     return students.reduce((count, student) => {
-      return effectiveStatus(student.id) === 'present' ? count + 1 : count;
+      const status = effectiveStatus(student.id);
+      return status === 'present' ? count + 1 : count;
     }, 0);
   }, [students, statusMap]);
 
   const absentCount = useMemo(() => {
     return students.reduce((count, student) => {
-      return effectiveStatus(student.id) === 'absent' ? count + 1 : count;
+      const status = effectiveStatus(student.id);
+      return status === 'absent' ? count + 1 : count;
     }, 0);
   }, [students, statusMap]);
 
@@ -270,11 +279,20 @@ const Attendance = () => {
     return students.length - presentCount - absentCount;
   }, [students.length, presentCount, absentCount]);
 
+  // Pagination calculations
+  const safePageSize = pageSize || 1;
+  const totalPages = totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / safePageSize)) : 1;
+  const showingFromRaw = totalStudents === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
+  const showingFrom = totalStudents === 0 ? 0 : Math.min(showingFromRaw, totalStudents);
+  const showingTo = totalStudents === 0 ? 0 : Math.min(totalStudents, showingFrom + Math.max(students.length - 1, 0));
+  const isFirstPage = currentPage <= 1;
+  const isLastPage = currentPage >= totalPages;
+
   const hasChanges = useMemo(() => {
     return students.some((student) => {
       const current = effectiveStatus(student.id);
-      const initial = initialStatusMap[student.id] || null;
-      return current !== (initial || null);
+      const initial = initialStatusMap[student.id] || 'present';
+      return current !== initial;
     });
   }, [students, statusMap, initialStatusMap]);
 
@@ -520,10 +538,11 @@ const Attendance = () => {
     }
   };
 
-  const loadAttendance = async () => {
+  const loadAttendance = async (pageOverride = null) => {
     setLoading(true);
     setSelectedDateHolidayInfo(null);
     try {
+      const pageToUse = pageOverride !== null ? pageOverride : currentPage;
       const params = new URLSearchParams();
       params.append('date', attendanceDate);
 
@@ -535,13 +554,17 @@ const Attendance = () => {
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
+      // Add pagination parameters
+      params.append('limit', pageSize.toString());
+      params.append('offset', ((pageToUse - 1) * pageSize).toString());
+
       const response = await api.get(`/attendance?${params.toString()}`);
       if (!response.data?.success) {
         throw new Error(response.data?.message || 'Failed to fetch attendance');
       }
 
       const fetchedStudents = (response.data.data?.students || []).map((student) => {
-        const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : null;
+        const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : 'present';
         return {
           ...student,
           attendanceStatus: status
@@ -550,12 +573,19 @@ const Attendance = () => {
 
       const statusSnapshot = {};
       fetchedStudents.forEach((student) => {
-        statusSnapshot[student.id] = student.attendanceStatus || null;
+        // Default to 'present' if no status exists
+        statusSnapshot[student.id] = student.attendanceStatus || 'present';
       });
+
+      // Get pagination data
+      const paginationData = response.data?.pagination || {};
+      const total = paginationData.total ?? fetchedStudents.length ?? 0;
 
       setStudents(fetchedStudents);
       setStatusMap(statusSnapshot);
       setInitialStatusMap({ ...statusSnapshot });
+      setTotalStudents(total);
+      setCurrentPage(pageToUse);
       setSmsResults([]);
 
       if (response.data?.data?.holiday) {
@@ -567,6 +597,7 @@ const Attendance = () => {
       setStudents([]);
       setStatusMap({});
       setInitialStatusMap({});
+      setTotalStudents(0);
       setSelectedDateHolidayInfo(null);
     } finally {
       setLoading(false);
@@ -593,7 +624,8 @@ const Attendance = () => {
   }, []);
 
   useEffect(() => {
-    loadAttendance();
+    setCurrentPage(1);
+    loadAttendance(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     attendanceDate,
@@ -601,7 +633,8 @@ const Attendance = () => {
     filters.course,
     filters.branch,
     filters.currentYear,
-    filters.currentSemester
+    filters.currentSemester,
+    pageSize
   ]);
 
   useEffect(() => {
@@ -610,8 +643,9 @@ const Attendance = () => {
       return;
     }
 
+    setCurrentPage(1);
     const handle = setTimeout(() => {
-      loadAttendance();
+      loadAttendance(1);
     }, 400);
 
     return () => clearTimeout(handle);
@@ -652,6 +686,38 @@ const Attendance = () => {
       studentName: '',
       parentMobile: ''
     });
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (newPage) => {
+    if (loading) {
+      return;
+    }
+
+    const safePageSize = pageSize || 1;
+    const totalPages = totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / safePageSize)) : 1;
+
+    if (newPage === currentPage || newPage < 1 || newPage > totalPages) {
+      return;
+    }
+
+    loadAttendance(newPage);
+  };
+
+  const handlePageSizeChange = (event) => {
+    const newSize = parseInt(event.target.value, 10);
+
+    if (loading) {
+      return;
+    }
+
+    if (Number.isNaN(newSize) || newSize <= 0 || newSize === pageSize) {
+      return;
+    }
+
+    setCurrentPage(1);
+    setPageSize(newSize);
+    // loadAttendance will be called by useEffect when pageSize changes
   };
 
   const handleRetryCalendarFetch = () => {
@@ -824,7 +890,56 @@ const Attendance = () => {
     });
   };
 
-  const handleSave = async () => {
+  const prepareAttendanceReport = () => {
+    const presentStudents = [];
+    const absentStudents = [];
+
+    students.forEach((student) => {
+      const current = effectiveStatus(student.id);
+      if (current === 'present') {
+        presentStudents.push(student);
+      } else if (current === 'absent') {
+        absentStudents.push(student);
+      }
+    });
+
+    return {
+      totalStudents: totalStudents, // Use total from pagination
+      presentCount: presentStudents.length,
+      absentCount: absentStudents.length,
+      presentStudents,
+      absentStudents,
+      absentPinNumbers: absentStudents
+        .map(s => s.pinNumber || s.pin_no || 'N/A')
+        .filter(pin => pin !== 'N/A')
+    };
+  };
+
+  const handleSaveClick = () => {
+    if (editingLocked) {
+      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+      return;
+    }
+
+    const report = prepareAttendanceReport();
+    
+    // Check if there are any changes
+    const hasChanges = students.some((student) => {
+      const current = effectiveStatus(student.id);
+      const initial = initialStatusMap[student.id] || 'present';
+      return current !== initial;
+    });
+
+    if (!hasChanges && report.presentCount === 0 && report.absentCount === 0) {
+      toast('Nothing to save');
+      return;
+    }
+
+    setAttendanceReport(report);
+    setShowReportModal(true);
+  };
+
+  const handleConfirmSave = async () => {
     if (editingLocked) {
       toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
       return;
@@ -832,8 +947,9 @@ const Attendance = () => {
     const records = students
       .map((student) => {
         const current = effectiveStatus(student.id);
-        const initial = initialStatusMap[student.id] || null;
-        if (!current || current === initial) {
+        const initial = initialStatusMap[student.id] || 'present';
+        // Only save if status has changed from initial
+        if (current === initial) {
           return null;
         }
 
@@ -853,10 +969,12 @@ const Attendance = () => {
 
     if (records.length === 0) {
       toast('Nothing to save');
+      setShowReportModal(false);
       return;
     }
 
     setSaving(true);
+    setShowReportModal(false);
     try {
       const response = await api.post('/attendance', {
         attendanceDate,
@@ -871,7 +989,7 @@ const Attendance = () => {
       setStudents((prev) =>
         prev.map((student) => ({
           ...student,
-          attendanceStatus: statusMap[student.id] || null
+          attendanceStatus: statusMap[student.id] || 'present'
         }))
       );
 
@@ -899,6 +1017,8 @@ const Attendance = () => {
       setSaving(false);
     }
   };
+
+  const handleSave = handleSaveClick;
 
   const renderPhoto = (student) => {
     if (student.photo) {
@@ -1078,167 +1198,117 @@ const Attendance = () => {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={attendanceDate}
+            onChange={(e) => setAttendanceDate(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
           <button
             type="button"
             onClick={handleOpenCalendarModal}
-            className={`relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
-              nonWorkingDayDetails.isNonWorkingDay
-                ? 'border-amber-400 bg-amber-50 text-amber-800 hover:border-amber-500 hover:bg-amber-100'
-                : 'border-gray-300 bg-white text-gray-700 hover:border-blue-500 hover:bg-blue-50'
-            }`}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            title="Open calendar"
           >
-            <div
-              className={`rounded-full p-2 ${
-                nonWorkingDayDetails.isNonWorkingDay ? 'bg-amber-200 text-amber-700' : 'bg-blue-100 text-blue-600'
-              }`}
-            >
-              <CalendarDays size={18} />
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-sm font-semibold">{attendanceDateLabel}</span>
-              <span className="text-xs text-gray-500">
-                {nonWorkingDayDetails.isNonWorkingDay
-                  ? 'Holiday — attendance disabled'
-                  : 'Tap to open academic calendar'}
-              </span>
-            </div>
-            {calendarLoading && (
-              <span className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin text-blue-500" />
-            )}
+            <CalendarDays size={16} />
           </button>
         </div>
       </header>
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
-        <div className="flex items-center gap-2 text-gray-700 font-semibold">
-          <Filter size={18} />
-          <span>Filters</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Batch</label>
-            <select
-              value={filters.batch}
-              onChange={(event) => handleFilterChange('batch', event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Batches</option>
-              {filterOptions.batches.map((batchOption) => (
-                <option key={batchOption} value={batchOption}>
-                  {batchOption}
-                </option>
-              ))}
-            </select>
+      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Filter size={16} className="text-gray-600" />
+          <select
+            value={filters.batch}
+            onChange={(event) => handleFilterChange('batch', event.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Batches</option>
+            {filterOptions.batches.map((batchOption) => (
+              <option key={batchOption} value={batchOption}>
+                {batchOption}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.course}
+            onChange={(event) => handleFilterChange('course', event.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Courses</option>
+            {filterOptions.courses.map((courseOption) => (
+              <option key={courseOption} value={courseOption}>
+                {courseOption}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.branch}
+            onChange={(event) => handleFilterChange('branch', event.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Branches</option>
+            {filterOptions.branches.map((branchOption) => (
+              <option key={branchOption} value={branchOption}>
+                {branchOption}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.currentYear}
+            onChange={(event) => handleFilterChange('currentYear', event.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Years</option>
+            {filterOptions.years.map((yearOption) => (
+              <option key={yearOption} value={yearOption}>
+                Year {yearOption}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.currentSemester}
+            onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Semesters</option>
+            {filterOptions.semesters.map((semesterOption) => (
+              <option key={semesterOption} value={semesterOption}>
+                Sem {semesterOption}
+              </option>
+            ))}
+          </select>
+          <div className="relative flex-1 min-w-[150px]">
+            <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Student name or PIN"
+              value={filters.studentName}
+              onChange={(event) => handleFilterChange('studentName', event.target.value)}
+              className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
           </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Course</label>
-            <select
-              value={filters.course}
-              onChange={(event) => handleFilterChange('course', event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Courses</option>
-              {filterOptions.courses.map((courseOption) => (
-                <option key={courseOption} value={courseOption}>
-                  {courseOption}
-                </option>
-              ))}
-            </select>
+          <div className="relative min-w-[150px]">
+            <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Parent mobile"
+              value={filters.parentMobile}
+              onChange={(event) => handleFilterChange('parentMobile', event.target.value)}
+              className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
           </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Branch</label>
-            <select
-              value={filters.branch}
-              onChange={(event) => handleFilterChange('branch', event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Branches</option>
-              {filterOptions.branches.map((branchOption) => (
-                <option key={branchOption} value={branchOption}>
-                  {branchOption}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Current Year</label>
-            <select
-              value={filters.currentYear}
-              onChange={(event) => handleFilterChange('currentYear', event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Years</option>
-              {filterOptions.years.map((yearOption) => (
-                <option key={yearOption} value={yearOption}>
-                  Year {yearOption}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Current Semester</label>
-            <select
-              value={filters.currentSemester}
-              onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">All Semesters</option>
-              {filterOptions.semesters.map((semesterOption) => (
-                <option key={semesterOption} value={semesterOption}>
-                  Semester {semesterOption}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-1">Parent Mobile</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                <Search size={16} />
-              </span>
-              <input
-                type="text"
-                placeholder="Search parent mobile"
-                value={filters.parentMobile}
-                onChange={(event) => handleFilterChange('parentMobile', event.target.value)}
-                className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col md:col-span-2 lg:col-span-6">
-            <label className="text-sm font-medium text-gray-700 mb-1">Student Name or PIN</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                <Search size={16} />
-              </span>
-              <input
-                type="text"
-                placeholder="Search student name or PIN"
-                value={filters.studentName}
-                onChange={(event) => handleFilterChange('studentName', event.target.value)}
-                className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2 justify-between items-center pt-2">
           <button
             type="button"
             onClick={handleClearFilters}
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
           >
-            <RefreshCw size={16} />
-            Clear Filters
+            <RefreshCw size={14} />
+            Clear
           </button>
-          <div className="text-sm text-gray-500">
-            {students.length} student{students.length === 1 ? '' : 's'} loaded
+          <div className="text-sm text-gray-500 whitespace-nowrap">
+            {totalStudents.toLocaleString()} found
           </div>
         </div>
       </section>
@@ -1288,6 +1358,7 @@ const Attendance = () => {
             <p>No students found for the selected filters.</p>
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -1332,37 +1403,42 @@ const Attendance = () => {
                         <div>{parentContact}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(student.id, 'present')}
-                            disabled={editingLocked}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                              editingLocked
-                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                                : status === 'present'
-                                ? 'bg-green-100 border-green-500 text-green-700'
-                                : 'bg-white border-gray-300 text-gray-600 hover:bg-green-50 hover:border-green-400'
-                            }`}
-                          >
-                            <Check size={16} />
-                            Present
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(student.id, 'absent')}
-                            disabled={editingLocked}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                              editingLocked
-                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                                : status === 'absent'
-                                ? 'bg-red-100 border-red-500 text-red-700'
-                                : 'bg-white border-gray-300 text-gray-600 hover:bg-red-50 hover:border-red-400'
-                            }`}
-                          >
-                            <X size={16} />
-                            Absent
-                          </button>
+                        <div className="flex items-center gap-3">
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                            status === 'present' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {status === 'present' ? (
+                              <>
+                                <Check size={16} />
+                                Present
+                              </>
+                            ) : (
+                              <>
+                                <X size={16} />
+                                Absent
+                              </>
+                            )}
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={status === 'absent'}
+                              onChange={(e) => {
+                                if (editingLocked) {
+                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                  return;
+                                }
+                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                              }}
+                              disabled={editingLocked}
+                              className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                              Mark as Absent
+                            </span>
+                          </label>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -1400,6 +1476,50 @@ const Attendance = () => {
               </tbody>
             </table>
           </div>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-4 py-4 border-t border-gray-100">
+            <div className="text-sm text-gray-600">
+              {totalStudents === 0
+                ? 'No students to display'
+                : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                Rows per page
+                <select
+                  value={pageSize}
+                  onChange={handlePageSizeChange}
+                  className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  disabled={loading}
+                >
+                  {pageSizeOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={isFirstPage || loading || totalStudents === 0}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-600">
+                  Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={isLastPage || loading || totalStudents === 0}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+          </>
         )}
       </section>
 
@@ -1534,6 +1654,86 @@ const Attendance = () => {
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
               >
                 Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Report Modal */}
+      {showReportModal && attendanceReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4">
+          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Attendance Report</h2>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Total Students</p>
+                  <p className="text-2xl font-bold text-blue-700">{attendanceReport.totalStudents.toLocaleString()}</p>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Present</p>
+                  <p className="text-2xl font-bold text-green-700">{attendanceReport.presentCount.toLocaleString()}</p>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-1">Absent</p>
+                  <p className="text-2xl font-bold text-red-700">{attendanceReport.absentCount.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {attendanceReport.absentCount > 0 && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Absent Students PIN Numbers</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {attendanceReport.absentPinNumbers.length > 0 ? (
+                      attendanceReport.absentPinNumbers.map((pin, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-3 py-1 rounded-md bg-red-100 text-red-800 text-sm font-medium border border-red-200"
+                        >
+                          {pin}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500">No PIN numbers available for absent students</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Date & Filters</h3>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p><span className="font-medium">Date:</span> {attendanceDateLabel}</p>
+                  {filters.batch && <p><span className="font-medium">Batch:</span> {filters.batch}</p>}
+                  {filters.course && <p><span className="font-medium">Course:</span> {filters.course}</p>}
+                  {filters.branch && <p><span className="font-medium">Branch:</span> {filters.branch}</p>}
+                  {filters.currentYear && <p><span className="font-medium">Year:</span> {filters.currentYear}</p>}
+                  {filters.currentSemester && <p><span className="font-medium">Semester:</span> {filters.currentSemester}</p>}
+                </div>
+              </div>
+            </div>
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? 'Saving...' : 'Confirm & Save'}
               </button>
             </div>
           </div>

@@ -236,9 +236,20 @@ exports.getAttendance = async (req, res) => {
 
     query += ' ORDER BY s.student_name ASC';
 
+    // Build count query for pagination
+    const countQuery = query.replace(
+      /SELECT[\s\S]*?FROM/s,
+      'SELECT COUNT(*) AS total FROM'
+    ).replace(/ORDER BY[\s\S]*$/s, '');
+
     const parsedLimit = limit ? parseInt(limit, 10) : null;
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
 
+    // Get total count
+    const [countRows] = await masterPool.query(countQuery, params);
+    const total = countRows?.[0]?.total || 0;
+
+    // Apply pagination to data query
     if (parsedLimit && parsedLimit > 0) {
       query += ' LIMIT ? OFFSET ?';
       params.push(parsedLimit, parsedOffset);
@@ -303,6 +314,11 @@ exports.getAttendance = async (req, res) => {
         date: attendanceDate,
         students,
         holiday: holidayInfo
+      },
+      pagination: {
+        total,
+        limit: parsedLimit || null,
+        offset: parsedOffset
       }
     });
   } catch (error) {

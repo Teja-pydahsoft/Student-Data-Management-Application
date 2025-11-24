@@ -11,7 +11,7 @@ import FormBuilder from './pages/FormBuilder';
 import Submissions from './pages/Submissions';
 import Students from './pages/Students';
 import AddStudent from './pages/AddStudent';
-import CourseConfig from './pages/CourseConfig';
+import Settings from './pages/Settings';
 import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
 import UserManagement from './pages/UserManagement';
@@ -77,7 +77,7 @@ function App() {
           <Route path="students" element={<Students />} />
           <Route path="students/add" element={<AddStudent />} />
           <Route path="promotions" element={<StudentPromotions />} />
-          <Route path="courses" element={<CourseConfig />} />
+          <Route path="courses" element={<Settings />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />

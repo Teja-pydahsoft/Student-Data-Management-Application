@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
-  Eye,
   Edit,
   Trash2,
   Download,
@@ -1359,16 +1358,23 @@ const Students = () => {
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold whitespace-nowrap">Remarks</div>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left sticky right-0 bg-gray-50 z-20">
-                    <div className="font-semibold whitespace-nowrap">Actions</div>
-                  </th>
                 </tr>
               </thead>
               <tbody>
                 {students.map((student) => {
                   return (
-                    <tr key={student.admission_number} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2 px-3 text-center sticky left-0 bg-white z-10 border-r border-gray-200">
+                    <tr 
+                      key={student.admission_number} 
+                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      onClick={(e) => {
+                        // Don't trigger if clicking on checkbox
+                        if (e.target.type === 'checkbox' || e.target.closest('input[type="checkbox"]')) {
+                          return;
+                        }
+                        handleViewDetails(student);
+                      }}
+                    >
+                      <td className="py-2 px-3 text-center sticky left-0 bg-white z-10 border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded"
@@ -1431,16 +1437,6 @@ const Students = () => {
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
                         <span className="block truncate">{student.remarks || '-'}</span>
-                      </td>
-                      <td className="py-2 px-1.5 sticky right-0 bg-white z-10">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleViewDetails(student)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View Details">
-                            <Eye size={14} />
-                          </button>
-                          <button onClick={() => handleDelete(student.admission_number)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );
