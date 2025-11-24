@@ -1,0 +1,266 @@
+const collegeService = require('../services/collegeService');
+
+/**
+ * GET /api/colleges
+ * Get all colleges
+ */
+exports.getColleges = async (req, res) => {
+  try {
+    const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
+    
+    const colleges = await collegeService.fetchColleges({ includeInactive });
+
+    res.json({
+      success: true,
+      data: colleges
+    });
+  } catch (error) {
+    console.error('getColleges error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch colleges'
+    });
+  }
+};
+
+/**
+ * GET /api/colleges/:collegeId
+ * Get single college by ID
+ */
+exports.getCollege = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    const college = await collegeService.fetchCollegeById(collegeId);
+
+    if (!college) {
+      return res.status(404).json({
+        success: false,
+        message: 'College not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: college
+    });
+  } catch (error) {
+    console.error('getCollege error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch college'
+    });
+  }
+};
+
+/**
+ * POST /api/colleges
+ * Create new college
+ */
+exports.createCollege = async (req, res) => {
+  try {
+    const { name, code, isActive, metadata } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'College name is required'
+      });
+    }
+
+    const college = await collegeService.createCollege({
+      name,
+      code,
+      isActive: isActive !== undefined ? isActive : true,
+      metadata
+    });
+
+    res.status(201).json({
+      success: true,
+      data: college,
+      message: 'College created successfully'
+    });
+  } catch (error) {
+    console.error('createCollege error:', error);
+    
+    if (error.message.includes('already exists')) {
+      return res.status(409).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create college'
+    });
+  }
+};
+
+/**
+ * PUT /api/colleges/:collegeId
+ * Update college
+ */
+exports.updateCollege = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    const { name, code, isActive, metadata } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (code !== undefined) updates.code = code;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (metadata !== undefined) updates.metadata = metadata;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update'
+      });
+    }
+
+    const college = await collegeService.updateCollege(collegeId, updates);
+
+    res.json({
+      success: true,
+      data: college,
+      message: 'College updated successfully'
+    });
+  } catch (error) {
+    console.error('updateCollege error:', error);
+
+    if (error.message === 'College not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('already exists')) {
+      return res.status(409).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update college'
+    });
+  }
+};
+
+/**
+ * DELETE /api/colleges/:collegeId
+ * Delete college (soft delete by default)
+ */
+exports.deleteCollege = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    const hard = req.query.hard === 'true' || req.query.hard === true;
+    const cascade = req.query.cascade === 'true' || req.query.cascade === true;
+
+    const result = await collegeService.deleteCollege(collegeId, { hard, cascade });
+
+    if (cascade) {
+      res.json({
+        success: true,
+        deletedStudents: result.deletedStudents || 0,
+        deletedBranches: result.deletedBranches || 0,
+        deletedCourses: result.deletedCourses || 0,
+        message: 'College and all related data deleted successfully.'
+      });
+    } else {
+      res.json({
+        success: true,
+        message: hard ? 'College deleted permanently' : 'College deleted successfully'
+      });
+    }
+  } catch (error) {
+    console.error('deleteCollege error:', error);
+
+    if (error.message === 'College not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('still has courses')) {
+      return res.status(409).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete college'
+    });
+  }
+};
+
+/**
+ * GET /api/colleges/:collegeId/courses
+ * Get all courses for a college
+ */
+exports.getCollegeCourses = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    // Check if college exists
+    const college = await collegeService.fetchCollegeById(collegeId);
+    if (!college) {
+      return res.status(404).json({
+        success: false,
+        message: 'College not found'
+      });
+    }
+
+    const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
+    
+    const courses = await collegeService.getCollegeCourses(collegeId, { includeInactive });
+
+    res.json({
+      success: true,
+      data: courses
+    });
+  } catch (error) {
+    console.error('getCollegeCourses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch college courses'
+    });
+  }
+};
+

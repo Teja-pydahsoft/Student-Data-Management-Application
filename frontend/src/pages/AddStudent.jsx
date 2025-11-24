@@ -9,6 +9,9 @@ const AddStudent = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
+  const [colleges, setColleges] = useState([]);
+  const [collegesLoading, setCollegesLoading] = useState(true);
+  const [selectedCollegeId, setSelectedCollegeId] = useState(null);
   const [courseOptions, setCourseOptions] = useState([]);
   const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
   const [selectedCourseName, setSelectedCourseName] = useState('');
@@ -18,6 +21,7 @@ const AddStudent = () => {
     current_year: '1',
     current_semester: '1',
     batch: '',
+    college: '',
     course: '',
     branch: '',
     stud_type: '',
@@ -44,10 +48,30 @@ const AddStudent = () => {
   });
 
   useEffect(() => {
+    const loadColleges = async () => {
+      try {
+        setCollegesLoading(true);
+        const response = await api.get('/colleges');
+        setColleges(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to load colleges', error);
+        toast.error(error.response?.data?.message || 'Failed to load colleges');
+      } finally {
+        setCollegesLoading(false);
+      }
+    };
+
+    loadColleges();
+  }, []);
+
+  useEffect(() => {
     const loadCourseConfig = async () => {
       try {
         setCourseOptionsLoading(true);
-        const response = await api.get('/courses/options');
+        const url = selectedCollegeId 
+          ? `/courses?collegeId=${selectedCollegeId}&includeInactive=false`
+          : '/courses/options';
+        const response = await api.get(url);
         setCourseOptions(response.data.data || []);
       } catch (error) {
         console.error('Failed to load course configuration', error);
@@ -58,7 +82,7 @@ const AddStudent = () => {
     };
 
     loadCourseConfig();
-  }, []);
+  }, [selectedCollegeId]);
 
   const availableCourses = useMemo(
     () => courseOptions.filter((course) => course?.isActive !== false),
@@ -201,6 +225,21 @@ const AddStudent = () => {
     });
   }, [activeStructure]);
 
+  const handleCollegeSelect = (event) => {
+    const value = event.target.value;
+    const collegeId = value ? parseInt(value, 10) : null;
+    setSelectedCollegeId(collegeId);
+    const selectedCollege = colleges.find(c => c.id === collegeId);
+    setStudentData((prev) => ({
+      ...prev,
+      college: selectedCollege ? selectedCollege.name : '',
+      course: '',
+      branch: ''
+    }));
+    setSelectedCourseName('');
+    setSelectedBranchName('');
+  };
+
   const handleCourseSelect = (event) => {
     const value = event.target.value;
     setSelectedCourseName(value);
@@ -228,6 +267,11 @@ const AddStudent = () => {
     // Basic validation
     if (!studentData.student_name || !studentData.admission_no) {
       toast.error('Student name and admission number are required');
+      return;
+    }
+
+    if (!studentData.college) {
+      toast.error('Please select a college');
       return;
     }
 
@@ -373,6 +417,31 @@ const AddStudent = () => {
               Academic Information
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  College <span className="text-red-500">*</span>
+                </label>
+                {collegesLoading ? (
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    Loading colleges...
+                  </div>
+                ) : (
+                  <select
+                    value={selectedCollegeId || ''}
+                    onChange={handleCollegeSelect}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select College</option>
+                    {colleges.filter(c => c.isActive !== false).map((college) => (
+                      <option key={college.id} value={college.id}>
+                        {college.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Course {availableCourses.length > 0 && <span className="text-red-500">*</span>}

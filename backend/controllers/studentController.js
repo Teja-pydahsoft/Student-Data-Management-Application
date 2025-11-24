@@ -172,6 +172,7 @@ const FIELD_MAPPING = {
   // Exact field names from Excel template
   'Pin Number': 'pin_no',
   'Batch': 'batch',
+  'College': 'college',
   'Branch': 'branch',
   'StudType': 'stud_type',
   'Student Name': 'student_name',
@@ -236,6 +237,7 @@ const FIELD_MAPPING = {
   admission_no: 'admission_no',
   admission_number: 'admission_number',
   batch: 'batch',
+  college: 'college',
   branch: 'branch',
   branch_code: 'branch_code',
   stud_type: 'stud_type',
@@ -284,6 +286,7 @@ const createComprehensiveFieldMapping = () => {
   const fieldVariations = {
     pin_no: ['pinnumber', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'pinno', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'rollnumber', 'roll_number', 'rollno', 'roll_no'],
     batch: ['batch', 'batchyear', 'batch_year', 'year', 'academicyear', 'academic_year', 'batch', 'batchyear', 'batch_year', 'year', 'academicyear', 'academic_year', 'batchyear', 'batch_year', 'academicyear', 'academic_year'],
+    college: ['college', 'collegename', 'college_name', 'institution', 'institutionname', 'institution_name', 'campus', 'campusname', 'campus_name', 'college', 'collegename', 'college_name', 'institution', 'institutionname', 'institution_name', 'campus', 'campusname', 'campus_name'],
     branch: ['branch', 'branchname', 'branch_name', 'department', 'dept', 'specialization', 'branch', 'branchname', 'branch_name', 'department', 'dept', 'specialization', 'specialisation', 'stream', 'discipline'],
     stud_type: ['studtype', 'studenttype', 'student_type', 'type', 'category', 'studentcategory', 'studtype', 'studenttype', 'student_type', 'type', 'category', 'studentcategory', 'studentcategory', 'student_category'],
     student_name: ['studentname', 'name', 'student', 'fullname', 'full_name', 'studentfullname', 'student_name', 'studentname', 'nameofstudent', 'name_of_student', 'sname', 's_name'],
@@ -1656,6 +1659,7 @@ exports.getAllStudents = async (req, res) => {
       filter_year,
       filter_semester,
       filter_batch,
+      filter_college,
       filter_course,
       filter_branch,
       ...otherFilters
@@ -1668,6 +1672,8 @@ exports.getAllStudents = async (req, res) => {
     const parsedFilterSemester = filter_semester !== undefined ? parseInt(filter_semester, 10) : null;
     const normalizedFilterBatch =
       typeof filter_batch === 'string' && filter_batch.trim().length > 0 ? filter_batch.trim() : null;
+    const normalizedFilterCollege =
+      typeof filter_college === 'string' && filter_college.trim().length > 0 ? filter_college.trim() : null;
     const normalizedFilterCourse =
       typeof filter_course === 'string' && filter_course.trim().length > 0 ? filter_course.trim() : null;
     const normalizedFilterBranch =
@@ -1685,7 +1691,7 @@ exports.getAllStudents = async (req, res) => {
       'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
       'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
       'student_address', 'city_village', 'mandal_name', 'district',
-      'previous_college', 'certificates_status', 'remarks'
+      'previous_college', 'certificates_status', 'remarks', 'college'
     ];
 
     const cacheKey = fetchAll
@@ -1700,6 +1706,7 @@ exports.getAllStudents = async (req, res) => {
           filter_year: parsedFilterYear,
           filter_semester: parsedFilterSemester,
           filter_batch: normalizedFilterBatch,
+          filter_college: normalizedFilterCollege,
           filter_course: normalizedFilterCourse,
           filter_branch: normalizedFilterBranch,
           filters: normalizedOtherFilters
@@ -1751,6 +1758,11 @@ exports.getAllStudents = async (req, res) => {
     if (normalizedFilterBatch) {
       query += ' AND batch = ?';
       params.push(normalizedFilterBatch);
+    }
+
+    if (normalizedFilterCollege) {
+      query += ' AND college = ?';
+      params.push(normalizedFilterCollege);
     }
 
     if (normalizedFilterCourse) {
@@ -1837,6 +1849,11 @@ exports.getAllStudents = async (req, res) => {
     if (normalizedFilterBatch) {
       countQuery += ' AND batch = ?';
       countParams.push(normalizedFilterBatch);
+    }
+
+    if (normalizedFilterCollege) {
+      countQuery += ' AND college = ?';
+      countParams.push(normalizedFilterCollege);
     }
 
     if (normalizedFilterCourse) {

@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
 import useAuthStore from '../store/authStore';
+import DeleteConfirmModal from '../components/DeleteConfirmModal';
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -135,6 +136,14 @@ const defaultCourseForm = {
 };
 
 const Settings = () => {
+  const [colleges, setColleges] = useState([]);
+  const [selectedCollegeId, setSelectedCollegeId] = useState(null);
+  const [editingCollegeId, setEditingCollegeId] = useState(null);
+  const [savingCollegeId, setSavingCollegeId] = useState(null);
+  const [creatingCollege, setCreatingCollege] = useState(false);
+  const [newCollege, setNewCollege] = useState({ name: '', code: '', isActive: true });
+  const [collegeDrafts, setCollegeDrafts] = useState({});
+  
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creatingCourse, setCreatingCourse] = useState(false);
@@ -149,6 +158,14 @@ const Settings = () => {
   const [branchDrafts, setBranchDrafts] = useState({});
   const [editingBranch, setEditingBranch] = useState(null);
   const [savingBranchId, setSavingBranchId] = useState(null);
+  
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    type: null, // 'college', 'course', or 'branch'
+    item: null,
+    onConfirm: null
+  });
   const [activeSection, setActiveSection] = useState('courses'); // 'courses' or 'calendar'
 
   // Calendar state
@@ -168,12 +185,181 @@ const Settings = () => {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
 
-  const fetchCourses = async ({ silent = false } = {}) => {
+  // Fetch colleges from API
+  const fetchColleges = async ({ silent = false } = {}) => {
     try {
       if (!silent) {
         setLoading(true);
       }
-      const response = await api.get('/courses?includeInactive=true');
+      const response = await api.get('/colleges?includeInactive=true');
+      const collegeData = response.data.data || [];
+      setColleges(collegeData);
+      return collegeData;
+    } catch (error) {
+      console.error('Failed to fetch colleges', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch colleges');
+      return [];
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Get courses for selected college (filtered by collegeId)
+  const coursesForSelectedCollege = useMemo(() => {
+    if (!selectedCollegeId) return [];
+    return courses.filter(course => course.collegeId === selectedCollegeId);
+  }, [courses, selectedCollegeId]);
+
+  // College management functions
+  const handleCreateCollege = async (event) => {
+    event.preventDefault();
+    if (!newCollege.name.trim()) {
+      toast.error('College name is required');
+      return;
+    }
+
+    try {
+      setCreatingCollege(true);
+      const response = await api.post('/colleges', {
+        name: newCollege.name.trim(),
+        code: newCollege.code?.trim() || null,
+        isActive: newCollege.isActive !== undefined ? newCollege.isActive : true
+      });
+      
+      const createdCollege = response.data.data;
+      toast.success('College created successfully');
+      setNewCollege({ name: '', code: '', isActive: true });
+      await fetchColleges({ silent: true });
+      setSelectedCollegeId(createdCollege.id);
+    } catch (error) {
+      console.error('Failed to create college', error);
+      const errorMessage = error.response?.data?.message || 'Failed to create college';
+      if (errorMessage.includes('already exists')) {
+        toast.error('College with this name or code already exists');
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setCreatingCollege(false);
+    }
+  };
+
+
+  const cancelEditCollege = (collegeId) => {
+    setEditingCollegeId(null);
+    setCollegeDrafts(prev => {
+      const updated = { ...prev };
+      delete updated[collegeId];
+      return updated;
+    });
+  };
+
+  const saveCollegeEdits = async (collegeId) => {
+    const draft = collegeDrafts[collegeId];
+    if (!draft || !draft.name?.trim()) {
+      toast.error('College name is required');
+      return;
+    }
+
+    try {
+      setSavingCollegeId(collegeId);
+      const updates = {};
+      if (draft.name !== undefined) updates.name = draft.name.trim();
+      if (draft.code !== undefined) updates.code = draft.code?.trim() || null;
+      
+      await api.put(`/colleges/${collegeId}`, updates);
+      toast.success('College updated successfully');
+      await fetchColleges({ silent: true });
+      cancelEditCollege(collegeId);
+    } catch (error) {
+      console.error('Failed to update college', error);
+      const errorMessage = error.response?.data?.message || 'Failed to update college';
+      if (errorMessage.includes('already exists')) {
+        toast.error('College with this name or code already exists');
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setSavingCollegeId(null);
+    }
+  };
+
+  const toggleCollegeActive = async (college) => {
+    try {
+      setSavingCollegeId(college.id);
+      await api.put(`/colleges/${college.id}`, {
+        isActive: !college.isActive
+      });
+      toast.success(`College ${!college.isActive ? 'activated' : 'deactivated'}`);
+      await fetchColleges({ silent: true });
+    } catch (error) {
+      console.error('Failed to toggle college status', error);
+      toast.error(error.response?.data?.message || 'Failed to update college status');
+    } finally {
+      setSavingCollegeId(null);
+    }
+  };
+
+  const handleDeleteCollege = (college) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'college',
+      item: college,
+      onConfirm: async () => {
+        try {
+          setSavingCollegeId(college.id);
+          const response = await api.delete(`/colleges/${college.id}?cascade=true`);
+          const deletedCount = response.data.deletedStudents || 0;
+          toast.success(`College deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
+          await fetchColleges({ silent: true });
+          if (selectedCollegeId === college.id) {
+            setSelectedCollegeId(null);
+            setSelectedCourseId(null);
+          }
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+        } catch (error) {
+          console.error('Failed to delete college', error);
+          toast.error(error.response?.data?.message || 'Failed to delete college');
+        } finally {
+          setSavingCollegeId(null);
+        }
+      }
+    });
+  };
+
+  const updateCollegeDraft = (collegeId, field, value) => {
+    setCollegeDrafts(prev => ({
+      ...prev,
+      [collegeId]: {
+        ...(prev[collegeId] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const handleEditCollege = (college) => {
+    setEditingCollegeId(college.id);
+    setCollegeDrafts(prev => ({
+      ...prev,
+      [college.id]: {
+        name: college.name,
+        code: college.code || ''
+      }
+    }));
+  };
+
+  const fetchCourses = async ({ silent = false, collegeId = null } = {}) => {
+    try {
+      if (!silent) {
+        setLoading(true);
+      }
+      const params = { includeInactive: true };
+      if (collegeId) {
+        params.collegeId = collegeId;
+      }
+      const response = await api.get('/courses', { params });
       const courseData = response.data.data || [];
       setCourses(courseData);
       return courseData;
@@ -368,26 +554,53 @@ const Settings = () => {
   };
 
   useEffect(() => {
-    fetchCourses();
+    const initializeData = async () => {
+      await fetchColleges();
+      await fetchCourses();
+    };
+    initializeData();
   }, []);
 
   useEffect(() => {
-    if (courses.length === 0) {
+    // Auto-select first college if none selected
+    if (colleges.length > 0 && !selectedCollegeId) {
+      setSelectedCollegeId(colleges[0].id);
+    }
+  }, [colleges, selectedCollegeId]);
+
+  useEffect(() => {
+    // Fetch courses when college selection changes
+    if (selectedCollegeId) {
+      fetchCourses({ collegeId: selectedCollegeId });
+    } else {
+      fetchCourses();
+    }
+  }, [selectedCollegeId]);
+
+  useEffect(() => {
+    if (coursesForSelectedCollege.length === 0) {
       setSelectedCourseId(null);
       return;
     }
 
-    const hasSelected = courses.some((course) => course.id === selectedCourseId);
+    const hasSelected = coursesForSelectedCollege.some((course) => course.id === selectedCourseId);
     if (!hasSelected) {
-      const firstCourseId = courses[0].id;
-      setSelectedCourseId(firstCourseId);
-      loadBranches(firstCourseId);
+      const firstCourseId = coursesForSelectedCollege[0]?.id;
+      if (firstCourseId) {
+        setSelectedCourseId(firstCourseId);
+        loadBranches(firstCourseId);
+      }
     }
-  }, [courses, selectedCourseId]);
+  }, [coursesForSelectedCollege, selectedCourseId]);
 
   const selectedCourse = useMemo(
-    () => courses.find((course) => course.id === selectedCourseId) || null,
-    [courses, selectedCourseId]
+    () => coursesForSelectedCollege.find((course) => course.id === selectedCourseId) || null,
+    [coursesForSelectedCollege, selectedCourseId]
+  );
+
+  const selectedCollege = useMemo(
+    () => colleges.find((college) => college.id === selectedCollegeId) || null,
+    [colleges, selectedCollegeId]
   );
 
   useEffect(() => {
@@ -412,6 +625,11 @@ const Settings = () => {
   const handleCreateCourse = async (event) => {
     event.preventDefault();
 
+    if (!selectedCollegeId) {
+      toast.error('Please select a college first');
+      return;
+    }
+
     if (!newCourse.name.trim()) {
       toast.error('Course name is required');
       return;
@@ -431,6 +649,7 @@ const Settings = () => {
       setCreatingCourse(true);
       const response = await api.post('/courses', {
         name: newCourse.name.trim(),
+        collegeId: selectedCollegeId,
         totalYears: Number(newCourse.totalYears),
         semestersPerYear: Number(newCourse.semestersPerYear),
         isActive: newCourse.isActive
@@ -438,7 +657,7 @@ const Settings = () => {
       toast.success('Course created successfully');
       resetNewCourse();
       const createdCourse = response.data?.data;
-      const updatedCourses = await fetchCourses({ silent: true });
+      const updatedCourses = await fetchCourses({ silent: true, collegeId: selectedCollegeId });
       const nextSelectedId = createdCourse?.id || updatedCourses[0]?.id || null;
       if (nextSelectedId) {
         setSelectedCourseId(nextSelectedId);
@@ -446,7 +665,12 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('Failed to create course', error);
-      toast.error(error.response?.data?.message || 'Failed to create course');
+      const errorMessage = error.response?.data?.message || 'Failed to create course';
+      if (errorMessage.includes('College not found')) {
+        toast.error('Selected college not found. Please refresh and try again.');
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setCreatingCourse(false);
     }
@@ -469,7 +693,8 @@ const Settings = () => {
   };
 
   const handleRefresh = async () => {
-    const updatedCourses = await fetchCourses({ silent: true });
+    await fetchColleges({ silent: true });
+    const updatedCourses = await fetchCourses({ silent: true, collegeId: selectedCollegeId });
     if (selectedCourseId && updatedCourses.some((course) => course.id === selectedCourseId)) {
       await loadBranches(selectedCourseId);
     }
@@ -494,6 +719,37 @@ const Settings = () => {
     }
   };
 
+  const handleDeleteCourse = (course) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'course',
+      item: course,
+      onConfirm: async () => {
+        try {
+          setSavingCourseId(course.id);
+          const response = await api.delete(`/courses/${course.id}?cascade=true`);
+          const deletedCount = response.data.deletedStudents || 0;
+          toast.success(`Course deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
+          
+          // Clear selection if deleted course was selected
+          if (selectedCourseId === course.id) {
+            setSelectedCourseId(null);
+            setEditingCourseId(null);
+          }
+          
+          await fetchCourses({ silent: true });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+        } catch (error) {
+          console.error('Failed to delete course', error);
+          const errorMessage = error.response?.data?.message || 'Failed to delete course';
+          toast.error(errorMessage);
+        } finally {
+          setSavingCourseId(null);
+        }
+      }
+    });
+  };
+
   const updateCourseDraft = (courseId, field, value) => {
     setCourseDrafts((prev) => ({
       ...prev,
@@ -504,12 +760,22 @@ const Settings = () => {
     }));
   };
 
+  const handleSelectCollege = async (collegeId) => {
+    setSelectedCollegeId(collegeId);
+    setSelectedCourseId(null);
+    setEditingCourseId(null);
+    setEditingBranch(null);
+    // Fetch courses for the selected college
+    await fetchCourses({ silent: true, collegeId });
+  };
+
   const handleEditCourse = (course) => {
     setEditingCourseId(course.id);
     setCourseDrafts((prev) => ({
       ...prev,
       [course.id]: {
         name: course.name,
+        collegeId: course.collegeId,
         totalYears: course.totalYears,
         semestersPerYear: course.semestersPerYear
       }
@@ -549,18 +815,30 @@ const Settings = () => {
 
     try {
       setSavingCourseId(courseId);
-      await api.put(`/courses/${courseId}`, {
+      const updates = {
         name: draft.name.trim(),
         totalYears: Number(draft.totalYears),
         semestersPerYear: Number(draft.semestersPerYear)
-      });
+      };
+      
+      // Include collegeId if it was changed
+      if (draft.collegeId !== undefined) {
+        updates.collegeId = draft.collegeId;
+      }
+      
+      await api.put(`/courses/${courseId}`, updates);
       toast.success('Course updated successfully');
-      await fetchCourses({ silent: true });
+      await fetchCourses({ silent: true, collegeId: selectedCollegeId });
       await loadBranches(courseId);
       cancelEditCourse(courseId);
     } catch (error) {
       console.error('Failed to update course', error);
-      toast.error(error.response?.data?.message || 'Failed to update course');
+      const errorMessage = error.response?.data?.message || 'Failed to update course';
+      if (errorMessage.includes('College not found')) {
+        toast.error('Selected college not found. Please refresh and try again.');
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setSavingCourseId(null);
     }
@@ -679,36 +957,38 @@ const Settings = () => {
     }
   };
 
-  const deleteBranch = async (courseId, branch) => {
-    const confirmed = window.confirm(`Delete branch "${branch.name}"? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setSavingBranchId(branch.id);
-      await api.delete(`/courses/${courseId}/branches/${branch.id}`, {
-        params: { hard: true }
-      });
-      toast.success('Branch deleted successfully');
-      cancelEditBranch();
-      await loadBranches(courseId);
-      await fetchCourses({ silent: true });
-    } catch (error) {
-      console.error('Failed to delete branch', error);
-      toast.error(error.response?.data?.message || 'Failed to delete branch');
-    } finally {
-      setSavingBranchId(null);
-    }
+  const handleDeleteBranch = (courseId, branch) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'branch',
+      item: branch,
+      onConfirm: async () => {
+        try {
+          setSavingBranchId(branch.id);
+          const response = await api.delete(`/courses/${courseId}/branches/${branch.id}?cascade=true`);
+          const deletedCount = response.data.deletedStudents || 0;
+          toast.success(`Branch deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
+          cancelEditBranch();
+          await loadBranches(courseId);
+          await fetchCourses({ silent: true });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+        } catch (error) {
+          console.error('Failed to delete branch', error);
+          toast.error(error.response?.data?.message || 'Failed to delete branch');
+        } finally {
+          setSavingBranchId(null);
+        }
+      }
+    });
   };
 
   const branchesForSelectedCourse = selectedCourse ? courseBranches[selectedCourse.id] || [] : [];
 
   const courseOptionsSummary = useMemo(() => {
-    const courseCount = courses.filter((course) => course.isActive).length;
-    const branchCount = courses.reduce(
+    const courseCount = coursesForSelectedCollege.filter((course) => course.isActive).length;
+    const branchCount = coursesForSelectedCollege.reduce(
       (acc, course) =>
-        acc + (course.branches || []).filter((branch) => branch.isActive).length,
+        acc + (courseBranches[course.id] || []).filter((branch) => branch.isActive).length,
       0
     );
 
@@ -718,7 +998,7 @@ const Settings = () => {
       defaultYears: 4,
       defaultSemesters: 2
     };
-  }, [courses]);
+  }, [coursesForSelectedCollege, courseBranches]);
 
   if (loading) {
     return (
@@ -738,7 +1018,7 @@ const Settings = () => {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
           <p className="text-sm text-gray-600">
-            Manage courses, branches, and academic calendar.
+            Manage colleges, courses, branches, and academic calendar.
           </p>
         </div>
         <button
@@ -767,9 +1047,9 @@ const Settings = () => {
               <BookOpen size={20} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Campuses and Courses</h2>
+              <h2 className="text-base font-semibold text-gray-900">Colleges and Courses</h2>
               <p className="text-sm text-gray-600 mt-0.5">
-                Manage courses, branches, and academic configurations
+                Manage colleges, courses, branches, and academic configurations
               </p>
             </div>
           </div>
@@ -804,17 +1084,96 @@ const Settings = () => {
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:gap-4">
+            <StatCard icon={Landmark} title="Colleges" value={colleges.filter(c => c.isActive).length} />
             <StatCard icon={BookOpen} title="Active Courses" value={courseOptionsSummary.courseCount} />
             <StatCard icon={Layers} title="Active Branches" value={courseOptionsSummary.branchCount} />
-            <StatCard icon={Landmark} title="Forms Using Config" value="All" />
           </div>
 
-          {/* Courses Section */}
+          {/* Colleges Section */}
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
-          <Plus size={16} />
-          Add course
-        </h2>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <Landmark size={16} />
+              Colleges
+            </h2>
+            <form onSubmit={handleCreateCollege} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
+              <TextField
+                label="College Name"
+                value={newCollege.name}
+                onChange={(value) => setNewCollege((prev) => ({ ...prev, name: value }))}
+                placeholder="e.g., Pydah College of Engineering"
+                required
+                className="sm:col-span-3"
+              />
+              <TextField
+                label="Code (Optional)"
+                value={newCollege.code || ''}
+                onChange={(value) => setNewCollege((prev) => ({ ...prev, code: value }))}
+                placeholder="e.g., PCE"
+                className="sm:col-span-1"
+              />
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={creatingCollege}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingCollege ? (
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                  ) : (
+                    <Plus size={16} />
+                  )}
+                  Add College
+                </button>
+              </div>
+            </form>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {colleges.length === 0 ? (
+                <div className="col-span-full rounded-lg border border-gray-200 bg-white p-8 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
+                    <Landmark size={24} className="text-gray-500" />
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-2">No colleges yet</h3>
+                  <p className="text-sm text-gray-600">
+                    Add your first college above to organize courses and branches.
+                  </p>
+                </div>
+              ) : (
+                colleges.map((college) => (
+                  <CollegeCard
+                    key={college.id}
+                    college={college}
+                    isSelected={selectedCollegeId === college.id}
+                    onSelect={() => handleSelectCollege(college.id)}
+                    onEdit={() => handleEditCollege(college)}
+                    onDelete={() => handleDeleteCollege(college)}
+                    onToggleActive={() => toggleCollegeActive(college)}
+                    isEditing={editingCollegeId === college.id}
+                    isSaving={savingCollegeId === college.id}
+                    draft={collegeDrafts[college.id]}
+                    onUpdateDraft={(field, value) => updateCollegeDraft(college.id, field, value)}
+                    onSave={() => saveCollegeEdits(college.id)}
+                    onCancel={() => cancelEditCollege(college.id)}
+                    coursesCount={courses.filter(course => course.collegeId === college.id).length}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Courses Section - Only show when a college is selected */}
+          {selectedCollege && (
+            <>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <Plus size={16} />
+            Add course
+          </h2>
+          <span className="text-xs text-gray-500">
+            For: <span className="font-medium text-gray-700">{selectedCollege.name}</span>
+          </span>
+        </div>
         <form onSubmit={handleCreateCourse} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <TextField
             label="Name"
@@ -859,10 +1218,20 @@ const Settings = () => {
 
       <div className="grid gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[300px,1fr] 2xl:grid-cols-[320px,1fr]">
         <div className="space-y-3">
-          {courses.length === 0 ? (
+          {!selectedCollege ? (
+            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
+                <Landmark size={24} className="text-gray-500" />
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Select a College</h3>
+              <p className="text-sm text-gray-600">
+                Select a college from above to view and manage its courses.
+              </p>
+            </div>
+          ) : coursesForSelectedCollege.length === 0 ? (
             <EmptyState />
           ) : (
-            courses.map((course) => (
+            coursesForSelectedCollege.map((course) => (
               <CourseCard
                 key={course.id}
                 course={course}
@@ -915,13 +1284,23 @@ const Settings = () => {
                       Cancel
                     </button>
                   ) : (
-                    <button
-                      onClick={() => handleEditCourse(selectedCourse)}
-                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                      <Pencil size={16} />
-                      Edit
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleEditCourse(selectedCourse)}
+                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                      >
+                        <Pencil size={16} />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCourse(selectedCourse)}
+                        disabled={savingCourseId === selectedCourse.id}
+                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -934,6 +1313,21 @@ const Settings = () => {
                     onChange={(value) => updateCourseDraft(selectedCourse.id, 'name', value)}
                     required
                   />
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-gray-700">College</span>
+                    <select
+                      value={courseDrafts[selectedCourse.id]?.collegeId ?? selectedCourse.collegeId ?? ''}
+                      onChange={(e) => updateCourseDraft(selectedCourse.id, 'collegeId', parseInt(e.target.value, 10))}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+                    >
+                      <option value="">Select a college</option>
+                      {colleges.map((college) => (
+                        <option key={college.id} value={college.id}>
+                          {college.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <NumberField
                     label="Years"
                     value={courseDrafts[selectedCourse.id]?.totalYears ?? selectedCourse.totalYears}
@@ -1107,7 +1501,7 @@ const Settings = () => {
                                     Edit
                                   </button>
                                   <button
-                                    onClick={() => deleteBranch(selectedCourse.id, branch)}
+                                    onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
                                     disabled={savingBranchId === branch.id}
                                     className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
@@ -1182,7 +1576,9 @@ const Settings = () => {
           )}
         </div>
       </div>
-      </>
+            </>
+          )}
+        </>
       )}
 
       {activeSection === 'calendar' && (
@@ -1528,6 +1924,15 @@ const Settings = () => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null })}
+        onConfirm={deleteModal.onConfirm || (() => {})}
+        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : 'Branch'}`}
+        itemName={deleteModal.item?.name}
+        itemType={deleteModal.type}
+      />
     </div>
   );
 };
@@ -1584,6 +1989,124 @@ const StatusBadge = ({ isActive }) => (
     {isActive ? 'Active' : 'Inactive'}
   </span>
 );
+
+const CollegeCard = ({ 
+  college, 
+  isSelected, 
+  onSelect, 
+  onEdit, 
+  onDelete, 
+  onToggleActive,
+  isEditing,
+  isSaving,
+  draft,
+  onUpdateDraft,
+  onSave,
+  onCancel,
+  coursesCount
+}) => {
+  return (
+    <div
+      className={`rounded-lg border-2 px-4 py-3 transition-all ${
+        isSelected
+          ? 'border-blue-500 bg-blue-50 shadow-sm'
+          : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+      }`}
+    >
+      {isEditing ? (
+        <div className="space-y-3">
+          <input
+            type="text"
+            value={draft?.name || college.name}
+            onChange={(e) => onUpdateDraft('name', e.target.value)}
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+            placeholder="College name"
+          />
+          <input
+            type="text"
+            value={draft?.code || college.code || ''}
+            onChange={(e) => onUpdateDraft('code', e.target.value)}
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+            placeholder="College code (optional)"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={onSave}
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Save
+            </button>
+            <button
+              onClick={onCancel}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={onSelect}
+              className="flex-1 text-left"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900">{college.name}</span>
+                <StatusBadge isActive={college.isActive} />
+              </div>
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-gray-500">{coursesCount || 0} courses</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={onSelect}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <BookOpen size={14} />
+              View Courses
+            </button>
+            <button
+              onClick={onEdit}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+            <button
+              onClick={onToggleActive}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              {college.isActive ? (
+                <>
+                  <ToggleRight size={14} className="text-green-600" />
+                  Active
+                </>
+              ) : (
+                <>
+                  <ToggleLeft size={14} className="text-gray-500" />
+                  Activate
+                </>
+              )}
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const CourseCard = ({ course, isSelected, onSelect }) => {
   const activeBranches = (course.branches || []).filter((branch) => branch.isActive).length;

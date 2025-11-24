@@ -34,8 +34,11 @@ const Students = () => {
   const [editData, setEditData] = useState({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({});
+  const [colleges, setColleges] = useState([]);
+  const [collegesLoading, setCollegesLoading] = useState(false);
   const [quickFilterOptions, setQuickFilterOptions] = useState({
     batches: [],
+    colleges: [],
     courses: [],
     branches: [],
     years: [],
@@ -89,6 +92,7 @@ const Students = () => {
     if (filters.year) filterParams.year = filters.year;
     if (filters.semester) filterParams.semester = filters.semester;
     if (filters.batch) filterParams.batch = filters.batch;
+    if (filters.college) filterParams.college = filters.college;
     if (filters.course) filterParams.course = filters.course;
     if (filters.branch) filterParams.branch = filters.branch;
 
@@ -287,18 +291,38 @@ const Students = () => {
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [students]);
 
+  // Fetch colleges on component mount
+  const fetchColleges = async () => {
+    try {
+      setCollegesLoading(true);
+      const response = await api.get('/colleges');
+      if (response.data?.success) {
+        setColleges(response.data.data || []);
+      } else {
+        throw new Error('Failed to fetch colleges');
+      }
+    } catch (error) {
+      console.error('Failed to fetch colleges:', error);
+      toast.error(error.response?.data?.message || 'Failed to load colleges');
+    } finally {
+      setCollegesLoading(false);
+    }
+  };
+
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
+    fetchColleges();
     fetchQuickFilterOptions(filters);
     fetchDropdownFilterOptions(filters);
   }, []);
 
   // Refetch filter options when filters change (for cascading filters)
   // Use individual filter values to prevent unnecessary refetches
-  const prevFiltersRef = useRef({ course: '', branch: '', batch: '', year: '', semester: '' });
+  const prevFiltersRef = useRef({ college: '', course: '', branch: '', batch: '', year: '', semester: '' });
   
   useEffect(() => {
     const currentFilters = {
+      college: filters.college || '',
       course: filters.course || '',
       branch: filters.branch || '',
       batch: filters.batch || '',
@@ -308,6 +332,7 @@ const Students = () => {
     
     // Only refetch if filter values actually changed
     const filtersChanged = 
+      currentFilters.college !== prevFiltersRef.current.college ||
       currentFilters.course !== prevFiltersRef.current.course ||
       currentFilters.branch !== prevFiltersRef.current.branch ||
       currentFilters.batch !== prevFiltersRef.current.batch ||
@@ -319,7 +344,7 @@ const Students = () => {
       fetchQuickFilterOptions(filters);
       fetchDropdownFilterOptions(filters);
     }
-  }, [filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
+  }, [filters.college, filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
 
   // Remove auto-search - only search on button click
   // useEffect removed - search will only trigger on button click
@@ -341,7 +366,9 @@ const Students = () => {
   const fetchQuickFilterOptions = async (currentFilters = {}) => {
     try {
       // Build query params from current filters
+      // IMPORTANT: Add college first to ensure proper filtering hierarchy
       const params = new URLSearchParams();
+      if (currentFilters.college) params.append('college', currentFilters.college);
       if (currentFilters.course) params.append('course', currentFilters.course);
       if (currentFilters.branch) params.append('branch', currentFilters.branch);
       if (currentFilters.batch) params.append('batch', currentFilters.batch);
@@ -355,6 +382,7 @@ const Students = () => {
         const data = response.data.data || {};
         setQuickFilterOptions({
           batches: data.batches || [],
+          colleges: data.colleges || [],
           courses: data.courses || [],
           branches: data.branches || [],
           years: data.years || [],
@@ -363,6 +391,7 @@ const Students = () => {
       }
     } catch (error) {
       console.warn('Failed to fetch quick filter options:', error);
+      toast.error('Failed to load filter options');
     }
   };
 
@@ -578,7 +607,11 @@ const Students = () => {
       }
       
       // Clear dependent filters when parent filter changes
-      if (field === 'course') {
+      if (field === 'college') {
+        // If college changes (or is cleared), clear course and branch to avoid invalid selections
+        delete newFilters.course;
+        delete newFilters.branch;
+      } else if (field === 'course') {
         // If course changes (or is cleared), clear branch to avoid invalid selections
         delete newFilters.branch;
       }
@@ -1107,6 +1140,20 @@ const Students = () => {
           <div className="px-4 py-4 border-t border-gray-200">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">College</label>
+                <select
+                  value={filters.college || ''}
+                  onChange={(e) => handleFilterChange('college', e.target.value)}
+                  disabled={collegesLoading}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">All</option>
+                  {colleges.filter(c => c.isActive !== false).map((college) => (
+                    <option key={college.id} value={college.name}>{college.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-600 mb-1">Batch</label>
                 <select
                   value={filters.batch || ''}
@@ -1321,6 +1368,9 @@ const Students = () => {
                     <div className="font-semibold whitespace-nowrap">Batch</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">College</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Course</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
@@ -1414,6 +1464,7 @@ const Students = () => {
                       </td>
                       <td className="py-2 px-1.5 text-xs font-medium text-gray-900">{student.admission_number || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.batch || '-'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.college || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
@@ -1733,6 +1784,29 @@ const Students = () => {
                     ) : (
                       <p className="text-sm text-gray-900 font-medium">
                         {editData.batch || editData.Batch || '-'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                    <label className="block text-xs font-semibold text-purple-600 uppercase tracking-wide mb-2">
+                      College
+                    </label>
+                    {editMode ? (
+                      <select
+                        value={editData.college || editData.College || selectedStudent?.college || ''}
+                        onChange={(e) => updateEditField('college', e.target.value)}
+                        disabled={collegesLoading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select College</option>
+                        {colleges.filter(c => c.isActive !== false).map((college) => (
+                          <option key={college.id} value={college.name}>{college.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-900 font-medium">
+                        {editData.college || editData.College || selectedStudent?.college || '-'}
                       </p>
                     )}
                   </div>
