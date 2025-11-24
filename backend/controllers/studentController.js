@@ -1897,6 +1897,7 @@ exports.getAllStudents = async (req, res) => {
     });
 
     const totalCount = countResult?.[0]?.total || 0;
+    const totalPages = fetchAll ? 1 : (pageSize > 0 ? Math.ceil(totalCount / pageSize) : 1);
 
     const responsePayload = {
       success: true,
@@ -1904,7 +1905,9 @@ exports.getAllStudents = async (req, res) => {
       pagination: {
         total: totalCount,
         limit: fetchAll ? null : pageSize,
-        offset: fetchAll ? 0 : pageOffset
+        offset: fetchAll ? 0 : pageOffset,
+        totalPages: totalPages,
+        currentPage: fetchAll ? 1 : Math.floor(pageOffset / pageSize) + 1
       }
     };
 

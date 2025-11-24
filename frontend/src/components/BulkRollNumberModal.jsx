@@ -1,33 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
+import { useAllStudents } from '../hooks/useStudents';
 
 const BulkRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
-  const [students, setStudents] = useState([]);
-  const [loadingStudents, setLoadingStudents] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchStudents();
-    }
-  }, [isOpen]);
-
-  const fetchStudents = async () => {
-    setLoadingStudents(true);
-    try {
-      const response = await api.get('/students?limit=1000');
-      setStudents(response.data.data);
-    } catch (error) {
-      console.error('Failed to fetch students');
-    } finally {
-      setLoadingStudents(false);
-    }
-  };
+  // Use React Query to fetch students
+  const { data: students = [], isLoading: loadingStudents } = useAllStudents({
+    filters: {},
+    enabled: isOpen // Only fetch when modal is open
+  });
 
   if (!isOpen) return null;
 

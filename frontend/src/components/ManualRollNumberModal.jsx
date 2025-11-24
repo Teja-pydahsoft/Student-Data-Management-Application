@@ -1,50 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Save, AlertCircle, CheckCircle, Search } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
+import { useAllStudents } from '../hooks/useStudents';
 
 const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
-  const [students, setStudents] = useState([]);
-  const [filteredStudents, setFilteredStudents] = useState([]);
-  const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [rollNumbers, setRollNumbers] = useState({});
   const [showOnlyPending, setShowOnlyPending] = useState(true);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchStudents();
-    }
-  }, [isOpen]);
+  // Use React Query to fetch students
+  const { data: studentsData = [], isLoading: loadingStudents, refetch } = useAllStudents({
+    filters: {},
+    enabled: isOpen // Only fetch when modal is open
+  });
 
-  useEffect(() => {
-    filterStudents();
-  }, [students, searchTerm, showOnlyPending]);
+  const students = studentsData;
 
-  const fetchStudents = async () => {
-    setLoadingStudents(true);
-    try {
-      const response = await api.get('/students?limit=1000');
-      const studentsData = response.data.data;
-      setStudents(studentsData);
-      
-      // Initialize roll numbers state with existing values
+  // Initialize roll numbers when students data changes
+  useEffect(() => {
+    if (students.length > 0) {
       const initialRollNumbers = {};
-      studentsData.forEach(student => {
+      students.forEach(student => {
         initialRollNumbers[student.admission_number] = student.pin_no || '';
       });
-      setRollNumbers(initialRollNumbers);
-    } catch (error) {
-      toast.error('Failed to fetch students');
-      console.error(error);
-    } finally {
-      setLoadingStudents(false);
+      setRollNumbers(prev => {
+        // Merge with existing to preserve user edits
+        return { ...initialRollNumbers, ...prev };
+      });
     }
-  };
+  }, [students]);
 
-  const filterStudents = () => {
+  // Memoize filtered students
+  const filteredStudents = useMemo(() => {
     let filtered = [...students];
 
     // Filter by pending status
@@ -70,8 +60,9 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
       });
     }
 
-    setFilteredStudents(filtered);
-  };
+    return filtered;
+  }, [students, searchTerm, showOnlyPending]);
+
 
   const handleRollNumberChange = (admissionNumber, value) => {
     setRollNumbers(prev => ({
@@ -129,7 +120,7 @@ const ManualRollNumberModal = ({ isOpen, onClose, onUpdateComplete }) => {
         if (onUpdateComplete) {
           onUpdateComplete();
         }
-        fetchStudents(); // Refresh the list
+        refetch(); // Refresh the list using React Query
       }
 
       if (failedCount > 0) {

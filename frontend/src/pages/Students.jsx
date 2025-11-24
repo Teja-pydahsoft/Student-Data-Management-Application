@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
   Edit,
@@ -23,12 +23,10 @@ import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
 import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
+import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
 
 const Students = () => {
   const location = useLocation();
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [initialLoad, setInitialLoad] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -62,20 +60,83 @@ const Students = () => {
   const [forms, setForms] = useState([]);
   const [loadingForms, setLoadingForms] = useState(false);
   const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [totalStudents, setTotalStudents] = useState(0);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const lastQueryRef = useRef({ page: 1, limit: 25, filters: {}, search: '' });
   const skipFilterFetchRef = useRef(false);
   const filtersRef = useRef(filters);
   const searchTermRef = useRef(searchTerm);
   const pageSizeRef = useRef(pageSize);
   const pageSizeOptions = [10, 25, 50, 100];
 
+  // React Query hooks
+  const updateStudentMutation = useUpdateStudent();
+  const deleteStudentMutation = useDeleteStudent();
+  const bulkDeleteMutation = useBulkDeleteStudents();
+  const invalidateStudents = useInvalidateStudents();
+
+  // Memoize filters for React Query
+  const memoizedFilters = useMemo(() => {
+    const filterParams = {};
+    
+    // Standard filters
+    if (filters.dateFrom) filterParams.dateFrom = filters.dateFrom;
+    if (filters.dateTo) filterParams.dateTo = filters.dateTo;
+    if (filters.pinNumberStatus) filterParams.pinNumberStatus = filters.pinNumberStatus;
+    if (filters.year) filterParams.year = filters.year;
+    if (filters.semester) filterParams.semester = filters.semester;
+    if (filters.batch) filterParams.batch = filters.batch;
+    if (filters.course) filterParams.course = filters.course;
+    if (filters.branch) filterParams.branch = filters.branch;
+
+    // All student database fields
+    const studentFields = [
+      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status', 
+      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2', 
+      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
+      'student_address', 'city_village', 'mandal_name', 'district', 
+      'previous_college', 'certificates_status', 'remarks', 'created_at'
+    ];
+
+    studentFields.forEach(field => {
+      if (filters[field]) {
+        filterParams[field] = filters[field];
+      }
+    });
+
+    // Dynamic field filters (for fields in student_data JSON)
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key.startsWith('field_') && value) {
+        filterParams[key] = value;
+      }
+    });
+
+    return filterParams;
+  }, [filters]);
+
+  // Use React Query to fetch students
+  const { 
+    data: studentsData, 
+    isLoading, 
+    isFetching,
+    isError,
+    error 
+  } = useStudents({
+    page: currentPage,
+    pageSize: pageSize,
+    filters: memoizedFilters,
+    search: searchTerm,
+    enabled: true
+  });
+
+  const students = studentsData?.students || [];
+  const totalStudents = studentsData?.pagination?.total || 0;
+  const totalPages = studentsData?.pagination?.totalPages || 
+    (totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / (pageSize || 1))) : 1);
+  const loading = isLoading;
+  const initialLoad = isLoading && students.length === 0;
+
   const safePageSize = pageSize || 1;
-  const totalPages = totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / safePageSize)) : 1;
   const showingFromRaw = totalStudents === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
   const showingFrom = totalStudents === 0 ? 0 : Math.min(showingFromRaw, totalStudents);
   const showingTo = totalStudents === 0 ? 0 : Math.min(totalStudents, showingFrom + Math.max(students.length - 1, 0));
@@ -147,23 +208,9 @@ const Students = () => {
   useEffect(() => {
     const newStudent = location.state?.newStudent;
     if (newStudent) {
-      // Add the new student to state without fetching
-      setStudents(prev => {
-        const limit = lastQueryRef.current?.limit || pageSizeRef.current || prev.length || 25;
-        const updated = [newStudent, ...prev];
-        if (limit && updated.length > limit) {
-          return updated.slice(0, limit);
-        }
-        return updated;
-      });
-      setTotalStudents(prev => prev + 1);
+      // Invalidate cache to refetch with new student
+      invalidateStudents();
       setCurrentPage(1);
-      lastQueryRef.current = {
-        page: 1,
-        limit: lastQueryRef.current?.limit || pageSizeRef.current || 25,
-        filters: { ...filtersRef.current },
-        search: searchTermRef.current
-      };
       // Fetch completion percentage for the new student
       getStudentCompletionPercentage(newStudent.admission_number).then(percentage => {
         setCompletionPercentages(prev => ({
@@ -173,10 +220,8 @@ const Students = () => {
       });
       // Clear the state to avoid re-adding on re-renders
       window.history.replaceState({}, document.title);
-    } else {
-      fetchStudents({ page: 1 });
     }
-  }, [location.state]);
+  }, [location.state, invalidateStudents]);
 
   // Calculate stats when students are loaded
   useEffect(() => {
@@ -358,123 +403,12 @@ const Students = () => {
     });
   }, [students]);
 
-  const fetchStudents = async ({
-    page = 1,
-    limit,
-    filtersOverride,
-    searchOverride
-  } = {}) => {
-    setLoading(true);
-
-    const resolvedFilters =
-      filtersOverride !== undefined && filtersOverride !== null ? filtersOverride : filtersRef.current || {};
-    const resolvedSearch =
-      searchOverride !== undefined && searchOverride !== null ? searchOverride : searchTermRef.current || '';
-
-    const parsedLimit = parseInt(limit ?? pageSizeRef.current ?? 25, 10);
-    const effectiveLimit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 25 : parsedLimit;
-
-    const filterParams = {};
-
-    // Standard filters
-    if (resolvedFilters.dateFrom) filterParams.filter_dateFrom = resolvedFilters.dateFrom;
-    if (resolvedFilters.dateTo) filterParams.filter_dateTo = resolvedFilters.dateTo;
-    if (resolvedFilters.pinNumberStatus) filterParams.filter_pinNumberStatus = resolvedFilters.pinNumberStatus;
-    if (resolvedFilters.year) filterParams.filter_year = resolvedFilters.year;
-    if (resolvedFilters.semester) filterParams.filter_semester = resolvedFilters.semester;
-    if (resolvedFilters.batch) filterParams.filter_batch = resolvedFilters.batch;
-    if (resolvedFilters.course) filterParams.filter_course = resolvedFilters.course;
-    if (resolvedFilters.branch) filterParams.filter_branch = resolvedFilters.branch;
-
-    // All student database fields
-    const studentFields = [
-      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status', 
-      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2', 
-      'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
-      'student_address', 'city_village', 'mandal_name', 'district', 
-      'previous_college', 'certificates_status', 'remarks', 'created_at'
-    ];
-
-    studentFields.forEach(field => {
-      if (resolvedFilters[field]) {
-        filterParams[`filter_${field}`] = resolvedFilters[field];
-      }
-    });
-
-    // Dynamic field filters (for fields in student_data JSON)
-    Object.entries(resolvedFilters).forEach(([key, value]) => {
-      if (key.startsWith('field_') && value) {
-        const fieldName = key.replace('field_', '');
-        filterParams[`filter_field_${fieldName}`] = value;
-      }
-    });
-
-    const queryParams = new URLSearchParams();
-
-    Object.entries(filterParams).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value);
-      }
-    });
-
-    if (resolvedSearch && resolvedSearch.trim()) {
-      queryParams.append('search', resolvedSearch.trim());
-    }
-
-    queryParams.append('limit', effectiveLimit);
-    queryParams.append('offset', Math.max(0, (page - 1) * effectiveLimit));
-
-    let responseStudents = [];
-    let paginationData = {};
-    let requestFailed = false;
-
-    try {
-      const response = await api.get(`/students?${queryParams.toString()}`);
-      responseStudents = response.data?.data || [];
-      paginationData = response.data?.pagination || {};
-    } catch (error) {
-      requestFailed = true;
+  // Error handling for React Query
+  useEffect(() => {
+    if (isError && error) {
       toast.error(error.response?.data?.message || 'Failed to fetch students');
-    } finally {
-      setLoading(false);
     }
-
-    if (requestFailed) {
-      return;
-    }
-
-    const total = paginationData.total ?? responseStudents.length ?? 0;
-
-    if (page > 1 && responseStudents.length === 0 && total > 0) {
-      setCurrentPage(page - 1);
-      await fetchStudents({
-        page: page - 1,
-        limit: effectiveLimit,
-        filtersOverride: resolvedFilters,
-        searchOverride: resolvedSearch
-      });
-      return;
-    }
-
-    const resolvedPage = total === 0 ? 1 : page;
-
-    setStudents(responseStudents);
-    setTotalStudents(total);
-    setCurrentPage(resolvedPage);
-    setPageSize(effectiveLimit);
-    
-    // Mark initial load as complete after first successful fetch
-    if (initialLoad) {
-      setInitialLoad(false);
-    }
-
-    lastQueryRef.current = {
-      page: resolvedPage,
-      limit: effectiveLimit,
-      filters: JSON.parse(JSON.stringify(resolvedFilters || {})),
-      search: resolvedSearch
-    };
-  };
+  }, [isError, error]);
 
   const fetchForms = async () => {
     if (loadingForms) {
@@ -498,13 +432,11 @@ const Students = () => {
   // Apply server-side filtering
   const applyFilters = () => {
     setCurrentPage(1);
-    fetchStudents({ page: 1 });
   };
 
   // Legacy function for backward compatibility - now uses server-side filtering
   const handleLocalSearch = () => {
     setCurrentPage(1);
-    fetchStudents({ page: 1 });
   };
 
   const handleFilterChange = (field, value) => {
@@ -529,11 +461,10 @@ const Students = () => {
         setFiltersExpanded(true);
       }
       
-      // Update ref immediately for fetchStudents to use
+      // Update ref immediately
       filtersRef.current = newFilters;
-      // Automatically apply filter when changed
+      // Automatically apply filter when changed - React Query will refetch automatically
       setCurrentPage(1);
-      fetchStudents({ page: 1, filtersOverride: newFilters });
       return newFilters;
     });
   };
@@ -544,15 +475,10 @@ const Students = () => {
     setAvailableFields([]);
     setCurrentPage(1);
     skipFilterFetchRef.current = true;
-    fetchStudents({
-      page: 1,
-      filtersOverride: {},
-      searchOverride: ''
-    });
   };
 
   const handlePageChange = (newPage) => {
-    if (loading) {
+    if (isLoading || isFetching) {
       return;
     }
 
@@ -560,13 +486,13 @@ const Students = () => {
       return;
     }
 
-    fetchStudents({ page: newPage });
+    setCurrentPage(newPage);
   };
 
   const handlePageSizeChange = (event) => {
     const newSize = parseInt(event.target.value, 10);
 
-    if (loading) {
+    if (isLoading || isFetching) {
       return;
     }
 
@@ -574,26 +500,12 @@ const Students = () => {
       return;
     }
 
+    setPageSize(newSize);
     setCurrentPage(1);
-    fetchStudents({ page: 1, limit: newSize });
   };
 
-  const refreshStudents = (pageOverride) => {
-    const lastQuery = lastQueryRef.current || {};
-    const pageToFetch = pageOverride || lastQuery.page || currentPage || 1;
-    const limitToUse = lastQuery.limit || pageSizeRef.current || pageSize;
-    const filtersToUse = lastQuery.filters || filtersRef.current || {};
-    const searchToUse =
-      lastQuery.search !== undefined && lastQuery.search !== null
-        ? lastQuery.search
-        : searchTermRef.current || '';
-
-    fetchStudents({
-      page: pageToFetch,
-      limit: limitToUse,
-      filtersOverride: filtersToUse,
-      searchOverride: searchToUse
-    });
+  const refreshStudents = () => {
+    invalidateStudents();
   };
   const handleViewDetails = (student) => {
     setEditMode(false);
@@ -647,12 +559,12 @@ const Students = () => {
         editData.current_semester || editData['Current Semester']
       );
 
-      await api.put(`/students/${selectedStudent.admission_number}`, {
-        studentData: synchronizedData,
+      await updateStudentMutation.mutateAsync({
+        admissionNumber: selectedStudent.admission_number,
+        data: { studentData: synchronizedData }
       });
 
       console.log('Save successful');
-      toast.success('Student data updated successfully');
       setEditMode(false);
       setEditData(synchronizedData);
       setSelectedStudent((prev) =>
@@ -668,22 +580,6 @@ const Students = () => {
           : prev
       );
 
-      // Update local state instead of refetching all data
-      setStudents(prevStudents =>
-        prevStudents.map(student =>
-          student.admission_number === selectedStudent.admission_number
-            ? {
-                ...student,
-                current_year:
-                  synchronizedData.current_year || student.current_year,
-                current_semester:
-                  synchronizedData.current_semester || student.current_semester,
-                student_data: synchronizedData
-              }
-            : student
-        )
-      );
-
       // Update completion percentage for the updated student
       const updatedPercentage = await getStudentCompletionPercentage(selectedStudent.admission_number);
       setCompletionPercentages(prev => ({
@@ -693,7 +589,7 @@ const Students = () => {
 
     } catch (error) {
       console.error('Save failed:', error);
-      toast.error('Failed to update student data');
+      // Error toast is handled by the mutation
     }
   };
 
@@ -725,13 +621,7 @@ const Students = () => {
       return;
     }
     try {
-      await api.delete(`/students/${admissionNumber}`);
-      toast.success('Student deleted successfully');
-
-      // Update local state instead of refetching all data
-      setStudents(prevStudents =>
-        prevStudents.filter(student => student.admission_number !== admissionNumber)
-      );
+      await deleteStudentMutation.mutateAsync(admissionNumber);
 
       // Remove from completion percentages
       setCompletionPercentages(prev => {
@@ -739,7 +629,6 @@ const Students = () => {
         delete updated[admissionNumber];
         return updated;
       });
-      setTotalStudents(prev => Math.max(prev - 1, 0));
 
       setSelectedAdmissionNumbers((prev) => {
         const updated = new Set(prev);
@@ -747,15 +636,15 @@ const Students = () => {
         return updated;
       });
 
-      refreshStudents();
+      // Cache invalidation is handled by the mutation
 
     } catch (error) {
-      toast.error('Failed to delete student');
+      // Error toast is handled by the mutation
     }
   };
 
   const handleBulkDelete = async () => {
-    if (selectedCount === 0 || bulkDeleting) {
+    if (selectedCount === 0 || bulkDeleteMutation.isPending) {
       return;
     }
 
@@ -763,45 +652,24 @@ const Students = () => {
       return;
     }
 
-    setBulkDeleting(true);
     const admissionNumbers = Array.from(selectedAdmissionNumbers);
 
     try {
-      const response = await api.post('/students/bulk-delete', { admissionNumbers });
-      const deletedCount = response.data?.deletedCount || 0;
-      const notFound = response.data?.notFound || [];
-      const deletedAdmissions = Array.isArray(response.data?.deletedAdmissionNumbers)
-        ? response.data.deletedAdmissionNumbers
-        : admissionNumbers.filter((number) => !notFound.includes(number));
-      const deletedSet = new Set(deletedAdmissions);
-
-      if (deletedCount > 0) {
-        toast.success(`Deleted ${deletedCount} student${deletedCount === 1 ? '' : 's'} successfully`);
-      }
-
-      if (notFound.length > 0) {
-        toast.error(`${notFound.length} admission number${notFound.length === 1 ? '' : 's'} not found`);
-      }
-
-      if (deletedCount > 0) {
-        setStudents((prevStudents) =>
-          prevStudents.filter((student) => !deletedSet.has(student.admission_number))
-        );
-        setCompletionPercentages((prev) => {
-          const updated = { ...prev };
-          deletedAdmissions.forEach((number) => {
-            delete updated[number];
-          });
-          return updated;
+      await bulkDeleteMutation.mutateAsync(admissionNumbers);
+      
+      // Remove from completion percentages
+      setCompletionPercentages((prev) => {
+        const updated = { ...prev };
+        admissionNumbers.forEach((number) => {
+          delete updated[number];
         });
-        setSelectedAdmissionNumbers(new Set());
-        setTotalStudents((prev) => Math.max(prev - deletedCount, 0));
-        refreshStudents();
-      }
+        return updated;
+      });
+      setSelectedAdmissionNumbers(new Set());
+      
+      // Cache invalidation is handled by the mutation
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete selected students');
-    } finally {
-      setBulkDeleting(false);
+      // Error toast is handled by the mutation
     }
   };
 
@@ -993,11 +861,11 @@ const Students = () => {
 
           <button
             onClick={handleBulkDelete}
-            disabled={selectedCount === 0 || bulkDeleting}
+            disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={18} />
-            {bulkDeleting ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+            {bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
           </button>
 
           <button
@@ -1288,7 +1156,7 @@ const Students = () => {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
-          {loading && !initialLoad && (
+          {(isFetching && !isLoading) && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 rounded-xl">
               <LoadingAnimation
                 width={24}
@@ -1305,7 +1173,7 @@ const Students = () => {
                     <input
                       type="checkbox"
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded"
-                      disabled={students.length === 0 || bulkDeleting}
+                      disabled={students.length === 0 || bulkDeleteMutation.isPending}
                       checked={isAllSelected}
                       onChange={(e) => toggleSelectAllStudents(e.target.checked)}
                     />
@@ -1378,7 +1246,7 @@ const Students = () => {
                         <input
                           type="checkbox"
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded"
-                          disabled={bulkDeleting}
+                          disabled={bulkDeleteMutation.isPending}
                           checked={selectedAdmissionNumbers.has(student.admission_number)}
                           onChange={() => toggleSelectStudent(student.admission_number)}
                         />
@@ -1457,7 +1325,7 @@ const Students = () => {
                   value={pageSize}
                   onChange={handlePageSizeChange}
                   className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-                  disabled={loading}
+                  disabled={isLoading || isFetching}
                 >
                   {pageSizeOptions.map(option => (
                     <option key={option} value={option}>{option}</option>
@@ -1468,7 +1336,7 @@ const Students = () => {
                 <button
                   type="button"
                   onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={isFirstPage || loading || totalStudents === 0}
+                  disabled={isFirstPage || isLoading || isFetching || totalStudents === 0}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Previous
@@ -1479,7 +1347,7 @@ const Students = () => {
                 <button
                   type="button"
                   onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={isLastPage || loading || totalStudents === 0}
+                  disabled={isLastPage || isLoading || isFetching || totalStudents === 0}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Next

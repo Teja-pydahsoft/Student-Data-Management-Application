@@ -5,17 +5,18 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@tanstack/react-query": "^5.90.10",
     "axios": "^1.5.0",
+    "jspdf": "^2.5.1",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.284.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
-    "recharts": "^2.10.4",
     "react-qr-code": "^2.0.12",
     "react-router-dom": "^6.16.0",
-    "zustand": "^4.4.1",
-    "jspdf": "^2.5.1"
+    "recharts": "^2.10.4",
+    "zustand": "^4.4.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.1.0",

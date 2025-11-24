@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -9,48 +9,33 @@ import {
   ArrowRight,
   Eye,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
+import { useStudentStats } from '../hooks/useStudents';
 
 const Dashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [recentSubmissions, setRecentSubmissions] = useState([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(true);
+  // Use React Query for stats
+  const { data: stats, isLoading: loadingStats } = useStudentStats();
 
-  useEffect(() => {
-    fetchStats();
-    fetchRecentSubmissions();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await api.get('/students/stats');
-      setStats(response.data.data);
-    } catch (error) {
-      toast.error('Failed to fetch dashboard statistics');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRecentSubmissions = async () => {
-    try {
+  // Use React Query for recent submissions
+  const { data: recentSubmissionsData, isLoading: loadingSubmissions } = useQuery({
+    queryKey: ['submissions', 'recent'],
+    queryFn: async () => {
       const response = await api.get('/submissions');
-      // Get the 10 most recent submissions
       const submissions = response.data.data || [];
-      const sortedSubmissions = submissions
+      // Get the 10 most recent submissions
+      return submissions
         .sort((a, b) => new Date(b.created_at || b.submitted_at) - new Date(a.created_at || a.submitted_at))
         .slice(0, 10);
-      setRecentSubmissions(sortedSubmissions);
-    } catch (error) {
-      console.error('Failed to fetch recent submissions:', error);
-    } finally {
-      setLoadingSubmissions(false);
-    }
-  };
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
+
+  const recentSubmissions = recentSubmissionsData || [];
+  const loading = loadingStats;
 
   const statCards = [
     {
@@ -165,7 +150,7 @@ const Dashboard = () => {
           </Link>
         </div>
 
-        {loadingSubmissions ? (
+        {loadingSubmissions || !recentSubmissionsData ? (
           <div className="flex items-center justify-center py-12">
             <LoadingAnimation width={32} height={32} message="Loading submissions..." />
           </div>
