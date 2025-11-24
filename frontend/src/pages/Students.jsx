@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Search,
   Edit,
@@ -75,7 +75,10 @@ const Students = () => {
   const bulkDeleteMutation = useBulkDeleteStudents();
   const invalidateStudents = useInvalidateStudents();
 
-  // Memoize filters for React Query
+  // Memoize filters for React Query - use stable comparison to prevent unnecessary refetches
+  const prevFiltersStringRef = useRef('');
+  const prevFiltersObjectRef = useRef({});
+  
   const memoizedFilters = useMemo(() => {
     const filterParams = {};
     
@@ -111,6 +114,14 @@ const Students = () => {
       }
     });
 
+    // Compare with previous filters to return same reference if unchanged
+    const filtersString = JSON.stringify(filterParams);
+    if (prevFiltersStringRef.current === filtersString) {
+      return prevFiltersObjectRef.current;
+    }
+    
+    prevFiltersStringRef.current = filtersString;
+    prevFiltersObjectRef.current = filterParams;
     return filterParams;
   }, [filters]);
 
@@ -223,10 +234,58 @@ const Students = () => {
     }
   }, [location.state, invalidateStudents]);
 
-  // Calculate stats when students are loaded
+  // Calculate stats when students are loaded - use stable comparison to prevent infinite loops
+  const studentsLengthRef = useRef(0);
+  const studentsIdsRef = useRef('');
+  
   useEffect(() => {
-    calculateOverallStats();
-  }, [students]);
+    const currentIds = students.map(s => s.admission_number).sort().join(',');
+    const currentLength = students.length;
+    
+    // Only recalculate if students actually changed (different IDs or length)
+    if (currentLength !== studentsLengthRef.current || currentIds !== studentsIdsRef.current) {
+      studentsLengthRef.current = currentLength;
+      studentsIdsRef.current = currentIds;
+      
+      // Call calculateOverallStats directly without including it in dependencies
+      (async () => {
+        if (students.length === 0) {
+          setStats({ total: 0, completed: 0, averageCompletion: 0 });
+          return;
+        }
+
+        const totalStudents = students.length;
+        let completedStudents = 0;
+        let totalCompletion = 0;
+
+        // Fetch completion percentages for all students in parallel
+        const promises = students
+          .filter(student => student.admission_number)
+          .map(async (student) => {
+            const percentage = await getStudentCompletionPercentage(student.admission_number);
+            return { percentage, admissionNumber: student.admission_number };
+          });
+
+        const results = await Promise.all(promises);
+
+        results.forEach(result => {
+          totalCompletion += result.percentage;
+          if (result.percentage >= 80) {
+            completedStudents++;
+          }
+        });
+
+        const averageCompletion = totalStudents > 0 ? Math.round(totalCompletion / totalStudents) : 0;
+
+        setStats({
+          total: totalStudents,
+          completed: completedStudents,
+          averageCompletion
+        });
+      })();
+     }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [students]);
 
   // Fetch filter fields when component mounts to ensure proper filter management
   useEffect(() => {
@@ -235,16 +294,48 @@ const Students = () => {
   }, []);
 
   // Refetch filter options when filters change (for cascading filters)
+  // Use individual filter values to prevent unnecessary refetches
+  const prevFiltersRef = useRef({ course: '', branch: '', batch: '', year: '', semester: '' });
+  
   useEffect(() => {
-    fetchQuickFilterOptions(filters);
-    fetchDropdownFilterOptions(filters);
+    const currentFilters = {
+      course: filters.course || '',
+      branch: filters.branch || '',
+      batch: filters.batch || '',
+      year: filters.year || '',
+      semester: filters.semester || ''
+    };
+    
+    // Only refetch if filter values actually changed
+    const filtersChanged = 
+      currentFilters.course !== prevFiltersRef.current.course ||
+      currentFilters.branch !== prevFiltersRef.current.branch ||
+      currentFilters.batch !== prevFiltersRef.current.batch ||
+      currentFilters.year !== prevFiltersRef.current.year ||
+      currentFilters.semester !== prevFiltersRef.current.semester;
+    
+    if (filtersChanged) {
+      prevFiltersRef.current = currentFilters;
+      fetchQuickFilterOptions(filters);
+      fetchDropdownFilterOptions(filters);
+    }
   }, [filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
 
   // Remove auto-search - only search on button click
   // useEffect removed - search will only trigger on button click
 
+  // Only clear available fields when filters/search actually change (not on every render)
+  const prevFiltersSearchRef = useRef({ filters: {}, searchTerm: '' });
+  
   useEffect(() => {
-    setAvailableFields([]);
+    const filtersString = JSON.stringify(filters);
+    const searchChanged = searchTerm !== prevFiltersSearchRef.current.searchTerm;
+    const filtersChanged = filtersString !== JSON.stringify(prevFiltersSearchRef.current.filters);
+    
+    if (searchChanged || filtersChanged) {
+      prevFiltersSearchRef.current = { filters, searchTerm };
+      setAvailableFields([]);
+    }
   }, [searchTerm, filters]);
 
   const fetchQuickFilterOptions = async (currentFilters = {}) => {
@@ -306,7 +397,19 @@ const Students = () => {
   };
 
   // Fetch completion percentages when students are loaded (in parallel)
+  // Use stable comparison to prevent infinite loops
+  const completionPercentagesStudentsRef = useRef('');
+  
   useEffect(() => {
+    const studentIds = students.map(s => s.admission_number).sort().join(',');
+    
+    // Only fetch if student IDs actually changed
+    if (studentIds === completionPercentagesStudentsRef.current) {
+      return;
+    }
+    
+    completionPercentagesStudentsRef.current = studentIds;
+    
     const fetchCompletionPercentages = async () => {
       if (students.length === 0) return;
 
@@ -333,7 +436,19 @@ const Students = () => {
     fetchCompletionPercentages();
   }, [students]);
 
+  // Update selected admission numbers when students change - use stable comparison
+  const selectedStudentsRef = useRef('');
+  
   useEffect(() => {
+    const studentIds = students.map(s => s.admission_number).sort().join(',');
+    
+    // Only update if student IDs actually changed
+    if (studentIds === selectedStudentsRef.current) {
+      return;
+    }
+    
+    selectedStudentsRef.current = studentIds;
+    
     setSelectedAdmissionNumbers((prev) => {
       const updated = new Set();
       students.forEach((student) => {
@@ -345,10 +460,22 @@ const Students = () => {
     });
   }, [students]);
 
+  // Extract available fields from students - use stable comparison to prevent infinite loops
+  const availableFieldsStudentsRef = useRef('');
+  
   useEffect(() => {
     if (students.length === 0) {
       return;
     }
+
+    const studentIds = students.map(s => s.admission_number).sort().join(',');
+    
+    // Only extract fields if student IDs actually changed
+    if (studentIds === availableFieldsStudentsRef.current) {
+      return;
+    }
+    
+    availableFieldsStudentsRef.current = studentIds;
 
     // Extract available fields and their unique values from current students data
     const fieldsMap = {};
@@ -757,7 +884,7 @@ const Students = () => {
   // Calculate overall statistics
   const [stats, setStats] = useState({ total: 0, completed: 0, averageCompletion: 0 });
 
-  const calculateOverallStats = async () => {
+  const calculateOverallStats = useCallback(async () => {
     if (students.length === 0) {
       setStats({ total: 0, completed: 0, averageCompletion: 0 });
       return;
@@ -791,7 +918,7 @@ const Students = () => {
       completed: completedStudents,
       averageCompletion
     });
-  };
+  }, [students]);
 
   // Only show full-page loader on initial load
   if (loading && initialLoad) {

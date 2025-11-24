@@ -86,26 +86,28 @@ const AdminLayout = () => {
       <aside
         className={`
           fixed top-0 left-0 z-40 h-screen bg-white border-r border-gray-200
-          transition-all duration-300 ease-in-out
+          transition-[width,transform] duration-300 ease-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
           ${sidebarCollapsed ? 'w-16' : 'w-64'}
         `}
+        style={{ willChange: 'width, transform' }}
       >
         <div className="flex flex-col h-full">
           {/* Logo and Close Button */}
-          <div className={`border-b border-gray-200 flex items-center ${sidebarCollapsed ? 'justify-center p-4' : 'justify-between p-6'}`}>
-            {!sidebarCollapsed && (
-              <img
-                src="/logo.png"
-                alt="Pydah DB Logo"
-                className="h-12 w-auto max-w-full object-contain"
-                loading="lazy"
-              />
-            )}
+          <div className={`border-b border-gray-200 flex items-center transition-[padding,justify-content] duration-300 ease-out ${sidebarCollapsed ? 'justify-center p-4' : 'justify-between p-6'}`}>
+            <img
+              src="/logo.png"
+              alt="Pydah DB Logo"
+              className={`
+                h-12 w-auto max-w-full object-contain transition-opacity duration-300 ease-out
+                ${sidebarCollapsed ? 'opacity-0 w-0 h-0 overflow-hidden' : 'opacity-100'}
+              `}
+              loading="lazy"
+            />
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 transition-colors flex-shrink-0"
               title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
             >
               <X size={20} />
@@ -113,7 +115,7 @@ const AdminLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className={`flex-1 space-y-1 ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
+          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -134,32 +136,42 @@ const AdminLayout = () => {
                   `}
                   title={sidebarCollapsed ? item.label : ''}
                 >
-                  <Icon size={20} />
-                  {!sidebarCollapsed && <span>{item.label}</span>}
+                  <Icon size={20} className="flex-shrink-0" />
+                  <span 
+                    className={`
+                      transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
+                      ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                    `}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
           </nav>
 
           {/* User Info & Logout */}
-          <div className={`border-t border-gray-200 ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
-            {!sidebarCollapsed && (
-              <div className="flex items-center gap-3 px-4 py-3 mb-2">
-                <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">
-                    {user?.username?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {user?.username}
-                  </p>
-                  <p className="text-xs text-gray-600 truncate">
-                    {user?.email || (user?.role === 'admin' ? 'Administrator' : 'Team Member')}
-                  </p>
-                </div>
+          <div className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
+            <div 
+              className={`
+                flex items-center gap-3 mb-2 transition-opacity duration-300 ease-out overflow-hidden
+                ${sidebarCollapsed ? 'opacity-0 h-0 mb-0' : 'opacity-100 h-auto mb-2'}
+              `}
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-semibold text-sm">
+                  {user?.username?.charAt(0).toUpperCase()}
+                </span>
               </div>
-            )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.username}
+                </p>
+                <p className="text-xs text-gray-600 truncate">
+                  {user?.email || (user?.role === 'admin' ? 'Administrator' : 'Team Member')}
+                </p>
+              </div>
+            </div>
             <button
               onClick={handleLogout}
               className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700 transition-colors duration-200 ${
@@ -167,8 +179,15 @@ const AdminLayout = () => {
               }`}
               title={sidebarCollapsed ? 'Logout' : ''}
             >
-              <LogOut size={20} />
-              {!sidebarCollapsed && <span>Logout</span>}
+              <LogOut size={20} className="flex-shrink-0" />
+              <span 
+                className={`
+                  transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
+                  ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                `}
+              >
+                Logout
+              </span>
             </button>
           </div>
         </div>
@@ -183,7 +202,7 @@ const AdminLayout = () => {
       )}
 
       {/* Main Content */}
-      <main className={`min-h-screen bg-white transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
+      <main className={`min-h-screen bg-white transition-[margin-left] duration-300 ease-out ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
         <div className="p-4 lg:p-0">
           <Outlet />
         </div>
