@@ -44,23 +44,44 @@ const AdminLayout = () => {
 
   const allowedModules = useMemo(() => {
     if (!user) return [];
-    if (user.role === 'admin') {
+    // Super admin and legacy admin have full access
+    if (user.role === 'admin' || user.role === 'super_admin') {
       return Object.keys(MODULE_ROUTE_MAP);
     }
+    // For RBAC users, check permissions
+    if (user.permissions) {
+      const modules = [];
+      Object.keys(MODULE_ROUTE_MAP).forEach(moduleKey => {
+        const permission = user.permissions[moduleKey];
+        if (permission && (permission.read || permission.write)) {
+          modules.push(moduleKey);
+        }
+      });
+      return modules;
+    }
+    // Legacy staff users with modules array
     return Array.isArray(user.modules) ? user.modules : [];
   }, [user]);
 
   const filteredNavItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if (!item.permission) return true;
-      if (user?.role === 'admin') return true;
+      // Super admin and legacy admin have full access
+      if (user?.role === 'admin' || user?.role === 'super_admin') return true;
+      // For RBAC users, check permissions
+      if (user?.permissions) {
+        const permission = user.permissions[item.permission];
+        return permission && (permission.read || permission.write);
+      }
+      // Legacy staff users
       return allowedModules.includes(item.permission);
     });
-  }, [allowedModules, user?.role]);
+  }, [allowedModules, user?.role, user?.permissions]);
 
   useEffect(() => {
     if (!user) return;
-    if (user.role === 'admin') return;
+    // Super admin and legacy admin have full access
+    if (user.role === 'admin' || user.role === 'super_admin') return;
     const currentModuleKey = getModuleKeyForPath(location.pathname);
     if (currentModuleKey && !allowedModules.includes(currentModuleKey)) {
       const firstAllowedRoute =
@@ -165,10 +186,10 @@ const AdminLayout = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.username}
+                  {user?.name || user?.username || 'User'}
                 </p>
                 <p className="text-xs text-gray-600 truncate">
-                  {user?.email || (user?.role === 'admin' ? 'Administrator' : 'Team Member')}
+                  {user?.email || (user?.role === 'admin' || user?.role === 'super_admin' ? 'Administrator' : 'Team Member')}
                 </p>
               </div>
             </div>

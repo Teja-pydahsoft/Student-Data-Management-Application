@@ -22,6 +22,9 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
   const [metadataError, setMetadataError] = useState(null);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [selectedCollegeId, setSelectedCollegeId] = useState('');
+  const [colleges, setColleges] = useState([]);
+  const [collegesLoading, setCollegesLoading] = useState(false);
   const [showAllErrors, setShowAllErrors] = useState(false);
   const [validRecordsPage, setValidRecordsPage] = useState(1);
   const [invalidRecordsPage, setInvalidRecordsPage] = useState(1);
@@ -78,6 +81,27 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
       semesterField
     };
   }, [resolvedFormFields]);
+
+  // Fetch colleges on mount
+  useEffect(() => {
+    const fetchColleges = async () => {
+      try {
+        setCollegesLoading(true);
+        const response = await api.get('/colleges');
+        if (response.data?.success) {
+          setColleges(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch colleges:', error);
+      } finally {
+        setCollegesLoading(false);
+      }
+    };
+    
+    if (isOpen) {
+      fetchColleges();
+    }
+  }, [isOpen]);
 
    useEffect(() => {
      if (forms && forms.length > 0 && !selectedForm) {
@@ -151,7 +175,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
   useEffect(() => {
     setPreviewData(null);
     setUploadResult(null);
-  }, [selectedForm]);
+  }, [selectedForm, selectedCollegeId]);
 
   const courseOptions = useMemo(
     () => (templateMetadata?.courseOptions ? templateMetadata.courseOptions : []),
@@ -274,11 +298,19 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     setPreviewData(null);
     setUploadProgress('Preparing preview...');
 
+    if (!selectedCollegeId) {
+      toast.error('Please select a college before uploading');
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append('file', file);
       if (selectedForm) {
         formData.append('formId', selectedForm);
+      }
+      if (selectedCollegeId) {
+        formData.append('collegeId', selectedCollegeId);
       }
 
       const response = await api.post('/students/bulk-upload/preview', formData, {
@@ -322,12 +354,18 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     setConfirmingUpload(true);
     setUploadResult(null);
 
+    if (!selectedCollegeId) {
+      toast.error('Please select a college before uploading');
+      return;
+    }
+
     try {
       const payload = {
         records: previewData.validRecords.map((record) => ({
           rowNumber: record.rowNumber,
           sanitizedData: record.sanitizedData
-        }))
+        })),
+        collegeId: selectedCollegeId
       };
 
       const response = await api.post('/students/bulk-upload/commit', payload);
@@ -368,6 +406,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
     setMetadataError(null);
     setSelectedCourseId('');
     setSelectedBranchId('');
+    setSelectedCollegeId('');
     setPreviewData(null);
     setConfirmingUpload(false);
     onClose();
@@ -438,6 +477,41 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
          <div className="p-4 overflow-y-auto max-h-[calc(95vh-100px)] text-xs">
 
         <div className="space-y-4">
+          {/* College Selection */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Select College * <span className="text-red-500">(Required for validation)</span>
+            </label>
+            <select
+              value={selectedCollegeId}
+              onChange={(e) => {
+                setSelectedCollegeId(e.target.value);
+                setPreviewData(null);
+                setUploadResult(null);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={collegesLoading}
+            >
+              <option value="">
+                {collegesLoading ? 'Loading colleges...' : 'Choose a college...'}
+              </option>
+              {!collegesLoading && colleges && colleges.length > 0 ? (
+                colleges.map((college) => (
+                  <option key={college.id} value={college.id}>
+                    {college.name}
+                  </option>
+                ))
+              ) : (
+                !collegesLoading && <option value="" disabled>No colleges available</option>
+              )}
+            </select>
+            {selectedCollegeId && (
+              <p className="text-xs text-blue-600 mt-1">
+                Courses and branches will be validated against this college
+              </p>
+            )}
+          </div>
+
           {/* Form Selection */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -648,11 +722,11 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                 onChange={handleFileChange}
                 className="hidden"
                 id="csv-upload"
-                disabled={!selectedForm}
+                disabled={!selectedForm || !selectedCollegeId}
               />
               <label
                 htmlFor="csv-upload"
-                className={`cursor-pointer ${!selectedForm ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`cursor-pointer ${!selectedForm || !selectedCollegeId ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <Upload className="mx-auto text-gray-400 mb-2" size={32} />
                 <p className="text-sm text-gray-600 mb-1">
@@ -1049,7 +1123,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 pt-3">
             <button
               onClick={handleUpload}
-              disabled={!selectedForm || !file || uploading}
+              disabled={!selectedForm || !file || !selectedCollegeId || uploading}
               className="w-full md:flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-xs font-semibold shadow-lg"
             >
               {uploading ? (

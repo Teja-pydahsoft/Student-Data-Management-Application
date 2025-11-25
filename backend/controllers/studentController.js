@@ -782,10 +782,19 @@ const fetchExistingAdmissionNumbers = async (admissionNumbers = []) => {
   return existingSet;
 };
 
-const buildCourseBranchIndex = async () => {
-  const [courses] = await masterPool.query(
-    'SELECT id, name, code FROM courses WHERE is_active = 1'
-  );
+const buildCourseBranchIndex = async (collegeId = null) => {
+  let query = 'SELECT id, name, code, college_id FROM courses WHERE is_active = 1';
+  let queryParams = [];
+  
+  if (collegeId !== null && collegeId !== undefined) {
+    const parsedCollegeId = parseInt(collegeId, 10);
+    if (!Number.isNaN(parsedCollegeId)) {
+      query += ' AND college_id = ?';
+      queryParams.push(parsedCollegeId);
+    }
+  }
+  
+  const [courses] = await masterPool.query(query, queryParams);
 
   const baseIndex = {
     courses: [],
@@ -908,7 +917,7 @@ const validateCourseBranch = (payload, courseIndex) => {
       courseIndex.findCourse(payload.course_code);
     if (!resolvedCourse) {
       issues.push(
-        `Course "${courseIdentifier}" does not match any active course`
+        `Course "${courseIdentifier}" does not match any active course in the selected college`
       );
     }
   }
@@ -922,7 +931,7 @@ const validateCourseBranch = (payload, courseIndex) => {
       courseIndex.findBranch(resolvedCourse, payload.branch_code);
     if (!resolvedBranch) {
       issues.push(
-        `Branch "${branchIdentifier}" is not configured for course "${resolvedCourse.name}"`
+        `Branch "${branchIdentifier}" is not configured for course "${resolvedCourse.name}" in the selected college`
       );
     }
   } else if (branchIdentifier) {
@@ -1174,7 +1183,10 @@ exports.previewBulkUploadStudents = async (req, res) => {
     );
 
     const existingAdmissions = await fetchExistingAdmissionNumbers(uniqueAdmissionsForLookup);
-    const courseIndex = await buildCourseBranchIndex();
+    
+    // Get collegeId from request body (for multipart/form-data) or query params
+    const collegeId = req.body?.collegeId || req.query?.collegeId || null;
+    const courseIndex = await buildCourseBranchIndex(collegeId);
 
     // Track duplicates: for each admission number, find the row with most filled fields
     const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
@@ -1373,7 +1385,9 @@ exports.commitBulkUploadStudents = async (req, res) => {
   );
 
   const existingAdmissions = await fetchExistingAdmissionNumbers(admissionsForLookup);
-  const courseIndex = await buildCourseBranchIndex();
+  // Get collegeId from request body
+  const collegeId = req.body?.collegeId || null;
+  const courseIndex = await buildCourseBranchIndex(collegeId);
 
   // Track duplicates: for each admission number, find the row with most filled fields
   const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}

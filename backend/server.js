@@ -18,6 +18,7 @@ const collegeRoutes = require('./routes/collegeRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const logRoutes = require('./routes/logRoutes');
 const userRoutes = require('./routes/userRoutes');
+const rbacUserRoutes = require('./routes/rbacUserRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 
 const app = express();
@@ -102,6 +103,7 @@ app.use('/api/colleges', collegeRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/rbac/users', rbacUserRoutes);
 app.use('/api/calendar', calendarRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
@@ -114,6 +116,7 @@ app.use('/colleges', collegeRoutes);
 app.use('/attendance', attendanceRoutes);
 app.use('/logs', logRoutes);
 app.use('/users', userRoutes);
+app.use('/rbac/users', rbacUserRoutes);
 app.use('/calendar', calendarRoutes);
 
 // Root API endpoint

@@ -28,7 +28,27 @@ export const getModuleKeyForPath = (path = '/') => {
 
 const resolveDefaultRoute = (user) => {
   if (!user) return '/login';
-  if (user.role === 'admin') return '/';
+  // Super admin and legacy admin have full access
+  if (user.role === 'admin' || user.role === 'super_admin') return '/';
+  
+  // For RBAC users, check permissions
+  if (user.permissions) {
+    const modules = [];
+    Object.keys(MODULE_ROUTE_MAP).forEach(moduleKey => {
+      const permission = user.permissions[moduleKey];
+      if (permission && (permission.read || permission.write)) {
+        modules.push(moduleKey);
+      }
+    });
+    for (const moduleKey of modules) {
+      const route = MODULE_ROUTE_MAP[moduleKey];
+      if (route) {
+        return route;
+      }
+    }
+  }
+  
+  // Legacy staff users with modules array
   const modules = Array.isArray(user.modules) ? user.modules : [];
   for (const moduleKey of modules) {
     const route = MODULE_ROUTE_MAP[moduleKey];
