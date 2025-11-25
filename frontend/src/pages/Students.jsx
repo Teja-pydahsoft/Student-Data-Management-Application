@@ -36,6 +36,7 @@ const Students = () => {
   const [filters, setFilters] = useState({});
   const [colleges, setColleges] = useState([]);
   const [collegesLoading, setCollegesLoading] = useState(false);
+  const [filtersLoading, setFiltersLoading] = useState(true); // Track overall filter loading state
   const [quickFilterOptions, setQuickFilterOptions] = useState({
     batches: [],
     colleges: [],
@@ -130,6 +131,7 @@ const Students = () => {
   }, [filters]);
 
   // Use React Query to fetch students
+  // Only enable students query after filters are loaded
   const { 
     data: studentsData, 
     isLoading, 
@@ -141,15 +143,18 @@ const Students = () => {
     pageSize: pageSize,
     filters: memoizedFilters,
     search: searchTerm,
-    enabled: true
+    enabled: !filtersLoading // Disable until filters are loaded
   });
 
   const students = studentsData?.students || [];
   const totalStudents = studentsData?.pagination?.total || 0;
   const totalPages = studentsData?.pagination?.totalPages || 
     (totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / (pageSize || 1))) : 1);
-  const loading = isLoading;
-  const initialLoad = isLoading && students.length === 0;
+  // Only show loading for students table, not the entire page
+  // Page structure (header, filters) should always be visible
+  const tableLoading = isLoading && students.length === 0 && !filtersLoading;
+  // Table is fetching when students query is fetching (but filters are already loaded)
+  const tableFetching = (isFetching || isLoading) && !filtersLoading;
 
   const safePageSize = pageSize || 1;
   const showingFromRaw = totalStudents === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
@@ -309,18 +314,47 @@ const Students = () => {
     }
   };
 
-  // Fetch filter fields when component mounts to ensure proper filter management
+  // Load all filters in sequence: colleges → quick filters → dropdown filters
+  // This ensures filters are ready before students query runs
+  const loadAllFilters = async (currentFilters = {}) => {
+    try {
+      setFiltersLoading(true);
+      
+      // Step 1: Load colleges first (independent)
+      await fetchColleges();
+      
+      // Step 2: Load quick filter options (depends on current filters for cascading)
+      await fetchQuickFilterOptions(currentFilters);
+      
+      // Step 3: Load dropdown filter options (depends on current filters for cascading)
+      await fetchDropdownFilterOptions(currentFilters);
+      
+    } catch (error) {
+      console.error('Failed to load filters:', error);
+      toast.error('Failed to load some filter options');
+    } finally {
+      setFiltersLoading(false);
+    }
+  };
+
+  // Fetch filter fields when component mounts - load in sequence
   useEffect(() => {
-    fetchColleges();
-    fetchQuickFilterOptions(filters);
-    fetchDropdownFilterOptions(filters);
-  }, []);
+    loadAllFilters(filters);
+  }, []); // Only run on mount
 
   // Refetch filter options when filters change (for cascading filters)
   // Use individual filter values to prevent unnecessary refetches
+  // Only reload filter options, NOT the entire page
   const prevFiltersRef = useRef({ college: '', course: '', branch: '', batch: '', year: '', semester: '' });
+  const isInitialMountRef = useRef(true);
   
   useEffect(() => {
+    // Skip on initial mount (already handled by loadAllFilters)
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    
     const currentFilters = {
       college: filters.college || '',
       course: filters.course || '',
@@ -341,8 +375,15 @@ const Students = () => {
     
     if (filtersChanged) {
       prevFiltersRef.current = currentFilters;
-      fetchQuickFilterOptions(filters);
-      fetchDropdownFilterOptions(filters);
+      // Only reload filter options (not colleges, they're independent)
+      // Don't set filtersLoading to true here - we want students table to keep showing
+      // while filter options update in the background
+      fetchQuickFilterOptions(filters).catch(err => {
+        console.warn('Failed to refresh quick filter options:', err);
+      });
+      fetchDropdownFilterOptions(filters).catch(err => {
+        console.warn('Failed to refresh dropdown filter options:', err);
+      });
     }
   }, [filters.college, filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
 
@@ -389,9 +430,14 @@ const Students = () => {
           semesters: data.semesters || []
         });
       }
+      return true;
     } catch (error) {
       console.warn('Failed to fetch quick filter options:', error);
-      toast.error('Failed to load filter options');
+      // Don't show toast on background refresh, only on initial load
+      if (filtersLoading) {
+        toast.error('Failed to load filter options');
+      }
+      throw error;
     }
   };
 
@@ -399,6 +445,7 @@ const Students = () => {
     try {
       // Build query params from current filters
       const params = new URLSearchParams();
+      if (currentFilters.college) params.append('college', currentFilters.college);
       if (currentFilters.course) params.append('course', currentFilters.course);
       if (currentFilters.branch) params.append('branch', currentFilters.branch);
       if (currentFilters.batch) params.append('batch', currentFilters.batch);
@@ -420,8 +467,14 @@ const Students = () => {
           remarks: data.remarks || []
         });
       }
+      return true;
     } catch (error) {
       console.warn('Failed to fetch dropdown filter options:', error);
+      // Don't show toast on background refresh, only on initial load
+      if (filtersLoading) {
+        toast.error('Failed to load dropdown filter options');
+      }
+      throw error;
     }
   };
 
@@ -652,7 +705,7 @@ const Students = () => {
   const handlePageSizeChange = (event) => {
     const newSize = parseInt(event.target.value, 10);
 
-    if (isLoading || isFetching) {
+    if (filtersLoading || isLoading || isFetching) {
       return;
     }
 
@@ -953,20 +1006,8 @@ const Students = () => {
     });
   }, [students]);
 
-  // Only show full-page loader on initial load
-  if (loading && initialLoad) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center space-y-6">
-          <LoadingAnimation
-            width={32}
-            height={32}
-            message="Loading students..."
-          />
-        </div>
-      </div>
-    );
-  }
+  // Never show full-page loader - always show page structure
+  // Only the table area will show loading state
 
   return (
     <div className="space-y-6 p-4 lg:p-8">
@@ -1314,7 +1355,17 @@ const Students = () => {
         )}
       </div>
 
-      {students.length === 0 ? (
+      {tableLoading ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <div className="max-w-md mx-auto">
+            <LoadingAnimation
+              width={32}
+              height={32}
+              message="Loading students..."
+            />
+          </div>
+        </div>
+      ) : students.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <div className="max-w-md mx-auto">
             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1330,13 +1381,18 @@ const Students = () => {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
-          {(isFetching && !isLoading) && (
+          {/* Show loading overlay only when table is fetching (not on initial page load) */}
+          {tableFetching && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 rounded-xl">
-              <LoadingAnimation
-                width={24}
-                height={24}
-                message="Loading..."
-              />
+              <div className="text-center space-y-2">
+                <LoadingAnimation
+                  width={24}
+                  height={24}
+                  message=""
+                  showMessage={false}
+                />
+                <p className="text-sm text-gray-600">Updating table...</p>
+              </div>
             </div>
           )}
           <div className="overflow-x-auto">
