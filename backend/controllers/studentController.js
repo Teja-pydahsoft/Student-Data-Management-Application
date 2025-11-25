@@ -1188,6 +1188,89 @@ exports.previewBulkUploadStudents = async (req, res) => {
     const collegeId = req.body?.collegeId || req.query?.collegeId || null;
     const courseIndex = await buildCourseBranchIndex(collegeId);
 
+    // Check if auto-generate series is enabled and generate admission numbers for records without them
+    let autoGenerateEnabled = false;
+    let admissionPrefix = 'PYDAH2025';
+    let nextAdmissionNumber = 1;
+
+    try {
+      const { data: setting, error: setErr } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'auto_assign_series')
+        .single();
+
+      if (!setErr && setting && setting.value === 'true') {
+        autoGenerateEnabled = true;
+
+        // Get admission prefix from settings
+        const { data: prefixSetting } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'admission_prefix')
+          .single();
+
+        if (prefixSetting && prefixSetting.value) {
+          admissionPrefix = prefixSetting.value;
+        }
+
+        // Find the maximum admission number from existing records
+        const { data: submissions, error: subErr } = await supabase
+          .from('form_submissions')
+          .select('admission_number')
+          .like('admission_number', `${admissionPrefix}_%`);
+
+        if (subErr) {
+          console.error('Error fetching submissions for admission number generation:', subErr);
+        }
+
+        // Query students from MySQL
+        const masterConn = await masterPool.getConnection();
+        const [studentRows] = await masterConn.query(
+          'SELECT admission_number FROM students WHERE admission_number LIKE ?',
+          [`${admissionPrefix}_%`]
+        );
+        masterConn.release();
+
+        // Collect all existing admission numbers
+        const allNumbers = [
+          ...(submissions || []).map(s => s.admission_number),
+          ...studentRows.map(s => s.admission_number),
+          ...uniqueAdmissionsForLookup // Include admission numbers from current batch
+        ].filter(Boolean);
+
+        // Find the maximum number
+        let maxNum = 0;
+        allNumbers.forEach(num => {
+          const match = num.match(new RegExp(`^${admissionPrefix}_(\\d+)$`));
+          if (match) {
+            const numPart = parseInt(match[1], 10);
+            if (numPart > maxNum) maxNum = numPart;
+          }
+        });
+
+        nextAdmissionNumber = maxNum + 1;
+      }
+    } catch (error) {
+      console.error('Error checking auto-assign setting:', error);
+      // Continue without auto-generation if there's an error
+    }
+
+    // Auto-generate admission numbers for records without them
+    if (autoGenerateEnabled) {
+      processedRows.forEach((record) => {
+        const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
+        if (!normalizedAdmission) {
+          // Generate admission number for this record
+          const generatedNum = nextAdmissionNumber.toString().padStart(3, '0');
+          const generatedAdmission = `${admissionPrefix}_${generatedNum}`;
+          record.sanitized.admission_number = generatedAdmission;
+          record.sanitized.admission_no = generatedAdmission;
+          nextAdmissionNumber++;
+        }
+      });
+    }
+
     // Track duplicates: for each admission number, find the row with most filled fields
     const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
     const duplicateRowNumbers = new Set(); // row numbers that are duplicates (not the best one)
@@ -1247,6 +1330,14 @@ exports.previewBulkUploadStudents = async (req, res) => {
           sanitized[key] = sanitized[key].trim();
         }
       });
+
+      // Sync admission_no and admission_number
+      if (sanitized.admission_no && !sanitized.admission_number) {
+        sanitized.admission_number = sanitized.admission_no;
+      }
+      if (!sanitized.admission_no && sanitized.admission_number) {
+        sanitized.admission_no = sanitized.admission_number;
+      }
 
       const issues = [];
       const normalizedAdmission = normalizeAdmissionNumber(sanitized.admission_number);
@@ -1388,6 +1479,89 @@ exports.commitBulkUploadStudents = async (req, res) => {
   // Get collegeId from request body
   const collegeId = req.body?.collegeId || null;
   const courseIndex = await buildCourseBranchIndex(collegeId);
+
+  // Check if auto-generate series is enabled and generate admission numbers for records without them
+  let autoGenerateEnabled = false;
+  let admissionPrefix = 'PYDAH2025';
+  let nextAdmissionNumber = 1;
+
+  try {
+    const { data: setting, error: setErr } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'auto_assign_series')
+      .single();
+
+    if (!setErr && setting && setting.value === 'true') {
+      autoGenerateEnabled = true;
+
+      // Get admission prefix from settings
+      const { data: prefixSetting } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'admission_prefix')
+        .single();
+
+      if (prefixSetting && prefixSetting.value) {
+        admissionPrefix = prefixSetting.value;
+      }
+
+      // Find the maximum admission number from existing records
+      const { data: submissions, error: subErr } = await supabase
+        .from('form_submissions')
+        .select('admission_number')
+        .like('admission_number', `${admissionPrefix}_%`);
+
+      if (subErr) {
+        console.error('Error fetching submissions for admission number generation:', subErr);
+      }
+
+      // Query students from MySQL
+      const masterConn = await masterPool.getConnection();
+      const [studentRows] = await masterConn.query(
+        'SELECT admission_number FROM students WHERE admission_number LIKE ?',
+        [`${admissionPrefix}_%`]
+      );
+      masterConn.release();
+
+      // Collect all existing admission numbers
+      const allNumbers = [
+        ...(submissions || []).map(s => s.admission_number),
+        ...studentRows.map(s => s.admission_number),
+        ...admissionsForLookup // Include admission numbers from current batch
+      ].filter(Boolean);
+
+      // Find the maximum number
+      let maxNum = 0;
+      allNumbers.forEach(num => {
+        const match = num.match(new RegExp(`^${admissionPrefix}_(\\d+)$`));
+        if (match) {
+          const numPart = parseInt(match[1], 10);
+          if (numPart > maxNum) maxNum = numPart;
+        }
+      });
+
+      nextAdmissionNumber = maxNum + 1;
+    }
+  } catch (error) {
+    console.error('Error checking auto-assign setting:', error);
+    // Continue without auto-generation if there's an error
+  }
+
+  // Auto-generate admission numbers for records without them
+  if (autoGenerateEnabled) {
+    preparedRecords.forEach((record) => {
+      const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
+      if (!normalizedAdmission) {
+        // Generate admission number for this record
+        const generatedNum = nextAdmissionNumber.toString().padStart(3, '0');
+        const generatedAdmission = `${admissionPrefix}_${generatedNum}`;
+        record.sanitizedData.admission_number = generatedAdmission;
+        record.sanitizedData.admission_no = generatedAdmission;
+        nextAdmissionNumber++;
+      }
+    });
+  }
 
   // Track duplicates: for each admission number, find the row with most filled fields
   const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
