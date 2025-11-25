@@ -2,9 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
-  FileText,
   ClipboardList,
-  CheckCircle,
   Clock,
   ArrowRight,
   Eye,
@@ -43,24 +41,13 @@ const Dashboard = () => {
       value: stats?.totalStudents || 0,
       icon: Users,
       bgGradient: 'from-blue-600 to-blue-700',
-    },
-    {
-      title: 'Total Forms',
-      value: stats?.totalForms || 0,
-      icon: FileText,
-      bgGradient: 'from-blue-500 to-blue-600',
+      subtitle: 'Regular students',
     },
     {
       title: 'Pending Submissions',
       value: stats?.pendingSubmissions || 0,
       icon: Clock,
       bgGradient: 'from-blue-400 to-blue-500',
-    },
-    {
-      title: 'Approved Today',
-      value: stats?.approvedToday || 0,
-      icon: CheckCircle,
-      bgGradient: 'from-blue-700 to-blue-800',
     },
   ];
 
@@ -81,7 +68,7 @@ const Dashboard = () => {
           <p className="text-gray-600 mt-2 body-font">Overview of your student management system</p>
         </div>
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -93,6 +80,9 @@ const Dashboard = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
                   <p className="text-4xl font-extrabold text-gray-900 mt-1">{stat.value}</p>
+                  {stat.subtitle && (
+                    <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
+                  )}
                 </div>
                 <div className={`p-3 rounded-lg bg-gradient-to-br ${stat.bgGradient} shadow`}>
                   <Icon className="text-white" size={26} />

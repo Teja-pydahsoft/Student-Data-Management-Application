@@ -2328,17 +2328,15 @@ exports.getDashboardStats = async (_req, res) => {
     let masterDbConnected = true;
 
     try {
-      const [studentCount] = await masterPool.query('SELECT COUNT(*) as total FROM students');
+      // Count only Regular students
+      const [studentCount] = await masterPool.query(
+        "SELECT COUNT(*) as total FROM students WHERE student_status = 'Regular'"
+      );
       totalStudents = studentCount?.[0]?.total || 0;
     } catch (dbError) {
       masterDbConnected = false;
       console.warn('Dashboard stats: master database unavailable, returning fallback totals', dbError.message || dbError);
     }
-
-    const totalForms = await safeSupabaseCount(
-      supabase.from('forms').select('*', { count: 'exact', head: true }),
-      'forms count'
-    );
 
     const pendingSubmissions = await safeSupabaseCount(
       supabase
@@ -2348,29 +2346,21 @@ exports.getDashboardStats = async (_req, res) => {
       'pending submissions count'
     );
 
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const approvedToday = await safeSupabaseCount(
-      supabase
-        .from('form_submissions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'approved')
-        .gte('reviewed_at', start.toISOString()),
-      'approved submissions count'
-    );
-
     let recentWithNames = [];
     try {
       const { data: recentSubmissions, error: recentError } = await supabase
         .from('form_submissions')
-        .select('submission_id, admission_number, status, created_at as submitted_at, form_id')
+        .select('submission_id, admission_number, status, created_at, form_id')
         .order('created_at', { ascending: false })
         .limit(10);
 
       if (recentError) {
         console.warn('Dashboard stats: unable to fetch recent submissions', recentError.message || recentError);
       } else if (recentSubmissions) {
-        recentWithNames = [...recentSubmissions];
+        recentWithNames = recentSubmissions.map((r) => ({
+          ...r,
+          submitted_at: r.created_at // Use created_at as submitted_at
+        }));
         const formIds = Array.from(new Set(recentSubmissions.map((r) => r.form_id))).filter(Boolean);
 
         if (formIds.length > 0) {
@@ -2385,8 +2375,7 @@ exports.getDashboardStats = async (_req, res) => {
             const idToName = new Map(formsRows.map((f) => [f.form_id, f.form_name]));
             recentWithNames = recentWithNames.map((r) => ({
               ...r,
-              form_name: idToName.get(r.form_id) || null,
-              submitted_at: r.created_at
+              form_name: idToName.get(r.form_id) || null
             }));
           }
         }
@@ -2400,9 +2389,7 @@ exports.getDashboardStats = async (_req, res) => {
       success: true,
       data: {
         totalStudents,
-        totalForms,
         pendingSubmissions,
-        approvedToday,
         recentSubmissions: recentWithNames,
         completedProfiles: 0,
         averageCompletion: 0,

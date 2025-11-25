@@ -33,7 +33,7 @@ const Students = () => {
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState({});
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState({ student_status: 'Regular' }); // Default to show only Regular students
   const [colleges, setColleges] = useState([]);
   const [collegesLoading, setCollegesLoading] = useState(false);
   const [filtersLoading, setFiltersLoading] = useState(true); // Track overall filter loading state
@@ -420,12 +420,18 @@ const Students = () => {
           return;
         }
 
-        const totalStudents = students.length;
+        // Filter to only count Regular students
+        const regularStudents = students.filter(student => {
+          const status = student.student_status || student.student_data?.student_status || student.student_data?.['Student Status'];
+          return status === 'Regular';
+        });
+
+        const totalStudents = regularStudents.length;
         let completedStudents = 0;
         let totalCompletion = 0;
 
-        // Fetch completion percentages for all students in parallel
-        const promises = students
+        // Fetch completion percentages for all regular students in parallel
+        const promises = regularStudents
           .filter(student => student.admission_number)
           .map(async (student) => {
             const percentage = await getStudentCompletionPercentage(student.admission_number);
@@ -1153,12 +1159,18 @@ const Students = () => {
       return;
     }
 
-    const totalStudents = students.length;
+    // Filter to only count Regular students
+    const regularStudents = students.filter(student => {
+      const status = student.student_status || student.student_data?.student_status || student.student_data?.['Student Status'];
+      return status === 'Regular';
+    });
+
+    const totalStudents = regularStudents.length;
     let completedStudents = 0;
     let totalCompletion = 0;
 
-    // Fetch completion percentages for all students in parallel
-    const promises = students
+    // Fetch completion percentages for all regular students in parallel
+    const promises = regularStudents
       .filter(student => student.admission_number) // Only process students with admission numbers
       .map(async (student) => {
         const percentage = await getStudentCompletionPercentage(student.admission_number);
@@ -1264,7 +1276,9 @@ const Students = () => {
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-1">Total Students</p>
                 <p className="text-xl font-bold text-blue-600">{totalStudents.toLocaleString()}</p>
-                <p className="text-xs text-gray-500 mt-1">Across current filters</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {filters.student_status === 'Regular' ? 'Regular students' : 'Across current filters'}
+                </p>
               </div>
               <div className="bg-blue-100 p-2 rounded-lg">
                 <Users className="text-blue-600" size={18} />
