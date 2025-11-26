@@ -293,6 +293,8 @@ exports.getAttendance = async (req, res) => {
         s.parent_mobile2,
         s.student_photo,
         s.batch,
+        s.course,
+        s.branch,
         s.current_year,
         s.current_semester,
         s.student_data,

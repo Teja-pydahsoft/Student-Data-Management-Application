@@ -592,6 +592,8 @@ const Attendance = () => {
       setTotalStudents(total);
       setCurrentPage(pageToUse);
       setSmsResults([]);
+      setSmsStatusMap({});
+      setLastUpdatedAt(null); // Clear last updated when loading new data
 
       if (response.data?.data?.holiday) {
         setSelectedDateHolidayInfo(response.data.data.holiday);
@@ -1482,55 +1484,98 @@ const Attendance = () => {
                         <div>{parentContact}</div>
                       </td>
                       <td className="px-4 py-3">
-                        {/* Show attendance marked state if saved and matches initial, otherwise show toggle */}
-                        {lastUpdatedAt && initialStatusMap[student.id] === status ? (
-                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                            status === 'present' 
-                              ? 'bg-green-100 text-green-700 border border-green-200' 
-                              : 'bg-red-100 text-red-700 border border-red-200'
-                          }`}>
-                            <Check size={16} />
-                            {status === 'present' ? 'Present' : 'Absent'} (Marked)
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-3">
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                              status === 'present' 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {status === 'present' ? (
-                                <>
+                        {/* Attendance status logic:
+                            - hasDbRecord: student.attendanceStatus is not null (record exists in DB for this date)
+                            - statusChanged: current status differs from initial loaded status
+                            - justSaved: attendance was saved in this session
+                            
+                            Show "Marked" only if:
+                            1. There's a DB record AND status hasn't been changed locally
+                            2. OR attendance was just saved in this session
+                        */}
+                        {(() => {
+                          const hasDbRecord = student.attendanceStatus !== null;
+                          const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+                          const justSaved = lastUpdatedAt !== null;
+                          
+                          // Show marked state if saved or has existing record that wasn't changed
+                          const showMarked = justSaved || (hasDbRecord && !statusChanged);
+                          
+                          if (showMarked && !statusChanged) {
+                            return (
+                              <div className="flex items-center gap-3">
+                                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                                  status === 'present' 
+                                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                                    : 'bg-red-100 text-red-700 border border-red-200'
+                                }`}>
                                   <Check size={16} />
-                                  Present
-                                </>
-                              ) : (
-                                <>
-                                  <X size={16} />
-                                  Absent
-                                </>
-                              )}
+                                  {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                                </div>
+                                {/* Still allow changing even if marked */}
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={status === 'absent'}
+                                    onChange={(e) => {
+                                      if (editingLocked) {
+                                        toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                        return;
+                                      }
+                                      handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                    }}
+                                    disabled={editingLocked}
+                                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                    Change
+                                  </span>
+                                </label>
+                              </div>
+                            );
+                          }
+                          
+                          // Not marked yet - show toggle controls
+                          return (
+                            <div className="flex items-center gap-3">
+                              <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                                status === 'present' 
+                                  ? 'bg-green-50 text-green-600 border border-green-100' 
+                                  : 'bg-red-50 text-red-600 border border-red-100'
+                              }`}>
+                                {status === 'present' ? (
+                                  <>
+                                    <Check size={16} />
+                                    Present
+                                  </>
+                                ) : (
+                                  <>
+                                    <X size={16} />
+                                    Absent
+                                  </>
+                                )}
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={status === 'absent'}
+                                  onChange={(e) => {
+                                    if (editingLocked) {
+                                      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                      return;
+                                    }
+                                    handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                  }}
+                                  disabled={editingLocked}
+                                  className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                  Mark as Absent
+                                </span>
+                              </label>
                             </div>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={status === 'absent'}
-                                onChange={(e) => {
-                                  if (editingLocked) {
-                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                    return;
-                                  }
-                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                }}
-                                disabled={editingLocked}
-                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                              />
-                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                Mark as Absent
-                              </span>
-                            </label>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         {/* SMS Status Column */}
@@ -1567,15 +1612,43 @@ const Attendance = () => {
                           
                           if (smsStatus.success) {
                             return smsStatus.mocked ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                <RefreshCw size={12} />
-                                Test Mode
-                              </span>
+                              <button
+                                onClick={() => handleRetrySms(student)}
+                                disabled={retryingSmsFor === student.id}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
+                                title="Test mode - Click to send again"
+                              >
+                                {retryingSmsFor === student.id ? (
+                                  <>
+                                    <RefreshCw size={12} className="animate-spin" />
+                                    Sending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw size={12} />
+                                    Test - Send Again
+                                  </>
+                                )}
+                              </button>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                <Check size={12} />
-                                Sent
-                              </span>
+                              <button
+                                onClick={() => handleRetrySms(student)}
+                                disabled={retryingSmsFor === student.id}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
+                                title="SMS sent - Click to send again"
+                              >
+                                {retryingSmsFor === student.id ? (
+                                  <>
+                                    <RefreshCw size={12} className="animate-spin" />
+                                    Sending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check size={12} />
+                                    Sent - Send Again
+                                  </>
+                                )}
+                              </button>
                             );
                           }
                           
