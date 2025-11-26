@@ -80,6 +80,8 @@ const serializeBranchRow = (branchRow) => ({
   isActive: branchRow.is_active === 1 || branchRow.is_active === true,
   totalYears: branchRow.total_years ?? null,
   semestersPerYear: branchRow.semesters_per_year ?? null,
+  academicYearId: branchRow.academic_year_id ?? null,
+  academicYearLabel: branchRow.academic_year_label ?? null,
   metadata: branchRow.metadata ? JSON.parse(branchRow.metadata) : null
 });
 
@@ -123,8 +125,14 @@ const fetchCoursesWithBranches = async ({ includeInactive = false, collegeId = n
     : '';
 
   const branchQuery = includeInactive
-    ? 'SELECT * FROM course_branches WHERE course_id IN (?) ORDER BY name ASC'
-    : 'SELECT * FROM course_branches WHERE is_active = 1 AND course_id IN (?) ORDER BY name ASC';
+    ? `SELECT cb.*, ay.year_label as academic_year_label 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+       WHERE cb.course_id IN (?) ORDER BY cb.name ASC`
+    : `SELECT cb.*, ay.year_label as academic_year_label 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+       WHERE cb.is_active = 1 AND cb.course_id IN (?) ORDER BY cb.name ASC`;
 
   const [courses] = await masterPool.query(
     `SELECT * FROM courses ${courseWhereClause} ORDER BY name ASC`,
@@ -239,6 +247,9 @@ const validateBranchPayload = (
     defaultSemesters
   );
 
+  // Parse academic year ID
+  const academicYearId = branchPayload.academicYearId ?? branchPayload.academic_year_id;
+
   if (!isUpdate || branchPayload.totalYears !== undefined || branchPayload.total_years !== undefined) {
     if (totalYears <= 0 || totalYears > MAX_YEARS) {
       errors.push(`Branch totalYears must be between 1 and ${MAX_YEARS}`);
@@ -266,6 +277,7 @@ const validateBranchPayload = (
       name,
       totalYears,
       semestersPerYear,
+      academicYearId: academicYearId ? parseInt(academicYearId, 10) : null,
       metadata: branchPayload.metadata ?? null,
       isActive: parseBoolean(
         branchPayload.isActive ?? branchPayload.is_active,
@@ -809,13 +821,14 @@ exports.createBranch = async (req, res) => {
 
     const [result] = await masterPool.query(
       `INSERT INTO course_branches
-        (course_id, name, total_years, semesters_per_year, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (course_id, name, total_years, semesters_per_year, academic_year_id, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         courseId,
         sanitized.name?.trim(),
         sanitized.totalYears,
         sanitized.semestersPerYear,
+        sanitized.academicYearId || null,
         branchMetadata || null,
         sanitized.isActive
       ]
@@ -824,7 +837,10 @@ exports.createBranch = async (req, res) => {
     const branchId = result.insertId;
 
     const [branchRows] = await masterPool.query(
-      'SELECT * FROM course_branches WHERE id = ? LIMIT 1',
+      `SELECT cb.*, ay.year_label as academic_year_label 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+       WHERE cb.id = ? LIMIT 1`,
       [branchId]
     );
 
@@ -856,11 +872,14 @@ exports.getBranches = async (req, res) => {
   try {
     const includeInactive = parseBoolean(req.query.includeInactive, true);
     const whereClause = includeInactive
-      ? 'WHERE course_id = ?'
-      : 'WHERE course_id = ? AND is_active = 1';
+      ? 'WHERE cb.course_id = ?'
+      : 'WHERE cb.course_id = ? AND cb.is_active = 1';
 
     const [rows] = await masterPool.query(
-      `SELECT * FROM course_branches ${whereClause} ORDER BY name ASC`,
+      `SELECT cb.*, ay.year_label as academic_year_label 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+       ${whereClause} ORDER BY cb.name ASC`,
       [courseId]
     );
 
@@ -964,6 +983,11 @@ exports.updateBranch = async (req, res) => {
       values.push(sanitized.isActive);
     }
 
+    if (req.body.academicYearId !== undefined || req.body.academic_year_id !== undefined) {
+      fields.push('academic_year_id = ?');
+      values.push(sanitized.academicYearId || null);
+    }
+
     if (fields.length === 0) {
       return res.status(400).json({
         success: false,
@@ -981,7 +1005,10 @@ exports.updateBranch = async (req, res) => {
     );
 
     const [branchRows] = await masterPool.query(
-      'SELECT * FROM course_branches WHERE course_id = ? AND id = ? LIMIT 1',
+      `SELECT cb.*, ay.year_label as academic_year_label 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+       WHERE cb.course_id = ? AND cb.id = ? LIMIT 1`,
       [courseId, branchId]
     );
 
@@ -1147,6 +1174,153 @@ exports.deleteBranch = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete branch'
+    });
+  }
+};
+
+/**
+ * GET /api/courses/:courseId/affected-students
+ * Preview students that will be affected when deleting a course
+ */
+exports.getAffectedStudentsByCourse = async (req, res) => {
+  const courseId = parseInt(req.params.courseId, 10);
+
+  if (!courseId || Number.isNaN(courseId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid course ID'
+    });
+  }
+
+  try {
+    // Get course name
+    const [courseRow] = await masterPool.query(
+      'SELECT name FROM courses WHERE id = ? LIMIT 1',
+      [courseId]
+    );
+
+    if (courseRow.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+
+    const courseName = courseRow[0].name;
+
+    // Get all students under this course (limit to 100 for preview)
+    const [students] = await masterPool.query(
+      `SELECT admission_number, student_name, branch, batch, current_year, current_semester 
+       FROM students 
+       WHERE course = ?
+       ORDER BY student_name ASC
+       LIMIT 100`,
+      [courseName]
+    );
+
+    // Get total count
+    const [countResult] = await masterPool.query(
+      'SELECT COUNT(*) as total FROM students WHERE course = ?',
+      [courseName]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        courseName,
+        students,
+        totalCount: countResult[0].total,
+        hasMore: countResult[0].total > 100
+      }
+    });
+  } catch (error) {
+    console.error('getAffectedStudentsByCourse error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch affected students'
+    });
+  }
+};
+
+/**
+ * GET /api/courses/:courseId/branches/:branchId/affected-students
+ * Preview students that will be affected when deleting a branch
+ */
+exports.getAffectedStudentsByBranch = async (req, res) => {
+  const courseId = parseInt(req.params.courseId, 10);
+  const branchId = parseInt(req.params.branchId, 10);
+
+  if (!courseId || Number.isNaN(courseId) || !branchId || Number.isNaN(branchId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid course or branch ID'
+    });
+  }
+
+  try {
+    // Get branch and course names
+    const [branchRow] = await masterPool.query(
+      `SELECT cb.name as branch_name, cb.academic_year_id, ay.year_label as academic_year, c.name as course_name
+       FROM course_branches cb
+       JOIN courses c ON cb.course_id = c.id
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id
+       WHERE cb.course_id = ? AND cb.id = ?
+       LIMIT 1`,
+      [courseId, branchId]
+    );
+
+    if (branchRow.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Branch not found for this course'
+      });
+    }
+
+    const { branch_name: branchName, course_name: courseName, academic_year: academicYear } = branchRow[0];
+
+    // Get all students under this branch (limit to 100 for preview)
+    // Filter by batch (academic year) if available
+    let query = `SELECT admission_number, student_name, batch, current_year, current_semester 
+                 FROM students 
+                 WHERE course = ? AND branch = ?`;
+    const params = [courseName, branchName];
+    
+    if (academicYear) {
+      query += ' AND batch = ?';
+      params.push(academicYear);
+    }
+    
+    query += ' ORDER BY student_name ASC LIMIT 100';
+
+    const [students] = await masterPool.query(query, params);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) as total FROM students WHERE course = ? AND branch = ?';
+    const countParams = [courseName, branchName];
+    
+    if (academicYear) {
+      countQuery += ' AND batch = ?';
+      countParams.push(academicYear);
+    }
+
+    const [countResult] = await masterPool.query(countQuery, countParams);
+
+    res.json({
+      success: true,
+      data: {
+        branchName,
+        courseName,
+        academicYear,
+        students,
+        totalCount: countResult[0].total,
+        hasMore: countResult[0].total > 100
+      }
+    });
+  } catch (error) {
+    console.error('getAffectedStudentsByBranch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch affected students'
     });
   }
 };

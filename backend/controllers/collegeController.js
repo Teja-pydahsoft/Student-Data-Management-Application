@@ -1,4 +1,5 @@
 const collegeService = require('../services/collegeService');
+const { masterPool } = require('../config/database');
 
 /**
  * GET /api/colleges
@@ -260,6 +261,64 @@ exports.getCollegeCourses = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch college courses'
+    });
+  }
+};
+
+/**
+ * GET /api/colleges/:collegeId/affected-students
+ * Preview students that will be affected when deleting a college
+ */
+exports.getAffectedStudentsByCollege = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    // Get college name
+    const college = await collegeService.fetchCollegeById(collegeId);
+    if (!college) {
+      return res.status(404).json({
+        success: false,
+        message: 'College not found'
+      });
+    }
+
+    // Get all students under this college (limit to 100 for preview)
+    const [students] = await masterPool.query(
+      `SELECT admission_number, student_name, course, branch, batch, current_year, current_semester 
+       FROM students 
+       WHERE college = ?
+       ORDER BY student_name ASC
+       LIMIT 100`,
+      [college.name]
+    );
+
+    // Get total count
+    const [countResult] = await masterPool.query(
+      'SELECT COUNT(*) as total FROM students WHERE college = ?',
+      [college.name]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        collegeName: college.name,
+        students,
+        totalCount: countResult[0].total,
+        hasMore: countResult[0].total > 100
+      }
+    });
+  } catch (error) {
+    console.error('getAffectedStudentsByCollege error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch affected students'
     });
   }
 };

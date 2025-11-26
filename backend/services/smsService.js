@@ -1,5 +1,11 @@
+// DLT Template: "Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH."
+// Variable 1: "your ward", Variable 2: date (DD-MM-YYYY)
 const DEFAULT_TEMPLATE =
-  'Dear Parent, {{studentName}} was marked absent on {{attendanceDate}}. Please contact the college for more details.';
+  'Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH.';
+
+// DLT Template ID and PE ID for absent SMS
+const SMS_TEMPLATE_ID = process.env.SMS_TEMPLATE_ID || '1607100000000150000';
+const SMS_PE_ID = process.env.SMS_PE_ID || '1102395590000010000';
 
 const SMS_API_URL = process.env.SMS_API_URL || process.env.BULKSMS_ENGLISH_API_URL || 'https://www.bulksmsapps.com/api/apismsv2.aspx';
 const SMS_API_KEY = process.env.SMS_API_KEY || process.env.BULKSMS_API_KEY || '7c9c967a-4ce9-4748-9dc7-d2aaef847275';
@@ -28,15 +34,7 @@ const formatDateForMessage = (dateString = '') => {
   return `${day}-${month}-${year}`;
 };
 
-const renderTemplate = (template, variables) => {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return variables[key] !== undefined && variables[key] !== null
-      ? String(variables[key])
-      : '';
-  });
-};
-
-const dispatchSms = async ({ to, message, meta = {} }) => {
+const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   if (!to) {
     return {
       success: false,
@@ -46,7 +44,7 @@ const dispatchSms = async ({ to, message, meta = {} }) => {
   }
 
   if (SMS_TEST_MODE) {
-    console.log('[SMS-TEST]', { to, message, meta });
+    console.log('[SMS-TEST]', { to, message, templateId, peId, meta });
     return {
       success: true,
       mocked: true,
@@ -76,7 +74,9 @@ const dispatchSms = async ({ to, message, meta = {} }) => {
       apikey: SMS_API_KEY,
       senderid: SMS_SENDER_ID,
       number: to,
-      message
+      message,
+      templateid: templateId || SMS_TEMPLATE_ID,
+      peid: peId || SMS_PE_ID
     });
 
     const response = await fetch(SMS_API_URL, {
@@ -138,24 +138,23 @@ const resolveParentContact = (student) => {
   );
 };
 
-const resolveStudentName = (student) => {
-  if (!student) return '';
-
-  if (student.student_name) {
-    return student.student_name;
-  }
-
-  const data = student.student_data;
-  if (!data || typeof data !== 'object') {
-    return '';
-  }
-
-  return (
-    data['Student Name'] ||
-    data['student_name'] ||
-    data['Name'] ||
-    ''
-  );
+/**
+ * Build message by replacing {#var#} placeholders with actual values
+ * DLT Template: "Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH."
+ * Variables: [0] = "your ward", [1] = date (DD-MM-YYYY)
+ */
+const buildAbsenceMessage = (template, variables) => {
+  let message = template;
+  let varIndex = 0;
+  
+  // Replace each {#var#} placeholder with the corresponding variable value
+  message = message.replace(/\{#var#\}/g, () => {
+    const value = variables[varIndex] || '';
+    varIndex++;
+    return value;
+  });
+  
+  return message;
 };
 
 exports.sendAbsenceNotification = async ({
@@ -163,7 +162,6 @@ exports.sendAbsenceNotification = async ({
   attendanceDate
 }) => {
   const parentMobile = resolveParentContact(student);
-  const studentName = resolveStudentName(student);
 
   if (!parentMobile) {
     return {
@@ -176,17 +174,19 @@ exports.sendAbsenceNotification = async ({
   const template = process.env.SMS_ABSENCE_TEMPLATE || DEFAULT_TEMPLATE;
   const formattedDate = formatDateForMessage(attendanceDate);
 
-  const message = renderTemplate(template, {
-    studentName: studentName || 'your ward',
-    attendanceDate: formattedDate,
-    batch: student.batch || '',
-    currentYear: student.current_year || '',
-    currentSemester: student.current_semester || ''
-  });
+  // DLT Template variables:
+  // Variable 1: "your ward" (always use this as per requirement)
+  // Variable 2: the attendance date
+  const message = buildAbsenceMessage(template, [
+    'your ward',
+    formattedDate
+  ]);
 
   return dispatchSms({
     to: parentMobile,
     message,
+    templateId: SMS_TEMPLATE_ID,
+    peId: SMS_PE_ID,
     meta: {
       template: 'attendance_absent',
       student: {

@@ -17,5 +17,8 @@ router.delete('/:collegeId', collegeController.deleteCollege);
 // College courses
 router.get('/:collegeId/courses', collegeController.getCollegeCourses);
 
+// Preview affected students
+router.get('/:collegeId/affected-students', collegeController.getAffectedStudentsByCollege);
+
 module.exports = router;
 

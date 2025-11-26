@@ -5,6 +5,21 @@ import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
 
+// Dropdown options for student fields
+const STUDENT_TYPE_OPTIONS = ['CONV', 'LATER', 'LSPOT', 'MANG'];
+const STUDENT_STATUS_OPTIONS = [
+  'Regular',
+  'Discontinued from the second year',
+  'Discontinued from the third year',
+  'Discontinued from the fourth year',
+  'Admission Cancelled',
+  'Long Absent',
+  'Detained'
+];
+const SCHOLAR_STATUS_OPTIONS = ['Eligible', 'Not Eligible'];
+const CASTE_OPTIONS = ['OC', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST', 'EWS', 'Other'];
+const CERTIFICATES_STATUS_OPTIONS = ['Submitted', 'Pending', 'Partial', 'Originals Returned', 'Not Required'];
+
 const AddStudent = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -16,6 +31,8 @@ const AddStudent = () => {
   const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
   const [selectedCourseName, setSelectedCourseName] = useState('');
   const [selectedBranchName, setSelectedBranchName] = useState('');
+  const [academicYears, setAcademicYears] = useState([]);
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
   const [studentData, setStudentData] = useState({
     pin_no: '',
     current_year: '1',
@@ -61,7 +78,21 @@ const AddStudent = () => {
       }
     };
 
+    const loadAcademicYears = async () => {
+      try {
+        setAcademicYearsLoading(true);
+        const response = await api.get('/academic-years/active');
+        setAcademicYears(response.data.data || []);
+      } catch (error) {
+        console.error('Failed to load academic years', error);
+        // Don't show error - might not have the table yet
+      } finally {
+        setAcademicYearsLoading(false);
+      }
+    };
+
     loadColleges();
+    loadAcademicYears();
   }, []);
 
   useEffect(() => {
@@ -100,10 +131,19 @@ const AddStudent = () => {
 
   const branchOptions = useMemo(() => {
     if (!selectedCourse) return [];
-    return (selectedCourse.branches || []).filter(
+    let branches = (selectedCourse.branches || []).filter(
       (branch) => branch?.isActive !== false
     );
-  }, [selectedCourse]);
+    
+    // Filter branches by selected batch (academic year) if batch is selected
+    if (studentData.batch) {
+      branches = branches.filter(
+        (branch) => branch.academicYearLabel === studentData.batch || !branch.academicYearLabel
+      );
+    }
+    
+    return branches;
+  }, [selectedCourse, studentData.batch]);
 
   const selectedBranch = useMemo(
     () =>
@@ -139,6 +179,24 @@ const AddStudent = () => {
       (_value, index) => String(index + 1)
     );
   }, [activeStructure]);
+
+  // Reset branch selection when batch changes (as branches are filtered by batch)
+  useEffect(() => {
+    if (selectedBranchName && branchOptions.length > 0) {
+      const branchStillValid = branchOptions.some(
+        (branch) => branch.name?.toLowerCase() === selectedBranchName.toLowerCase()
+      );
+      if (!branchStillValid) {
+        setSelectedBranchName('');
+        setStudentData((prev) => ({ ...prev, branch: '' }));
+      }
+    }
+    
+    // Auto-select first branch if only one option available for this batch
+    if (!selectedBranchName && branchOptions.length === 1) {
+      setSelectedBranchName(branchOptions[0].name);
+    }
+  }, [studentData.batch, branchOptions, selectedBranchName]);
 
   useEffect(() => {
     if (!selectedCourse) {
@@ -190,6 +248,54 @@ const AddStudent = () => {
       );
     }
   }, [selectedBranch, studentData.branch]);
+
+  // Auto-calculate current year based on batch year
+  useEffect(() => {
+    if (!studentData.batch || !activeStructure) {
+      return;
+    }
+
+    const batchYear = parseInt(studentData.batch, 10);
+    const currentCalendarYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    
+    // Calculate which academic year the student should be in
+    // Assuming academic year starts in June
+    let calculatedYear = currentCalendarYear - batchYear + 1;
+    if (currentMonth < 6) {
+      // Before June, student is still in the previous academic year
+      calculatedYear = calculatedYear - 1;
+    }
+    
+    const totalYears = Number(activeStructure.totalYears) || 4;
+    const semestersPerYear = Number(activeStructure.semestersPerYear) || 2;
+    
+    // Clamp to valid range
+    calculatedYear = Math.max(1, Math.min(calculatedYear, totalYears));
+    
+    // Calculate current semester (default to 1 for first half, 2 for second half of academic year)
+    let calculatedSemester = 1;
+    if (currentMonth >= 6 && currentMonth <= 11) {
+      calculatedSemester = 1; // First semester (June - November)
+    } else {
+      calculatedSemester = Math.min(2, semestersPerYear); // Second semester (December - May)
+    }
+
+    setStudentData((prev) => {
+      const shouldUpdate = 
+        prev.current_year !== String(calculatedYear) || 
+        prev.current_semester !== String(calculatedSemester);
+      
+      if (shouldUpdate) {
+        return {
+          ...prev,
+          current_year: String(calculatedYear),
+          current_semester: String(calculatedSemester)
+        };
+      }
+      return prev;
+    });
+  }, [studentData.batch, activeStructure]);
 
   useEffect(() => {
     if (!activeStructure) {
@@ -264,20 +370,44 @@ const AddStudent = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Basic validation
-    if (!studentData.student_name || !studentData.admission_no) {
-      toast.error('Student name and admission number are required');
+    // Comprehensive validation for all required fields
+    const requiredFields = [
+      { field: 'admission_no', label: 'Admission Number' },
+      { field: 'student_name', label: 'Student Name' },
+      { field: 'father_name', label: 'Father Name' },
+      { field: 'gender', label: 'Gender' },
+      { field: 'college', label: 'College' },
+      { field: 'course', label: 'Course' },
+      { field: 'branch', label: 'Branch' },
+      { field: 'current_year', label: 'Current Year' },
+      { field: 'current_semester', label: 'Current Semester' },
+      { field: 'batch', label: 'Batch' },
+      { field: 'stud_type', label: 'Student Type' },
+      { field: 'student_status', label: 'Student Status' },
+      { field: 'scholar_status', label: 'Scholar Status' },
+      { field: 'student_mobile', label: 'Student Mobile' },
+      { field: 'parent_mobile1', label: 'Parent Mobile 1' },
+      { field: 'caste', label: 'Caste' },
+      { field: 'dob', label: 'Date of Birth' },
+      { field: 'certificates_status', label: 'Certificates Status' }
+    ];
+
+    const missingFields = requiredFields.filter(({ field }) => !studentData[field] || !studentData[field].toString().trim());
+    
+    if (missingFields.length > 0) {
+      const fieldNames = missingFields.slice(0, 3).map(f => f.label).join(', ');
+      const moreCount = missingFields.length > 3 ? ` and ${missingFields.length - 3} more` : '';
+      toast.error(`Please fill in required fields: ${fieldNames}${moreCount}`);
       return;
     }
 
-    if (!studentData.college) {
-      toast.error('Please select a college');
-      return;
-    }
-
-    if (!studentData.current_year || !studentData.current_semester) {
-      toast.error('Please select the current year and semester');
-      return;
+    // Validate batch exists in academic years
+    if (academicYears.length > 0) {
+      const batchExists = academicYears.some(y => y.yearLabel === studentData.batch);
+      if (!batchExists) {
+        toast.error('Selected batch year is not available. Please select a valid batch.');
+        return;
+      }
     }
     
     try {
@@ -382,24 +512,26 @@ const AddStudent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Father Name
+                  Father Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   name="father_name"
                   value={studentData.father_name}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gender
+                  Gender <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="gender"
                   value={studentData.gender}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 >
                   <option value="">Select Gender</option>
@@ -417,6 +549,7 @@ const AddStudent = () => {
               Academic Information
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* 1. College */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   College <span className="text-red-500">*</span>
@@ -442,9 +575,48 @@ const AddStudent = () => {
                   </select>
                 )}
               </div>
+
+              {/* 2. Batch (Academic Year) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Course {availableCourses.length > 0 && <span className="text-red-500">*</span>}
+                  Batch (Academic Year) <span className="text-red-500">*</span>
+                </label>
+                {academicYearsLoading ? (
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    Loading batches...
+                  </div>
+                ) : academicYears.length > 0 ? (
+                  <select
+                    name="batch"
+                    value={studentData.batch}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select Batch</option>
+                    {academicYears.map((year) => (
+                      <option key={year.id} value={year.yearLabel}>
+                        {year.yearLabel}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name="batch"
+                    value={studentData.batch}
+                    onChange={handleChange}
+                    placeholder="Enter batch year"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  />
+                )}
+              </div>
+
+              {/* 3. Course */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Course <span className="text-red-500">*</span>
                 </label>
                 {courseOptionsLoading ? (
                   <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
@@ -476,20 +648,23 @@ const AddStudent = () => {
                   />
                 )}
               </div>
+
+              {/* 4. Branch */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch
+                  Branch <span className="text-red-500">*</span>
                 </label>
                 {availableCourses.length > 0 && branchOptions.length > 0 ? (
                   <select
                     value={selectedBranchName}
                     onChange={handleBranchSelect}
+                    required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                   >
                     <option value="">Select Branch</option>
                     {branchOptions.map((branch) => (
                       <option key={branch.name} value={branch.name}>
-                        {branch.name}
+                        {branch.name} {branch.academicYearLabel ? `(Batch ${branch.academicYearLabel})` : ''}
                       </option>
                     ))}
                   </select>
@@ -499,11 +674,14 @@ const AddStudent = () => {
                     name="branch"
                     value={studentData.branch}
                     onChange={handleChange}
+                    required
                     placeholder={availableCourses.length > 0 ? 'No branches configured' : 'Enter branch'}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                   />
                 )}
               </div>
+
+              {/* 5. Current Academic Year */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Current Academic Year <span className="text-red-500">*</span>
@@ -523,6 +701,8 @@ const AddStudent = () => {
                   ))}
                 </select>
               </div>
+
+              {/* 6. Current Semester */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Current Semester <span className="text-red-500">*</span>
@@ -542,54 +722,71 @@ const AddStudent = () => {
                   ))}
                 </select>
               </div>
+
+              {/* 7. Student Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Batch
+                  Student Type <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="batch"
-                  value={studentData.batch}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Student Type
-                </label>
-                <input
-                  type="text"
+                <select
                   name="stud_type"
                   value={studentData.stud_type}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                >
+                  <option value="">Select Student Type</option>
+                  {STUDENT_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* 8. Student Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Student Status
+                  Student Status <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   name="student_status"
                   value={studentData.student_status}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                >
+                  <option value="">Select Status</option>
+                  {STUDENT_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* 9. Scholar Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Scholar Status
+                  Scholar Status <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   name="scholar_status"
                   value={studentData.scholar_status}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                >
+                  <option value="">Select Scholar Status</option>
+                  {SCHOLAR_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* 10. Previous College Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Previous College Name
@@ -613,25 +810,27 @@ const AddStudent = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Student Mobile Number
+                  Student Mobile Number <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
                   name="student_mobile"
                   value={studentData.student_mobile}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Parent Mobile Number 1
+                  Parent Mobile Number 1 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
                   name="parent_mobile1"
                   value={studentData.parent_mobile1}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />
               </div>
@@ -658,13 +857,14 @@ const AddStudent = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date of Birth
+                  Date of Birth <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   name="dob"
                   value={studentData.dob}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                 />
               </div>
@@ -682,15 +882,22 @@ const AddStudent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Caste
+                  Caste <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   name="caste"
                   value={studentData.caste}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                >
+                  <option value="">Select Caste</option>
+                  {CASTE_OPTIONS.map((caste) => (
+                    <option key={caste} value={caste}>
+                      {caste}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -762,15 +969,22 @@ const AddStudent = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Certificates Status
+                  Certificates Status <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   name="certificates_status"
                   value={studentData.certificates_status}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                />
+                >
+                  <option value="">Select Certificate Status</option>
+                  {CERTIFICATES_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-text-primary mb-2">

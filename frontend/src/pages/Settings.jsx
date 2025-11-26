@@ -14,7 +14,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  GraduationCap
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -158,13 +159,27 @@ const Settings = () => {
   const [branchDrafts, setBranchDrafts] = useState({});
   const [editingBranch, setEditingBranch] = useState(null);
   const [savingBranchId, setSavingBranchId] = useState(null);
+  const [branchBatchFilter, setBranchBatchFilter] = useState(''); // Filter branches by batch
+  
+  // Academic Years state
+  const [academicYears, setAcademicYears] = useState([]);
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
+  const [creatingAcademicYear, setCreatingAcademicYear] = useState(false);
+  const [newAcademicYear, setNewAcademicYear] = useState({ yearLabel: '', startDate: '', endDate: '' });
+  const [editingAcademicYearId, setEditingAcademicYearId] = useState(null);
+  const [academicYearDrafts, setAcademicYearDrafts] = useState({});
+  const [savingAcademicYearId, setSavingAcademicYearId] = useState(null);
   
   // Delete confirmation modal state
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
-    type: null, // 'college', 'course', or 'branch'
+    type: null, // 'college', 'course', 'branch', or 'academicYear'
     item: null,
-    onConfirm: null
+    onConfirm: null,
+    affectedStudents: [],
+    totalStudentCount: 0,
+    hasMoreStudents: false,
+    isLoadingStudents: false
   });
   const [activeSection, setActiveSection] = useState('courses'); // 'courses' or 'calendar'
 
@@ -204,6 +219,93 @@ const Settings = () => {
         setLoading(false);
       }
     }
+  };
+
+  // Fetch academic years from API
+  const fetchAcademicYears = async ({ silent = false } = {}) => {
+    try {
+      if (!silent) {
+        setAcademicYearsLoading(true);
+      }
+      const response = await api.get('/academic-years?includeInactive=true');
+      const yearData = response.data.data || [];
+      setAcademicYears(yearData);
+      return yearData;
+    } catch (error) {
+      console.error('Failed to fetch academic years', error);
+      // Don't show error toast - might not have the table yet
+      return [];
+    } finally {
+      if (!silent) {
+        setAcademicYearsLoading(false);
+      }
+    }
+  };
+
+  // Academic Year management functions
+  const handleCreateAcademicYear = async (event) => {
+    event.preventDefault();
+    if (!newAcademicYear.yearLabel.trim()) {
+      toast.error('Year label is required');
+      return;
+    }
+
+    try {
+      setCreatingAcademicYear(true);
+      await api.post('/academic-years', {
+        yearLabel: newAcademicYear.yearLabel.trim(),
+        startDate: newAcademicYear.startDate || null,
+        endDate: newAcademicYear.endDate || null,
+        isActive: true
+      });
+      
+      toast.success('Academic year created successfully');
+      setNewAcademicYear({ yearLabel: '', startDate: '', endDate: '' });
+      await fetchAcademicYears({ silent: true });
+    } catch (error) {
+      console.error('Failed to create academic year', error);
+      toast.error(error.response?.data?.message || 'Failed to create academic year');
+    } finally {
+      setCreatingAcademicYear(false);
+    }
+  };
+
+  const toggleAcademicYearActive = async (year) => {
+    try {
+      setSavingAcademicYearId(year.id);
+      await api.put(`/academic-years/${year.id}`, {
+        isActive: !year.isActive
+      });
+      toast.success(`Academic year ${!year.isActive ? 'activated' : 'deactivated'}`);
+      await fetchAcademicYears({ silent: true });
+    } catch (error) {
+      console.error('Failed to toggle academic year status', error);
+      toast.error(error.response?.data?.message || 'Failed to update academic year status');
+    } finally {
+      setSavingAcademicYearId(null);
+    }
+  };
+
+  const handleDeleteAcademicYear = (year) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'academicYear',
+      item: year,
+      onConfirm: async () => {
+        try {
+          setSavingAcademicYearId(year.id);
+          await api.delete(`/academic-years/${year.id}`);
+          toast.success('Academic year deleted successfully');
+          await fetchAcademicYears({ silent: true });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+        } catch (error) {
+          console.error('Failed to delete academic year', error);
+          toast.error(error.response?.data?.message || 'Failed to delete academic year');
+        } finally {
+          setSavingAcademicYearId(null);
+        }
+      }
+    });
   };
 
   // Get courses for selected college (filtered by collegeId)
@@ -302,11 +404,16 @@ const Settings = () => {
     }
   };
 
-  const handleDeleteCollege = (college) => {
+  const handleDeleteCollege = async (college) => {
+    // Show modal with loading state first
     setDeleteModal({
       isOpen: true,
       type: 'college',
       item: college,
+      affectedStudents: [],
+      totalStudentCount: 0,
+      hasMoreStudents: false,
+      isLoadingStudents: true,
       onConfirm: async () => {
         try {
           setSavingCollegeId(college.id);
@@ -318,7 +425,7 @@ const Settings = () => {
             setSelectedCollegeId(null);
             setSelectedCourseId(null);
           }
-          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false });
         } catch (error) {
           console.error('Failed to delete college', error);
           toast.error(error.response?.data?.message || 'Failed to delete college');
@@ -327,6 +434,25 @@ const Settings = () => {
         }
       }
     });
+
+    // Fetch affected students
+    try {
+      const response = await api.get(`/colleges/${college.id}/affected-students`);
+      const { students, totalCount, hasMore } = response.data.data || {};
+      setDeleteModal(prev => ({
+        ...prev,
+        affectedStudents: students || [],
+        totalStudentCount: totalCount || 0,
+        hasMoreStudents: hasMore || false,
+        isLoadingStudents: false
+      }));
+    } catch (error) {
+      console.error('Failed to fetch affected students', error);
+      setDeleteModal(prev => ({
+        ...prev,
+        isLoadingStudents: false
+      }));
+    }
   };
 
   const updateCollegeDraft = (collegeId, field, value) => {
@@ -557,6 +683,7 @@ const Settings = () => {
     const initializeData = async () => {
       await fetchColleges();
       await fetchCourses();
+      await fetchAcademicYears();
     };
     initializeData();
   }, []);
@@ -694,6 +821,7 @@ const Settings = () => {
 
   const handleRefresh = async () => {
     await fetchColleges({ silent: true });
+    await fetchAcademicYears({ silent: true });
     const updatedCourses = await fetchCourses({ silent: true, collegeId: selectedCollegeId });
     if (selectedCourseId && updatedCourses.some((course) => course.id === selectedCourseId)) {
       await loadBranches(selectedCourseId);
@@ -719,11 +847,16 @@ const Settings = () => {
     }
   };
 
-  const handleDeleteCourse = (course) => {
+  const handleDeleteCourse = async (course) => {
+    // Show modal with loading state first
     setDeleteModal({
       isOpen: true,
       type: 'course',
       item: course,
+      affectedStudents: [],
+      totalStudentCount: 0,
+      hasMoreStudents: false,
+      isLoadingStudents: true,
       onConfirm: async () => {
         try {
           setSavingCourseId(course.id);
@@ -738,7 +871,7 @@ const Settings = () => {
           }
           
           await fetchCourses({ silent: true });
-          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false });
         } catch (error) {
           console.error('Failed to delete course', error);
           const errorMessage = error.response?.data?.message || 'Failed to delete course';
@@ -748,6 +881,25 @@ const Settings = () => {
         }
       }
     });
+
+    // Fetch affected students
+    try {
+      const response = await api.get(`/courses/${course.id}/affected-students`);
+      const { students, totalCount, hasMore } = response.data.data || {};
+      setDeleteModal(prev => ({
+        ...prev,
+        affectedStudents: students || [],
+        totalStudentCount: totalCount || 0,
+        hasMoreStudents: hasMore || false,
+        isLoadingStudents: false
+      }));
+    } catch (error) {
+      console.error('Failed to fetch affected students', error);
+      setDeleteModal(prev => ({
+        ...prev,
+        isLoadingStudents: false
+      }));
+    }
   };
 
   const updateCourseDraft = (courseId, field, value) => {
@@ -862,12 +1014,18 @@ const Settings = () => {
       return;
     }
 
+    if (!payload.academicYearId) {
+      toast.error('Please select a batch year for the branch');
+      return;
+    }
+
     try {
       setSavingBranchId(`new-${course.id}`);
       await api.post(`/courses/${course.id}/branches`, {
         name: payload.name.trim(),
         totalYears: Number(payload.totalYears || course.totalYears),
         semestersPerYear: Number(payload.semestersPerYear || course.semestersPerYear),
+        academicYearId: Number(payload.academicYearId),
         isActive: true
       });
       toast.success('Branch added successfully');
@@ -957,11 +1115,16 @@ const Settings = () => {
     }
   };
 
-  const handleDeleteBranch = (courseId, branch) => {
+  const handleDeleteBranch = async (courseId, branch) => {
+    // Show modal with loading state first
     setDeleteModal({
       isOpen: true,
       type: 'branch',
       item: branch,
+      affectedStudents: [],
+      totalStudentCount: 0,
+      hasMoreStudents: false,
+      isLoadingStudents: true,
       onConfirm: async () => {
         try {
           setSavingBranchId(branch.id);
@@ -971,7 +1134,7 @@ const Settings = () => {
           cancelEditBranch();
           await loadBranches(courseId);
           await fetchCourses({ silent: true });
-          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false });
         } catch (error) {
           console.error('Failed to delete branch', error);
           toast.error(error.response?.data?.message || 'Failed to delete branch');
@@ -980,17 +1143,50 @@ const Settings = () => {
         }
       }
     });
+
+    // Fetch affected students
+    try {
+      const response = await api.get(`/courses/${courseId}/branches/${branch.id}/affected-students`);
+      const { students, totalCount, hasMore } = response.data.data || {};
+      setDeleteModal(prev => ({
+        ...prev,
+        affectedStudents: students || [],
+        totalStudentCount: totalCount || 0,
+        hasMoreStudents: hasMore || false,
+        isLoadingStudents: false
+      }));
+    } catch (error) {
+      console.error('Failed to fetch affected students', error);
+      setDeleteModal(prev => ({
+        ...prev,
+        isLoadingStudents: false
+      }));
+    }
   };
 
-  const branchesForSelectedCourse = selectedCourse ? courseBranches[selectedCourse.id] || [] : [];
+  const branchesForSelectedCourse = useMemo(() => {
+    if (!selectedCourse) return [];
+    const allBranches = courseBranches[selectedCourse.id] || [];
+    if (!branchBatchFilter) return allBranches;
+    return allBranches.filter(branch => branch.academicYearId === parseInt(branchBatchFilter, 10));
+  }, [selectedCourse, courseBranches, branchBatchFilter]);
+  
+  // Reset batch filter when course changes
+  useEffect(() => {
+    setBranchBatchFilter('');
+  }, [selectedCourseId]);
 
   const courseOptionsSummary = useMemo(() => {
     const courseCount = coursesForSelectedCollege.filter((course) => course.isActive).length;
-    const branchCount = coursesForSelectedCollege.reduce(
-      (acc, course) =>
-        acc + (courseBranches[course.id] || []).filter((branch) => branch.isActive).length,
-      0
-    );
+    
+    // Count unique branch names per course (not total across all batches)
+    const branchCount = coursesForSelectedCollege.reduce((acc, course) => {
+      const branches = courseBranches[course.id] || [];
+      const activeBranches = branches.filter((branch) => branch.isActive);
+      // Get unique branch names
+      const uniqueBranchNames = new Set(activeBranches.map((branch) => branch.name));
+      return acc + uniqueBranchNames.size;
+    }, 0);
 
     return {
       courseCount,
@@ -1082,502 +1278,413 @@ const Settings = () => {
       {/* Content Section */}
       {activeSection === 'courses' && (
         <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:gap-4">
-            <StatCard icon={Landmark} title="Colleges" value={colleges.filter(c => c.isActive).length} />
-            <StatCard icon={BookOpen} title="Active Courses" value={courseOptionsSummary.courseCount} />
-            <StatCard icon={Layers} title="Active Branches" value={courseOptionsSummary.branchCount} />
-          </div>
-
-          {/* Colleges Section */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
-              <Landmark size={16} />
-              Colleges
-            </h2>
-            <form onSubmit={handleCreateCollege} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
-              <TextField
-                label="College Name"
-                value={newCollege.name}
-                onChange={(value) => setNewCollege((prev) => ({ ...prev, name: value }))}
-                placeholder="e.g., Pydah College of Engineering"
-                required
-                className="sm:col-span-3"
-              />
-              <TextField
-                label="Code (Optional)"
-                value={newCollege.code || ''}
-                onChange={(value) => setNewCollege((prev) => ({ ...prev, code: value }))}
-                placeholder="e.g., PCE"
-                className="sm:col-span-1"
-              />
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={creatingCollege}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {creatingCollege ? (
-                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                  ) : (
-                    <Plus size={16} />
-                  )}
-                  Add College
-                </button>
-              </div>
-            </form>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {colleges.length === 0 ? (
-                <div className="col-span-full rounded-lg border border-gray-200 bg-white p-8 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
-                    <Landmark size={24} className="text-gray-500" />
-                  </div>
-                  <h3 className="text-base font-semibold text-gray-900 mb-2">No colleges yet</h3>
-                  <p className="text-sm text-gray-600">
-                    Add your first college above to organize courses and branches.
-                  </p>
-                </div>
-              ) : (
-                colleges.map((college) => (
-                  <CollegeCard
-                    key={college.id}
-                    college={college}
-                    isSelected={selectedCollegeId === college.id}
-                    onSelect={() => handleSelectCollege(college.id)}
-                    onEdit={() => handleEditCollege(college)}
-                    onDelete={() => handleDeleteCollege(college)}
-                    onToggleActive={() => toggleCollegeActive(college)}
-                    isEditing={editingCollegeId === college.id}
-                    isSaving={savingCollegeId === college.id}
-                    draft={collegeDrafts[college.id]}
-                    onUpdateDraft={(field, value) => updateCollegeDraft(college.id, field, value)}
-                    onSave={() => saveCollegeEdits(college.id)}
-                    onCancel={() => cancelEditCollege(college.id)}
-                    coursesCount={courses.filter(course => course.collegeId === college.id).length}
-                  />
-                ))
-              )}
+          {/* Quick Stats Bar */}
+          <div className="flex flex-wrap items-center gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Landmark size={16} className="text-blue-600" />
+              <span className="text-sm text-gray-600">Colleges:</span>
+              <span className="font-semibold text-gray-900">{colleges.filter(c => c.isActive).length}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300" />
+            <div className="flex items-center gap-2">
+              <GraduationCap size={16} className="text-green-600" />
+              <span className="text-sm text-gray-600">Batches:</span>
+              <span className="font-semibold text-gray-900">{academicYears.filter(y => y.isActive).length}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300" />
+            <div className="flex items-center gap-2">
+              <BookOpen size={16} className="text-purple-600" />
+              <span className="text-sm text-gray-600">Courses:</span>
+              <span className="font-semibold text-gray-900">{courseOptionsSummary.courseCount}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300" />
+            <div className="flex items-center gap-2">
+              <Layers size={16} className="text-orange-600" />
+              <span className="text-sm text-gray-600">Branches:</span>
+              <span className="font-semibold text-gray-900">{courseOptionsSummary.branchCount}</span>
             </div>
           </div>
 
-          {/* Courses Section - Only show when a college is selected */}
-          {selectedCollege && (
-            <>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-            <Plus size={16} />
-            Add course
-          </h2>
-          <span className="text-xs text-gray-500">
-            For: <span className="font-medium text-gray-700">{selectedCollege.name}</span>
-          </span>
-        </div>
-        <form onSubmit={handleCreateCourse} className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <TextField
-            label="Name"
-            value={newCourse.name}
-            onChange={(value) => setNewCourse((prev) => ({ ...prev, name: value }))}
-            placeholder="e.g., B.Tech"
-            required
-            className="sm:col-span-2"
-          />
-          <NumberField
-            label="Years"
-            value={newCourse.totalYears}
-            onChange={(value) => setNewCourse((prev) => ({ ...prev, totalYears: value }))}
-            min={1}
-            max={10}
-          />
-          <NumberField
-            label="Semesters / Year"
-            value={newCourse.semestersPerYear}
-            onChange={(value) =>
-              setNewCourse((prev) => ({ ...prev, semestersPerYear: value }))
-            }
-            min={1}
-            max={4}
-          />
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={creatingCourse}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {creatingCourse ? (
-                <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-              ) : (
-                <Plus size={16} />
-              )}
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[300px,1fr] 2xl:grid-cols-[320px,1fr]">
-        <div className="space-y-3">
-          {!selectedCollege ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
-                <Landmark size={24} className="text-gray-500" />
-              </div>
-              <h3 className="text-base font-semibold text-gray-900 mb-2">Select a College</h3>
-              <p className="text-sm text-gray-600">
-                Select a college from above to view and manage its courses.
-              </p>
-            </div>
-          ) : coursesForSelectedCollege.length === 0 ? (
-            <EmptyState />
-          ) : (
-            coursesForSelectedCollege.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                isSelected={selectedCourseId === course.id}
-                onSelect={() => handleSelectCourse(course.id)}
-              />
-            ))
-          )}
-        </div>
-
-        <div>
-          {selectedCourse ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-900">{selectedCourse.name}</h2>
-                    <StatusBadge isActive={selectedCourse.isActive} />
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {selectedCourse.totalYears} years · {selectedCourse.semestersPerYear} semesters/year
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    {(selectedCourse.branches || []).length} total branches
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => toggleCourseActive(selectedCourse)}
-                    disabled={savingCourseId === selectedCourse.id}
-                    className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {selectedCourse.isActive ? (
-                      <>
-                        <ToggleRight size={16} className="text-green-600" />
-                        Active
-                      </>
-                    ) : (
-                      <>
-                        <ToggleLeft size={16} className="text-gray-500" />
-                        Activate
-                      </>
-                    )}
-                  </button>
-                  {editingCourseId === selectedCourse.id ? (
-                    <button
-                      onClick={() => cancelEditCourse(selectedCourse.id)}
-                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleEditCourse(selectedCourse)}
-                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                      >
-                        <Pencil size={16} />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCourse(selectedCourse)}
-                        disabled={savingCourseId === selectedCourse.id}
-                        className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Trash2 size={16} />
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {editingCourseId === selectedCourse.id && (
-                <div className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-200 pt-4 sm:grid-cols-3">
-                  <TextField
-                    label="Name"
-                    value={courseDrafts[selectedCourse.id]?.name ?? selectedCourse.name}
-                    onChange={(value) => updateCourseDraft(selectedCourse.id, 'name', value)}
-                    required
-                  />
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-gray-700">College</span>
-                    <select
-                      value={courseDrafts[selectedCourse.id]?.collegeId ?? selectedCourse.collegeId ?? ''}
-                      onChange={(e) => updateCourseDraft(selectedCourse.id, 'collegeId', parseInt(e.target.value, 10))}
-                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                    >
-                      <option value="">Select a college</option>
-                      {colleges.map((college) => (
-                        <option key={college.id} value={college.id}>
-                          {college.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <NumberField
-                    label="Years"
-                    value={courseDrafts[selectedCourse.id]?.totalYears ?? selectedCourse.totalYears}
-                    onChange={(value) => updateCourseDraft(selectedCourse.id, 'totalYears', value)}
-                    min={1}
-                    max={10}
-                  />
-                  <NumberField
-                    label="Semesters / Year"
-                    value={
-                      courseDrafts[selectedCourse.id]?.semestersPerYear ?? selectedCourse.semestersPerYear
-                    }
-                    onChange={(value) =>
-                      updateCourseDraft(selectedCourse.id, 'semestersPerYear', value)
-                    }
-                    min={1}
-                    max={4}
-                  />
-                  <div className="sm:col-span-3 flex gap-2">
-                    <button
-                      onClick={() => saveCourseEdits(selectedCourse.id)}
-                      disabled={savingCourseId === selectedCourse.id}
-                      className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Save changes
-                    </button>
-                    <button
-                      onClick={() => cancelEditCourse(selectedCourse.id)}
-                      className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
+          {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
+          <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+            {/* Left Column */}
+            <div className="space-y-4">
+              {/* Colleges Card */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                      <Landmark size={16} className="text-blue-600" />
+                      Colleges
+                    </h3>
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      {colleges.length}
+                    </span>
                   </div>
                 </div>
-              )}
-
-              <div className="mt-6 border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-semibold text-gray-900">Branches</h3>
-                  <span className="text-sm text-gray-500">
-                    {(branchesForSelectedCourse || []).filter((branch) => branch.isActive).length} active
-                  </span>
-                </div>
-
-                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-                  <p className="mb-3 text-sm font-semibold text-gray-900">Add branch</p>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div className="p-3">
+                  {/* Add College Form */}
+                  <form onSubmit={handleCreateCollege} className="mb-3 flex gap-2">
                     <input
                       type="text"
-                      value={branchForms[selectedCourse.id]?.name || ''}
-                      onChange={(e) => updateBranchForm(selectedCourse.id, 'name', e.target.value)}
-                      placeholder="Name"
-                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={
-                        branchForms[selectedCourse.id]?.totalYears ??
-                        selectedCourse.totalYears
-                      }
-                      onChange={(e) =>
-                        updateBranchForm(selectedCourse.id, 'totalYears', e.target.value)
-                      }
-                      placeholder="Years"
-                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      max={4}
-                      value={
-                        branchForms[selectedCourse.id]?.semestersPerYear ??
-                        selectedCourse.semestersPerYear
-                      }
-                      onChange={(e) =>
-                        updateBranchForm(selectedCourse.id, 'semestersPerYear', e.target.value)
-                      }
-                      placeholder="Sem / year"
-                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+                      value={newCollege.name}
+                      onChange={(e) => setNewCollege((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="New college name..."
+                      className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                     <button
-                      onClick={() => handleAddBranch(selectedCourse)}
-                      disabled={savingBranchId === `new-${selectedCourse.id}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="submit"
+                      disabled={creatingCollege || !newCollege.name.trim()}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {savingBranchId === `new-${selectedCourse.id}` ? (
-                        <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                      ) : (
-                        <Plus size={16} />
-                      )}
-                      Add
+                      <Plus size={16} />
                     </button>
+                  </form>
+                  
+                  {/* College List */}
+                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+                    {colleges.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-gray-400">No colleges yet</p>
+                    ) : (
+                      colleges.map((college) => (
+                        <div
+                          key={college.id}
+                          onClick={() => handleSelectCollege(college.id)}
+                          className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
+                            selectedCollegeId === college.id
+                              ? 'bg-blue-50 border border-blue-200'
+                              : 'hover:bg-gray-50 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${college.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className={`text-sm truncate ${selectedCollegeId === college.id ? 'font-medium text-blue-900' : 'text-gray-700'}`}>
+                              {college.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleCollegeActive(college); }}
+                              className="p-1 text-gray-400 hover:text-gray-600"
+                              title={college.isActive ? 'Deactivate' : 'Activate'}
+                            >
+                              {college.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteCollege(college); }}
+                              className="p-1 text-gray-400 hover:text-red-500"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
+              </div>
 
-                {branchesLoading ? (
-                  <div className="flex items-center justify-center py-10">
-                    <LoadingAnimation width={24} height={24} showMessage={false} />
+              {/* Academic Years Card */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                      <GraduationCap size={16} className="text-green-600" />
+                      Batches (Academic Years)
+                    </h3>
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      {academicYears.filter(y => y.isActive).length}
+                    </span>
                   </div>
-                ) : branchesForSelectedCourse.length === 0 ? (
-                  <p className="mt-4 text-sm text-gray-500">No branches yet. Add one to get started.</p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {branchesForSelectedCourse.map((branch) => {
-                      const isEditing =
-                        editingBranch &&
-                        editingBranch.courseId === selectedCourse.id &&
-                        editingBranch.branchId === branch.id;
-                      const branchDraft = branchDrafts[branch.id] || branch;
-
-                      return (
+                </div>
+                <div className="p-3">
+                  {/* Add Year Form */}
+                  <form onSubmit={handleCreateAcademicYear} className="mb-3 flex gap-2">
+                    <input
+                      type="text"
+                      value={newAcademicYear.yearLabel}
+                      onChange={(e) => setNewAcademicYear((prev) => ({ ...prev, yearLabel: e.target.value }))}
+                      placeholder="e.g., 2027"
+                      className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-green-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={creatingAcademicYear || !newAcademicYear.yearLabel.trim()}
+                      className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </form>
+                  
+                  {/* Year Tags */}
+                  <div className="flex flex-wrap gap-2">
+                    {academicYears.length === 0 ? (
+                      <p className="py-2 text-sm text-gray-400">No batches yet</p>
+                    ) : (
+                      academicYears.map((year) => (
                         <div
-                          key={branch.id}
-                          className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm"
+                          key={year.id}
+                          className={`group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 text-sm font-medium transition-all ${
+                            year.isActive
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-500'
+                          }`}
                         >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="space-y-1 text-sm">
-                              <div className="flex items-center gap-2">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={branchDraft.name}
-                                    onChange={(e) =>
-                                      updateBranchDraft(branch.id, 'name', e.target.value)
-                                    }
-                                    className="w-48 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                                  />
-                                ) : (
-                                  <span className="font-semibold text-gray-900">{branch.name}</span>
-                                )}
-                                {!branch.isActive && (
-                                  <span className="rounded-full bg-yellow-100 border border-yellow-200 px-2.5 py-1 text-xs font-medium text-yellow-700">
-                                    Inactive
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-gray-600">
-                                {(branch.totalYears ?? selectedCourse.totalYears)} years ·{' '}
-                                {(branch.semestersPerYear ?? selectedCourse.semestersPerYear)} semesters/year
-                              </p>
-                            </div>
+                          <span>{year.yearLabel}</span>
+                          <button
+                            onClick={() => toggleAcademicYearActive(year)}
+                            disabled={savingAcademicYearId === year.id}
+                            className="p-0.5 rounded hover:bg-white/50 transition-colors"
+                          >
+                            {year.isActive ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAcademicYear(year)}
+                            disabled={savingAcademicYearId === year.id}
+                            className="p-0.5 rounded text-red-400 hover:text-red-600 hover:bg-white/50 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                            <div className="flex flex-wrap gap-2">
-                              {isEditing ? (
-                                <>
-                                  <button
-                                    onClick={() => saveBranchEdit(selectedCourse.id, branch)}
-                                    disabled={savingBranchId === branch.id}
-                                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    onClick={cancelEditBranch}
-                                    className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                                  >
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() =>
-                                      startEditBranch(selectedCourse.id, branch, selectedCourse)
-                                    }
-                                    className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                                  >
-                                    <Pencil size={16} />
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
-                                    disabled={savingBranchId === branch.id}
-                                    className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    <Trash2 size={16} />
-                                    Delete
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => toggleBranchActive(selectedCourse.id, branch)}
-                                disabled={savingBranchId === branch.id}
-                                className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {branch.isActive ? (
-                                  <>
-                                    <ToggleRight size={16} className="text-green-600" />
-                                    Active
-                                  </>
-                                ) : (
-                                  <>
-                                    <ToggleLeft size={16} className="text-gray-500" />
-                                    Activate
-                                  </>
-                                )}
-                              </button>
+            {/* Right Column - Courses & Branches */}
+            <div className="space-y-4">
+              {!selectedCollege ? (
+                <div className="flex h-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8">
+                  <div className="text-center">
+                    <Landmark size={32} className="mx-auto mb-3 text-gray-300" />
+                    <p className="text-sm text-gray-500">Select a college to manage its courses</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Add Course Form */}
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                        <BookOpen size={16} className="text-purple-600" />
+                        Courses
+                      </h3>
+                      <span className="text-xs text-gray-500">
+                        for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
+                      </span>
+                    </div>
+                    <form onSubmit={handleCreateCourse} className="flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        value={newCourse.name}
+                        onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Course name (e.g., B.Tech)"
+                        className="flex-1 min-w-[150px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={newCourse.totalYears}
+                        onChange={(e) => setNewCourse((prev) => ({ ...prev, totalYears: e.target.value }))}
+                        placeholder="Years"
+                        className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={4}
+                        value={newCourse.semestersPerYear}
+                        onChange={(e) => setNewCourse((prev) => ({ ...prev, semestersPerYear: e.target.value }))}
+                        placeholder="Sem/Yr"
+                        className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={creatingCourse || !newCourse.name.trim()}
+                        className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {creatingCourse ? <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" /> : 'Add Course'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Course List & Branches */}
+                  <div className="grid gap-4 lg:grid-cols-[240px,1fr]">
+                    {/* Course List */}
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Select Course</div>
+                      <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+                        {coursesForSelectedCollege.length === 0 ? (
+                          <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
+                        ) : (
+                          coursesForSelectedCollege.map((course) => (
+                            <div
+                              key={course.id}
+                              onClick={() => handleSelectCourse(course.id)}
+                              className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
+                                selectedCourseId === course.id
+                                  ? 'bg-purple-100 border border-purple-300'
+                                  : 'bg-white hover:bg-purple-50 border border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`h-2 w-2 rounded-full flex-shrink-0 ${course.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                <div className="min-w-0">
+                                  <span className={`block text-sm truncate ${selectedCourseId === course.id ? 'font-medium text-purple-900' : 'text-gray-700'}`}>
+                                    {course.name}
+                                  </span>
+                                  <span className="text-xs text-gray-500">{course.totalYears}yr · {course.semestersPerYear}sem</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleCourseActive(course); }}
+                                  className="p-1 text-gray-400 hover:text-gray-600"
+                                >
+                                  {course.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course); }}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Branches Panel */}
+                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                      {selectedCourse ? (
+                        <>
+                          <div className="border-b border-gray-100 px-4 py-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">{selectedCourse.name} - Branches</h4>
+                                <p className="text-xs text-gray-500">{selectedCourse.totalYears} years · {selectedCourse.semestersPerYear} semesters/year</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={branchBatchFilter}
+                                  onChange={(e) => setBranchBatchFilter(e.target.value)}
+                                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                >
+                                  <option value="">All Batches</option>
+                                  {academicYears.filter(y => y.isActive).map((year) => (
+                                    <option key={year.id} value={year.id}>{year.yearLabel}</option>
+                                  ))}
+                                </select>
+                                <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+                                  {branchesForSelectedCourse.length} {branchBatchFilter ? 'shown' : 'branches'}
+                                </span>
+                              </div>
                             </div>
                           </div>
 
-                          {isEditing && (
-                            <div className="mt-4 flex flex-wrap gap-4 border-t border-gray-200 pt-3">
-                              <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700">Years</label>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={10}
-                                  value={branchDraft.totalYears ?? selectedCourse.totalYears}
-                                  onChange={(e) =>
-                                    updateBranchDraft(branch.id, 'totalYears', e.target.value)
-                                  }
-                                  className="w-24 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                                />
+                          {/* Add Branch Form */}
+                          <div className="border-b border-gray-100 p-4">
+                            <form 
+                              onSubmit={(e) => { e.preventDefault(); handleAddBranch(selectedCourse); }}
+                              className="flex flex-wrap gap-2"
+                            >
+                              <select
+                                value={branchForms[selectedCourse.id]?.academicYearId || ''}
+                                onChange={(e) => updateBranchForm(selectedCourse.id, 'academicYearId', e.target.value)}
+                                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              >
+                                <option value="">Batch</option>
+                                {academicYears.filter(y => y.isActive).map((year) => (
+                                  <option key={year.id} value={year.id}>{year.yearLabel}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                value={branchForms[selectedCourse.id]?.name || ''}
+                                onChange={(e) => updateBranchForm(selectedCourse.id, 'name', e.target.value)}
+                                placeholder="Branch name (e.g., CSE)"
+                                className="flex-1 min-w-[120px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              />
+                              <button
+                                type="submit"
+                                disabled={savingBranchId === `new-${selectedCourse.id}` || !branchForms[selectedCourse.id]?.name?.trim() || !branchForms[selectedCourse.id]?.academicYearId}
+                                className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {savingBranchId === `new-${selectedCourse.id}` ? (
+                                  <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                                ) : (
+                                  <Plus size={16} />
+                                )}
+                              </button>
+                            </form>
+                          </div>
+
+                          {/* Branch List */}
+                          <div className="p-4 max-h-[300px] overflow-y-auto">
+                            {branchesLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                <LoadingAnimation width={24} height={24} showMessage={false} />
                               </div>
-                              <div className="flex items-center gap-2">
-                                <label className="text-sm font-medium text-gray-700">Semesters / Year</label>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={4}
-                                  value={
-                                    branchDraft.semestersPerYear ?? selectedCourse.semestersPerYear
-                                  }
-                                  onChange={(e) =>
-                                    updateBranchDraft(branch.id, 'semestersPerYear', e.target.value)
-                                  }
-                                  className="w-24 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                                />
+                            ) : branchesForSelectedCourse.length === 0 ? (
+                              <p className="py-8 text-center text-sm text-gray-400">No branches yet</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {branchesForSelectedCourse.map((branch) => (
+                                  <div
+                                    key={branch.id}
+                                    className="group flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${branch.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                      <span className="text-sm font-medium text-gray-800 truncate">{branch.name}</span>
+                                      {branch.academicYearLabel && (
+                                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                                          {branch.academicYearLabel}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() => toggleBranchActive(selectedCourse.id, branch)}
+                                        disabled={savingBranchId === branch.id}
+                                        className="p-1 text-gray-400 hover:text-gray-600"
+                                      >
+                                        {branch.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
+                                        disabled={savingBranchId === branch.id}
+                                        className="p-1 text-gray-400 hover:text-red-500"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex h-full items-center justify-center p-8">
+                          <div className="text-center">
+                            <Layers size={32} className="mx-auto mb-3 text-gray-300" />
+                            <p className="text-sm text-gray-500">Select a course to view branches</p>
+                          </div>
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-sm text-gray-500">
-              Select a course to manage its details.
-            </div>
-          )}
-        </div>
-      </div>
-            </>
-          )}
+          </div>
         </>
       )}
 
@@ -1927,11 +2034,15 @@ const Settings = () => {
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null })}
+        onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false })}
         onConfirm={deleteModal.onConfirm || (() => {})}
-        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : 'Branch'}`}
-        itemName={deleteModal.item?.name}
+        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : 'Branch'}`}
+        itemName={deleteModal.item?.name || deleteModal.item?.yearLabel}
         itemType={deleteModal.type}
+        affectedStudents={deleteModal.affectedStudents || []}
+        totalStudentCount={deleteModal.totalStudentCount || 0}
+        hasMoreStudents={deleteModal.hasMoreStudents || false}
+        isLoadingStudents={deleteModal.isLoadingStudents || false}
       />
     </div>
   );
@@ -2109,7 +2220,10 @@ const CollegeCard = ({
 };
 
 const CourseCard = ({ course, isSelected, onSelect }) => {
-  const activeBranches = (course.branches || []).filter((branch) => branch.isActive).length;
+  // Count unique branch names (not total across batches)
+  const activeBranches = new Set(
+    (course.branches || []).filter((branch) => branch.isActive).map((branch) => branch.name)
+  ).size;
   return (
     <button
       type="button"

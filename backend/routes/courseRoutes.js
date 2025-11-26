@@ -20,5 +20,9 @@ router.post('/:courseId/branches', courseController.createBranch);
 router.put('/:courseId/branches/:branchId', courseController.updateBranch);
 router.delete('/:courseId/branches/:branchId', courseController.deleteBranch);
 
+// Preview affected students endpoints
+router.get('/:courseId/affected-students', courseController.getAffectedStudentsByCourse);
+router.get('/:courseId/branches/:branchId/affected-students', courseController.getAffectedStudentsByBranch);
+
 module.exports = router;
 
