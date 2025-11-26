@@ -1218,7 +1218,8 @@ exports.submitForm = async (req, res) => {
 
     const submissionId = uuidv4();
 
-    // Check if auto-assign is enabled
+    // Check if auto-assign is enabled and generate admission number based on academic year
+    // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
     let generatedAdmissionNumber = null;
     try {
       const { data: setting, error: setErr } = await supabase
@@ -1228,46 +1229,71 @@ exports.submitForm = async (req, res) => {
         .single();
 
       if (!setErr && setting && setting.value === 'true') {
-        // Generate next sequential number
-        // Get current prefix from settings
-        const { data: prefixSetting } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'admission_prefix')
-          .single();
+        // Get academic year from submission data (batch field)
+        let academicYear = submissionData.batch || submissionData.academic_year;
+        
+        // Extract year if batch contains range like "2024-2028" or "2024-25"
+        if (academicYear && typeof academicYear === 'string') {
+          const yearMatch = academicYear.match(/^(\d{4})/);
+          if (yearMatch) {
+            academicYear = yearMatch[1];
+          }
+        }
+        
+        // Default to current year if no batch/academic year specified
+        if (!academicYear) {
+          academicYear = new Date().getFullYear().toString();
+        }
 
-        const prefix = prefixSetting ? prefixSetting.value : 'PYDAH2025';
-        const { data: submissions, error: subErr } = await supabase
-          .from('form_submissions')
-          .select('admission_number')
-          .like('admission_number', `${prefix}_%`);
+        const yearPrefix = academicYear.toString();
 
-        if (subErr) throw subErr;
-
-        // Query students from MySQL
+        // Query MySQL to find max admission number for this year
         const masterConn2 = await masterPool.getConnection();
-        const [studentRows2] = await masterConn2.query(
-          'SELECT admission_number FROM students WHERE admission_number LIKE ?',
-          [`${prefix}_%`]
+        const [existingRows] = await masterConn2.query(
+          `SELECT admission_number FROM students 
+           WHERE admission_number REGEXP ? 
+           ORDER BY admission_number DESC`,
+          [`^${yearPrefix}[0-9]{4}$`]
         );
         masterConn2.release();
 
-        const allNumbers = [...(submissions || []).map(s => s.admission_number), ...studentRows2.map(s => s.admission_number)].filter(Boolean);
-
-        let maxNum = 0;
-        allNumbers.forEach(num => {
-          const match = num.match(new RegExp(`^${prefix}_(\\d+)$`));
-          if (match) {
-            const numPart = parseInt(match[1], 10);
-            if (numPart > maxNum) maxNum = numPart;
+        // Find the maximum sequence number for this year
+        let maxSeq = 0;
+        existingRows.forEach(row => {
+          const admNum = row.admission_number;
+          if (admNum && admNum.startsWith(yearPrefix)) {
+            const seqPart = admNum.substring(yearPrefix.length);
+            const seqNum = parseInt(seqPart, 10);
+            if (!isNaN(seqNum) && seqNum > maxSeq) {
+              maxSeq = seqNum;
+            }
           }
         });
 
-        const nextNum = (maxNum + 1).toString().padStart(3, '0');
-        generatedAdmissionNumber = `${prefix}_${nextNum}`;
+        // Also check form_submissions for any pending numbers
+        const { data: submissions } = await supabase
+          .from('form_submissions')
+          .select('admission_number')
+          .like('admission_number', `${yearPrefix}%`);
+
+        if (submissions) {
+          submissions.forEach(sub => {
+            const admNum = sub.admission_number;
+            if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+              const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
+              }
+            }
+          });
+        }
+
+        const nextSeq = maxSeq + 1;
+        generatedAdmissionNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+        console.log(`Generated admission number: ${generatedAdmissionNumber} for academic year ${academicYear}`);
       }
     } catch (error) {
-      console.error('Error checking auto-assign setting:', error);
+      console.error('Error generating admission number:', error);
       // Continue without assigning
     }
 
@@ -2536,131 +2562,190 @@ exports.bulkUploadSubmissions = async (req, res) => {
   }
 };
 
-// Generate admission number series
+// Generate admission number series based on academic year
+// Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
 exports.generateAdmissionSeries = async (req, res) => {
   try {
-    // Get current prefix from settings
-    const { data: prefixSetting } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'admission_prefix')
-      .single();
-
-    const currentPrefix = prefixSetting ? prefixSetting.value : 'PYDAH2025';
-    const prefix = req.body.prefix || currentPrefix;
-
+    // Get academic year from request - can be a year (2025) or prefix input
+    let academicYear = req.body.prefix || req.body.academicYear;
     const { autoAssign = false } = req.body;
-    const count = 1; // Always generate one number
 
-    if (!prefix || typeof prefix !== 'string') {
+    // Extract year if input contains range like "2024-2028" or other formats
+    if (academicYear && typeof academicYear === 'string') {
+      const yearMatch = academicYear.match(/(\d{4})/);
+      if (yearMatch) {
+        academicYear = yearMatch[1];
+      }
+    }
+
+    // Default to current year if no academic year specified
+    if (!academicYear) {
+      academicYear = new Date().getFullYear().toString();
+    }
+
+    // Validate that we have a valid 4-digit year
+    if (!/^\d{4}$/.test(academicYear)) {
       return res.status(400).json({
         success: false,
-        message: 'Prefix is required'
+        message: 'Academic year must be a valid 4-digit year (e.g., 2025)'
       });
     }
 
-    // Validate prefix format (alphanumeric, underscores, hyphens only)
-    if (!/^[a-zA-Z0-9_-]+$/.test(prefix)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Prefix can only contain letters, numbers, underscores, and hyphens'
-      });
-    }
+    const yearPrefix = academicYear.toString();
 
-    // Find the next sequential number
-    const { data: submissions, error: subErr } = await supabase
-      .from('form_submissions')
-      .select('admission_number')
-      .like('admission_number', `${prefix}_%`);
-
-    if (subErr) throw subErr;
-
-    // Query students from MySQL
+    // Query MySQL to find max admission number for this year
     const masterConn = await masterPool.getConnection();
-    const [studentRows] = await masterConn.query(
-      'SELECT admission_number FROM students WHERE admission_number LIKE ?',
-      [`${prefix}_%`]
+    const [existingRows] = await masterConn.query(
+      `SELECT admission_number FROM students 
+       WHERE admission_number REGEXP ? 
+       ORDER BY admission_number DESC`,
+      [`^${yearPrefix}[0-9]{4}$`]
     );
     masterConn.release();
 
-    const allNumbers = [...(submissions || []).map(s => s.admission_number), ...studentRows.map(s => s.admission_number)].filter(Boolean);
-
-    let maxNum = 0;
-    allNumbers.forEach(num => {
-      const match = num.match(new RegExp(`^${prefix}_(\\d+)$`));
-      if (match) {
-        const numPart = parseInt(match[1], 10);
-        if (numPart > maxNum) maxNum = numPart;
+    // Find the maximum sequence number for this year
+    let maxSeq = 0;
+    existingRows.forEach(row => {
+      const admNum = row.admission_number;
+      if (admNum && admNum.startsWith(yearPrefix)) {
+        const seqPart = admNum.substring(yearPrefix.length);
+        const seqNum = parseInt(seqPart, 10);
+        if (!isNaN(seqNum) && seqNum > maxSeq) {
+          maxSeq = seqNum;
+        }
       }
     });
 
-    const admissionNumbers = [];
-    for (let i = 1; i <= count; i++) {
-      const num = (maxNum + i).toString().padStart(3, '0');
-      admissionNumbers.push(`${prefix}_${num}`);
+    // Also check form_submissions for any pending numbers
+    const { data: submissions } = await supabase
+      .from('form_submissions')
+      .select('admission_number')
+      .like('admission_number', `${yearPrefix}%`);
+
+    if (submissions) {
+      submissions.forEach(sub => {
+        const admNum = sub.admission_number;
+        if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+          const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+          if (!isNaN(seqNum) && seqNum > maxSeq) {
+            maxSeq = seqNum;
+          }
+        }
+      });
     }
 
-    // If autoAssign is true, assign these numbers to pending submissions
-    if (autoAssign && admissionNumbers.length > 0) {
+    // Generate admission number
+    const nextSeq = maxSeq + 1;
+    const generatedAdmissionNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+    const admissionNumbers = [generatedAdmissionNumber];
+
+    console.log(`Generated admission number: ${generatedAdmissionNumber} for academic year ${academicYear}`);
+
+    // If autoAssign is true, assign to pending submissions
+    if (autoAssign) {
       try {
-        // Get pending submissions that don't have admission numbers
+        // Get pending submissions that don't have admission numbers and match the academic year
         const { data: pendingSubmissions, error } = await supabase
           .from('form_submissions')
-          .select('submission_id')
+          .select('submission_id, submission_data')
           .eq('status', 'pending')
           .or('admission_number.is.null,admission_number.eq.')
-          .order('created_at', { ascending: true })
-          .limit(count);
+          .order('created_at', { ascending: true });
 
         if (error) {
           console.error('Error fetching pending submissions:', error);
         } else if (pendingSubmissions && pendingSubmissions.length > 0) {
-          // Update pending submissions with generated admission numbers
-          const updates = pendingSubmissions.map((submission, index) => ({
-            submission_id: submission.submission_id,
-            admission_number: admissionNumbers[index] || null
-          })).filter(update => update.admission_number);
+          // Filter submissions by academic year (batch) and assign numbers
+          let assignedCount = 0;
+          const masterConnAssign = await masterPool.getConnection();
+          
+          try {
+            for (const submission of pendingSubmissions) {
+              const subData = submission.submission_data || {};
+              let subYear = subData.batch || subData.academic_year;
+              
+              // Extract year from batch
+              if (subYear && typeof subYear === 'string') {
+                const subYearMatch = subYear.match(/(\d{4})/);
+                if (subYearMatch) {
+                  subYear = subYearMatch[1];
+                }
+              }
+              
+              // Only assign if submission matches the academic year or has no year specified
+              if (!subYear || subYear === academicYear) {
+                // Get the next sequence number for this year
+                const [latestRows] = await masterConnAssign.query(
+                  `SELECT MAX(CAST(SUBSTRING(admission_number, 5) AS UNSIGNED)) as max_seq 
+                   FROM students 
+                   WHERE admission_number REGEXP ?`,
+                  [`^${yearPrefix}[0-9]{4}$`]
+                );
+                
+                let currentMaxSeq = latestRows[0]?.max_seq || 0;
+                
+                // Also check form_submissions
+                const { data: latestSubs } = await supabase
+                  .from('form_submissions')
+                  .select('admission_number')
+                  .like('admission_number', `${yearPrefix}%`);
+                
+                if (latestSubs) {
+                  latestSubs.forEach(sub => {
+                    const admNum = sub.admission_number;
+                    if (admNum && admNum.startsWith(yearPrefix)) {
+                      const seqPart = admNum.substring(yearPrefix.length);
+                      const seqNum = parseInt(seqPart, 10);
+                      if (!isNaN(seqNum) && seqNum > currentMaxSeq) {
+                        currentMaxSeq = seqNum;
+                      }
+                    }
+                  });
+                }
+                
+                const newAdmNum = `${yearPrefix}${(currentMaxSeq + 1).toString().padStart(4, '0')}`;
+                
+                const { error: updateError } = await supabase
+                  .from('form_submissions')
+                  .update({
+                    admission_number: newAdmNum,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('submission_id', submission.submission_id);
 
-          if (updates.length > 0) {
-            // Use batch update for better performance
-            for (const update of updates) {
-              const { error: updateError } = await supabase
-                .from('form_submissions')
-                .update({
-                  admission_number: update.admission_number,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('submission_id', update.submission_id);
-
-              if (updateError) {
-                console.error(`Error updating submission ${update.submission_id}:`, updateError);
+                if (!updateError) {
+                  assignedCount++;
+                  console.log(`Assigned ${newAdmNum} to submission ${submission.submission_id}`);
+                } else {
+                  console.error(`Error updating submission ${submission.submission_id}:`, updateError);
+                }
               }
             }
-
-            console.log(`Auto-assigned ${updates.length} admission numbers to pending submissions`);
-          } else {
-            console.log('No pending submissions available for auto-assignment');
+          } finally {
+            masterConnAssign.release();
           }
+
+          console.log(`Auto-assigned ${assignedCount} admission numbers for academic year ${academicYear}`);
         } else {
           console.log('No pending submissions found for auto-assignment');
         }
       } catch (assignError) {
         console.error('Error auto-assigning admission numbers:', assignError);
-        // Don't fail the request if auto-assignment fails
       }
     }
 
-    // Always save the prefix to settings since the admin explicitly requested this prefix
+    // Save the academic year as the current setting
     await supabase
       .from('settings')
-      .upsert({ key: 'admission_prefix', value: prefix });
+      .upsert({ key: 'admission_prefix', value: academicYear });
 
     res.json({
       success: true,
       data: {
         admissionNumbers,
-        prefix,
-        autoAssigned: autoAssign ? admissionNumbers.length : 0
+        academicYear,
+        prefix: academicYear,
+        autoAssigned: autoAssign ? 1 : 0
       }
     });
 

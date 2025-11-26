@@ -676,14 +676,17 @@ const Submissions = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Series Prefix</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Academic Year</label>
                 <input
                   type="text"
                   id="seriesPrefix"
-                  defaultValue="PYDAH2025"
+                  defaultValue={new Date().getFullYear().toString()}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                  placeholder="Enter series prefix (letters, numbers, _, - only)"
+                  placeholder="Enter academic year (e.g., 2025)"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Admission numbers will be generated as: {new Date().getFullYear()}0001, {new Date().getFullYear()}0002, etc.
+                </p>
               </div>
 
 
@@ -696,7 +699,7 @@ const Submissions = () => {
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
                 <label htmlFor="autoAssign" className="ml-2 block text-sm text-gray-900">
-                  Auto-assign to pending submissions (prefix will be saved for future use)
+                  Auto-assign to pending submissions based on their academic year
                 </label>
               </div>
             </div>
@@ -704,21 +707,23 @@ const Submissions = () => {
             <div className="flex items-center gap-3 mt-6">
               <button
                 onClick={() => {
-                  const prefix = document.getElementById('seriesPrefix').value;
+                  const academicYear = document.getElementById('seriesPrefix').value;
 
-                  if (!prefix.trim()) {
-                    toast.error('Series prefix is required');
+                  if (!academicYear.trim()) {
+                    toast.error('Academic year is required');
                     return;
                   }
 
-                  // Validate prefix format (alphanumeric, underscores, hyphens only)
-                  if (!/^[a-zA-Z0-9_-]+$/.test(prefix.trim())) {
-                    toast.error('Prefix can only contain letters, numbers, underscores, and hyphens');
+                  // Validate academic year format (4-digit year)
+                  const yearMatch = academicYear.trim().match(/(\d{4})/);
+                  if (!yearMatch) {
+                    toast.error('Please enter a valid 4-digit year (e.g., 2025)');
                     return;
                   }
 
                   api.post('/submissions/generate-admission-series', {
-                    prefix: prefix.trim(),
+                    prefix: yearMatch[1],
+                    academicYear: yearMatch[1],
                     autoAssign
                   })
                     .then(response => {
@@ -726,13 +731,13 @@ const Submissions = () => {
                       const numbers = data.admissionNumbers;
 
                       if (autoAssign) {
-                        toast.success(`Generated and auto-assigned ${numbers.length} admission numbers to pending submissions!`);
+                        toast.success(`Generated and auto-assigned admission numbers for academic year ${yearMatch[1]}!`);
                         fetchSubmissions(); // Refresh to show updated admission numbers
                         // Set global auto-assign
                         toggleGlobalAutoAssign();
                       } else {
                         navigator.clipboard.writeText(numbers.join('\n'));
-                        toast.success(`${numbers.length} admission numbers generated and copied to clipboard! (Prefix saved for future use)`);
+                        toast.success(`Admission number ${numbers[0]} generated and copied to clipboard!`);
                       }
                       setShowAdmissionSeries(false);
                       setAutoAssign(false);

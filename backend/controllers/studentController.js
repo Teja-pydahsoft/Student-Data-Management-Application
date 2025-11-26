@@ -1188,10 +1188,27 @@ exports.previewBulkUploadStudents = async (req, res) => {
     const collegeId = req.body?.collegeId || req.query?.collegeId || null;
     const courseIndex = await buildCourseBranchIndex(collegeId);
 
-    // Check if auto-generate series is enabled and generate admission numbers for records without them
+    // Fetch college name if collegeId is provided
+    let collegeName = null;
+    if (collegeId) {
+      try {
+        const masterConn = await masterPool.getConnection();
+        const [collegeRows] = await masterConn.query(
+          'SELECT name FROM colleges WHERE id = ?',
+          [collegeId]
+        );
+        masterConn.release();
+        if (collegeRows && collegeRows.length > 0) {
+          collegeName = collegeRows[0].name;
+          console.log(`Preview using college: ${collegeName} (ID: ${collegeId})`);
+        }
+      } catch (error) {
+        console.error('Error fetching college name:', error);
+      }
+    }
+
+    // Check if auto-generate series is enabled
     let autoGenerateEnabled = false;
-    let admissionPrefix = 'PYDAH2025';
-    let nextAdmissionNumber = 1;
 
     try {
       const { data: setting, error: setErr } = await supabase
@@ -1202,73 +1219,100 @@ exports.previewBulkUploadStudents = async (req, res) => {
 
       if (!setErr && setting && setting.value === 'true') {
         autoGenerateEnabled = true;
-
-        // Get admission prefix from settings
-        const { data: prefixSetting } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'admission_prefix')
-          .single();
-
-        if (prefixSetting && prefixSetting.value) {
-          admissionPrefix = prefixSetting.value;
-        }
-
-        // Find the maximum admission number from existing records
-        const { data: submissions, error: subErr } = await supabase
-          .from('form_submissions')
-          .select('admission_number')
-          .like('admission_number', `${admissionPrefix}_%`);
-
-        if (subErr) {
-          console.error('Error fetching submissions for admission number generation:', subErr);
-        }
-
-        // Query students from MySQL
-        const masterConn = await masterPool.getConnection();
-        const [studentRows] = await masterConn.query(
-          'SELECT admission_number FROM students WHERE admission_number LIKE ?',
-          [`${admissionPrefix}_%`]
-        );
-        masterConn.release();
-
-        // Collect all existing admission numbers
-        const allNumbers = [
-          ...(submissions || []).map(s => s.admission_number),
-          ...studentRows.map(s => s.admission_number),
-          ...uniqueAdmissionsForLookup // Include admission numbers from current batch
-        ].filter(Boolean);
-
-        // Find the maximum number
-        let maxNum = 0;
-        allNumbers.forEach(num => {
-          const match = num.match(new RegExp(`^${admissionPrefix}_(\\d+)$`));
-          if (match) {
-            const numPart = parseInt(match[1], 10);
-            if (numPart > maxNum) maxNum = numPart;
-          }
-        });
-
-        nextAdmissionNumber = maxNum + 1;
       }
     } catch (error) {
       console.error('Error checking auto-assign setting:', error);
-      // Continue without auto-generation if there's an error
     }
 
-    // Auto-generate admission numbers for records without them
+    // Auto-generate admission numbers based on academic year (batch)
+    // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
     if (autoGenerateEnabled) {
+      // Group records by academic year to find max admission number per year
+      const recordsByYear = new Map(); // year -> array of records without admission numbers
+      
       processedRows.forEach((record) => {
         const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
         if (!normalizedAdmission) {
-          // Generate admission number for this record
-          const generatedNum = nextAdmissionNumber.toString().padStart(3, '0');
-          const generatedAdmission = `${admissionPrefix}_${generatedNum}`;
-          record.sanitized.admission_number = generatedAdmission;
-          record.sanitized.admission_no = generatedAdmission;
-          nextAdmissionNumber++;
+          // Get academic year from batch field
+          let academicYear = record.sanitized.batch || record.sanitized.academic_year;
+          
+          // Extract year if batch contains range like "2024-2028" or "2024-25"
+          if (academicYear && typeof academicYear === 'string') {
+            const yearMatch = academicYear.match(/^(\d{4})/);
+            if (yearMatch) {
+              academicYear = yearMatch[1];
+            }
+          }
+          
+          // Default to current year if no batch/academic year specified
+          if (!academicYear) {
+            academicYear = new Date().getFullYear().toString();
+          }
+          
+          if (!recordsByYear.has(academicYear)) {
+            recordsByYear.set(academicYear, []);
+          }
+          recordsByYear.get(academicYear).push(record);
         }
       });
+
+      // For each academic year, find max admission number and generate new ones
+      if (recordsByYear.size > 0) {
+        const masterConn = await masterPool.getConnection();
+        try {
+          for (const [year, records] of recordsByYear) {
+            // Query MySQL to find max admission number for this year
+            // Format: YEAR0001, YEAR0002, etc.
+            const yearPrefix = year.toString();
+            const [existingRows] = await masterConn.query(
+              `SELECT admission_number FROM students 
+               WHERE admission_number REGEXP ? 
+               ORDER BY admission_number DESC`,
+              [`^${yearPrefix}[0-9]{4}$`]
+            );
+
+            // Find the maximum sequence number for this year
+            let maxSeq = 0;
+            existingRows.forEach(row => {
+              const admNum = row.admission_number;
+              if (admNum && admNum.startsWith(yearPrefix)) {
+                const seqPart = admNum.substring(yearPrefix.length);
+                const seqNum = parseInt(seqPart, 10);
+                if (!isNaN(seqNum) && seqNum > maxSeq) {
+                  maxSeq = seqNum;
+                }
+              }
+            });
+
+            // Also check current batch for duplicates
+            processedRows.forEach(r => {
+              const admNum = r.sanitized.admission_number;
+              if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+                const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+                if (!isNaN(seqNum) && seqNum > maxSeq) {
+                  maxSeq = seqNum;
+                }
+              }
+            });
+
+            console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
+
+            // Generate admission numbers for records in this year
+            let nextSeq = maxSeq + 1;
+            records.forEach((record) => {
+              const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+              record.sanitized.admission_number = generatedAdmission;
+              record.sanitized.admission_no = generatedAdmission;
+              console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
+              nextSeq++;
+            });
+
+            console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
+          }
+        } finally {
+          masterConn.release();
+        }
+      }
     }
 
     // Track duplicates: for each admission number, find the row with most filled fields
@@ -1337,6 +1381,11 @@ exports.previewBulkUploadStudents = async (req, res) => {
       }
       if (!sanitized.admission_no && sanitized.admission_number) {
         sanitized.admission_no = sanitized.admission_number;
+      }
+
+      // Set college name from selected college if not already present in record
+      if (collegeName && !sanitized.college) {
+        sanitized.college = collegeName;
       }
 
       const issues = [];
@@ -1480,10 +1529,27 @@ exports.commitBulkUploadStudents = async (req, res) => {
   const collegeId = req.body?.collegeId || null;
   const courseIndex = await buildCourseBranchIndex(collegeId);
 
-  // Check if auto-generate series is enabled and generate admission numbers for records without them
+  // Fetch college name if collegeId is provided
+  let collegeName = null;
+  if (collegeId) {
+    try {
+      const masterConn = await masterPool.getConnection();
+      const [collegeRows] = await masterConn.query(
+        'SELECT name FROM colleges WHERE id = ?',
+        [collegeId]
+      );
+      masterConn.release();
+      if (collegeRows && collegeRows.length > 0) {
+        collegeName = collegeRows[0].name;
+        console.log(`Using college: ${collegeName} (ID: ${collegeId})`);
+      }
+    } catch (error) {
+      console.error('Error fetching college name:', error);
+    }
+  }
+
+  // Check if auto-generate series is enabled
   let autoGenerateEnabled = false;
-  let admissionPrefix = 'PYDAH2025';
-  let nextAdmissionNumber = 1;
 
   try {
     const { data: setting, error: setErr } = await supabase
@@ -1494,73 +1560,100 @@ exports.commitBulkUploadStudents = async (req, res) => {
 
     if (!setErr && setting && setting.value === 'true') {
       autoGenerateEnabled = true;
-
-      // Get admission prefix from settings
-      const { data: prefixSetting } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'admission_prefix')
-        .single();
-
-      if (prefixSetting && prefixSetting.value) {
-        admissionPrefix = prefixSetting.value;
-      }
-
-      // Find the maximum admission number from existing records
-      const { data: submissions, error: subErr } = await supabase
-        .from('form_submissions')
-        .select('admission_number')
-        .like('admission_number', `${admissionPrefix}_%`);
-
-      if (subErr) {
-        console.error('Error fetching submissions for admission number generation:', subErr);
-      }
-
-      // Query students from MySQL
-      const masterConn = await masterPool.getConnection();
-      const [studentRows] = await masterConn.query(
-        'SELECT admission_number FROM students WHERE admission_number LIKE ?',
-        [`${admissionPrefix}_%`]
-      );
-      masterConn.release();
-
-      // Collect all existing admission numbers
-      const allNumbers = [
-        ...(submissions || []).map(s => s.admission_number),
-        ...studentRows.map(s => s.admission_number),
-        ...admissionsForLookup // Include admission numbers from current batch
-      ].filter(Boolean);
-
-      // Find the maximum number
-      let maxNum = 0;
-      allNumbers.forEach(num => {
-        const match = num.match(new RegExp(`^${admissionPrefix}_(\\d+)$`));
-        if (match) {
-          const numPart = parseInt(match[1], 10);
-          if (numPart > maxNum) maxNum = numPart;
-        }
-      });
-
-      nextAdmissionNumber = maxNum + 1;
     }
   } catch (error) {
     console.error('Error checking auto-assign setting:', error);
-    // Continue without auto-generation if there's an error
   }
 
-  // Auto-generate admission numbers for records without them
+  // Auto-generate admission numbers based on academic year (batch)
+  // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
   if (autoGenerateEnabled) {
+    // Group records by academic year to find max admission number per year
+    const recordsByYear = new Map(); // year -> array of records without admission numbers
+    
     preparedRecords.forEach((record) => {
       const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
       if (!normalizedAdmission) {
-        // Generate admission number for this record
-        const generatedNum = nextAdmissionNumber.toString().padStart(3, '0');
-        const generatedAdmission = `${admissionPrefix}_${generatedNum}`;
-        record.sanitizedData.admission_number = generatedAdmission;
-        record.sanitizedData.admission_no = generatedAdmission;
-        nextAdmissionNumber++;
+        // Get academic year from batch field
+        let academicYear = record.sanitizedData.batch || record.sanitizedData.academic_year;
+        
+        // Extract year if batch contains range like "2024-2028" or "2024-25"
+        if (academicYear && typeof academicYear === 'string') {
+          const yearMatch = academicYear.match(/^(\d{4})/);
+          if (yearMatch) {
+            academicYear = yearMatch[1];
+          }
+        }
+        
+        // Default to current year if no batch/academic year specified
+        if (!academicYear) {
+          academicYear = new Date().getFullYear().toString();
+        }
+        
+        if (!recordsByYear.has(academicYear)) {
+          recordsByYear.set(academicYear, []);
+        }
+        recordsByYear.get(academicYear).push(record);
       }
     });
+
+    // For each academic year, find max admission number and generate new ones
+    if (recordsByYear.size > 0) {
+      const masterConn = await masterPool.getConnection();
+      try {
+        for (const [year, records] of recordsByYear) {
+          // Query MySQL to find max admission number for this year
+          // Format: YEAR0001, YEAR0002, etc.
+          const yearPrefix = year.toString();
+          const [existingRows] = await masterConn.query(
+            `SELECT admission_number FROM students 
+             WHERE admission_number REGEXP ? 
+             ORDER BY admission_number DESC`,
+            [`^${yearPrefix}[0-9]{4}$`]
+          );
+
+          // Find the maximum sequence number for this year
+          let maxSeq = 0;
+          existingRows.forEach(row => {
+            const admNum = row.admission_number;
+            if (admNum && admNum.startsWith(yearPrefix)) {
+              const seqPart = admNum.substring(yearPrefix.length);
+              const seqNum = parseInt(seqPart, 10);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
+              }
+            }
+          });
+
+          // Also check current batch for duplicates
+          preparedRecords.forEach(r => {
+            const admNum = r.sanitizedData.admission_number;
+            if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+              const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
+              }
+            }
+          });
+
+          console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
+
+          // Generate admission numbers for records in this year
+          let nextSeq = maxSeq + 1;
+          records.forEach((record) => {
+            const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+            record.sanitizedData.admission_number = generatedAdmission;
+            record.sanitizedData.admission_no = generatedAdmission;
+            console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
+            nextSeq++;
+          });
+
+          console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
+        }
+      } finally {
+        masterConn.release();
+      }
+    }
   }
 
   // Track duplicates: for each admission number, find the row with most filled fields
@@ -1638,6 +1731,11 @@ exports.commitBulkUploadStudents = async (req, res) => {
       }
       if (!sanitized.admission_no && sanitized.admission_number) {
         sanitized.admission_no = sanitized.admission_number;
+      }
+
+      // Set college name from selected college if not already present in record
+      if (collegeName && !sanitized.college) {
+        sanitized.college = collegeName;
       }
 
       const normalizedAdmission = normalizeAdmissionNumber(sanitized.admission_number);
