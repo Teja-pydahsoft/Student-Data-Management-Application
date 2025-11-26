@@ -2413,11 +2413,17 @@ exports.updateStudent = async (req, res) => {
 
 // Update student PIN number
 exports.updatePinNumber = async (req, res) => {
+  console.log('[PIN UPDATE] Request received for:', req.params.admissionNumber);
+  console.log('[PIN UPDATE] Body:', req.body);
+  
   try {
     const { admissionNumber } = req.params;
     const { pinNumber } = req.body;
 
+    console.log('[PIN UPDATE] Admission Number:', admissionNumber, 'PIN:', pinNumber);
+
     if (!pinNumber || typeof pinNumber !== 'string') {
+      console.log('[PIN UPDATE] ERROR: PIN number is required');
       return res.status(400).json({
         success: false,
         message: 'PIN number is required'
@@ -2449,22 +2455,29 @@ exports.updatePinNumber = async (req, res) => {
       });
     }
 
-    // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE_PIN_NUMBER', 'STUDENT', admissionNumber, req.admin.id, JSON.stringify({ pinNumber })]
-    );
+    // Log action (non-blocking - don't fail the operation if logging fails)
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['UPDATE_PIN_NUMBER', 'STUDENT', admissionNumber, req.admin?.id || null, JSON.stringify({ pinNumber })]
+      );
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message);
+      // Don't fail the operation just because audit logging failed
+    }
 
     clearStudentsCache();
 
+    console.log('[PIN UPDATE] ✅ SUCCESS - PIN updated to:', pinNumber);
+    
     res.json({
       success: true,
       message: 'PIN number updated successfully'
     });
 
   } catch (error) {
-    console.error('Update PIN number error:', error);
+    console.error('[PIN UPDATE] ❌ ERROR:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while updating PIN number'

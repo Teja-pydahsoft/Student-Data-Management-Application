@@ -1022,29 +1022,36 @@ const Students = () => {
   const handleSaveRollNumber = async () => {
     if (savingPinNumber) return; // Prevent double submission
     
+    console.log('[PIN UPDATE] Starting update for:', selectedStudent?.admission_number, 'New PIN:', tempRollNumber);
+    
     setSavingPinNumber(true);
     try {
+      const url = `/students/${selectedStudent.admission_number}/pin-number`;
+      console.log('[PIN UPDATE] Making API call to:', url);
+      
       // Make the API call - axios throws on non-2xx responses
-      await api.put(`/students/${selectedStudent.admission_number}/pin-number`, {
+      const response = await api.put(url, {
         pinNumber: tempRollNumber,
       });
       
+      console.log('[PIN UPDATE] API Response:', response.data);
+      
       // If we reach here, the request was successful (no exception thrown)
       setEditingRollNumber(false);
+      
+      // Update selectedStudent state
       setSelectedStudent(prev => ({ ...prev, pin_no: tempRollNumber }));
+      
+      // Update editData state as well
+      setEditData(prev => ({ ...prev, pin_no: tempRollNumber }));
 
-      // Update local state instead of refetching all data
-      setStudents(prevStudents =>
-        prevStudents.map(student =>
-          student.admission_number === selectedStudent.admission_number
-            ? { ...student, pin_no: tempRollNumber }
-            : student
-        )
-      );
+      // Invalidate the React Query cache to refresh the student list
+      invalidateStudents();
       
       toast.success('PIN number updated successfully');
     } catch (error) {
-      console.error('PIN number update error:', error);
+      console.error('[PIN UPDATE] Error:', error);
+      console.error('[PIN UPDATE] Error response:', error.response?.data);
       toast.error(error.response?.data?.message || 'Failed to update PIN number');
     } finally {
       setSavingPinNumber(false);
