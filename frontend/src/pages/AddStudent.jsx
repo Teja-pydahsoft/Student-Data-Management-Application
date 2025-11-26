@@ -33,6 +33,8 @@ const AddStudent = () => {
   const [selectedBranchName, setSelectedBranchName] = useState('');
   const [academicYears, setAcademicYears] = useState([]);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
+  const [admissionNumberLoading, setAdmissionNumberLoading] = useState(false);
+  const [isAdmissionNumberManual, setIsAdmissionNumberManual] = useState(false);
   const [studentData, setStudentData] = useState({
     pin_no: '',
     current_year: '1',
@@ -137,9 +139,22 @@ const AddStudent = () => {
     
     // Filter branches by selected batch (academic year) if batch is selected
     if (studentData.batch) {
-      branches = branches.filter(
+      // Get branches that match the selected batch OR have no batch specified
+      const matchingBranches = branches.filter(
         (branch) => branch.academicYearLabel === studentData.batch || !branch.academicYearLabel
       );
+      
+      // Deduplicate by name - prefer batch-specific branch over generic one
+      const branchMap = new Map();
+      matchingBranches.forEach(branch => {
+        const existing = branchMap.get(branch.name);
+        // If no existing entry or this one has the matching batch (more specific), use it
+        if (!existing || branch.academicYearLabel === studentData.batch) {
+          branchMap.set(branch.name, branch);
+        }
+      });
+      
+      branches = Array.from(branchMap.values());
     }
     
     return branches;
@@ -248,6 +263,38 @@ const AddStudent = () => {
       );
     }
   }, [selectedBranch, studentData.branch]);
+
+  // Auto-generate admission number when batch changes
+  useEffect(() => {
+    const generateAdmissionNumber = async () => {
+      // Don't generate if no batch selected or if user manually entered an admission number
+      if (!studentData.batch || isAdmissionNumberManual) {
+        return;
+      }
+
+      try {
+        setAdmissionNumberLoading(true);
+        const response = await api.post('/submissions/generate-admission-series', {
+          academicYear: studentData.batch
+        });
+
+        if (response.data.success && response.data.data.admissionNumbers?.[0]) {
+          const generatedNumber = response.data.data.admissionNumbers[0];
+          setStudentData((prev) => ({
+            ...prev,
+            admission_no: generatedNumber
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to generate admission number:', error);
+        // Don't show error toast - just let user enter manually if API fails
+      } finally {
+        setAdmissionNumberLoading(false);
+      }
+    };
+
+    generateAdmissionNumber();
+  }, [studentData.batch, isAdmissionNumberManual]);
 
   // Auto-calculate current year based on batch year
   useEffect(() => {
@@ -360,10 +407,26 @@ const AddStudent = () => {
   const handleBranchSelect = (event) => {
     const value = event.target.value;
     setSelectedBranchName(value);
+    // Directly update studentData.branch (don't rely only on useEffect)
+    setStudentData((prev) => ({
+      ...prev,
+      branch: value || ''
+    }));
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    // Track if user manually changes admission number
+    if (name === 'admission_no' && value) {
+      setIsAdmissionNumberManual(true);
+    }
+    
+    // If batch changes, reset the manual flag to allow auto-generation
+    if (name === 'batch') {
+      setIsAdmissionNumberManual(false);
+    }
+    
     setStudentData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -474,16 +537,35 @@ const AddStudent = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Admission Number <span className="text-red-500">*</span>
+                  {admissionNumberLoading && (
+                    <span className="ml-2 text-xs text-primary-600">(Auto-generating...)</span>
+                  )}
+                  {!admissionNumberLoading && studentData.admission_no && !isAdmissionNumberManual && (
+                    <span className="ml-2 text-xs text-green-600">(Auto-generated)</span>
+                  )}
                 </label>
-                <input
-                  type="text"
-                  name="admission_no"
-                  value={studentData.admission_no}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border border-border-light rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-input-bg text-text-primary transition-all duration-200 hover:border-primary-300"
-                  placeholder="Enter admission number"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="admission_no"
+                    value={studentData.admission_no}
+                    onChange={handleChange}
+                    required
+                    disabled={admissionNumberLoading}
+                    className={`w-full px-4 py-3 border border-border-light rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-input-bg text-text-primary transition-all duration-200 hover:border-primary-300 ${admissionNumberLoading ? 'bg-gray-100' : ''}`}
+                    placeholder={admissionNumberLoading ? 'Generating...' : 'Enter admission number or select batch to auto-generate'}
+                  />
+                  {admissionNumberLoading && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    </div>
+                  )}
+                </div>
+                {!isAdmissionNumberManual && studentData.batch && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Format: {studentData.batch.match(/\d{4}/)?.[0] || studentData.batch}XXXX (e.g., {studentData.batch.match(/\d{4}/)?.[0] || studentData.batch}0001)
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -664,7 +746,7 @@ const AddStudent = () => {
                     <option value="">Select Branch</option>
                     {branchOptions.map((branch) => (
                       <option key={branch.name} value={branch.name}>
-                        {branch.name} {branch.academicYearLabel ? `(Batch ${branch.academicYearLabel})` : ''}
+                        {branch.name}
                       </option>
                     ))}
                   </select>
@@ -1010,29 +1092,23 @@ const AddStudent = () => {
                             return;
                           }
 
-                          // Upload file to server
-                          const formData = new FormData();
-                          formData.append('photo', file);
-                          formData.append('admissionNumber', studentData.admission_no || 'temp');
-
-                          const response = await api.post('/students/upload-photo', formData, {
-                            headers: {
-                              'Content-Type': 'multipart/form-data',
-                            },
-                          });
-
-                          if (response.data.success) {
+                          // Convert to base64 and store locally (will be sent with student creation)
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            const base64Data = reader.result;
                             setStudentData(prev => ({
                               ...prev,
-                              student_photo: response.data.data.filename
+                              student_photo: base64Data
                             }));
-                            toast.success('Photo uploaded successfully');
-                          } else {
-                            toast.error('Failed to upload photo');
-                          }
+                            toast.success('Photo selected successfully');
+                          };
+                          reader.onerror = () => {
+                            toast.error('Failed to read photo file');
+                          };
+                          reader.readAsDataURL(file);
                         } catch (error) {
-                          console.error('Photo upload error:', error);
-                          toast.error('Failed to upload photo');
+                          console.error('Photo selection error:', error);
+                          toast.error('Failed to select photo');
                         }
                       }
                     }}
@@ -1043,11 +1119,19 @@ const AddStudent = () => {
                     htmlFor="photo-upload"
                     className="cursor-pointer flex flex-col items-center gap-2"
                   >
-                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                      <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
+                    {studentData.student_photo && studentData.student_photo.startsWith('data:') ? (
+                      <img 
+                        src={studentData.student_photo} 
+                        alt="Student preview" 
+                        className="w-24 h-24 object-cover rounded-lg border-2 border-primary-300"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                        <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
                     <div className="text-center">
                       <p className="text-sm font-medium text-text-primary">
                         {studentData.student_photo ? 'Change Photo' : 'Upload Photo'}
@@ -1063,11 +1147,8 @@ const AddStudent = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span className="text-sm font-medium">Photo uploaded successfully</span>
+                        <span className="text-sm font-medium">Photo selected - will be saved with student</span>
                       </div>
-                      <p className="text-xs text-green-600 mt-1">
-                        {studentData.student_photo}
-                      </p>
                     </div>
                   )}
                 </div>

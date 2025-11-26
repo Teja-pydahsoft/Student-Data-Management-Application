@@ -7,10 +7,20 @@ const DEFAULT_TEMPLATE =
 const SMS_TEMPLATE_ID = process.env.SMS_TEMPLATE_ID || '1607100000000150000';
 const SMS_PE_ID = process.env.SMS_PE_ID || '1102395590000010000';
 
-const SMS_API_URL = process.env.SMS_API_URL || process.env.BULKSMS_ENGLISH_API_URL || 'https://www.bulksmsapps.com/api/apismsv2.aspx';
+// Support both SMS_* and BULKSMS_* env variable names
+const SMS_API_URL = process.env.SMS_API_URL || process.env.BULKSMS_API_URL || process.env.BULKSMS_ENGLISH_API_URL || 'http://www.bulksmsapps.com/api/apismsv2.aspx';
 const SMS_API_KEY = process.env.SMS_API_KEY || process.env.BULKSMS_API_KEY || '7c9c967a-4ce9-4748-9dc7-d2aaef847275';
 const SMS_SENDER_ID = process.env.SMS_SENDER_ID || process.env.BULKSMS_SENDER_ID || 'PYDAHK';
 const SMS_TEST_MODE = String(process.env.SMS_TEST_MODE || '').toLowerCase() === 'true';
+
+// Log SMS configuration on module load (helps debug configuration issues)
+console.log('📱 SMS Service Configuration:');
+console.log(`   API URL: ${SMS_API_URL}`);
+console.log(`   Sender ID: ${SMS_SENDER_ID}`);
+console.log(`   Template ID: ${SMS_TEMPLATE_ID}`);
+console.log(`   PE ID: ${SMS_PE_ID}`);
+console.log(`   Test Mode: ${SMS_TEST_MODE ? 'ENABLED' : 'DISABLED'}`);
+console.log(`   API Key: ${SMS_API_KEY ? SMS_API_KEY.substring(0, 8) + '...' : 'NOT SET'}`);
 
 const ensureFetchAvailable = () => {
   if (typeof fetch === 'function') {
@@ -35,7 +45,10 @@ const formatDateForMessage = (dateString = '') => {
 };
 
 const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
+  const logPrefix = `[SMS] ${meta?.student?.admissionNumber || 'unknown'}`;
+  
   if (!to) {
+    console.log(`${logPrefix} ⚠️ SKIPPED - No destination number provided`);
     return {
       success: false,
       skipped: true,
@@ -44,16 +57,18 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   }
 
   if (SMS_TEST_MODE) {
-    console.log('[SMS-TEST]', { to, message, templateId, peId, meta });
+    console.log(`${logPrefix} 🧪 TEST MODE - SMS simulated to ${to}`);
+    console.log(`${logPrefix}    Message: ${message}`);
     return {
       success: true,
       mocked: true,
-      testMode: true
+      testMode: true,
+      sentTo: to
     };
   }
 
   if (!SMS_API_URL) {
-    console.warn('⚠️  SMS_API_URL is not configured. SMS dispatch skipped.');
+    console.warn(`${logPrefix} ⚠️ SKIPPED - SMS_API_URL not configured`);
     return {
       success: false,
       skipped: true,
@@ -62,6 +77,7 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   }
 
   if (!ensureFetchAvailable()) {
+    console.warn(`${logPrefix} ⚠️ SKIPPED - fetch API not available`);
     return {
       success: false,
       skipped: true,
@@ -70,45 +86,172 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   }
 
   try {
-    const payload = new URLSearchParams({
-      apikey: SMS_API_KEY,
-      senderid: SMS_SENDER_ID,
-      number: to,
-      message,
-      templateid: templateId || SMS_TEMPLATE_ID,
-      peid: peId || SMS_PE_ID
-    });
+    console.log(`${logPrefix} 📤 SENDING SMS to ${to}...`);
+    
+    // BulkSMSApps.com API parameters
+    // Using the exact parameter names that work with their API
+    const params = new URLSearchParams();
+    
+    // API Key - try 'apikey' (most common for bulksmsapps)
+    params.append('apikey', SMS_API_KEY);
+    
+    // Sender ID 
+    params.append('sender', SMS_SENDER_ID);
+    
+    // Mobile number - singular 'number' 
+    params.append('number', to);
+    
+    // Message content
+    params.append('message', message);
+    
+    // DLT Template ID (lowercase)
+    params.append('templateid', templateId || SMS_TEMPLATE_ID);
+    
+    // Principal Entity ID (lowercase)
+    params.append('peid', peId || SMS_PE_ID);
 
-    const response = await fetch(SMS_API_URL, {
-      method: 'POST',
+    // Ensure we use HTTP (not HTTPS) as per the user's working config
+    let apiUrl = SMS_API_URL;
+    if (apiUrl.startsWith('https://')) {
+      apiUrl = apiUrl.replace('https://', 'http://');
+    }
+
+    // Build URL with query parameters (GET method)
+    const fullUrl = `${apiUrl}?${params.toString()}`;
+    
+    // Log request details
+    console.log(`${logPrefix}    API URL: ${apiUrl}`);
+    console.log(`${logPrefix}    Full Request: ${apiUrl}?apikey=***&sender=${SMS_SENDER_ID}&number=${to}&templateid=${templateId || SMS_TEMPLATE_ID}&peid=${peId || SMS_PE_ID}`);
+    console.log(`${logPrefix}    Message: "${message}"`);
+    
+    // Send GET request
+    const response = await fetch(fullUrl, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: payload.toString()
+        'Accept': 'text/plain, application/json, */*',
+        'User-Agent': 'NodeJS-SMS-Client/1.0'
+      }
     });
 
+    const text = await response.text();
+    console.log(`${logPrefix}    HTTP Status: ${response.status}`);
+    console.log(`${logPrefix}    API Response: ${text}`);
+    
     if (!response.ok) {
-      const errorText = await response.text();
+      console.error(`${logPrefix} ❌ FAILED - HTTP ${response.status}`);
       return {
         success: false,
         skipped: false,
         reason: `http_${response.status}`,
-        details: errorText
+        details: text,
+        sentTo: to
       };
     }
 
-    const text = await response.text();
+    // Check for success patterns FIRST (message IDs are definitive success)
+    // BulkSMSApps returns "MessageId-XXXXXXX" on success
+    const successPatterns = [
+      /MessageId[-:]\s*\d+/i,  // MessageId-123456 or MessageId: 123456
+      /^[0-9]+$/,              // Just a number (message ID)
+      /success/i,
+      /sent/i,
+      /submitted/i,
+      /accepted/i
+    ];
+    
+    // Extract just the first line or first part before HTML
+    const firstLine = text.split('\n')[0].trim();
+    const beforeHtml = text.split('<!DOCTYPE')[0].trim();
+    const relevantText = beforeHtml || firstLine || text;
+    
+    console.log(`${logPrefix}    Checking response: "${relevantText.substring(0, 100)}"`);
+    
+    // Check if we have a MessageId (definitive success)
+    const messageIdMatch = text.match(/MessageId[-:]\s*(\d+)/i);
+    if (messageIdMatch) {
+      console.log(`${logPrefix} ✅ SUCCESS - SMS sent to ${to} (MessageId: ${messageIdMatch[1]})`);
+      return {
+        success: true,
+        data: relevantText,
+        messageId: messageIdMatch[1],
+        sentTo: to
+      };
+    }
+    
+    // Check other success patterns
+    const hasSuccess = successPatterns.some(pattern => 
+      pattern instanceof RegExp ? pattern.test(relevantText) : relevantText.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    if (hasSuccess) {
+      console.log(`${logPrefix} ✅ SUCCESS - SMS sent to ${to}`);
+      return {
+        success: true,
+        data: relevantText,
+        sentTo: to
+      };
+    }
+    
+    // Check for error patterns only if no success pattern found
+    const errorPatterns = [
+      'Object reference not set',
+      'invalid',
+      'Invalid',
+      'failed',
+      'Failed',
+      'ERROR',
+      'Error:',
+      'Authentication',
+      'Unauthorized',
+      'insufficient',
+      'balance',
+      'expired'
+    ];
+    
+    const hasError = errorPatterns.some(pattern => 
+      relevantText.includes(pattern) || relevantText.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    if (hasError) {
+      console.error(`${logPrefix} ❌ API ERROR - SMS to ${to} failed`);
+      console.error(`${logPrefix}    Error details: ${relevantText}`);
+      return {
+        success: false,
+        skipped: false,
+        reason: 'api_error',
+        details: relevantText,
+        sentTo: to
+      };
+    }
+    
+    // If response is short and doesn't look like an error, assume success
+    if (relevantText.length > 0 && relevantText.length < 200) {
+      console.log(`${logPrefix} ✅ SUCCESS (assumed) - SMS sent to ${to}`);
+      return {
+        success: true,
+        data: relevantText,
+        sentTo: to
+      };
+    }
+    
+    // Unknown response format - log it and mark as potentially failed
+    console.warn(`${logPrefix} ⚠️ UNKNOWN RESPONSE - Unable to determine SMS status`);
+    console.warn(`${logPrefix}    Response: ${relevantText.substring(0, 200)}`);
     return {
-      success: true,
-      data: text
+      success: false,
+      skipped: false,
+      reason: 'unknown_response',
+      details: relevantText.substring(0, 500),
+      sentTo: to
     };
   } catch (error) {
-    console.error('❌ SMS dispatch failed:', error.message || error);
+    console.error(`${logPrefix} ❌ EXCEPTION - ${error.message || error}`);
     return {
       success: false,
       skipped: false,
       reason: 'exception',
-      details: error.message || String(error)
+      details: error.message || String(error),
+      sentTo: to
     };
   }
 };
@@ -161,9 +304,11 @@ exports.sendAbsenceNotification = async ({
   student,
   attendanceDate
 }) => {
+  const logPrefix = `[SMS] ${student.admission_number || 'unknown'}`;
   const parentMobile = resolveParentContact(student);
 
   if (!parentMobile) {
+    console.log(`${logPrefix} ⚠️ SKIPPED - No parent mobile number found`);
     return {
       success: false,
       skipped: true,
@@ -181,6 +326,10 @@ exports.sendAbsenceNotification = async ({
     'your ward',
     formattedDate
   ]);
+
+  // Log the message being sent
+  console.log(`${logPrefix} 📱 Preparing SMS for parent: ${parentMobile}`);
+  console.log(`${logPrefix} 📝 Message: "${message}"`);
 
   return dispatchSms({
     to: parentMobile,

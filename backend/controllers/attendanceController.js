@@ -629,23 +629,64 @@ exports.markAttendance = async (req, res) => {
     await connection.commit();
 
     const smsResults = [];
+    console.log(`\n========== SMS DISPATCH LOG (${normalizedDate}) ==========`);
+    console.log(`Total absent students to notify: ${smsQueue.length}`);
+    
     for (const payload of smsQueue) {
+      const student = payload.student;
+      const studentData = student.student_data || {};
+      
+      // Extract student details for logging and response
+      const studentDetails = {
+        studentId: student.id,
+        admissionNumber: student.admission_number || '',
+        pinNumber: student.pin_no || studentData['PIN Number'] || studentData['Pin Number'] || '',
+        studentName: student.student_name || studentData['Student Name'] || studentData['student_name'] || 'Unknown',
+        college: student.college || studentData['College'] || studentData['college'] || '',
+        course: student.course || studentData['Course'] || studentData['course'] || '',
+        branch: student.branch || studentData['Branch'] || studentData['branch'] || '',
+        year: student.current_year || studentData['Current Academic Year'] || '',
+        semester: student.current_semester || studentData['Current Semester'] || '',
+        parentMobile: student.parent_mobile1 || student.parent_mobile2 || 
+                      studentData['Parent Mobile Number 1'] || studentData['Parent Phone Number 1'] || 
+                      studentData['Parent Mobile Number'] || ''
+      };
+      
       try {
         const result = await sendAbsenceNotification(payload);
         smsResults.push({
-          studentId: payload.student.id,
+          ...studentDetails,
           success: !!result?.success,
-          ...result
+          mocked: result?.mocked || false,
+          skipped: result?.skipped || false,
+          reason: result?.reason || null,
+          sentTo: result?.sentTo || studentDetails.parentMobile,
+          apiResponse: result?.data || null
         });
       } catch (error) {
-        console.error('SMS notification failed:', error);
+        console.error(`SMS notification failed for ${student.admission_number}:`, error);
         smsResults.push({
-          studentId: payload.student.id,
+          ...studentDetails,
           success: false,
-          reason: error.message || 'unknown_error'
+          skipped: false,
+          reason: error.message || 'unknown_error',
+          sentTo: studentDetails.parentMobile
         });
       }
     }
+    
+    // Summary log
+    const successCount = smsResults.filter(r => r.success && !r.mocked).length;
+    const mockedCount = smsResults.filter(r => r.success && r.mocked).length;
+    const skippedCount = smsResults.filter(r => r.skipped).length;
+    const failedCount = smsResults.filter(r => !r.success && !r.skipped).length;
+    
+    console.log(`\n========== SMS DISPATCH SUMMARY ==========`);
+    console.log(`✅ Sent: ${successCount}`);
+    console.log(`🧪 Simulated (Test Mode): ${mockedCount}`);
+    console.log(`⚠️ Skipped: ${skippedCount}`);
+    console.log(`❌ Failed: ${failedCount}`);
+    console.log(`==========================================\n`);
 
     res.json({
       success: true,
@@ -670,6 +711,93 @@ exports.markAttendance = async (req, res) => {
     if (connection) {
       connection.release();
     }
+  }
+};
+
+// Retry SMS for a specific student
+exports.retrySms = async (req, res) => {
+  try {
+    const { studentId, admissionNumber, attendanceDate, parentMobile } = req.body;
+    
+    if (!studentId && !admissionNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID or admission number is required'
+      });
+    }
+    
+    // Get student details
+    let query = 'SELECT * FROM students WHERE ';
+    let params = [];
+    
+    if (studentId) {
+      query += 'id = ?';
+      params.push(studentId);
+    } else {
+      query += 'admission_number = ?';
+      params.push(admissionNumber);
+    }
+    
+    const [students] = await masterPool.query(query, params);
+    
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    const student = {
+      ...students[0],
+      student_data: parseStudentData(students[0].student_data)
+    };
+    
+    // Resolve parent mobile
+    const resolvedMobile = parentMobile || 
+      student.parent_mobile1 || 
+      student.parent_mobile2 || 
+      student.student_data?.['Parent Mobile Number 1'] ||
+      student.student_data?.['Parent Phone Number 1'] ||
+      student.student_data?.['Parent Mobile Number'];
+    
+    if (!resolvedMobile) {
+      return res.json({
+        success: false,
+        data: {
+          studentId: student.id,
+          success: false,
+          skipped: true,
+          reason: 'missing_parent_mobile'
+        }
+      });
+    }
+    
+    console.log(`[SMS RETRY] Retrying SMS for student ${student.admission_number} to ${resolvedMobile}`);
+    
+    // Send SMS
+    const result = await sendAbsenceNotification({
+      student: {
+        ...student,
+        parent_mobile1: resolvedMobile
+      },
+      attendanceDate: attendanceDate || getDateOnlyString()
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        studentId: student.id,
+        ...result,
+        sentTo: resolvedMobile
+      }
+    });
+    
+  } catch (error) {
+    console.error('SMS retry error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while retrying SMS'
+    });
   }
 };
 

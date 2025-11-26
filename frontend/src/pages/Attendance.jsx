@@ -123,6 +123,11 @@ const Attendance = () => {
   const [totalStudents, setTotalStudents] = useState(0);
   const pageSizeOptions = [10, 25, 50, 100];
   const [smsResults, setSmsResults] = useState([]);
+  const [smsStatusMap, setSmsStatusMap] = useState({}); // Map studentId to SMS status
+  const [smsModalOpen, setSmsModalOpen] = useState(false);
+  const [smsCurrentPage, setSmsCurrentPage] = useState(1);
+  const [smsPageSize] = useState(10);
+  const [retryingSmsFor, setRetryingSmsFor] = useState(null); // Track which student SMS is being retried
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -995,6 +1000,26 @@ const Attendance = () => {
 
       const results = response.data.data?.smsResults || [];
       setSmsResults(results);
+      
+      // Build SMS status map for quick lookup
+      const statusMap = {};
+      results.forEach(result => {
+        statusMap[result.studentId] = {
+          success: result.success,
+          mocked: result.mocked,
+          skipped: result.skipped,
+          reason: result.reason,
+          sentTo: result.sentTo || result.parentMobile,
+          studentName: result.studentName,
+          admissionNumber: result.admissionNumber
+        };
+      });
+      setSmsStatusMap(statusMap);
+      
+      setSmsCurrentPage(1);
+      if (results.length > 0) {
+        setSmsModalOpen(true);
+      }
       setLastUpdatedAt(new Date().toISOString());
 
       const smsSent = results.filter((result) => !result.skipped && result.success).length;
@@ -1019,6 +1044,59 @@ const Attendance = () => {
   };
 
   const handleSave = handleSaveClick;
+
+  // Retry SMS for a specific student
+  const handleRetrySms = async (student) => {
+    if (!student || retryingSmsFor) return;
+    
+    setRetryingSmsFor(student.id);
+    try {
+      const response = await api.post('/attendance/retry-sms', {
+        studentId: student.id,
+        admissionNumber: student.admissionNumber,
+        attendanceDate: attendanceDate,
+        parentMobile: student.parentMobile1 || student.parentMobile2
+      });
+      
+      if (response.data?.success) {
+        const result = response.data.data;
+        
+        // Update SMS status map
+        setSmsStatusMap(prev => ({
+          ...prev,
+          [student.id]: {
+            success: result.success,
+            mocked: result.mocked,
+            skipped: result.skipped,
+            reason: result.reason,
+            sentTo: result.sentTo,
+            studentName: student.studentName,
+            admissionNumber: student.admissionNumber
+          }
+        }));
+        
+        // Update smsResults array
+        setSmsResults(prev => prev.map(r => 
+          r.studentId === student.id 
+            ? { ...r, ...result }
+            : r
+        ));
+        
+        if (result.success) {
+          toast.success(`SMS ${result.mocked ? 'simulated' : 'sent'} to ${result.sentTo || student.parentMobile1}`);
+        } else {
+          toast.error(`SMS failed: ${result.reason || 'Unknown error'}`);
+        }
+      } else {
+        toast.error(response.data?.message || 'Failed to retry SMS');
+      }
+    } catch (error) {
+      console.error('SMS retry failed:', error);
+      toast.error(error.response?.data?.message || 'Failed to retry SMS');
+    } finally {
+      setRetryingSmsFor(null);
+    }
+  };
 
   const renderPhoto = (student) => {
     if (student.photo) {
@@ -1372,6 +1450,7 @@ const Attendance = () => {
                   <th className="px-4 py-3">Semester</th>
                   <th className="px-4 py-3">Parent Contact</th>
                   <th className="px-4 py-3">Attendance</th>
+                  <th className="px-4 py-3">SMS Status</th>
                   <th className="px-4 py-3 text-right">Insights</th>
                 </tr>
               </thead>
@@ -1403,43 +1482,134 @@ const Attendance = () => {
                         <div>{parentContact}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                        {/* Show attendance marked state if saved and matches initial, otherwise show toggle */}
+                        {lastUpdatedAt && initialStatusMap[student.id] === status ? (
+                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
                             status === 'present' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-red-100 text-red-700'
+                              ? 'bg-green-100 text-green-700 border border-green-200' 
+                              : 'bg-red-100 text-red-700 border border-red-200'
                           }`}>
-                            {status === 'present' ? (
-                              <>
-                                <Check size={16} />
-                                Present
-                              </>
-                            ) : (
-                              <>
-                                <X size={16} />
-                                Absent
-                              </>
-                            )}
+                            <Check size={16} />
+                            {status === 'present' ? 'Present' : 'Absent'} (Marked)
                           </div>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={status === 'absent'}
-                              onChange={(e) => {
-                                if (editingLocked) {
-                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                  return;
-                                }
-                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                              }}
-                              disabled={editingLocked}
-                              className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                            />
-                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                              Mark as Absent
-                            </span>
-                          </label>
-                        </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                              status === 'present' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {status === 'present' ? (
+                                <>
+                                  <Check size={16} />
+                                  Present
+                                </>
+                              ) : (
+                                <>
+                                  <X size={16} />
+                                  Absent
+                                </>
+                              )}
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={status === 'absent'}
+                                onChange={(e) => {
+                                  if (editingLocked) {
+                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                    return;
+                                  }
+                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                }}
+                                disabled={editingLocked}
+                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              />
+                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                Mark as Absent
+                              </span>
+                            </label>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {/* SMS Status Column */}
+                        {(() => {
+                          const smsStatus = smsStatusMap[student.id];
+                          if (!smsStatus) {
+                            // No SMS sent yet (student wasn't marked absent or attendance not saved)
+                            if (status === 'absent') {
+                              return (
+                                <button
+                                  onClick={() => handleRetrySms(student)}
+                                  disabled={retryingSmsFor === student.id}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Click to send SMS notification"
+                                >
+                                  {retryingSmsFor === student.id ? (
+                                    <>
+                                      <RefreshCw size={12} className="animate-spin" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertTriangle size={12} />
+                                      Pending - Send
+                                    </>
+                                  )}
+                                </button>
+                              );
+                            }
+                            return (
+                              <span className="text-xs text-gray-400">-</span>
+                            );
+                          }
+                          
+                          if (smsStatus.success) {
+                            return smsStatus.mocked ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                <RefreshCw size={12} />
+                                Test Mode
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                <Check size={12} />
+                                Sent
+                              </span>
+                            );
+                          }
+                          
+                          if (smsStatus.skipped) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
+                                <AlertTriangle size={12} />
+                                {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                              </span>
+                            );
+                          }
+                          
+                          // Failed - show retry button
+                          return (
+                            <button
+                              onClick={() => handleRetrySms(student)}
+                              disabled={retryingSmsFor === student.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
+                              title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
+                            >
+                              {retryingSmsFor === student.id ? (
+                                <>
+                                  <RefreshCw size={12} className="animate-spin" />
+                                  Retrying...
+                                </>
+                              ) : (
+                                <>
+                                  <X size={12} />
+                                  Failed - Retry
+                                </>
+                              )}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -1523,33 +1693,209 @@ const Attendance = () => {
         )}
       </section>
 
+      {/* SMS Results Summary Button - Shows when there are results */}
       {smsResults.length > 0 && (
-        <section className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-          <div className="font-semibold text-blue-700">SMS Dispatch Summary</div>
-          <ul className="space-y-1 text-sm text-blue-800">
-            {smsResults.map((result) => (
-              <li key={result.studentId} className="flex items-center gap-2">
-                {result.success ? (
-                  <Check size={16} className="text-green-600" />
-                ) : result.skipped ? (
-                  <AlertTriangle size={16} className="text-amber-500" />
-                ) : (
-                  <X size={16} className="text-red-600" />
-                )}
-                <span>
-                  Student ID {result.studentId}:{' '}
-                  {result.success
-                    ? result.mocked
-                      ? 'SMS simulated (test mode)'
-                      : 'SMS sent'
-                    : result.skipped
-                    ? `Skipped (${result.reason || 'no reason'})`
-                    : `Failed (${result.reason || 'unknown'})`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <button
+          onClick={() => setSmsModalOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+        >
+          <CalendarCheck size={20} />
+          <span className="font-medium">SMS Report</span>
+          <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+            {smsResults.length}
+          </span>
+        </button>
+      )}
+
+      {/* SMS Dispatch Summary Modal */}
+      {smsModalOpen && smsResults.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <CalendarCheck size={24} className="text-white" />
+                <div>
+                  <h3 className="font-bold text-white text-lg">SMS Dispatch Summary</h3>
+                  <p className="text-blue-100 text-sm">{attendanceDate} • {smsResults.length} students</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const headers = ['Student Name', 'PIN Number', 'Admission Number', 'College', 'Course', 'Branch', 'Year', 'Semester', 'Parent Mobile', 'Status', 'Reason'];
+                    const rows = smsResults.map(result => [
+                      result.studentName || '-',
+                      result.pinNumber || '-',
+                      result.admissionNumber || '-',
+                      result.college || '-',
+                      result.course || '-',
+                      result.branch || '-',
+                      result.year || '-',
+                      result.semester || '-',
+                      result.sentTo || result.parentMobile || '-',
+                      result.success ? (result.mocked ? 'Simulated (Test)' : 'Sent') : (result.skipped ? 'Skipped' : 'Failed'),
+                      result.reason || '-'
+                    ]);
+                    const csvContent = [
+                      headers.join(','),
+                      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                    ].join('\n');
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `sms-dispatch-report-${attendanceDate}.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(link.href);
+                    toast.success('SMS report downloaded');
+                  }}
+                  className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Download size={16} />
+                  Download CSV
+                </button>
+                <button
+                  onClick={() => setSmsModalOpen(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
+                <Check size={16} className="text-green-600" />
+                <div>
+                  <div className="text-xs text-green-700 font-medium">Sent</div>
+                  <div className="text-lg font-bold text-green-800">
+                    {smsResults.filter(r => r.success && !r.mocked).length}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
+                <RefreshCw size={16} className="text-blue-600" />
+                <div>
+                  <div className="text-xs text-blue-700 font-medium">Test Mode</div>
+                  <div className="text-lg font-bold text-blue-800">
+                    {smsResults.filter(r => r.success && r.mocked).length}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertTriangle size={16} className="text-amber-600" />
+                <div>
+                  <div className="text-xs text-amber-700 font-medium">Skipped</div>
+                  <div className="text-lg font-bold text-amber-800">
+                    {smsResults.filter(r => r.skipped).length}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-red-100 border border-red-200 rounded-lg px-3 py-2">
+                <X size={16} className="text-red-600" />
+                <div>
+                  <div className="text-xs text-red-700 font-medium">Failed</div>
+                  <div className="text-lg font-bold text-red-800">
+                    {smsResults.filter(r => !r.success && !r.skipped).length}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Detailed Table with Scroll */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-b border-gray-200 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Student Name</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">PIN</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Admission No</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">College</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Branch</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Year</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Sem</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Parent Mobile</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {smsResults
+                    .slice((smsCurrentPage - 1) * smsPageSize, smsCurrentPage * smsPageSize)
+                    .map((result, index) => (
+                    <tr key={result.studentId || index} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium text-gray-900">{result.studentName || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.pinNumber || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.admissionNumber || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600 max-w-[150px] truncate" title={result.college}>{result.college || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.course || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.branch || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.year || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600">{result.semester || '-'}</td>
+                      <td className="px-3 py-2 text-gray-600 font-mono text-xs">{result.sentTo || result.parentMobile || '-'}</td>
+                      <td className="px-3 py-2">
+                        {result.success ? (
+                          result.mocked ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              <RefreshCw size={12} />
+                              Test Mode
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                              <Check size={12} />
+                              Sent
+                            </span>
+                          )
+                        ) : result.skipped ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={result.reason}>
+                            <AlertTriangle size={12} />
+                            {result.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title={result.reason || result.details}>
+                            <X size={12} />
+                            Failed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination Footer */}
+            {smsResults.length > smsPageSize && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+                <div className="text-sm text-gray-600">
+                  Showing {((smsCurrentPage - 1) * smsPageSize) + 1} to {Math.min(smsCurrentPage * smsPageSize, smsResults.length)} of {smsResults.length} students
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSmsCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={smsCurrentPage === 1}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {smsCurrentPage} of {Math.ceil(smsResults.length / smsPageSize)}
+                  </span>
+                  <button
+                    onClick={() => setSmsCurrentPage(p => Math.min(Math.ceil(smsResults.length / smsPageSize), p + 1))}
+                    disabled={smsCurrentPage >= Math.ceil(smsResults.length / smsPageSize)}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
       {/* Holiday Alert Modal - Shows for both Public and Institute Holidays */}
       {showHolidayAlert && (nonWorkingDayDetails.isNonWorkingDay || customHolidayForDate || publicHolidayMatches.length > 0 || selectedDateIsSunday) && (

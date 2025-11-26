@@ -60,6 +60,8 @@ const Students = () => {
   const [showBulkStudentUpload, setShowBulkStudentUpload] = useState(false);
   const [editingRollNumber, setEditingRollNumber] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
+  const [savingPinNumber, setSavingPinNumber] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [completionPercentages, setCompletionPercentages] = useState({});
   const [profileCompletion, setProfileCompletion] = useState({ percentage: 0, filledCount: 0, totalCount: 0 });
   const [forms, setForms] = useState([]);
@@ -892,11 +894,34 @@ const Students = () => {
     const allFields = {
       // From student_data (form submission) - use original field names
       ...student.student_data,
-      // Map individual database columns to expected field names
-      'pin_no': student.pin_no || '',
-      'previous_college': student.previous_college || '',
-      'certificates_status': student.certificates_status || '',
-      'student_photo': student.student_photo || ''
+      // Map ALL individual database columns to ensure they're available
+      // These override student_data if they exist in individual columns
+      ...(student.student_name && { student_name: student.student_name }),
+      ...(student.father_name && { father_name: student.father_name }),
+      ...(student.gender && { gender: student.gender }),
+      ...(student.dob && { dob: student.dob }),
+      ...(student.student_mobile && { student_mobile: student.student_mobile }),
+      ...(student.parent_mobile1 && { parent_mobile1: student.parent_mobile1 }),
+      ...(student.parent_mobile2 && { parent_mobile2: student.parent_mobile2 }),
+      ...(student.adhar_no && { adhar_no: student.adhar_no }),
+      ...(student.caste && { caste: student.caste }),
+      ...(student.batch && { batch: student.batch }),
+      ...(student.college && { college: student.college }),
+      ...(student.course && { course: student.course }),
+      ...(student.branch && { branch: student.branch }),
+      ...(student.stud_type && { stud_type: student.stud_type }),
+      ...(student.student_status && { student_status: student.student_status }),
+      ...(student.scholar_status && { scholar_status: student.scholar_status }),
+      ...(student.student_address && { student_address: student.student_address }),
+      ...(student.city_village && { city_village: student.city_village }),
+      ...(student.mandal_name && { mandal_name: student.mandal_name }),
+      ...(student.district && { district: student.district }),
+      ...(student.pin_no && { pin_no: student.pin_no }),
+      ...(student.previous_college && { previous_college: student.previous_college }),
+      ...(student.certificates_status && { certificates_status: student.certificates_status }),
+      ...(student.student_photo && { student_photo: student.student_photo }),
+      ...(student.remarks && { remarks: student.remarks }),
+      ...(student.admission_date && { admission_date: student.admission_date })
     };
 
     console.log('Student data:', student);
@@ -934,6 +959,9 @@ const Students = () => {
   };
 
   const handleSaveEdit = async () => {
+    if (savingEdit) return; // Prevent double submission
+    
+    setSavingEdit(true);
     try {
       console.log('Saving edit data:', editData);
       console.log('Selected student:', selectedStudent);
@@ -986,17 +1014,24 @@ const Students = () => {
     } catch (error) {
       console.error('Save failed:', error);
       // Error toast is handled by the mutation
+    } finally {
+      setSavingEdit(false);
     }
   };
 
   const handleSaveRollNumber = async () => {
+    if (savingPinNumber) return; // Prevent double submission
+    
+    setSavingPinNumber(true);
     try {
+      // Make the API call - axios throws on non-2xx responses
       await api.put(`/students/${selectedStudent.admission_number}/pin-number`, {
         pinNumber: tempRollNumber,
       });
-      toast.success('PIN number updated successfully');
+      
+      // If we reach here, the request was successful (no exception thrown)
       setEditingRollNumber(false);
-      setSelectedStudent({ ...selectedStudent, pin_no: tempRollNumber });
+      setSelectedStudent(prev => ({ ...prev, pin_no: tempRollNumber }));
 
       // Update local state instead of refetching all data
       setStudents(prevStudents =>
@@ -1006,9 +1041,13 @@ const Students = () => {
             : student
         )
       );
-
+      
+      toast.success('PIN number updated successfully');
     } catch (error) {
+      console.error('PIN number update error:', error);
       toast.error(error.response?.data?.message || 'Failed to update PIN number');
+    } finally {
+      setSavingPinNumber(false);
     }
   };
 
@@ -1914,7 +1953,7 @@ const Students = () => {
                           />
                         ) : (
                           <p className="text-sm font-bold text-gray-900">
-                            {editData.student_name || editData['Student Name'] || '-'}
+                            {editData.student_name || editData['Student Name'] || selectedStudent?.student_name || '-'}
                           </p>
                         )}
                       </div>
@@ -1928,21 +1967,42 @@ const Students = () => {
                               type="text"
                               value={tempRollNumber}
                               onChange={(e) => setTempRollNumber(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !savingPinNumber) {
+                                  e.preventDefault();
+                                  handleSaveRollNumber();
+                                }
+                              }}
                               placeholder="Enter PIN number"
                               className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                              disabled={savingPinNumber}
                             />
                             <button
+                              type="button"
                               onClick={handleSaveRollNumber}
-                              className="px-2 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium"
+                              disabled={savingPinNumber}
+                              className="px-2 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                             >
-                              Save
+                              {savingPinNumber ? (
+                                <>
+                                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Saving...
+                                </>
+                              ) : (
+                                'Save'
+                              )}
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditingRollNumber(false);
                                 setTempRollNumber(selectedStudent.pin_no || '');
                               }}
-                              className="px-2 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+                              disabled={savingPinNumber}
+                              className="px-2 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Cancel
                             </button>
@@ -1998,7 +2058,7 @@ const Students = () => {
                           />
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
-                            {editData.branch || editData.Branch || '-'}
+                            {editData.branch || editData.Branch || selectedStudent?.branch || '-'}
                           </p>
                         )}
                       </div>
@@ -2095,7 +2155,7 @@ const Students = () => {
                           />
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
-                            {editData.batch || editData.Batch || '-'}
+                            {editData.batch || editData.Batch || selectedStudent?.batch || '-'}
                           </p>
                         )}
                       </div>
@@ -2116,7 +2176,7 @@ const Students = () => {
                           </select>
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
-                            {editData.stud_type || editData.StudType || '-'}
+                            {editData.stud_type || editData.StudType || selectedStudent?.stud_type || '-'}
                           </p>
                         )}
                       </div>
@@ -2215,7 +2275,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.parent_mobile1 || editData['Parent Mobile Number 1'] || '-'}
+                                {editData.parent_mobile1 || editData['Parent Mobile Number 1'] || selectedStudent?.parent_mobile1 || '-'}
                               </p>
                             )}
                           </div>
@@ -2234,7 +2294,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.parent_mobile2 || editData['Parent Mobile Number 2'] || '-'}
+                                {editData.parent_mobile2 || editData['Parent Mobile Number 2'] || selectedStudent?.parent_mobile2 || '-'}
                               </p>
                             )}
                           </div>
@@ -2317,7 +2377,7 @@ const Students = () => {
                                 />
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.district || editData.District || '-'}
+                                  {editData.district || editData.District || selectedStudent?.district || '-'}
                                 </p>
                               )}
                             </div>
@@ -2335,7 +2395,7 @@ const Students = () => {
                                 />
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.caste || editData.Caste || '-'}
+                                  {editData.caste || editData.Caste || selectedStudent?.caste || '-'}
                                 </p>
                               )}
                             </div>
@@ -2356,7 +2416,7 @@ const Students = () => {
                                 </select>
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.gender || editData['M/F'] || '-'}
+                                  {editData.gender || editData['M/F'] || selectedStudent?.gender || '-'}
                                 </p>
                               )}
                             </div>
@@ -2389,7 +2449,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.student_mobile || editData['Student Mobile Number'] || '-'}
+                                {editData.student_mobile || editData['Student Mobile Number'] || selectedStudent?.student_mobile || '-'}
                               </p>
                             )}
                           </div>
@@ -2407,7 +2467,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.father_name || editData['Father Name'] || '-'}
+                                {editData.father_name || editData['Father Name'] || selectedStudent?.father_name || '-'}
                               </p>
                             )}
                           </div>
@@ -2425,7 +2485,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {formatDate(editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'])}
+                                {formatDate(editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'] || selectedStudent?.dob)}
                               </p>
                             )}
                           </div>
@@ -2443,7 +2503,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.adhar_no || editData['ADHAR No'] || '-'}
+                                {editData.adhar_no || editData['ADHAR No'] || selectedStudent?.adhar_no || '-'}
                               </p>
                             )}
                           </div>
@@ -2490,7 +2550,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.student_status || editData['Student Status'] || '-'}
+                                {editData.student_status || editData['Student Status'] || selectedStudent?.student_status || '-'}
                               </p>
                             )}
                           </div>
@@ -2510,7 +2570,7 @@ const Students = () => {
                               </select>
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.scholar_status || editData['Scholar Status'] || '-'}
+                                {editData.scholar_status || editData['Scholar Status'] || selectedStudent?.scholar_status || '-'}
                               </p>
                             )}
                           </div>
@@ -2528,7 +2588,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.previous_college || '-'}
+                                {editData.previous_college || selectedStudent?.previous_college || '-'}
                               </p>
                             )}
                           </div>
@@ -2549,7 +2609,7 @@ const Students = () => {
                               </select>
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.certificates_status || '-'}
+                                {editData.certificates_status || selectedStudent?.certificates_status || '-'}
                               </p>
                             )}
                           </div>
@@ -2567,7 +2627,7 @@ const Students = () => {
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.remarks || editData.Remarks || '-'}
+                                {editData.remarks || editData.Remarks || selectedStudent?.remarks || '-'}
                               </p>
                             )}
                           </div>
@@ -2584,10 +2644,30 @@ const Students = () => {
               <div className="flex items-center gap-3">
                 {editMode ? (
                   <>
-                    <button onClick={handleSaveEdit} className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium">
-                      Save Changes
+                    <button 
+                      type="button"
+                      onClick={handleSaveEdit} 
+                      disabled={savingEdit}
+                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingEdit ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Saving...
+                        </>
+                      ) : (
+                        'Save Changes'
+                      )}
                     </button>
-                    <button onClick={() => setEditMode(false)} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                    <button 
+                      type="button"
+                      onClick={() => setEditMode(false)} 
+                      disabled={savingEdit}
+                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                       Cancel
                     </button>
                   </>

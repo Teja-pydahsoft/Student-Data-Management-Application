@@ -1170,6 +1170,14 @@ const Settings = () => {
     if (!branchBatchFilter) return allBranches;
     return allBranches.filter(branch => branch.academicYearId === parseInt(branchBatchFilter, 10));
   }, [selectedCourse, courseBranches, branchBatchFilter]);
+
+  // Get unique branch count for display (unique by name)
+  const uniqueBranchCount = useMemo(() => {
+    if (!selectedCourse) return 0;
+    const allBranches = courseBranches[selectedCourse.id] || [];
+    const uniqueNames = new Set(allBranches.map(branch => branch.name));
+    return uniqueNames.size;
+  }, [selectedCourse, courseBranches]);
   
   // Reset batch filter when course changes
   useEffect(() => {
@@ -1582,7 +1590,7 @@ const Settings = () => {
                                   ))}
                                 </select>
                                 <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-                                  {branchesForSelectedCourse.length} {branchBatchFilter ? 'shown' : 'branches'}
+                                  {branchBatchFilter ? branchesForSelectedCourse.length : uniqueBranchCount} {branchBatchFilter ? 'shown' : 'branches'}
                                 </span>
                               </div>
                             </div>

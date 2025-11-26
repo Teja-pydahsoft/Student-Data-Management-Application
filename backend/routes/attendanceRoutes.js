@@ -12,6 +12,7 @@ router.get('/student/:studentId/history', attendanceController.getStudentAttenda
 router.get('/download', attendanceController.downloadAttendanceReport);
 router.get('/', attendanceController.getAttendance);
 router.post('/', attendanceController.markAttendance);
+router.post('/retry-sms', attendanceController.retrySms);
 
 module.exports = router;
 

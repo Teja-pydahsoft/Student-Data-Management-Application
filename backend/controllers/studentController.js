@@ -2307,13 +2307,16 @@ exports.updateStudent = async (req, res) => {
     const existingStudent = existingStudents[0];
     console.log('Existing student data:', JSON.stringify(existingStudent, null, 2));
 
+    // Parse existing student_data to merge with incoming data
+    const existingStudentData = parseJSON(existingStudent.student_data) || {};
+    
     // Map form field names to database columns
     // Build update query for individual columns
     const updateFields = [];
     const updateValues = [];
 
-    // Update individual columns based on the field mapping
-    const mutableStudentData = { ...studentData };
+    // Merge incoming data with existing data (incoming takes precedence)
+    const mutableStudentData = { ...existingStudentData, ...studentData };
 
     let resolvedStage;
     try {
@@ -2694,12 +2697,21 @@ exports.getDashboardStats = async (_req, res) => {
 // Create student (manual entry)
 exports.createStudent = async (req, res) => {
   try {
+    console.log('📝 Create Student - Incoming request body:', JSON.stringify(req.body, null, 2));
+    
     const incomingData =
       req.body.studentData && typeof req.body.studentData === 'object'
         ? { ...req.body.studentData }
         : { ...req.body };
 
     delete incomingData.studentData;
+    
+    console.log('📝 Create Student - Parsed incomingData:', JSON.stringify({
+      course: incomingData.course,
+      branch: incomingData.branch,
+      college: incomingData.college,
+      batch: incomingData.batch
+    }, null, 2));
 
     const admissionNumber =
       req.body.admissionNumber ||
@@ -2778,6 +2790,14 @@ exports.createStudent = async (req, res) => {
     });
 
     const insertQuery = `INSERT INTO students (${insertColumns.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
+    
+    console.log('📝 Create Student - Insert columns:', insertColumns);
+    console.log('📝 Create Student - Checking for course/branch in columns:', {
+      hasCourse: insertColumns.includes('course'),
+      hasBranch: insertColumns.includes('branch'),
+      hasCollege: insertColumns.includes('college')
+    });
+    
     await masterPool.query(insertQuery, insertValues);
 
     // Fetch the created student data
