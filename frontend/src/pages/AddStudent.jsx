@@ -172,27 +172,32 @@ const AddStudent = () => {
       (branch) => branch?.isActive !== false
     );
     
-    // Filter branches by selected batch (academic year) if batch is selected
+    // Always deduplicate branches by name to avoid showing duplicates
+    const branchMap = new Map();
+    
     if (studentData.batch) {
-      // Get branches that match the selected batch OR have no batch specified
+      // If batch is selected, filter and prefer batch-specific branches
       const matchingBranches = branches.filter(
         (branch) => branch.academicYearLabel === studentData.batch || !branch.academicYearLabel
       );
       
-      // Deduplicate by name - prefer batch-specific branch over generic one
-      const branchMap = new Map();
       matchingBranches.forEach(branch => {
         const existing = branchMap.get(branch.name);
-        // If no existing entry or this one has the matching batch (more specific), use it
+        // Prefer batch-specific branch over generic one
         if (!existing || branch.academicYearLabel === studentData.batch) {
           branchMap.set(branch.name, branch);
         }
       });
-      
-      branches = Array.from(branchMap.values());
+    } else {
+      // If no batch selected, just deduplicate by name (show unique branch names)
+      branches.forEach(branch => {
+        if (!branchMap.has(branch.name)) {
+          branchMap.set(branch.name, branch);
+        }
+      });
     }
     
-    return branches;
+    return Array.from(branchMap.values());
   }, [selectedCourse, studentData.batch]);
 
   const selectedBranch = useMemo(
