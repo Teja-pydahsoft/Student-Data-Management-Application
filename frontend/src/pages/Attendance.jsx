@@ -1005,9 +1005,9 @@ const Attendance = () => {
       setSmsResults(results);
       
       // Build SMS status map for quick lookup
-      const statusMap = {};
+      const newSmsStatusMap = {};
       results.forEach(result => {
-        statusMap[result.studentId] = {
+        newSmsStatusMap[result.studentId] = {
           success: result.success,
           mocked: result.mocked,
           skipped: result.skipped,
@@ -1017,7 +1017,7 @@ const Attendance = () => {
           admissionNumber: result.admissionNumber
         };
       });
-      setSmsStatusMap(statusMap);
+      setSmsStatusMap(newSmsStatusMap);
       
       setSmsCurrentPage(1);
       if (results.length > 0) {

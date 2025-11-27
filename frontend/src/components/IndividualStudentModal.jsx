@@ -19,7 +19,7 @@ const SCHOLAR_STATUS_OPTIONS = ['Eligible', 'Not Eligible'];
 const CASTE_OPTIONS = ['OC', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST', 'EWS', 'Other'];
 const CERTIFICATES_STATUS_OPTIONS = ['Submitted', 'Pending', 'Partial', 'Originals Returned', 'Not Required'];
 
-const IndividualStudentModal = ({ isOpen, onClose, forms, onSubmitComplete }) => {
+const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false, onSubmitComplete }) => {
   const [loading, setLoading] = useState(false);
   const [colleges, setColleges] = useState([]);
   const [collegesLoading, setCollegesLoading] = useState(true);
@@ -525,6 +525,9 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, onSubmitComplete }) =>
 
   if (!isOpen) return null;
 
+  // Show loading or error state for forms
+  const formsNotReady = isLoadingForms || !forms || forms.length === 0;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
@@ -549,7 +552,35 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, onSubmitComplete }) =>
           </div>
         </div>
 
-        {/* Form Content */}
+        {/* Forms Loading/Error State */}
+        {formsNotReady && (
+          <div className="p-8 text-center">
+            {isLoadingForms ? (
+              <div className="flex flex-col items-center gap-4">
+                <LoadingAnimation width={48} height={48} showMessage={false} />
+                <p className="text-gray-600">Loading registration form...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
+                  <X size={32} className="text-red-500" />
+                </div>
+                <p className="text-gray-600">No registration forms available.</p>
+                <p className="text-sm text-gray-500">Please create a form first in the Forms section.</p>
+                <button
+                  onClick={handleClose}
+                  className="mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Form Content - Only show when forms are loaded */}
+        {!formsNotReady && (
+        <>
         <div className="p-6 overflow-y-auto max-h-[calc(95vh-180px)]">
           <form onSubmit={handleSubmit} className="space-y-6">
 
@@ -1219,6 +1250,8 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, onSubmitComplete }) =>
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

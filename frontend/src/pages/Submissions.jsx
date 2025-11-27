@@ -22,6 +22,7 @@ const Submissions = () => {
   const [formLink, setFormLink] = useState('');
   const [autoAssign, setAutoAssign] = useState(false);
   const [forms, setForms] = useState([]);
+  const [formsLoading, setFormsLoading] = useState(true);
   const [fieldStatus, setFieldStatus] = useState(null);
   const [selectedSubmissions, setSelectedSubmissions] = useState(new Set());
   const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
@@ -41,6 +42,7 @@ const Submissions = () => {
   }, [filter]);
 
   const fetchForms = async () => {
+    setFormsLoading(true);
     try {
       const response = await api.get('/forms');
       const activeForms = response.data.data.filter(f => f.is_active);
@@ -53,6 +55,9 @@ const Submissions = () => {
       }
     } catch (error) {
       console.error('Failed to fetch forms');
+      toast.error('Failed to load forms. Please refresh the page.');
+    } finally {
+      setFormsLoading(false);
     }
   };
 
@@ -345,17 +350,21 @@ const Submissions = () => {
           </button>
           <button
             onClick={() => setShowIndividualStudent(true)}
-            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+            disabled={formsLoading || forms.length === 0}
+            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={formsLoading ? 'Loading forms...' : forms.length === 0 ? 'No forms available' : 'Add a new student'}
           >
             <UserPlus size={18} />
-            Add Student
+            {formsLoading ? 'Loading...' : 'Add Student'}
           </button>
           <button
             onClick={() => setShowBulkUpload(true)}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+            disabled={formsLoading || forms.length === 0}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={formsLoading ? 'Loading forms...' : forms.length === 0 ? 'No forms available' : 'Upload students in bulk'}
           >
             <Upload size={18} />
-            Bulk Upload
+            {formsLoading ? 'Loading...' : 'Bulk Upload'}
           </button>
         </div>
       </div>
@@ -890,6 +899,7 @@ const Submissions = () => {
         isOpen={showBulkUpload}
         onClose={() => setShowBulkUpload(false)}
         forms={forms}
+        isLoadingForms={formsLoading}
         onUploadComplete={fetchSubmissions}
       />
 
@@ -897,6 +907,7 @@ const Submissions = () => {
         isOpen={showIndividualStudent}
         onClose={() => setShowIndividualStudent(false)}
         forms={forms}
+        isLoadingForms={formsLoading}
         onSubmitComplete={fetchSubmissions}
       />
 

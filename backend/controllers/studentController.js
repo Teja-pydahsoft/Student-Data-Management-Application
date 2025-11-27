@@ -2806,11 +2806,60 @@ exports.createStudent = async (req, res) => {
 
     applyStageToPayload(incomingData, resolvedStage);
 
-    const serializedStudentData = JSON.stringify(incomingData);
+    // Handle photo separately - save to file if it's a base64 string
+    let savedPhotoPath = null;
+    if (incomingData.student_photo && typeof incomingData.student_photo === 'string') {
+      const photoData = incomingData.student_photo;
+      
+      // Check if it's a base64 data URL
+      if (photoData.startsWith('data:image/')) {
+        try {
+          // Extract mime type and base64 data
+          const matches = photoData.match(/^data:image\/(\w+);base64,(.+)$/);
+          if (matches) {
+            const extension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+            
+            // Generate filename
+            const filename = `student_${admissionNumber}_${Date.now()}.${extension}`;
+            const filepath = `uploads/${filename}`;
+            
+            // Save to file
+            fs.writeFileSync(filepath, buffer);
+            savedPhotoPath = filename;
+            
+            console.log(`📷 Photo saved to file: ${filename} (${(buffer.length / 1024).toFixed(2)} KB)`);
+          }
+        } catch (photoError) {
+          console.error('Error saving photo to file:', photoError);
+          // Continue without photo rather than failing the entire operation
+        }
+      } else if (!photoData.startsWith('http')) {
+        // It's already a filename
+        savedPhotoPath = photoData;
+      }
+    }
+
+    // Remove photo from incomingData to prevent bloating student_data JSON
+    const dataForJson = { ...incomingData };
+    delete dataForJson.student_photo;
+    
+    // Store photo path reference in JSON instead of full base64
+    if (savedPhotoPath) {
+      dataForJson.student_photo = savedPhotoPath;
+    }
+
+    const serializedStudentData = JSON.stringify(dataForJson);
 
     const insertColumns = ['admission_number', 'current_year', 'current_semester', 'student_data'];
     const insertPlaceholders = ['?', '?', '?', '?'];
     const insertValues = [admissionNumber, resolvedStage.year, resolvedStage.semester, serializedStudentData];
+    
+    // Add photo path to direct column if saved
+    if (savedPhotoPath) {
+      incomingData.student_photo = savedPhotoPath;
+    }
 
     const updatedColumns = new Set(['admission_number', 'current_year', 'current_semester']);
 
