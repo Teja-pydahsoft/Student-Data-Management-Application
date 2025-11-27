@@ -330,6 +330,15 @@ const UserManagement = () => {
   // Delete user modal states
   const [deleteUserModal, setDeleteUserModal] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  
+  // Edit scope modal states
+  const [showEditCollegeModal, setShowEditCollegeModal] = useState(false);
+  const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
+  const [editCourses, setEditCourses] = useState([]);
+  const [editBranches, setEditBranches] = useState([]);
+  const [loadingEditCourses, setLoadingEditCourses] = useState(false);
+  const [loadingEditBranches, setLoadingEditBranches] = useState(false);
 
   const hasUserManagementAccess = useMemo(() => {
     if (isFullAccessRole(user?.role)) return true;
@@ -443,6 +452,69 @@ const UserManagement = () => {
       toast.error('Failed to load users');
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  // Load courses for edit modal
+  const loadEditCourses = async (collegeIds) => {
+    if (!collegeIds || collegeIds.length === 0) {
+      setEditCourses([]);
+      return;
+    }
+    setLoadingEditCourses(true);
+    try {
+      const coursePromises = collegeIds.map(id => api.get(`/colleges/${id}/courses?includeInactive=false`));
+      const responses = await Promise.all(coursePromises);
+      const allCourses = responses.flatMap((response) => (response.data?.data || []));
+      const uniqueCourses = allCourses.reduce((acc, course) => {
+        if (!acc.find(c => c.id === course.id)) acc.push(course);
+        return acc;
+      }, []);
+      setEditCourses(uniqueCourses);
+    } catch (error) {
+      toast.error('Failed to load courses');
+    } finally {
+      setLoadingEditCourses(false);
+    }
+  };
+
+  // Load branches for edit modal
+  const loadEditBranches = async (courseIds, coursesList = editCourses) => {
+    if (!courseIds || courseIds.length === 0) {
+      setEditBranches([]);
+      return;
+    }
+    setLoadingEditBranches(true);
+    try {
+      const branchPromises = courseIds.map(id => api.get(`/courses/${id}/branches?includeInactive=false`));
+      const responses = await Promise.all(branchPromises);
+      
+      const courseMap = {};
+      coursesList.forEach(c => { courseMap[c.id] = c.name; });
+      
+      const allBranches = responses.flatMap((response, idx) =>
+        (response.data?.data || []).map(branch => ({
+          ...branch,
+          courseId: courseIds[idx],
+          courseName: courseMap[courseIds[idx]] || '',
+          displayName: `${branch.name} (${courseMap[courseIds[idx]] || 'Course'})`
+        }))
+      );
+      
+      const uniqueBranchesMap = new Map();
+      allBranches.forEach(branch => {
+        const key = `${branch.name}-${branch.courseId}`;
+        if (!uniqueBranchesMap.has(key)) {
+          uniqueBranchesMap.set(key, branch);
+        }
+      });
+      
+      const uniqueBranches = Array.from(uniqueBranchesMap.values());
+      setEditBranches(uniqueBranches);
+    } catch (error) {
+      toast.error('Failed to load branches');
+    } finally {
+      setLoadingEditBranches(false);
     }
   };
 
@@ -604,13 +676,80 @@ const UserManagement = () => {
     const collegeIds = userData.collegeIds || (userData.collegeId ? [userData.collegeId] : []);
     const courseIds = userData.courseIds || (userData.courseId ? [userData.courseId] : []);
     
-    if (collegeIds.length > 0) await loadCourses(collegeIds);
-    if (courseIds.length > 0 && !userData.allCourses) await loadBranches(courseIds);
+    // Load courses and branches for edit modal
+    if (collegeIds.length > 0) {
+      await loadEditCourses(collegeIds);
+    }
+    if (courseIds.length > 0 && !userData.allCourses) {
+      // Wait a bit for courses to load then load branches
+      setTimeout(async () => {
+        await loadEditBranches(courseIds);
+      }, 100);
+    }
+  };
+
+  // Handle edit form college change
+  const handleEditCollegeChange = async (newCollegeIds) => {
+    setEditForm(prev => ({ 
+      ...prev, 
+      collegeIds: newCollegeIds,
+      courseIds: [],
+      branchIds: [],
+      allCourses: false,
+      allBranches: false
+    }));
+    setEditCourses([]);
+    setEditBranches([]);
+    if (newCollegeIds.length > 0) {
+      await loadEditCourses(newCollegeIds);
+    }
+  };
+
+  // Handle edit form course change
+  const handleEditCourseChange = async (newCourseIds) => {
+    setEditForm(prev => ({ 
+      ...prev, 
+      courseIds: newCourseIds,
+      branchIds: [],
+      allBranches: false
+    }));
+    setEditBranches([]);
+    if (newCourseIds.length > 0) {
+      await loadEditBranches(newCourseIds, editCourses);
+    }
+  };
+
+  // Handle edit form all courses toggle
+  const handleEditAllCoursesChange = (checked) => {
+    setEditForm(prev => ({
+      ...prev,
+      allCourses: checked,
+      courseIds: checked ? [] : prev.courseIds,
+      allBranches: checked ? true : prev.allBranches,
+      branchIds: checked ? [] : prev.branchIds
+    }));
+    if (checked) {
+      setEditBranches([]);
+    }
+  };
+
+  // Handle edit form all branches toggle
+  const handleEditAllBranchesChange = (checked) => {
+    setEditForm(prev => ({
+      ...prev,
+      allBranches: checked,
+      branchIds: checked ? [] : prev.branchIds
+    }));
   };
 
   const closeEditModal = () => {
     setEditingUser(null);
     setEditForm(null);
+    setEditCourses([]);
+    setEditBranches([]);
+    setShowEditCollegeModal(false);
+    setShowEditCourseModal(false);
+    setShowEditBranchModal(false);
   };
 
   const handleUpdateUser = async (e) => {
@@ -1427,7 +1566,7 @@ const UserManagement = () => {
       {/* Edit Modal with Improved Permissions UI */}
       {editingUser && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white w-full max-w-7xl rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Edit size={20} />
@@ -1439,7 +1578,7 @@ const UserManagement = () => {
             </div>
 
             <form className="flex-1 overflow-y-auto p-6" onSubmit={handleUpdateUser}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* User Info */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
@@ -1492,6 +1631,149 @@ const UserManagement = () => {
                     />
                     <span className="font-medium text-slate-700">Active User</span>
                   </label>
+                </div>
+
+                {/* Access Scope Edit */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <Layers size={16} className="text-emerald-500" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800">Access Scope</h3>
+                  </div>
+
+                  {/* Colleges Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                        <Building2 size={14} className="text-blue-500" />
+                        Colleges <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        {editForm.collegeIds.length} selected
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowEditCollegeModal(true)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all group text-left"
+                    >
+                      <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100">
+                        <Building2 size={16} className="text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {editForm.collegeIds.length > 0 ? (
+                          <p className="font-medium text-slate-700 text-sm truncate">
+                            {getSelectedNames(colleges, editForm.collegeIds).join(', ')}
+                          </p>
+                        ) : (
+                          <p className="text-slate-400 text-sm">Click to select colleges</p>
+                        )}
+                      </div>
+                      <Edit size={14} className="text-slate-400 group-hover:text-blue-500" />
+                    </button>
+                  </div>
+
+                  {/* Courses Selection */}
+                  {editForm.collegeIds.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                          <GraduationCap size={14} className="text-emerald-500" />
+                          Courses
+                        </label>
+                        <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editForm.allCourses}
+                            onChange={(e) => handleEditAllCoursesChange(e.target.checked)}
+                            className="w-3 h-3 rounded text-emerald-500"
+                          />
+                          <span className="font-medium text-emerald-600">All</span>
+                        </label>
+                      </div>
+                      {!editForm.allCourses ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowEditCourseModal(true)}
+                          className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all group text-left"
+                        >
+                          <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center group-hover:bg-emerald-100">
+                            <GraduationCap size={16} className="text-emerald-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {editForm.courseIds.length > 0 ? (
+                              <p className="font-medium text-slate-700 text-sm truncate">
+                                {getSelectedNames(editCourses, editForm.courseIds).join(', ')}
+                              </p>
+                            ) : (
+                              <p className="text-slate-400 text-sm">Click to select courses</p>
+                            )}
+                          </div>
+                          <Edit size={14} className="text-slate-400 group-hover:text-emerald-500" />
+                        </button>
+                      ) : (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-emerald-500" />
+                          <span className="text-sm font-medium text-emerald-700">All courses selected</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Branches Selection */}
+                  {(editForm.courseIds.length > 0 && !editForm.allCourses) && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                          <BookOpen size={14} className="text-orange-500" />
+                          Branches
+                        </label>
+                        <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editForm.allBranches}
+                            onChange={(e) => handleEditAllBranchesChange(e.target.checked)}
+                            className="w-3 h-3 rounded text-orange-500"
+                          />
+                          <span className="font-medium text-orange-600">All</span>
+                        </label>
+                      </div>
+                      {!editForm.allBranches ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowEditBranchModal(true)}
+                          className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-400 hover:bg-orange-50/50 transition-all group text-left"
+                        >
+                          <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center group-hover:bg-orange-100">
+                            <BookOpen size={16} className="text-orange-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {editForm.branchIds.length > 0 ? (
+                              <p className="font-medium text-slate-700 text-sm truncate">
+                                {getSelectedNames(editBranches, editForm.branchIds, 'displayName').join(', ')}
+                              </p>
+                            ) : (
+                              <p className="text-slate-400 text-sm">Click to select branches</p>
+                            )}
+                          </div>
+                          <Edit size={14} className="text-slate-400 group-hover:text-orange-500" />
+                        </button>
+                      ) : (
+                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-orange-500" />
+                          <span className="text-sm font-medium text-orange-700">All branches selected</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {editForm.collegeIds.length === 0 && (
+                    <div className="text-center py-6">
+                      <Layers size={32} className="text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400">Select a college to configure access</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Improved Permissions UI */}
@@ -1597,9 +1879,9 @@ const UserManagement = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={updatingUser}
+                  disabled={updatingUser || editForm.collegeIds.length === 0}
                   className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 ${
-                    updatingUser ? 'bg-blue-400' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25'
+                    updatingUser || editForm.collegeIds.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25'
                   }`}
                 >
                   {updatingUser ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -1610,6 +1892,56 @@ const UserManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Scope Selection Modals */}
+      <SelectionModal
+        isOpen={showEditCollegeModal}
+        onClose={() => setShowEditCollegeModal(false)}
+        title="Edit Colleges"
+        icon={Building2}
+        options={colleges}
+        selectedIds={editForm?.collegeIds || []}
+        onChange={handleEditCollegeChange}
+        loading={loadingColleges}
+        searchPlaceholder="Search colleges..."
+        colorScheme="blue"
+        emptyMessage="No colleges available"
+      />
+
+      <SelectionModal
+        isOpen={showEditCourseModal}
+        onClose={() => setShowEditCourseModal(false)}
+        title="Edit Courses"
+        icon={GraduationCap}
+        options={editCourses}
+        selectedIds={editForm?.courseIds || []}
+        onChange={handleEditCourseChange}
+        loading={loadingEditCourses}
+        searchPlaceholder="Search courses..."
+        colorScheme="green"
+        allOption="All Courses"
+        allSelected={editForm?.allCourses || false}
+        onAllChange={handleEditAllCoursesChange}
+        emptyMessage="No courses available for selected colleges"
+      />
+
+      <SelectionModal
+        isOpen={showEditBranchModal}
+        onClose={() => setShowEditBranchModal(false)}
+        title="Edit Branches"
+        icon={BookOpen}
+        options={editBranches}
+        selectedIds={editForm?.branchIds || []}
+        onChange={(ids) => setEditForm(prev => ({ ...prev, branchIds: ids }))}
+        loading={loadingEditBranches}
+        searchPlaceholder="Search branches..."
+        colorScheme="orange"
+        displayKey="displayName"
+        allOption="All Branches"
+        allSelected={editForm?.allBranches || false}
+        onAllChange={handleEditAllBranchesChange}
+        emptyMessage="No branches available for selected courses"
+      />
 
       {/* Reset Password Modal */}
       {resetPasswordUser && (
