@@ -54,5 +54,23 @@ router.delete(
   rbacUserController.deleteUser
 );
 
+// Permanently delete user
+// Requires user_management write permission and super admin role
+router.delete(
+  '/:id/permanent',
+  verifyPermission('user_management', 'write'),
+  verifyCanManageUser,
+  rbacUserController.permanentDeleteUser
+);
+
+// Reset user password and send email
+// Requires user_management write permission
+router.post(
+  '/:id/reset-password',
+  verifyPermission('user_management', 'write'),
+  verifyCanManageUser,
+  rbacUserController.resetPassword
+);
+
 module.exports = router;
 

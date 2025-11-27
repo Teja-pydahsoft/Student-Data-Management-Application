@@ -2,38 +2,41 @@ const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/studentController');
 const authMiddleware = require('../middleware/auth');
+const { attachUserScope } = require('../middleware/rbac');
 const multer = require('multer');
 
 // Configure multer for photo uploads
 const photoUpload = multer({ dest: 'uploads/' });
 
-// All routes are protected (admin only)
-router.get('/', authMiddleware, studentController.getAllStudents);
-router.get('/filter-fields', authMiddleware, studentController.getFilterFields);
-router.get('/filter-options', authMiddleware, studentController.getFilterOptions);
+// All routes are protected and scoped by user's assigned colleges/courses/branches
+router.get('/', authMiddleware, attachUserScope, studentController.getAllStudents);
+router.get('/filter-fields', authMiddleware, attachUserScope, studentController.getFilterFields);
+router.get('/filter-options', authMiddleware, attachUserScope, studentController.getFilterOptions);
 router.put('/filter-fields/:fieldName', authMiddleware, studentController.updateFilterField);
-router.get('/stats', authMiddleware, studentController.getDashboardStats);
-router.get('/dashboard-stats', authMiddleware, studentController.getDashboardStats);
+router.get('/stats', authMiddleware, attachUserScope, studentController.getDashboardStats);
+router.get('/dashboard-stats', authMiddleware, attachUserScope, studentController.getDashboardStats);
 router.post(
   '/bulk-upload/preview',
   authMiddleware,
+  attachUserScope,
   studentController.uploadMiddleware,
   studentController.previewBulkUploadStudents
 );
 router.post(
   '/bulk-upload/commit',
   authMiddleware,
+  attachUserScope,
   studentController.commitBulkUploadStudents
 );
-router.post('/bulk-update-pin-numbers', authMiddleware, studentController.uploadMiddleware, studentController.bulkUpdatePinNumbers);
-router.post('/bulk-delete', authMiddleware, studentController.bulkDeleteStudents);
+router.post('/bulk-update-pin-numbers', authMiddleware, attachUserScope, studentController.uploadMiddleware, studentController.bulkUpdatePinNumbers);
+router.post('/bulk-delete', authMiddleware, attachUserScope, studentController.bulkDeleteStudents);
 router.post('/upload-photo', authMiddleware, photoUpload.single('photo'), studentController.uploadStudentPhoto);
-router.post('/promotions/bulk', authMiddleware, studentController.bulkPromoteStudents);
-router.post('/', authMiddleware, studentController.createStudent);
-router.post('/:admissionNumber/promote', authMiddleware, studentController.promoteStudent);
-router.get('/:admissionNumber', authMiddleware, studentController.getStudentByAdmission);
-router.put('/:admissionNumber', authMiddleware, studentController.updateStudent);
-router.put('/:admissionNumber/pin-number', authMiddleware, studentController.updatePinNumber);
-router.delete('/:admissionNumber', authMiddleware, studentController.deleteStudent);
+router.post('/promotions/bulk', authMiddleware, attachUserScope, studentController.bulkPromoteStudents);
+router.post('/', authMiddleware, attachUserScope, studentController.createStudent);
+router.post('/:admissionNumber/promote', authMiddleware, attachUserScope, studentController.promoteStudent);
+router.get('/:admissionNumber', authMiddleware, attachUserScope, studentController.getStudentByAdmission);
+router.put('/:admissionNumber', authMiddleware, attachUserScope, studentController.updateStudent);
+router.put('/:admissionNumber/pin-number', authMiddleware, attachUserScope, studentController.updatePinNumber);
+router.delete('/:admissionNumber', authMiddleware, attachUserScope, studentController.deleteStudent);
 
 module.exports = router;

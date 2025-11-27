@@ -1,15 +1,21 @@
 const collegeService = require('../services/collegeService');
 const { masterPool } = require('../config/database');
+const { filterCollegesByScope } = require('../utils/scoping');
 
 /**
  * GET /api/colleges
- * Get all colleges
+ * Get all colleges (filtered by user scope)
  */
 exports.getColleges = async (req, res) => {
   try {
     const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
     
-    const colleges = await collegeService.fetchColleges({ includeInactive });
+    let colleges = await collegeService.fetchColleges({ includeInactive });
+
+    // Apply user scope filtering
+    if (req.userScope && !req.userScope.unrestricted) {
+      colleges = filterCollegesByScope(colleges, req.userScope);
+    }
 
     res.json({
       success: true,

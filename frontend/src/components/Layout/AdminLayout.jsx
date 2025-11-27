@@ -14,19 +14,28 @@ import {
   BarChart3,
   TrendingUp
 } from 'lucide-react';
-import useAuthStore, { MODULE_ROUTE_MAP, getModuleKeyForPath } from '../../store/authStore';
+import useAuthStore from '../../store/authStore';
+import { 
+  MODULE_ROUTE_MAP, 
+  getModuleKeyForPath, 
+  hasModuleAccess, 
+  getAllowedFrontendModules,
+  isFullAccessRole,
+  FRONTEND_MODULES
+} from '../../constants/rbac';
 import toast from 'react-hot-toast';
 
+// Navigation items with frontend module keys as permissions
 const NAV_ITEMS = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: 'dashboard' },
-  { path: '/forms', icon: FileText, label: 'Pre Registration', permission: 'forms' },
-  { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: 'submissions' },
-  { path: '/students', icon: Users, label: 'Student Management', permission: 'students' },
-  { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: 'promotions' },
-  { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: 'attendance' },
-  { path: '/courses', icon: Settings, label: 'Settings', permission: 'courses' },
-  { path: '/users', icon: ShieldCheck, label: 'User Management', permission: 'user-management' },
-  { path: '/reports', icon: BarChart3, label: 'Reports', permission: 'reports' }
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
+  { path: '/forms', icon: FileText, label: 'Pre Registration', permission: FRONTEND_MODULES.FORMS },
+  { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: FRONTEND_MODULES.SUBMISSIONS },
+  { path: '/students', icon: Users, label: 'Student Management', permission: FRONTEND_MODULES.STUDENTS },
+  { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
+  { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },
+  { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
+  { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
+  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS }
 ];
 
 const AdminLayout = () => {
@@ -42,50 +51,57 @@ const AdminLayout = () => {
     navigate('/login');
   };
 
+  // Get allowed modules based on user role and permissions
   const allowedModules = useMemo(() => {
     if (!user) return [];
-    // Super admin and legacy admin have full access
-    if (user.role === 'admin' || user.role === 'super_admin') {
-      return Object.keys(MODULE_ROUTE_MAP);
+    
+    // Super admin and legacy admin have full access to all modules
+    if (isFullAccessRole(user.role)) {
+      return Object.values(FRONTEND_MODULES);
     }
-    // For RBAC users, check permissions
+    
+    // For RBAC users, check permissions using the mapping
     if (user.permissions) {
-      const modules = [];
-      Object.keys(MODULE_ROUTE_MAP).forEach(moduleKey => {
-        const permission = user.permissions[moduleKey];
-        if (permission && (permission.read || permission.write)) {
-          modules.push(moduleKey);
-        }
-      });
-      return modules;
+      return getAllowedFrontendModules(user.permissions);
     }
+    
     // Legacy staff users with modules array
     return Array.isArray(user.modules) ? user.modules : [];
   }, [user]);
 
+  // Filter navigation items based on user's allowed modules
   const filteredNavItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if (!item.permission) return true;
+      
       // Super admin and legacy admin have full access
-      if (user?.role === 'admin' || user?.role === 'super_admin') return true;
-      // For RBAC users, check permissions
+      if (isFullAccessRole(user?.role)) return true;
+      
+      // For RBAC users, check permissions using the mapping
       if (user?.permissions) {
-        const permission = user.permissions[item.permission];
-        return permission && (permission.read || permission.write);
+        return hasModuleAccess(user.permissions, item.permission);
       }
+      
       // Legacy staff users
       return allowedModules.includes(item.permission);
     });
   }, [allowedModules, user?.role, user?.permissions]);
 
+  // Redirect user if they try to access a module they don't have access to
   useEffect(() => {
     if (!user) return;
+    
     // Super admin and legacy admin have full access
-    if (user.role === 'admin' || user.role === 'super_admin') return;
+    if (isFullAccessRole(user.role)) return;
+    
     const currentModuleKey = getModuleKeyForPath(location.pathname);
+    
+    // Check if user has access to current module
     if (currentModuleKey && !allowedModules.includes(currentModuleKey)) {
-      const firstAllowedRoute =
-        MODULE_ROUTE_MAP[allowedModules[0]] || MODULE_ROUTE_MAP.dashboard || '/';
+      // Redirect to first allowed route or dashboard
+      const firstAllowedRoute = allowedModules.length > 0 
+        ? MODULE_ROUTE_MAP[allowedModules[0]] 
+        : '/';
       navigate(firstAllowedRoute, { replace: true });
     }
   }, [user, allowedModules, location.pathname, navigate]);
@@ -189,7 +205,7 @@ const AdminLayout = () => {
                   {user?.name || user?.username || 'User'}
                 </p>
                 <p className="text-xs text-gray-600 truncate">
-                  {user?.email || (user?.role === 'admin' || user?.role === 'super_admin' ? 'Administrator' : 'Team Member')}
+                  {user?.email || (isFullAccessRole(user?.role) ? 'Administrator' : 'Team Member')}
                 </p>
               </div>
             </div>

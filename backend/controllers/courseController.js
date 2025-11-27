@@ -1,4 +1,5 @@
 const { masterPool } = require('../config/database');
+const { filterCoursesByScope, filterBranchesByScope } = require('../utils/scoping');
 
 const DEFAULT_SEMESTERS_PER_YEAR = 2;
 const MAX_YEARS = 10;
@@ -292,10 +293,15 @@ exports.getCourses = async (req, res) => {
     const includeInactive = parseBoolean(req.query.includeInactive, false);
     const collegeId = req.query.collegeId ? parseInt(req.query.collegeId, 10) : null;
     
-    const courses = await fetchCoursesWithBranches({ 
+    let courses = await fetchCoursesWithBranches({ 
       includeInactive,
       collegeId: Number.isNaN(collegeId) ? null : collegeId
     });
+
+    // Apply user scope filtering for courses
+    if (req.userScope && !req.userScope.unrestricted && !req.userScope.allCourses) {
+      courses = filterCoursesByScope(courses, req.userScope);
+    }
 
     res.json({
       success: true,
@@ -883,9 +889,16 @@ exports.getBranches = async (req, res) => {
       [courseId]
     );
 
+    let branches = rows.map(serializeBranchRow);
+
+    // Apply user scope filtering for branches
+    if (req.userScope && !req.userScope.unrestricted && !req.userScope.allBranches) {
+      branches = filterBranchesByScope(branches, req.userScope);
+    }
+
     res.json({
       success: true,
-      data: rows.map(serializeBranchRow)
+      data: branches
     });
   } catch (error) {
     console.error('getBranches error:', error);

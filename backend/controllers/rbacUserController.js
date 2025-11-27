@@ -3,6 +3,9 @@ const crypto = require('crypto');
 const { masterPool } = require('../config/database');
 const {
   USER_ROLES,
+  ROLE_HIERARCHY,
+  ROLE_LABELS,
+  ROLE_REQUIREMENTS,
   validateRoleRequirements,
   canCreateRole,
   parsePermissions,
@@ -11,18 +14,26 @@ const {
   MODULES,
   ALL_MODULES
 } = require('../constants/rbac');
+const { sendCredentialsEmail, sendPasswordResetEmail } = require('../utils/emailService');
 
 /**
- * Generate a random password
+ * Check if user is a super admin (including legacy 'admin' role)
  */
-const generatePassword = () => {
-  const length = 12;
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length));
+const isSuperAdmin = (user) => {
+  return user && (user.role === USER_ROLES.SUPER_ADMIN || user.role === 'admin');
+};
+
+/**
+ * Parse scope data (JSON or single value)
+ */
+const parseScopeData = (data) => {
+  if (!data) return [];
+  try {
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [data];
   }
-  return password;
 };
 
 /**
@@ -40,13 +51,18 @@ exports.getUsers = async (req, res) => {
         u.phone,
         u.username,
         u.role,
-        u.college_id,
-        u.course_id,
-        u.branch_id,
+        u.college_ids,
+        u.course_ids,
+        u.branch_ids,
+        u.all_courses,
+        u.all_branches,
         u.permissions,
         u.is_active,
         u.created_at,
         u.updated_at,
+        u.college_id,
+        u.course_id,
+        u.branch_id,
         c.name as college_name,
         co.name as course_name,
         cb.name as branch_name
@@ -58,39 +74,57 @@ exports.getUsers = async (req, res) => {
     const params = [];
     const conditions = [];
 
-    // Super admin sees all users
-    if (user.role !== USER_ROLES.SUPER_ADMIN) {
-      // Campus Principal sees users in their college
-      if (user.role === USER_ROLES.CAMPUS_PRINCIPAL) {
+    // Super admin (including legacy 'admin') sees all users
+    if (!isSuperAdmin(user)) {
+      // College Principal / College AO sees users in their college
+      if (user.role === USER_ROLES.COLLEGE_PRINCIPAL || user.role === USER_ROLES.COLLEGE_AO) {
         const [userRows] = await masterPool.query(
-          'SELECT college_id FROM rbac_users WHERE id = ?',
+          'SELECT college_id, college_ids FROM rbac_users WHERE id = ?',
           [user.id]
         );
-        if (userRows && userRows.length > 0 && userRows[0].college_id) {
-          conditions.push('u.college_id = ?');
-          params.push(userRows[0].college_id);
+        if (userRows && userRows.length > 0) {
+          const collegeIds = parseScopeData(userRows[0].college_ids);
+          if (collegeIds.length > 0) {
+            conditions.push(`(u.college_id IN (${collegeIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.college_ids, ?))`);
+            params.push(...collegeIds, JSON.stringify(collegeIds));
+          } else if (userRows[0].college_id) {
+            conditions.push('u.college_id = ?');
+            params.push(userRows[0].college_id);
+          }
         }
       }
-      // Course Principal sees users in their course
-      else if (user.role === USER_ROLES.COURSE_PRINCIPAL) {
+      // Branch HOD sees only users in their branch
+      else if (user.role === USER_ROLES.BRANCH_HOD) {
         const [userRows] = await masterPool.query(
-          'SELECT course_id FROM rbac_users WHERE id = ?',
+          'SELECT branch_id, branch_ids FROM rbac_users WHERE id = ?',
           [user.id]
         );
-        if (userRows && userRows.length > 0 && userRows[0].course_id) {
-          conditions.push('u.course_id = ?');
-          params.push(userRows[0].course_id);
+        if (userRows && userRows.length > 0) {
+          const branchIds = parseScopeData(userRows[0].branch_ids);
+          if (branchIds.length > 0) {
+            conditions.push(`(u.branch_id IN (${branchIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.branch_ids, ?))`);
+            params.push(...branchIds, JSON.stringify(branchIds));
+          } else if (userRows[0].branch_id) {
+            conditions.push('u.branch_id = ?');
+            params.push(userRows[0].branch_id);
+          }
         }
       }
-      // HOD sees only users in their branch
-      else if (user.role === USER_ROLES.HOD) {
+      // College Attender sees users in their college
+      else if (user.role === USER_ROLES.COLLEGE_ATTENDER) {
         const [userRows] = await masterPool.query(
-          'SELECT branch_id FROM rbac_users WHERE id = ?',
+          'SELECT college_id, college_ids FROM rbac_users WHERE id = ?',
           [user.id]
         );
-        if (userRows && userRows.length > 0 && userRows[0].branch_id) {
-          conditions.push('u.branch_id = ?');
-          params.push(userRows[0].branch_id);
+        if (userRows && userRows.length > 0) {
+          const collegeIds = parseScopeData(userRows[0].college_ids);
+          if (collegeIds.length > 0) {
+            conditions.push(`(u.college_id IN (${collegeIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.college_ids, ?))`);
+            params.push(...collegeIds, JSON.stringify(collegeIds));
+          } else if (userRows[0].college_id) {
+            conditions.push('u.college_id = ?');
+            params.push(userRows[0].college_id);
+          }
         }
       }
     }
@@ -103,23 +137,67 @@ exports.getUsers = async (req, res) => {
 
     const [rows] = await masterPool.query(query, params);
 
-    const users = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      phone: row.phone,
-      username: row.username,
-      role: row.role,
-      collegeId: row.college_id,
-      courseId: row.course_id,
-      branchId: row.branch_id,
-      collegeName: row.college_name,
-      courseName: row.course_name,
-      branchName: row.branch_name,
-      permissions: parsePermissions(row.permissions),
-      isActive: !!row.is_active,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+    // Fetch college, course, branch names for multi-select
+    const users = await Promise.all(rows.map(async (row) => {
+      const collegeIds = parseScopeData(row.college_ids);
+      const courseIds = parseScopeData(row.course_ids);
+      const branchIds = parseScopeData(row.branch_ids);
+      
+      let collegeNames = [];
+      let courseNames = [];
+      let branchNames = [];
+
+      if (collegeIds.length > 0) {
+        const [colleges] = await masterPool.query(
+          `SELECT id, name FROM colleges WHERE id IN (${collegeIds.map(() => '?').join(',')})`,
+          collegeIds
+        );
+        collegeNames = colleges.map(c => ({ id: c.id, name: c.name }));
+      }
+
+      if (courseIds.length > 0) {
+        const [courses] = await masterPool.query(
+          `SELECT id, name FROM courses WHERE id IN (${courseIds.map(() => '?').join(',')})`,
+          courseIds
+        );
+        courseNames = courses.map(c => ({ id: c.id, name: c.name }));
+      }
+
+      if (branchIds.length > 0) {
+        const [branches] = await masterPool.query(
+          `SELECT id, name FROM course_branches WHERE id IN (${branchIds.map(() => '?').join(',')})`,
+          branchIds
+        );
+        branchNames = branches.map(b => ({ id: b.id, name: b.name }));
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        username: row.username,
+        role: row.role,
+        roleLabel: ROLE_LABELS[row.role] || row.role,
+        collegeId: row.college_id,
+        courseId: row.course_id,
+        branchId: row.branch_id,
+        collegeIds: collegeIds,
+        courseIds: courseIds,
+        branchIds: branchIds,
+        allCourses: !!row.all_courses,
+        allBranches: !!row.all_branches,
+        collegeName: row.college_name,
+        courseName: row.course_name,
+        branchName: row.branch_name,
+        collegeNames,
+        courseNames,
+        branchNames,
+        permissions: parsePermissions(row.permissions),
+        isActive: !!row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
     }));
 
     res.json({
@@ -156,6 +234,11 @@ exports.getUser = async (req, res) => {
           u.college_id,
           u.course_id,
           u.branch_id,
+          u.college_ids,
+          u.course_ids,
+          u.branch_ids,
+          u.all_courses,
+          u.all_branches,
           u.permissions,
           u.is_active,
           u.created_at,
@@ -182,26 +265,24 @@ exports.getUser = async (req, res) => {
     const userData = rows[0];
 
     // Check if current user can view this user (scope check)
-    if (user.role !== USER_ROLES.SUPER_ADMIN) {
-      if (user.role === USER_ROLES.CAMPUS_PRINCIPAL && userData.college_id !== user.collegeId) {
+    if (!isSuperAdmin(user)) {
+      if ((user.role === USER_ROLES.COLLEGE_PRINCIPAL || user.role === USER_ROLES.COLLEGE_AO) && userData.college_id !== user.collegeId) {
         return res.status(403).json({
           success: false,
           message: 'Access denied'
         });
       }
-      if (user.role === USER_ROLES.COURSE_PRINCIPAL && userData.course_id !== user.courseId) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied'
-        });
-      }
-      if (user.role === USER_ROLES.HOD && userData.branch_id !== user.branchId) {
+      if (user.role === USER_ROLES.BRANCH_HOD && userData.branch_id !== user.branchId) {
         return res.status(403).json({
           success: false,
           message: 'Access denied'
         });
       }
     }
+
+    const collegeIds = parseScopeData(userData.college_ids);
+    const courseIds = parseScopeData(userData.course_ids);
+    const branchIds = parseScopeData(userData.branch_ids);
 
     res.json({
       success: true,
@@ -212,9 +293,15 @@ exports.getUser = async (req, res) => {
         phone: userData.phone,
         username: userData.username,
         role: userData.role,
+        roleLabel: ROLE_LABELS[userData.role] || userData.role,
         collegeId: userData.college_id,
         courseId: userData.course_id,
         branchId: userData.branch_id,
+        collegeIds,
+        courseIds,
+        branchIds,
+        allCourses: !!userData.all_courses,
+        allBranches: !!userData.all_branches,
         collegeName: userData.college_name,
         courseName: userData.course_name,
         branchName: userData.branch_name,
@@ -245,23 +332,56 @@ exports.createUser = async (req, res) => {
       email,
       phone,
       username,
+      password,
       role,
       collegeId,
       courseId,
       branchId,
-      permissions
+      collegeIds,
+      courseIds,
+      branchIds,
+      allCourses,
+      allBranches,
+      permissions,
+      sendCredentials
     } = req.body;
 
     // Validate required fields
-    if (!name || !email || !username || !role) {
+    if (!name || !email || !username || !role || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Name, email, username, and role are required'
+        message: 'Name, email, username, password, and role are required'
       });
     }
 
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Normalize IDs to arrays
+    const normalizedCollegeIds = collegeIds && collegeIds.length > 0 
+      ? collegeIds 
+      : (collegeId ? [collegeId] : []);
+    const normalizedCourseIds = courseIds && courseIds.length > 0 
+      ? courseIds 
+      : (courseId ? [courseId] : []);
+    const normalizedBranchIds = branchIds && branchIds.length > 0 
+      ? branchIds 
+      : (branchId ? [branchId] : []);
+
     // Validate role requirements
-    const roleValidation = validateRoleRequirements(role, collegeId, courseId, branchId);
+    const roleValidation = validateRoleRequirements(
+      role, 
+      normalizedCollegeIds, 
+      normalizedCourseIds, 
+      normalizedBranchIds,
+      allCourses,
+      allBranches
+    );
     if (!roleValidation.valid) {
       return res.status(400).json({
         success: false,
@@ -269,8 +389,9 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    // Check if creator can create this role
-    if (!canCreateRole(creator.role, role)) {
+    // Check if creator can create this role (convert legacy 'admin' to 'super_admin')
+    const effectiveCreatorRole = creator.role === 'admin' ? USER_ROLES.SUPER_ADMIN : creator.role;
+    if (!canCreateRole(effectiveCreatorRole, role)) {
       return res.status(403).json({
         success: false,
         message: `You do not have permission to create users with role: ${role}`
@@ -278,31 +399,45 @@ exports.createUser = async (req, res) => {
     }
 
     // Validate scope restrictions
-    if (creator.role !== USER_ROLES.SUPER_ADMIN) {
-      // Campus Principal can only create users in their college
-      if (creator.role === USER_ROLES.CAMPUS_PRINCIPAL) {
+    if (!isSuperAdmin(creator)) {
+      // College Principal / College AO can only create users in their college
+      if (creator.role === USER_ROLES.COLLEGE_PRINCIPAL || creator.role === USER_ROLES.COLLEGE_AO) {
         const [userRows] = await masterPool.query(
-          'SELECT college_id FROM rbac_users WHERE id = ?',
+          'SELECT college_id, college_ids FROM rbac_users WHERE id = ?',
           [creator.id]
         );
-        if (userRows && userRows.length > 0 && userRows[0].college_id !== collegeId) {
-          return res.status(403).json({
-            success: false,
-            message: 'You can only create users in your college'
-          });
+        if (userRows && userRows.length > 0) {
+          const creatorCollegeIds = parseScopeData(userRows[0].college_ids);
+          const creatorCollegeId = userRows[0].college_id;
+          const allowedColleges = creatorCollegeIds.length > 0 ? creatorCollegeIds : (creatorCollegeId ? [creatorCollegeId] : []);
+          
+          const isValidScope = normalizedCollegeIds.every(id => allowedColleges.includes(id));
+          if (!isValidScope) {
+            return res.status(403).json({
+              success: false,
+              message: 'You can only create users in your assigned colleges'
+            });
+          }
         }
       }
-      // Course Principal can only create users in their course
-      else if (creator.role === USER_ROLES.COURSE_PRINCIPAL) {
+      // Branch HOD can only create users in their branch
+      else if (creator.role === USER_ROLES.BRANCH_HOD) {
         const [userRows] = await masterPool.query(
-          'SELECT course_id FROM rbac_users WHERE id = ?',
+          'SELECT branch_id, branch_ids FROM rbac_users WHERE id = ?',
           [creator.id]
         );
-        if (userRows && userRows.length > 0 && userRows[0].course_id !== courseId) {
-          return res.status(403).json({
-            success: false,
-            message: 'You can only create users in your course'
-          });
+        if (userRows && userRows.length > 0) {
+          const creatorBranchIds = parseScopeData(userRows[0].branch_ids);
+          const creatorBranchId = userRows[0].branch_id;
+          const allowedBranches = creatorBranchIds.length > 0 ? creatorBranchIds : (creatorBranchId ? [creatorBranchId] : []);
+          
+          const isValidScope = normalizedBranchIds.every(id => allowedBranches.includes(id));
+          if (!isValidScope) {
+            return res.status(403).json({
+              success: false,
+              message: 'You can only create users in your assigned branches'
+            });
+          }
         }
       }
     }
@@ -320,9 +455,8 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    // Generate password
-    const generatedPassword = generatePassword();
-    const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+    // Hash the provided password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Parse and validate permissions
     let userPermissions = permissions || createDefaultPermissions();
@@ -336,12 +470,13 @@ exports.createUser = async (req, res) => {
       userPermissions = parsed;
     }
 
-    // Insert user
+    // Insert user with multi-select support
     const [result] = await masterPool.query(
       `
         INSERT INTO rbac_users 
-          (name, email, phone, username, password, role, college_id, course_id, branch_id, permissions, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?)
+          (name, email, phone, username, password, role, college_id, course_id, branch_id, 
+           college_ids, course_ids, branch_ids, all_courses, all_branches, permissions, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), ?, ?, CAST(? AS JSON), ?)
       `,
       [
         name.trim(),
@@ -350,9 +485,14 @@ exports.createUser = async (req, res) => {
         username.trim(),
         hashedPassword,
         role,
-        collegeId || null,
-        courseId || null,
-        branchId || null,
+        normalizedCollegeIds[0] || null,
+        normalizedCourseIds[0] || null,
+        normalizedBranchIds[0] || null,
+        JSON.stringify(normalizedCollegeIds),
+        JSON.stringify(normalizedCourseIds),
+        JSON.stringify(normalizedBranchIds),
+        allCourses ? 1 : 0,
+        allBranches ? 1 : 0,
         JSON.stringify(userPermissions),
         creator.id
       ]
@@ -371,6 +511,11 @@ exports.createUser = async (req, res) => {
           u.college_id,
           u.course_id,
           u.branch_id,
+          u.college_ids,
+          u.course_ids,
+          u.branch_ids,
+          u.all_courses,
+          u.all_branches,
           u.permissions,
           u.is_active,
           u.created_at,
@@ -389,11 +534,25 @@ exports.createUser = async (req, res) => {
 
     const newUser = rows[0];
 
-    // TODO: Send email notification with password
-    // For now, return password in response (remove in production)
+    // Send credentials email if requested
+    let emailSent = false;
+    if (sendCredentials) {
+      const emailResult = await sendCredentialsEmail({
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        username: username.trim(),
+        password: password,
+        role: ROLE_LABELS[role] || role
+      });
+      emailSent = emailResult.success;
+    }
+
     res.status(201).json({
       success: true,
-      message: 'User created successfully',
+      message: sendCredentials && emailSent 
+        ? 'User created and credentials sent to email!' 
+        : 'User created successfully',
+      emailSent,
       data: {
         id: newUser.id,
         name: newUser.name,
@@ -401,9 +560,15 @@ exports.createUser = async (req, res) => {
         phone: newUser.phone,
         username: newUser.username,
         role: newUser.role,
+        roleLabel: ROLE_LABELS[newUser.role] || newUser.role,
         collegeId: newUser.college_id,
         courseId: newUser.course_id,
         branchId: newUser.branch_id,
+        collegeIds: parseScopeData(newUser.college_ids),
+        courseIds: parseScopeData(newUser.course_ids),
+        branchIds: parseScopeData(newUser.branch_ids),
+        allCourses: !!newUser.all_courses,
+        allBranches: !!newUser.all_branches,
         collegeName: newUser.college_name,
         courseName: newUser.course_name,
         branchName: newUser.branch_name,
@@ -411,9 +576,7 @@ exports.createUser = async (req, res) => {
         isActive: !!newUser.is_active,
         createdAt: newUser.created_at,
         updatedAt: newUser.updated_at
-      },
-      // TODO: Remove this in production - send via email instead
-      password: generatedPassword
+      }
     });
   } catch (error) {
     console.error('Failed to create user:', error);
@@ -446,6 +609,11 @@ exports.updateUser = async (req, res) => {
       collegeId,
       courseId,
       branchId,
+      collegeIds,
+      courseIds,
+      branchIds,
+      allCourses,
+      allBranches,
       permissions,
       isActive
     } = req.body;
@@ -486,11 +654,19 @@ exports.updateUser = async (req, res) => {
 
     if (role !== undefined) {
       // Validate role requirements
+      const normalizedCollegeIds = collegeIds !== undefined ? collegeIds : parseScopeData(existingUser.college_ids);
+      const normalizedCourseIds = courseIds !== undefined ? courseIds : parseScopeData(existingUser.course_ids);
+      const normalizedBranchIds = branchIds !== undefined ? branchIds : parseScopeData(existingUser.branch_ids);
+      const useAllCourses = allCourses !== undefined ? allCourses : !!existingUser.all_courses;
+      const useAllBranches = allBranches !== undefined ? allBranches : !!existingUser.all_branches;
+
       const roleValidation = validateRoleRequirements(
         role,
-        collegeId !== undefined ? collegeId : existingUser.college_id,
-        courseId !== undefined ? courseId : existingUser.course_id,
-        branchId !== undefined ? branchId : existingUser.branch_id
+        normalizedCollegeIds,
+        normalizedCourseIds,
+        normalizedBranchIds,
+        useAllCourses,
+        useAllBranches
       );
       if (!roleValidation.valid) {
         return res.status(400).json({
@@ -515,6 +691,46 @@ exports.updateUser = async (req, res) => {
     if (branchId !== undefined) {
       updates.push('branch_id = ?');
       params.push(branchId || null);
+    }
+
+    if (collegeIds !== undefined) {
+      updates.push('college_ids = CAST(? AS JSON)');
+      params.push(JSON.stringify(collegeIds || []));
+      // Also update the single college_id for backward compatibility
+      if (collegeIds && collegeIds.length > 0) {
+        updates.push('college_id = ?');
+        params.push(collegeIds[0]);
+      }
+    }
+
+    if (courseIds !== undefined) {
+      updates.push('course_ids = CAST(? AS JSON)');
+      params.push(JSON.stringify(courseIds || []));
+      // Also update the single course_id for backward compatibility
+      if (courseIds && courseIds.length > 0) {
+        updates.push('course_id = ?');
+        params.push(courseIds[0]);
+      }
+    }
+
+    if (branchIds !== undefined) {
+      updates.push('branch_ids = CAST(? AS JSON)');
+      params.push(JSON.stringify(branchIds || []));
+      // Also update the single branch_id for backward compatibility
+      if (branchIds && branchIds.length > 0) {
+        updates.push('branch_id = ?');
+        params.push(branchIds[0]);
+      }
+    }
+
+    if (allCourses !== undefined) {
+      updates.push('all_courses = ?');
+      params.push(allCourses ? 1 : 0);
+    }
+
+    if (allBranches !== undefined) {
+      updates.push('all_branches = ?');
+      params.push(allBranches ? 1 : 0);
     }
 
     if (permissions !== undefined) {
@@ -556,6 +772,11 @@ exports.updateUser = async (req, res) => {
           u.college_id,
           u.course_id,
           u.branch_id,
+          u.college_ids,
+          u.course_ids,
+          u.branch_ids,
+          u.all_courses,
+          u.all_branches,
           u.permissions,
           u.is_active,
           u.created_at,
@@ -582,9 +803,15 @@ exports.updateUser = async (req, res) => {
         phone: rows[0].phone,
         username: rows[0].username,
         role: rows[0].role,
+        roleLabel: ROLE_LABELS[rows[0].role] || rows[0].role,
         collegeId: rows[0].college_id,
         courseId: rows[0].course_id,
         branchId: rows[0].branch_id,
+        collegeIds: parseScopeData(rows[0].college_ids),
+        courseIds: parseScopeData(rows[0].course_ids),
+        branchIds: parseScopeData(rows[0].branch_ids),
+        allCourses: !!rows[0].all_courses,
+        allBranches: !!rows[0].all_branches,
         collegeName: rows[0].college_name,
         courseName: rows[0].course_name,
         branchName: rows[0].branch_name,
@@ -643,30 +870,154 @@ exports.deleteUser = async (req, res) => {
 };
 
 /**
+ * DELETE /api/rbac/users/:id/permanent
+ * Permanently delete user from database
+ */
+exports.permanentDeleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || req.admin;
+
+    // Only super admin can permanently delete users
+    if (!isSuperAdmin(user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Super Admin can permanently delete users'
+      });
+    }
+
+    // Check if user exists
+    const [userRows] = await masterPool.query(
+      'SELECT id, username, role FROM rbac_users WHERE id = ?',
+      [id]
+    );
+
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const targetUser = userRows[0];
+
+    // Prevent deleting super admin users
+    if (targetUser.role === USER_ROLES.SUPER_ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot delete Super Admin users'
+      });
+    }
+
+    // Permanently delete the user
+    const [result] = await masterPool.query(
+      'DELETE FROM rbac_users WHERE id = ?',
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'User permanently deleted'
+    });
+  } catch (error) {
+    console.error('Failed to permanently delete user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting user'
+    });
+  }
+};
+
+/**
+ * POST /api/rbac/users/:id/reset-password
+ * Reset user password and send email
+ */
+exports.resetPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Get user details
+    const [users] = await masterPool.query(
+      'SELECT id, name, email, username, role FROM rbac_users WHERE id = ?',
+      [id]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = users[0];
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password in database
+    await masterPool.query(
+      'UPDATE rbac_users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [hashedPassword, id]
+    );
+
+    // Send email with new password
+    const emailResult = await sendPasswordResetEmail({
+      email: user.email,
+      name: user.name,
+      username: user.username,
+      newPassword: newPassword,
+      role: ROLE_LABELS[user.role] || user.role
+    });
+
+    res.json({
+      success: true,
+      message: emailResult.success 
+        ? 'Password reset successfully and email sent!' 
+        : 'Password reset successfully but email could not be sent',
+      emailSent: emailResult.success
+    });
+  } catch (error) {
+    console.error('Failed to reset password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while resetting password'
+    });
+  }
+};
+
+/**
  * GET /api/rbac/users/roles/available
  * Get available roles that current user can create
  */
 exports.getAvailableRoles = async (req, res) => {
   try {
     const user = req.user || req.admin;
-    const { ROLE_HIERARCHY, USER_ROLES } = require('../constants/rbac');
     
-    const availableRoles = ROLE_HIERARCHY[user.role] || [];
-    
-    const roleLabels = {
-      [USER_ROLES.SUPER_ADMIN]: 'Super Admin',
-      [USER_ROLES.CAMPUS_PRINCIPAL]: 'Campus Principal',
-      [USER_ROLES.COLLEGE_AO]: 'College AO',
-      [USER_ROLES.COURSE_PRINCIPAL]: 'Course Principal',
-      [USER_ROLES.COURSE_AO]: 'Course AO',
-      [USER_ROLES.HOD]: 'HOD'
-    };
+    // Convert legacy 'admin' role to 'super_admin' for hierarchy lookup
+    const effectiveRole = user.role === 'admin' ? USER_ROLES.SUPER_ADMIN : user.role;
+    const availableRoles = ROLE_HIERARCHY[effectiveRole] || [];
 
     res.json({
       success: true,
       data: availableRoles.map(role => ({
         value: role,
-        label: roleLabels[role] || role
+        label: ROLE_LABELS[role] || role,
+        requirements: ROLE_REQUIREMENTS[role] || {}
       }))
     });
   } catch (error) {
@@ -684,7 +1035,7 @@ exports.getAvailableRoles = async (req, res) => {
  */
 exports.getModules = async (req, res) => {
   try {
-    const { MODULES, MODULE_LABELS } = require('../constants/rbac');
+    const { MODULE_LABELS } = require('../constants/rbac');
     
     const modules = ALL_MODULES.map(module => ({
       key: module,
@@ -703,4 +1054,3 @@ exports.getModules = async (req, res) => {
     });
   }
 };
-

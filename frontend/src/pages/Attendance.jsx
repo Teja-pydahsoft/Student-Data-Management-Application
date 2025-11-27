@@ -27,6 +27,7 @@ import api, { getStaticFileUrlDirect } from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
 import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
 import useAuthStore from '../store/authStore';
+import { isFullAccessRole } from '../constants/rbac';
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -161,7 +162,7 @@ const Attendance = () => {
   const searchEffectInitialized = useRef(false);
 
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isFullAccessRole(user?.role);
 
   const setCachedCalendarData = (monthKey, updater) => {
     if (!monthKey) return null;

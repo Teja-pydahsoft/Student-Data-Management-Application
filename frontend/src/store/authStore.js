@@ -1,46 +1,33 @@
 import { create } from 'zustand';
 import api from '../config/api';
+import { 
+  MODULE_ROUTE_MAP, 
+  getModuleKeyForPath, 
+  getAllowedFrontendModules,
+  isFullAccessRole,
+  FRONTEND_MODULES
+} from '../constants/rbac';
 
-export const MODULE_ROUTE_MAP = {
-  dashboard: '/',
-  forms: '/forms',
-  submissions: '/submissions',
-  students: '/students',
-  promotions: '/promotions',
-  attendance: '/attendance',
-  courses: '/courses',
-  reports: '/reports',
-  'user-management': '/users'
-};
-
-export const getModuleKeyForPath = (path = '/') => {
-  if (path === '/' || path.startsWith('/dashboard')) return 'dashboard';
-  if (path.startsWith('/forms')) return 'forms';
-  if (path.startsWith('/submissions')) return 'submissions';
-  if (path.startsWith('/students')) return 'students';
-  if (path.startsWith('/promotions')) return 'promotions';
-  if (path.startsWith('/attendance')) return 'attendance';
-  if (path.startsWith('/courses')) return 'courses';
-  if (path.startsWith('/reports')) return 'reports';
-  if (path.startsWith('/users')) return 'user-management';
-  return null;
-};
+// Re-export for backward compatibility
+export { MODULE_ROUTE_MAP, getModuleKeyForPath };
 
 const resolveDefaultRoute = (user) => {
   if (!user) return '/login';
-  // Super admin and legacy admin have full access
-  if (user.role === 'admin' || user.role === 'super_admin') return '/';
   
-  // For RBAC users, check permissions
+  // Super admin and legacy admin have full access - go to dashboard
+  if (isFullAccessRole(user.role)) return '/';
+  
+  // For RBAC users, check permissions and find first allowed route
   if (user.permissions) {
-    const modules = [];
-    Object.keys(MODULE_ROUTE_MAP).forEach(moduleKey => {
-      const permission = user.permissions[moduleKey];
-      if (permission && (permission.read || permission.write)) {
-        modules.push(moduleKey);
-      }
-    });
-    for (const moduleKey of modules) {
+    const allowedModules = getAllowedFrontendModules(user.permissions);
+    
+    // If user has dashboard access or no specific permissions, go to dashboard
+    if (allowedModules.includes(FRONTEND_MODULES.DASHBOARD) || allowedModules.length === 0) {
+      return '/';
+    }
+    
+    // Find first allowed module's route
+    for (const moduleKey of allowedModules) {
       const route = MODULE_ROUTE_MAP[moduleKey];
       if (route) {
         return route;
@@ -56,6 +43,7 @@ const resolveDefaultRoute = (user) => {
       return route;
     }
   }
+  
   return '/';
 };
 

@@ -6,6 +6,7 @@ const {
 } = require('../services/nonWorkingDayService');
 const { listCustomHolidays } = require('../services/customHolidayService');
 const { getPublicHolidaysForYear } = require('../services/holidayService');
+const { getScopeConditionString } = require('../utils/scoping');
 
 const VALID_STATUSES = new Set(['present', 'absent']);
 
@@ -50,6 +51,15 @@ exports.getFilterOptions = async (req, res) => {
     // Build WHERE clause based on applied filters
     let whereClause = 'WHERE 1=1';
     const params = [];
+    
+    // Apply user scope filtering first
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        whereClause += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
     
     if (college) {
       whereClause += ' AND college = ?';
@@ -308,6 +318,15 @@ exports.getAttendance = async (req, res) => {
     `;
 
     const params = [attendanceDate];
+
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        query += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
 
     if (batch) {
       query += ' AND s.batch = ?';

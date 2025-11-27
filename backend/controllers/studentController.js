@@ -9,6 +9,7 @@ const {
   getNextStage,
   normalizeStage
 } = require('../services/academicProgression');
+const { getScopeConditionString } = require('../utils/scoping');
 
 // Configure multer for file uploads
 const upload = multer({ dest: 'uploads/' });
@@ -2008,6 +2009,15 @@ exports.getAllStudents = async (req, res) => {
     let query = 'SELECT * FROM students WHERE 1=1';
     const params = [];
 
+    // Apply user scope filtering (college/course/branch restrictions)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        query += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
+
     if (search) {
       query += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
@@ -2099,6 +2109,15 @@ exports.getAllStudents = async (req, res) => {
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM students WHERE 1=1';
     const countParams = [];
+
+    // Apply user scope filtering to count query
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        countQuery += ` AND ${scopeCondition}`;
+        countParams.push(...scopeParams);
+      }
+    }
 
     if (search) {
       countQuery += ' AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_data LIKE ?)';
@@ -2610,7 +2629,7 @@ exports.deleteStudent = async (req, res) => {
 };
 
 // Get dashboard statistics
-exports.getDashboardStats = async (_req, res) => {
+exports.getDashboardStats = async (req, res) => {
   const safeSupabaseCount = async (promise, label) => {
     try {
       const { count, error } = await promise;
@@ -2630,10 +2649,20 @@ exports.getDashboardStats = async (_req, res) => {
     let masterDbConnected = true;
 
     try {
-      // Count only Regular students
-      const [studentCount] = await masterPool.query(
-        "SELECT COUNT(*) as total FROM students WHERE student_status = 'Regular'"
-      );
+      // Build scope-aware query for regular students
+      let statsQuery = "SELECT COUNT(*) as total FROM students WHERE student_status = 'Regular'";
+      const statsParams = [];
+      
+      // Apply user scope filtering
+      if (req.userScope) {
+        const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+        if (scopeCondition) {
+          statsQuery += ` AND ${scopeCondition}`;
+          statsParams.push(...scopeParams);
+        }
+      }
+      
+      const [studentCount] = await masterPool.query(statsQuery, statsParams);
       totalStudents = studentCount?.[0]?.total || 0;
     } catch (dbError) {
       masterDbConnected = false;
@@ -3092,6 +3121,15 @@ exports.getFilterOptions = async (req, res) => {
     // Build WHERE clause based on applied filters
     let whereClause = 'WHERE 1=1';
     const params = [];
+    
+    // Apply user scope filtering first
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        whereClause += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
     
     if (course) {
       whereClause += ' AND course = ?';

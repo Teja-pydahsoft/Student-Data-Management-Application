@@ -155,7 +155,8 @@ const Students = () => {
     (totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / (pageSize || 1))) : 1);
   // Only show loading for students table, not the entire page
   // Page structure (header, filters) should always be visible
-  const tableLoading = isLoading && students.length === 0 && !filtersLoading;
+  // Show loading when filters are still loading OR when students query is loading with no data yet
+  const tableLoading = filtersLoading || (isLoading && students.length === 0);
   // Table is fetching when students query is fetching (but filters are already loaded)
   const tableFetching = (isFetching || isLoading) && !filtersLoading;
 

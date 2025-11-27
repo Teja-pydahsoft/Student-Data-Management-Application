@@ -22,6 +22,7 @@ import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
 import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
+import { isFullAccessRole } from '../constants/rbac';
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -198,7 +199,7 @@ const Settings = () => {
   const calendarCacheRef = useRef(new Map());
 
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isFullAccessRole(user?.role);
 
   // Fetch colleges from API
   const fetchColleges = async ({ silent = false } = {}) => {
