@@ -1031,15 +1031,17 @@ exports.getAvailableRoles = async (req, res) => {
 
 /**
  * GET /api/rbac/users/modules
- * Get all available modules for permissions
+ * Get all available modules for permissions with granular permission details
  */
 exports.getModules = async (req, res) => {
   try {
-    const { MODULE_LABELS } = require('../constants/rbac');
+    const { MODULE_LABELS, MODULE_PERMISSIONS } = require('../constants/rbac');
     
     const modules = ALL_MODULES.map(module => ({
       key: module,
-      label: MODULE_LABELS[module] || module
+      label: MODULE_LABELS[module] || module,
+      permissions: MODULE_PERMISSIONS[module]?.permissions || [],
+      permissionLabels: MODULE_PERMISSIONS[module]?.labels || {}
     }));
 
     res.json({

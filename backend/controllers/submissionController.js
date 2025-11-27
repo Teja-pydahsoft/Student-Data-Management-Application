@@ -1455,6 +1455,18 @@ exports.approveSubmission = async (req, res) => {
   let masterConn = null;
 
   try {
+    // Check for approve permission
+    const user = req.user || req.admin;
+    if (user && user.role !== 'super_admin' && user.role !== 'admin') {
+      const { hasPermission, MODULES } = require('../constants/rbac');
+      if (!hasPermission(user.permissions, MODULES.PRE_REGISTRATION, 'approve')) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to approve submissions'
+        });
+      }
+    }
+
     masterConn = await masterPool.getConnection();
     await masterConn.beginTransaction();
 
@@ -1751,6 +1763,18 @@ exports.rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
     const { reason } = req.body;
+    
+    // Check for reject permission
+    const user = req.user || req.admin;
+    if (user && user.role !== 'super_admin' && user.role !== 'admin') {
+      const { hasPermission, MODULES } = require('../constants/rbac');
+      if (!hasPermission(user.permissions, MODULES.PRE_REGISTRATION, 'reject')) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to reject submissions'
+        });
+      }
+    }
 
     const { data, error } = await supabase
       .from('form_submissions')

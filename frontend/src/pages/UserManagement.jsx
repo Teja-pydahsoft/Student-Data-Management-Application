@@ -33,7 +33,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import useAuthStore from '../store/authStore';
-import { ROLE_LABELS, ROLE_COLORS, isFullAccessRole, hasModuleAccess, BACKEND_MODULES } from '../constants/rbac';
+import { ROLE_LABELS, ROLE_COLORS, isFullAccessRole, hasModuleAccess, BACKEND_MODULES, MODULE_PERMISSIONS, MODULE_LABELS, createDefaultPermissions } from '../constants/rbac';
 
 const ROLE_AVATAR_COLORS = {
   college_principal: 'from-indigo-400 to-indigo-600',
@@ -350,12 +350,8 @@ const UserManagement = () => {
   }, [user]);
 
   const initializePermissions = useCallback(() => {
-    const perms = {};
-    modules.forEach(module => {
-      perms[module.key] = { read: false, write: false };
-    });
-    return perms;
-  }, [modules]);
+    return createDefaultPermissions();
+  }, []);
 
   const loadModules = async () => {
     setLoadingModules(true);
@@ -527,11 +523,9 @@ const UserManagement = () => {
   }, [hasUserManagementAccess]);
 
   useEffect(() => {
-    if (modules.length > 0) {
-      const perms = initializePermissions();
-      setForm(prev => ({ ...prev, permissions: perms }));
-    }
-  }, [modules, initializePermissions]);
+    const perms = initializePermissions();
+    setForm(prev => ({ ...prev, permissions: perms }));
+  }, [initializePermissions]);
 
   useEffect(() => {
     if (form.collegeIds.length > 0) {
@@ -574,35 +568,78 @@ const UserManagement = () => {
 
   const handleFormChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
-  const toggleEditPermission = (moduleKey, permissionType) => {
-    setEditForm(prev => ({
-      ...prev,
-      permissions: {
-        ...prev.permissions,
-        [moduleKey]: {
-          ...prev.permissions[moduleKey],
-          [permissionType]: !prev.permissions[moduleKey]?.[permissionType]
+  const toggleEditPermission = (moduleKey, permissionKey) => {
+    setEditForm(prev => {
+      const currentModulePerms = prev.permissions[moduleKey] || {};
+      return {
+        ...prev,
+        permissions: {
+          ...prev.permissions,
+          [moduleKey]: {
+            ...currentModulePerms,
+            [permissionKey]: !currentModulePerms[permissionKey]
+          }
         }
-      }
-    }));
+      };
+    });
+  };
+
+  // Toggle all permissions for a module
+  const toggleModuleAllPermissions = (moduleKey, grant) => {
+    const modulePerms = MODULE_PERMISSIONS[moduleKey];
+    if (!modulePerms) return;
+    
+    setEditForm(prev => {
+      const newPerms = {};
+      modulePerms.permissions.forEach(perm => {
+        newPerms[perm] = grant;
+      });
+      return {
+        ...prev,
+        permissions: {
+          ...prev.permissions,
+          [moduleKey]: newPerms
+        }
+      };
+    });
+  };
+
+  // Check if module has any permission enabled
+  const hasAnyModulePermission = (moduleKey) => {
+    const perms = editForm?.permissions?.[moduleKey];
+    if (!perms) return false;
+    return Object.values(perms).some(val => val === true);
+  };
+
+  // Count enabled permissions for a module
+  const countModulePermissions = (moduleKey) => {
+    const perms = editForm?.permissions?.[moduleKey];
+    if (!perms) return { enabled: 0, total: 0 };
+    const modulePerms = MODULE_PERMISSIONS[moduleKey];
+    const total = modulePerms?.permissions?.length || 0;
+    const enabled = Object.values(perms).filter(val => val === true).length;
+    return { enabled, total };
   };
 
   // Grant all permissions
   const grantAllPermissions = () => {
     const allPerms = {};
-    modules.forEach(module => {
-      allPerms[module.key] = { read: true, write: true };
+    Object.keys(BACKEND_MODULES).forEach(key => {
+      const moduleKey = BACKEND_MODULES[key];
+      const modulePerms = MODULE_PERMISSIONS[moduleKey];
+      if (modulePerms) {
+        allPerms[moduleKey] = {};
+        modulePerms.permissions.forEach(perm => {
+          allPerms[moduleKey][perm] = true;
+        });
+      }
     });
     setEditForm(prev => ({ ...prev, permissions: allPerms }));
   };
 
   // Revoke all permissions
   const revokeAllPermissions = () => {
-    const noPerms = {};
-    modules.forEach(module => {
-      noPerms[module.key] = { read: false, write: false };
-    });
-    setEditForm(prev => ({ ...prev, permissions: noPerms }));
+    setEditForm(prev => ({ ...prev, permissions: createDefaultPermissions() }));
   };
 
   const handleCreateUser = async (e) => {
@@ -661,6 +698,7 @@ const UserManagement = () => {
     setEditForm({
       id: userData.id,
       name: userData.name,
+      username: userData.username || '',
       email: userData.email,
       phone: userData.phone || '',
       role: userData.role,
@@ -880,17 +918,25 @@ const UserManagement = () => {
   // Check if user has any permissions configured
   const hasPermissions = (userData) => {
     if (!userData.permissions) return false;
-    return Object.values(userData.permissions).some(p => p.read || p.write);
+    return Object.values(userData.permissions).some(modulePerms => {
+      if (!modulePerms || typeof modulePerms !== 'object') return false;
+      return Object.values(modulePerms).some(val => val === true);
+    });
   };
 
-  // Count granted permissions
+  // Count granted permissions (modules with any permission enabled)
   const countPermissions = (userData) => {
-    if (!userData.permissions) return { granted: 0, total: modules.length };
+    const totalModules = Object.keys(BACKEND_MODULES).length;
+    if (!userData.permissions) return { granted: 0, total: totalModules };
     let granted = 0;
-    Object.values(userData.permissions).forEach(p => {
-      if (p.read || p.write) granted++;
+    Object.values(userData.permissions).forEach(modulePerms => {
+      if (modulePerms && typeof modulePerms === 'object') {
+        if (Object.values(modulePerms).some(val => val === true)) {
+          granted++;
+        }
+      }
     });
-    return { granted, total: modules.length };
+    return { granted, total: totalModules };
   };
 
   const getSelectedNames = (items, ids, key = 'name') => {
@@ -1598,6 +1644,13 @@ const UserManagement = () => {
                     />
                   </div>
                   <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Username</label>
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600">
+                      <AtSign size={14} className="text-slate-400" />
+                      <span>{editForm.username || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Email</label>
                     <input
                       type="email"
@@ -1803,68 +1856,87 @@ const UserManagement = () => {
                     </div>
                   </div>
                   
-                  <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
-                    {modules.map(module => {
-                      const hasRead = editForm.permissions[module.key]?.read || false;
-                      const hasWrite = editForm.permissions[module.key]?.write || false;
-                      const hasAny = hasRead || hasWrite;
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                    {Object.keys(BACKEND_MODULES).map(key => {
+                      const moduleKey = BACKEND_MODULES[key];
+                      const modulePerms = MODULE_PERMISSIONS[moduleKey];
+                      const moduleLabel = MODULE_LABELS[moduleKey];
+                      if (!modulePerms) return null;
+                      
+                      const hasAny = hasAnyModulePermission(moduleKey);
+                      const { enabled, total } = countModulePermissions(moduleKey);
                       
                       return (
                         <div 
-                          key={module.key} 
-                          className={`p-4 rounded-xl border-2 transition-all ${
+                          key={moduleKey} 
+                          className={`rounded-xl border-2 transition-all overflow-hidden ${
                             hasAny 
-                              ? 'bg-emerald-50/50 border-emerald-200' 
-                              : 'bg-white border-slate-200 hover:border-slate-300'
+                              ? 'bg-emerald-50/30 border-emerald-200' 
+                              : 'bg-white border-slate-200'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                hasAny ? 'bg-emerald-100' : 'bg-slate-100'
+                          {/* Module Header */}
+                          <div className="flex items-center justify-between p-3 bg-slate-50/50">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${
+                                hasAny ? 'bg-emerald-100' : 'bg-slate-200'
                               }`}>
                                 {hasAny ? (
-                                  <CheckCircle2 size={16} className="text-emerald-600" />
+                                  <CheckCircle2 size={14} className="text-emerald-600" />
                                 ) : (
-                                  <XCircle size={16} className="text-slate-400" />
+                                  <XCircle size={14} className="text-slate-400" />
                                 )}
                               </div>
-                              <span className={`text-sm font-semibold ${hasAny ? 'text-emerald-700' : 'text-slate-700'}`}>
-                                {module.label}
+                              <span className={`text-sm font-bold ${hasAny ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                {moduleLabel}
+                              </span>
+                              <span className="text-[10px] text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded">
+                                {enabled}/{total}
                               </span>
                             </div>
-                            <div className="flex gap-3">
-                              <label 
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-                                  hasRead 
-                                    ? 'bg-blue-100 text-blue-700' 
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleModuleAllPermissions(moduleKey, true)}
+                                className="px-2 py-1 text-[10px] font-semibold bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200 transition-colors"
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={hasRead}
-                                  onChange={() => toggleEditPermission(module.key, 'read')}
-                                  className="w-4 h-4 rounded text-blue-500"
-                                />
-                                <span className="text-xs font-semibold">Read</span>
-                              </label>
-                              <label 
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all ${
-                                  hasWrite 
-                                    ? 'bg-amber-100 text-amber-700' 
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                }`}
+                                All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleModuleAllPermissions(moduleKey, false)}
+                                className="px-2 py-1 text-[10px] font-semibold bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition-colors"
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={hasWrite}
-                                  onChange={() => toggleEditPermission(module.key, 'write')}
-                                  className="w-4 h-4 rounded text-amber-500"
-                                />
-                                <span className="text-xs font-semibold">Write</span>
-                              </label>
+                                None
+                              </button>
                             </div>
+                          </div>
+                          
+                          {/* Permissions Grid */}
+                          <div className="p-3 grid grid-cols-2 gap-2">
+                            {modulePerms.permissions.map(permKey => {
+                              const isEnabled = editForm?.permissions?.[moduleKey]?.[permKey] || false;
+                              const permLabel = modulePerms.labels[permKey] || permKey;
+                              
+                              return (
+                                <label 
+                                  key={permKey}
+                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${
+                                    isEnabled 
+                                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' 
+                                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={() => toggleEditPermission(moduleKey, permKey)}
+                                    className="w-3.5 h-3.5 rounded text-emerald-500"
+                                  />
+                                  <span className="font-medium truncate">{permLabel}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         </div>
                       );

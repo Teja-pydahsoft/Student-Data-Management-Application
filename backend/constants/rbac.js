@@ -40,16 +40,79 @@ const MODULES = {
   DASHBOARD: 'dashboard',
   PRE_REGISTRATION: 'pre_registration',
   STUDENT_MANAGEMENT: 'student_management',
-  EXPORT_STUDENTS: 'export_students',
-  UPLOAD_STUDENTS: 'upload_students',
-  EDIT_STUDENT: 'edit_student',
-  DELETE_STUDENT: 'delete_student',
   PROMOTIONS: 'promotions',
   ATTENDANCE: 'attendance',
   SETTINGS: 'settings',
-  CAMPUS_CRUD: 'campus_crud',
   USER_MANAGEMENT: 'user_management',
   REPORTS: 'reports'
+};
+
+// Granular Permissions for each module
+const MODULE_PERMISSIONS = {
+  [MODULES.DASHBOARD]: {
+    // Dashboard is common for all users - no special permissions needed
+    permissions: ['view'],
+    labels: {
+      view: 'View Dashboard'
+    }
+  },
+  [MODULES.PRE_REGISTRATION]: {
+    permissions: ['add_student', 'bulk_upload', 'approve', 'reject'],
+    labels: {
+      add_student: 'Add Student',
+      bulk_upload: 'Bulk Upload',
+      approve: 'Approve Submissions',
+      reject: 'Reject Submissions'
+    }
+  },
+  [MODULES.STUDENT_MANAGEMENT]: {
+    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export'],
+    labels: {
+      view: 'View Students',
+      add_student: 'Add Student',
+      bulk_upload: 'Bulk Upload',
+      edit_student: 'Edit Students',
+      delete_student: 'Delete Students',
+      update_pin: 'Update PIN Number',
+      export: 'Export Students'
+    }
+  },
+  [MODULES.PROMOTIONS]: {
+    permissions: ['view', 'manage'],
+    labels: {
+      view: 'View Promotions',
+      manage: 'Manage Promotions'
+    }
+  },
+  [MODULES.ATTENDANCE]: {
+    permissions: ['view', 'mark', 'download'],
+    labels: {
+      view: 'View Attendance',
+      mark: 'Mark Attendance',
+      download: 'Download Reports'
+    }
+  },
+  [MODULES.SETTINGS]: {
+    permissions: ['view', 'edit'],
+    labels: {
+      view: 'View Settings',
+      edit: 'Edit Settings (College, Course, Branch)'
+    }
+  },
+  [MODULES.USER_MANAGEMENT]: {
+    permissions: ['view', 'control'],
+    labels: {
+      view: 'View Users',
+      control: 'Manage Users (Create, Edit, Delete)'
+    }
+  },
+  [MODULES.REPORTS]: {
+    permissions: ['view', 'download'],
+    labels: {
+      view: 'View Reports',
+      download: 'Download Reports'
+    }
+  }
 };
 
 // Module Labels for UI
@@ -57,14 +120,9 @@ const MODULE_LABELS = {
   [MODULES.DASHBOARD]: 'Dashboard',
   [MODULES.PRE_REGISTRATION]: 'Pre-Registration',
   [MODULES.STUDENT_MANAGEMENT]: 'Student Management',
-  [MODULES.EXPORT_STUDENTS]: 'Export Students',
-  [MODULES.UPLOAD_STUDENTS]: 'Upload Students',
-  [MODULES.EDIT_STUDENT]: 'Edit Student',
-  [MODULES.DELETE_STUDENT]: 'Delete Student',
   [MODULES.PROMOTIONS]: 'Promotions',
   [MODULES.ATTENDANCE]: 'Attendance',
   [MODULES.SETTINGS]: 'Settings',
-  [MODULES.CAMPUS_CRUD]: 'Campus, Courses, Branches CRUD',
   [MODULES.USER_MANAGEMENT]: 'User Management',
   [MODULES.REPORTS]: 'Reports'
 };
@@ -72,11 +130,17 @@ const MODULE_LABELS = {
 // All modules as array
 const ALL_MODULES = Object.values(MODULES);
 
-// Default permissions structure
+// Default permissions structure (all false)
 const createDefaultPermissions = () => {
   const permissions = {};
   ALL_MODULES.forEach(module => {
-    permissions[module] = { read: false, write: false };
+    const modulePerms = MODULE_PERMISSIONS[module];
+    if (modulePerms) {
+      permissions[module] = {};
+      modulePerms.permissions.forEach(perm => {
+        permissions[module][perm] = false;
+      });
+    }
   });
   return permissions;
 };
@@ -85,13 +149,18 @@ const createDefaultPermissions = () => {
 const createSuperAdminPermissions = () => {
   const permissions = {};
   ALL_MODULES.forEach(module => {
-    permissions[module] = { read: true, write: true };
+    const modulePerms = MODULE_PERMISSIONS[module];
+    if (modulePerms) {
+      permissions[module] = {};
+      modulePerms.permissions.forEach(perm => {
+        permissions[module][perm] = true;
+      });
+    }
   });
   return permissions;
 };
 
 // Role requirements for college/course/branch
-// Now supports multi-select with arrays
 const ROLE_REQUIREMENTS = {
   [USER_ROLES.SUPER_ADMIN]: {
     requiresCollege: false,
@@ -145,14 +214,13 @@ const ROLE_REQUIREMENTS = {
   }
 };
 
-// Validate role requirements (updated for multi-select)
+// Validate role requirements
 const validateRoleRequirements = (role, collegeIds, courseIds, branchIds, allCourses = false, allBranches = false) => {
   const requirements = ROLE_REQUIREMENTS[role];
   if (!requirements) {
     return { valid: false, message: 'Invalid role' };
   }
 
-  // Normalize to arrays
   const colleges = Array.isArray(collegeIds) ? collegeIds : (collegeIds ? [collegeIds] : []);
   const courses = Array.isArray(courseIds) ? courseIds : (courseIds ? [courseIds] : []);
   const branches = Array.isArray(branchIds) ? branchIds : (branchIds ? [branchIds] : []);
@@ -169,7 +237,6 @@ const validateRoleRequirements = (role, collegeIds, courseIds, branchIds, allCou
     return { valid: false, message: `${role} requires at least one branch assignment or "All Branches"` };
   }
 
-  // Ensure NULL values for fields that shouldn't be set
   if (role === USER_ROLES.SUPER_ADMIN && (colleges.length > 0 || courses.length > 0 || branches.length > 0)) {
     return { valid: false, message: 'Super Admin cannot be assigned to college/course/branch' };
   }
@@ -183,7 +250,7 @@ const canCreateRole = (creatorRole, targetRole) => {
   return allowedRoles.includes(targetRole);
 };
 
-// Parse permissions from JSON
+// Parse permissions from JSON (handles both old and new format)
 const parsePermissions = (permissionsJson) => {
   if (!permissionsJson) return createDefaultPermissions();
   
@@ -192,14 +259,26 @@ const parsePermissions = (permissionsJson) => {
       ? JSON.parse(permissionsJson) 
       : permissionsJson;
     
-    // Ensure all modules exist
     const permissions = createDefaultPermissions();
+    
     Object.keys(parsed).forEach(module => {
       if (ALL_MODULES.includes(module)) {
-        permissions[module] = {
-          read: !!parsed[module]?.read,
-          write: !!parsed[module]?.write
-        };
+        const moduleDef = MODULE_PERMISSIONS[module];
+        if (moduleDef) {
+          // Handle old format (read/write)
+          if (parsed[module]?.read !== undefined || parsed[module]?.write !== undefined) {
+            // Convert old format to new format - if they had read/write, give them all permissions
+            const hasAccess = parsed[module]?.read || parsed[module]?.write;
+            moduleDef.permissions.forEach(perm => {
+              permissions[module][perm] = hasAccess;
+            });
+          } else {
+            // New format - individual permissions
+            moduleDef.permissions.forEach(perm => {
+              permissions[module][perm] = !!parsed[module]?.[perm];
+            });
+          }
+        }
       }
     });
     
@@ -210,16 +289,28 @@ const parsePermissions = (permissionsJson) => {
   }
 };
 
-// Check if user has permission for a module
-const hasPermission = (userPermissions, module, operation = 'read') => {
+// Check if user has permission for a module action
+const hasPermission = (userPermissions, module, action = 'view') => {
   const permissions = parsePermissions(userPermissions);
   const modulePerms = permissions[module];
   if (!modulePerms) return false;
   
-  if (operation === 'write') {
-    return modulePerms.write === true;
+  // If action is specified, check for that specific permission
+  if (modulePerms[action] !== undefined) {
+    return modulePerms[action] === true;
   }
-  return modulePerms.read === true || modulePerms.write === true;
+  
+  // Fallback: check if user has any permission in this module
+  return Object.values(modulePerms).some(val => val === true);
+};
+
+// Check if user has any access to a module
+const hasModuleAccess = (userPermissions, module) => {
+  const permissions = parsePermissions(userPermissions);
+  const modulePerms = permissions[module];
+  if (!modulePerms) return false;
+  
+  return Object.values(modulePerms).some(val => val === true);
 };
 
 // Role Labels for UI display
@@ -235,6 +326,7 @@ module.exports = {
   USER_ROLES,
   ROLE_HIERARCHY,
   MODULES,
+  MODULE_PERMISSIONS,
   MODULE_LABELS,
   ALL_MODULES,
   ROLE_REQUIREMENTS,
@@ -244,5 +336,6 @@ module.exports = {
   validateRoleRequirements,
   canCreateRole,
   parsePermissions,
-  hasPermission
+  hasPermission,
+  hasModuleAccess
 };

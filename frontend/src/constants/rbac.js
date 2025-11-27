@@ -1,23 +1,98 @@
 /**
  * Frontend RBAC Constants
  * Maps backend module keys to frontend navigation items
+ * Supports granular permissions per module
  */
 
 // Backend module keys (from backend/constants/rbac.js)
 export const BACKEND_MODULES = {
+  DASHBOARD: 'dashboard',
   PRE_REGISTRATION: 'pre_registration',
   STUDENT_MANAGEMENT: 'student_management',
-  EXPORT_STUDENTS: 'export_students',
-  UPLOAD_STUDENTS: 'upload_students',
-  EDIT_STUDENT: 'edit_student',
-  DELETE_STUDENT: 'delete_student',
   PROMOTIONS: 'promotions',
   ATTENDANCE: 'attendance',
   SETTINGS: 'settings',
-  CAMPUS_CRUD: 'campus_crud',
   USER_MANAGEMENT: 'user_management',
-  REPORTS: 'reports',
-  DASHBOARD: 'dashboard'
+  REPORTS: 'reports'
+};
+
+// Granular Permissions for each module
+export const MODULE_PERMISSIONS = {
+  [BACKEND_MODULES.DASHBOARD]: {
+    permissions: ['view'],
+    labels: {
+      view: 'View Dashboard'
+    }
+  },
+  [BACKEND_MODULES.PRE_REGISTRATION]: {
+    permissions: ['add_student', 'bulk_upload', 'approve', 'reject'],
+    labels: {
+      add_student: 'Add Student',
+      bulk_upload: 'Bulk Upload',
+      approve: 'Approve Submissions',
+      reject: 'Reject Submissions'
+    }
+  },
+  [BACKEND_MODULES.STUDENT_MANAGEMENT]: {
+    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export'],
+    labels: {
+      view: 'View Students',
+      add_student: 'Add Student',
+      bulk_upload: 'Bulk Upload',
+      edit_student: 'Edit Students',
+      delete_student: 'Delete Students',
+      update_pin: 'Update PIN Number',
+      export: 'Export Students'
+    }
+  },
+  [BACKEND_MODULES.PROMOTIONS]: {
+    permissions: ['view', 'manage'],
+    labels: {
+      view: 'View Promotions',
+      manage: 'Manage Promotions'
+    }
+  },
+  [BACKEND_MODULES.ATTENDANCE]: {
+    permissions: ['view', 'mark', 'download'],
+    labels: {
+      view: 'View Attendance',
+      mark: 'Mark Attendance',
+      download: 'Download Reports'
+    }
+  },
+  [BACKEND_MODULES.SETTINGS]: {
+    permissions: ['view', 'edit'],
+    labels: {
+      view: 'View Settings',
+      edit: 'Edit Settings'
+    }
+  },
+  [BACKEND_MODULES.USER_MANAGEMENT]: {
+    permissions: ['view', 'control'],
+    labels: {
+      view: 'View Users',
+      control: 'Manage Users'
+    }
+  },
+  [BACKEND_MODULES.REPORTS]: {
+    permissions: ['view', 'download'],
+    labels: {
+      view: 'View Reports',
+      download: 'Download Reports'
+    }
+  }
+};
+
+// Module Labels for UI
+export const MODULE_LABELS = {
+  [BACKEND_MODULES.DASHBOARD]: 'Dashboard',
+  [BACKEND_MODULES.PRE_REGISTRATION]: 'Pre-Registration',
+  [BACKEND_MODULES.STUDENT_MANAGEMENT]: 'Student Management',
+  [BACKEND_MODULES.PROMOTIONS]: 'Promotions',
+  [BACKEND_MODULES.ATTENDANCE]: 'Attendance',
+  [BACKEND_MODULES.SETTINGS]: 'Settings',
+  [BACKEND_MODULES.USER_MANAGEMENT]: 'User Management',
+  [BACKEND_MODULES.REPORTS]: 'Reports'
 };
 
 // Frontend navigation keys
@@ -34,7 +109,6 @@ export const FRONTEND_MODULES = {
 };
 
 // Map frontend navigation keys to backend permission keys
-// A frontend module can require ONE OR MORE backend permissions
 export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.DASHBOARD]: [BACKEND_MODULES.DASHBOARD],
   [FRONTEND_MODULES.FORMS]: [BACKEND_MODULES.PRE_REGISTRATION],
@@ -42,7 +116,7 @@ export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.STUDENTS]: [BACKEND_MODULES.STUDENT_MANAGEMENT],
   [FRONTEND_MODULES.PROMOTIONS]: [BACKEND_MODULES.PROMOTIONS],
   [FRONTEND_MODULES.ATTENDANCE]: [BACKEND_MODULES.ATTENDANCE],
-  [FRONTEND_MODULES.COURSES]: [BACKEND_MODULES.SETTINGS, BACKEND_MODULES.CAMPUS_CRUD],
+  [FRONTEND_MODULES.COURSES]: [BACKEND_MODULES.SETTINGS],
   [FRONTEND_MODULES.USERS]: [BACKEND_MODULES.USER_MANAGEMENT],
   [FRONTEND_MODULES.REPORTS]: [BACKEND_MODULES.REPORTS]
 };
@@ -55,7 +129,6 @@ export const BACKEND_TO_FRONTEND_MAP = {
   [BACKEND_MODULES.PROMOTIONS]: FRONTEND_MODULES.PROMOTIONS,
   [BACKEND_MODULES.ATTENDANCE]: FRONTEND_MODULES.ATTENDANCE,
   [BACKEND_MODULES.SETTINGS]: FRONTEND_MODULES.COURSES,
-  [BACKEND_MODULES.CAMPUS_CRUD]: FRONTEND_MODULES.COURSES,
   [BACKEND_MODULES.USER_MANAGEMENT]: FRONTEND_MODULES.USERS,
   [BACKEND_MODULES.REPORTS]: FRONTEND_MODULES.REPORTS
 };
@@ -91,7 +164,7 @@ export const getModuleKeyForPath = (path = '/') => {
  * Check if user has access to a frontend module based on backend permissions
  * @param {Object} permissions - User's permissions object from backend
  * @param {string} frontendModule - Frontend module key to check
- * @returns {boolean} - Whether user has access (read or write)
+ * @returns {boolean} - Whether user has any access
  */
 export const hasModuleAccess = (permissions, frontendModule) => {
   if (!permissions || !frontendModule) return false;
@@ -99,11 +172,28 @@ export const hasModuleAccess = (permissions, frontendModule) => {
   const backendModules = FRONTEND_TO_BACKEND_MAP[frontendModule];
   if (!backendModules || backendModules.length === 0) return false;
   
-  // User has access if ANY of the required backend permissions grant read or write
+  // User has access if ANY of the required backend permissions have any true permission
   return backendModules.some(backendModule => {
     const perm = permissions[backendModule];
-    return perm && (perm.read || perm.write);
+    if (!perm) return false;
+    return Object.values(perm).some(val => val === true);
   });
+};
+
+/**
+ * Check if user has a specific permission for a module
+ * @param {Object} permissions - User's permissions object from backend
+ * @param {string} module - Backend module key
+ * @param {string} action - Specific action to check (e.g., 'approve', 'reject', 'edit')
+ * @returns {boolean} - Whether user has that specific permission
+ */
+export const hasPermission = (permissions, module, action) => {
+  if (!permissions || !module || !action) return false;
+  
+  const modulePerm = permissions[module];
+  if (!modulePerm) return false;
+  
+  return modulePerm[action] === true;
 };
 
 /**
@@ -126,10 +216,10 @@ export const getAllowedFrontendModules = (permissions) => {
 };
 
 /**
- * Check if user has write permission for a frontend module
+ * Check if user has write/manage permission for a frontend module
  * @param {Object} permissions - User's permissions object from backend
  * @param {string} frontendModule - Frontend module key to check
- * @returns {boolean} - Whether user has write access
+ * @returns {boolean} - Whether user has write/manage access
  */
 export const hasWriteAccess = (permissions, frontendModule) => {
   if (!permissions || !frontendModule) return false;
@@ -137,10 +227,13 @@ export const hasWriteAccess = (permissions, frontendModule) => {
   const backendModules = FRONTEND_TO_BACKEND_MAP[frontendModule];
   if (!backendModules || backendModules.length === 0) return false;
   
-  // User has write access if ANY of the required backend permissions grant write
+  // Check for write-type permissions (edit, control, manage, etc.)
+  const writeActions = ['edit', 'control', 'manage', 'add_student', 'bulk_upload', 'delete_student', 'approve', 'reject', 'mark'];
+  
   return backendModules.some(backendModule => {
     const perm = permissions[backendModule];
-    return perm && perm.write;
+    if (!perm) return false;
+    return writeActions.some(action => perm[action] === true);
   });
 };
 
@@ -182,3 +275,34 @@ export const isFullAccessRole = (role) => {
   return role === USER_ROLES.SUPER_ADMIN || role === USER_ROLES.ADMIN;
 };
 
+// Create default permissions (all false)
+export const createDefaultPermissions = () => {
+  const permissions = {};
+  Object.keys(BACKEND_MODULES).forEach(key => {
+    const module = BACKEND_MODULES[key];
+    const modulePerms = MODULE_PERMISSIONS[module];
+    if (modulePerms) {
+      permissions[module] = {};
+      modulePerms.permissions.forEach(perm => {
+        permissions[module][perm] = false;
+      });
+    }
+  });
+  return permissions;
+};
+
+// Create super admin permissions (all true)
+export const createSuperAdminPermissions = () => {
+  const permissions = {};
+  Object.keys(BACKEND_MODULES).forEach(key => {
+    const module = BACKEND_MODULES[key];
+    const modulePerms = MODULE_PERMISSIONS[module];
+    if (modulePerms) {
+      permissions[module] = {};
+      modulePerms.permissions.forEach(perm => {
+        permissions[module][perm] = true;
+      });
+    }
+  });
+  return permissions;
+};
