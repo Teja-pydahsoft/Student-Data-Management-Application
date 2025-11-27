@@ -303,6 +303,14 @@ exports.getCourses = async (req, res) => {
       courses = filterCoursesByScope(courses, req.userScope);
     }
 
+    // Apply user scope filtering for branches within each course
+    if (req.userScope && !req.userScope.unrestricted && !req.userScope.allBranches) {
+      courses = courses.map(course => ({
+        ...course,
+        branches: filterBranchesByScope(course.branches || [], req.userScope)
+      }));
+    }
+
     // No caching to ensure fresh data after updates
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
 

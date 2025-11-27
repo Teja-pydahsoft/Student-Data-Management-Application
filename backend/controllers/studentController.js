@@ -2368,14 +2368,52 @@ exports.updateStudent = async (req, res) => {
         value !== '{}' &&
         value !== null
       ) {
+        // Convert values for specific column types
+        let convertedValue = value;
+        
+        // Handle gender ENUM conversion - must match MySQL ENUM('M', 'F', 'Other')
+        if (columnName === 'gender') {
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            const genderStr = value.toString().trim().toUpperCase();
+            if (genderStr === 'M' || genderStr === 'MALE' || genderStr === 'BOY' || genderStr === '1') {
+              convertedValue = 'M';
+            } else if (genderStr === 'F' || genderStr === 'FEMALE' || genderStr === 'GIRL' || genderStr === '2') {
+              convertedValue = 'F';
+            } else if (genderStr === 'OTHER' || genderStr === 'O' || genderStr === '3') {
+              convertedValue = 'Other';
+            } else {
+              // Skip invalid gender values to prevent ENUM errors
+              return;
+            }
+          } else {
+            // Skip empty gender values
+            return;
+          }
+        }
+        
+        // Handle year/semester as integers
+        if (columnName === 'current_year' || columnName === 'current_semester') {
+          convertedValue = parseInt(value, 10) || 1;
+        }
+        
         updateFields.push(`${columnName} = ?`);
-        updateValues.push(value);
+        updateValues.push(convertedValue);
         updatedColumns.add(columnName);
       }
     });
 
+    // Prepare JSON data (exclude large photo data to prevent bloating)
+    const dataForJson = { ...mutableStudentData };
+    if (dataForJson.student_photo && typeof dataForJson.student_photo === 'string' && dataForJson.student_photo.startsWith('data:image/')) {
+      // Don't store base64 photo in JSON, it's already in the dedicated column
+      delete dataForJson.student_photo;
+    }
+    if (dataForJson['Student Photo'] && typeof dataForJson['Student Photo'] === 'string' && dataForJson['Student Photo'].startsWith('data:image/')) {
+      delete dataForJson['Student Photo'];
+    }
+    
     // Always update the JSON data field
-    const serializedStudentData = JSON.stringify(mutableStudentData);
+    const serializedStudentData = JSON.stringify(dataForJson);
     updateFields.push('student_data = ?');
     updateValues.push(serializedStudentData);
     updateValues.push(admissionNumber);
@@ -2404,12 +2442,17 @@ exports.updateStudent = async (req, res) => {
 
     console.log('Updated student data:', JSON.stringify(updatedStudents[0], null, 2));
 
-    // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
-    );
+    // Log action (non-blocking - don't fail the operation if logging fails)
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['UPDATE', 'STUDENT', admissionNumber, req.admin?.id || null, serializedStudentData]
+      );
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message);
+      // Don't fail the operation just because audit logging failed
+    }
 
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
 
@@ -2424,9 +2467,27 @@ exports.updateStudent = async (req, res) => {
 
   } catch (error) {
     console.error('Update student error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      sqlMessage: error.sqlMessage,
+      sql: error.sql
+    });
+    
+    // Provide more specific error messages for common issues
+    let errorMessage = 'Server error while updating student';
+    if (error.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || error.code === 'ER_DATA_TOO_LONG') {
+      errorMessage = 'Invalid data format for one or more fields. Please check the values entered.';
+    } else if (error.code === 'ER_BAD_NULL_ERROR') {
+      errorMessage = 'A required field is missing.';
+    } else if (error.sqlMessage) {
+      errorMessage = `Database error: ${error.sqlMessage}`;
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Server error while updating student'
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

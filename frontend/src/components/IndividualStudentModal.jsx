@@ -106,9 +106,10 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
     const loadCourseConfig = async () => {
       try {
         setCourseOptionsLoading(true);
+        // Always use the scoped /courses endpoint to respect user's assigned scope
         const url = selectedCollegeId 
           ? `/courses?collegeId=${selectedCollegeId}&includeInactive=false`
-          : '/courses/options';
+          : '/courses?includeInactive=false';
         const response = await api.get(url);
         setCourseOptions(response.data.data || []);
       } catch (error) {

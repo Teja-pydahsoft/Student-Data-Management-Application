@@ -71,7 +71,18 @@ const AddStudent = () => {
       try {
         setCollegesLoading(true);
         const response = await api.get('/colleges');
-        setColleges(response.data.data || []);
+        const collegeData = response.data.data || [];
+        setColleges(collegeData);
+        
+        // Auto-select college if only one is available (for scoped users)
+        if (collegeData.length === 1) {
+          const singleCollege = collegeData[0];
+          setSelectedCollegeId(singleCollege.id);
+          setStudentData((prev) => ({
+            ...prev,
+            college: singleCollege.name
+          }));
+        }
       } catch (error) {
         console.error('Failed to load colleges', error);
         toast.error(error.response?.data?.message || 'Failed to load colleges');
@@ -101,11 +112,35 @@ const AddStudent = () => {
     const loadCourseConfig = async () => {
       try {
         setCourseOptionsLoading(true);
+        // Always use the scoped /courses endpoint to respect user's assigned scope
         const url = selectedCollegeId 
           ? `/courses?collegeId=${selectedCollegeId}&includeInactive=false`
-          : '/courses/options';
+          : '/courses?includeInactive=false';
         const response = await api.get(url);
-        setCourseOptions(response.data.data || []);
+        const courseData = response.data.data || [];
+        setCourseOptions(courseData);
+        
+        // Auto-select course if only one is available (for scoped users)
+        const activeCourses = courseData.filter((course) => course?.isActive !== false);
+        if (activeCourses.length === 1) {
+          const singleCourse = activeCourses[0];
+          setSelectedCourseName(singleCourse.name);
+          setStudentData((prev) => ({
+            ...prev,
+            course: singleCourse.name
+          }));
+          
+          // Also auto-select branch if only one is available
+          const activeBranches = (singleCourse.branches || []).filter((b) => b?.isActive !== false);
+          if (activeBranches.length === 1) {
+            const singleBranch = activeBranches[0];
+            setSelectedBranchName(singleBranch.name);
+            setStudentData((prev) => ({
+              ...prev,
+              branch: singleBranch.name
+            }));
+          }
+        }
       } catch (error) {
         console.error('Failed to load course configuration', error);
         toast.error(error.response?.data?.message || 'Failed to load course configuration');
@@ -168,6 +203,18 @@ const AddStudent = () => {
       ) || null,
     [branchOptions, selectedBranchName]
   );
+
+  // Auto-select branch if only one is available (for scoped users)
+  useEffect(() => {
+    if (branchOptions.length === 1 && !selectedBranchName) {
+      const singleBranch = branchOptions[0];
+      setSelectedBranchName(singleBranch.name);
+      setStudentData((prev) => ({
+        ...prev,
+        branch: singleBranch.name
+      }));
+    }
+  }, [branchOptions, selectedBranchName]);
 
   const activeStructure = useMemo(() => {
     if (selectedBranch?.structure) return selectedBranch.structure;

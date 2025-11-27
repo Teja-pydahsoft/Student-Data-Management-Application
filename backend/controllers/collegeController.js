@@ -284,7 +284,28 @@ exports.getCollegeCourses = async (req, res) => {
 
     const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
     
-    const courses = await collegeService.getCollegeCourses(collegeId, { includeInactive });
+    let courses = await collegeService.getCollegeCourses(collegeId, { includeInactive });
+
+    // Apply user scope filtering for courses
+    if (req.userScope && !req.userScope.unrestricted && !req.userScope.allCourses) {
+      const { filterCoursesByScope, filterBranchesByScope } = require('../utils/scoping');
+      courses = filterCoursesByScope(courses, req.userScope);
+      
+      // Also filter branches within each course
+      if (!req.userScope.allBranches) {
+        courses = courses.map(course => ({
+          ...course,
+          branches: filterBranchesByScope(course.branches || [], req.userScope)
+        }));
+      }
+    } else if (req.userScope && !req.userScope.unrestricted && !req.userScope.allBranches) {
+      // Even if all courses are allowed, still filter branches
+      const { filterBranchesByScope } = require('../utils/scoping');
+      courses = courses.map(course => ({
+        ...course,
+        branches: filterBranchesByScope(course.branches || [], req.userScope)
+      }));
+    }
 
     res.json({
       success: true,
