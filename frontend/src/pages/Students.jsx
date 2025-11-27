@@ -1923,7 +1923,8 @@ const Students = () => {
                                   });
 
                                   if (uploadResponse.data.success) {
-                                    updateEditField('student_photo', uploadResponse.data.data.filename);
+                                    // Use the base64 data URL returned from backend for immediate display
+                                    updateEditField('student_photo', uploadResponse.data.data.photo_url);
                                     toast.success('Photo uploaded successfully');
                                   } else {
                                     toast.error('Failed to upload photo');

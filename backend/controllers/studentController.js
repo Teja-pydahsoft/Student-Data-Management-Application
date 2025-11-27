@@ -86,7 +86,8 @@ exports.uploadStudentPhoto = async (req, res) => {
         student_admission_number: admissionNumber,
         image_size: `${(base64Image.length / 1024).toFixed(2)} KB`,
         image_type: mimeType,
-        storage: 'mysql'
+        storage: 'mysql',
+        photo_url: imageDataUrl // Return the base64 data URL for immediate display
       }
     });
 
@@ -2806,38 +2807,39 @@ exports.createStudent = async (req, res) => {
 
     applyStageToPayload(incomingData, resolvedStage);
 
-    // Handle photo separately - save to file if it's a base64 string
-    let savedPhotoPath = null;
+    // Handle photo - store as base64 data URL directly in database (works with hosted environments)
+    let photoDataUrl = null;
     if (incomingData.student_photo && typeof incomingData.student_photo === 'string') {
       const photoData = incomingData.student_photo;
       
-      // Check if it's a base64 data URL
+      // If it's already a base64 data URL, keep it as-is
       if (photoData.startsWith('data:image/')) {
+        photoDataUrl = photoData;
+        const sizeKB = (photoData.length * 0.75 / 1024).toFixed(2); // Approximate size
+        console.log(`📷 Photo stored as base64 data URL (${sizeKB} KB)`);
+      } else if (photoData.startsWith('http')) {
+        // It's an HTTP URL, keep it as-is
+        photoDataUrl = photoData;
+      } else {
+        // It's a filename - for backward compatibility, try to convert to base64 if file exists locally
         try {
-          // Extract mime type and base64 data
-          const matches = photoData.match(/^data:image\/(\w+);base64,(.+)$/);
-          if (matches) {
-            const extension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-            const base64Data = matches[2];
-            const buffer = Buffer.from(base64Data, 'base64');
-            
-            // Generate filename
-            const filename = `student_${admissionNumber}_${Date.now()}.${extension}`;
-            const filepath = `uploads/${filename}`;
-            
-            // Save to file
-            fs.writeFileSync(filepath, buffer);
-            savedPhotoPath = filename;
-            
-            console.log(`📷 Photo saved to file: ${filename} (${(buffer.length / 1024).toFixed(2)} KB)`);
+          const filepath = `uploads/${photoData}`;
+          if (fs.existsSync(filepath)) {
+            const fileBuffer = fs.readFileSync(filepath);
+            const base64 = fileBuffer.toString('base64');
+            // Detect mime type from extension
+            const ext = photoData.split('.').pop().toLowerCase();
+            const mimeType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+            photoDataUrl = `data:${mimeType};base64,${base64}`;
+            console.log(`📷 Converted file ${photoData} to base64 data URL`);
+          } else {
+            // File doesn't exist, keep the filename for reference
+            photoDataUrl = photoData;
           }
         } catch (photoError) {
-          console.error('Error saving photo to file:', photoError);
-          // Continue without photo rather than failing the entire operation
+          console.error('Error reading photo file:', photoError);
+          photoDataUrl = photoData; // Keep original value
         }
-      } else if (!photoData.startsWith('http')) {
-        // It's already a filename
-        savedPhotoPath = photoData;
       }
     }
 
@@ -2845,9 +2847,9 @@ exports.createStudent = async (req, res) => {
     const dataForJson = { ...incomingData };
     delete dataForJson.student_photo;
     
-    // Store photo path reference in JSON instead of full base64
-    if (savedPhotoPath) {
-      dataForJson.student_photo = savedPhotoPath;
+    // Don't store large base64 in JSON, only reference it
+    if (photoDataUrl && !photoDataUrl.startsWith('data:')) {
+      dataForJson.student_photo = photoDataUrl;
     }
 
     const serializedStudentData = JSON.stringify(dataForJson);
@@ -2856,9 +2858,9 @@ exports.createStudent = async (req, res) => {
     const insertPlaceholders = ['?', '?', '?', '?'];
     const insertValues = [admissionNumber, resolvedStage.year, resolvedStage.semester, serializedStudentData];
     
-    // Add photo path to direct column if saved
-    if (savedPhotoPath) {
-      incomingData.student_photo = savedPhotoPath;
+    // Store photo as base64 data URL in dedicated column
+    if (photoDataUrl) {
+      incomingData.student_photo = photoDataUrl;
     }
 
     const updatedColumns = new Set(['admission_number', 'current_year', 'current_semester']);
