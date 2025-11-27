@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Upload } from 'lucide-react';
 import api from '../config/api';
+import toast, { Toaster } from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
 
 const COURSE_FIELD_IDENTIFIERS = ['course', 'course name'];
@@ -27,6 +28,25 @@ const matchesFieldIdentifier = (field, identifiers = []) => {
   });
 };
 
+// Field category mappings
+const BASIC_FIELDS = ['student_name', 'father_name', 'gender', 'dob', 'adhar_no', 'pin_no'];
+const ACADEMIC_FIELDS = ['college', 'batch', 'course', 'branch', 'current_year', 'current_semester', 'stud_type', 'student_status', 'scholar_status', 'previous_college'];
+const CONTACT_FIELDS = ['student_mobile', 'parent_mobile1', 'parent_mobile2'];
+const ADDRESS_FIELDS = ['student_address', 'city_village', 'mandal_name', 'district'];
+const ADDITIONAL_FIELDS = ['caste', 'certificates_status', 'remarks', 'student_photo'];
+
+const categorizeField = (field) => {
+  const key = field.key?.toLowerCase() || '';
+  const label = field.label?.toLowerCase() || '';
+  
+  if (BASIC_FIELDS.some(f => key.includes(f) || label.includes(f.replace('_', ' ')))) return 'basic';
+  if (ACADEMIC_FIELDS.some(f => key.includes(f) || label.includes(f.replace('_', ' ')))) return 'academic';
+  if (CONTACT_FIELDS.some(f => key.includes(f) || label.includes(f.replace('_', ' ')))) return 'contact';
+  if (ADDRESS_FIELDS.some(f => key.includes(f) || label.includes(f.replace('_', ' ')))) return 'address';
+  if (ADDITIONAL_FIELDS.some(f => key.includes(f) || label.includes(f.replace('_', ' ')))) return 'additional';
+  return 'other';
+};
+
 const PublicForm = () => {
   const { formId } = useParams();
   const [form, setForm] = useState(null);
@@ -37,34 +57,29 @@ const PublicForm = () => {
   const [formData, setFormData] = useState({});
   const [admissionNumber, setAdmissionNumber] = useState('');
   const [fileData, setFileData] = useState({});
-  const [fetchingForm, setFetchingForm] = useState(false); // Prevent multiple simultaneous fetches
-  const [formCache, setFormCache] = useState(new Map()); // Simple cache for form data
-  const [retryCount, setRetryCount] = useState(0); // Track retry attempts
+  const [fetchingForm, setFetchingForm] = useState(false);
+  const [formCache, setFormCache] = useState(new Map());
+  const [retryCount, setRetryCount] = useState(0);
   const [courseOptions, setCourseOptions] = useState([]);
   const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
+  
+  // Additional state for structured form
+  const [colleges, setColleges] = useState([]);
+  const [collegesLoading, setCollegesLoading] = useState(true);
+  const [academicYears, setAcademicYears] = useState([]);
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
+  const [selectedCollegeId, setSelectedCollegeId] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   // Mobile browser detection - moved to component level
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/i.test(navigator.userAgent);
 
-  // Separate useEffect for mobile detection - runs only once
+  // Mobile detection for optimizations
   useEffect(() => {
-    // Log mobile browser detection for debugging
     if (isMobile) {
-      console.log('Mobile browser detected:', {
-        userAgent: navigator.userAgent,
-        isIOS,
-        isAndroid,
-        formId,
-        url: window.location.href,
-        origin: window.location.origin,
-        pathname: window.location.pathname
-      });
-
-      // Add mobile-specific optimizations
       document.body.classList.add('mobile-optimized');
-
       // Prevent zoom on input focus for iOS
       if (isIOS) {
         const viewport = document.querySelector('meta[name=viewport]');
@@ -73,23 +88,39 @@ const PublicForm = () => {
         }
       }
     }
-  }, []); // Empty dependency array - runs only once
+  }, []);
 
+  // Load all dropdown data in parallel for faster loading (using public endpoints)
   useEffect(() => {
-    const loadCourseConfig = async () => {
+    const loadAllData = async () => {
       try {
-        setCourseOptionsLoading(true);
-        const response = await api.get('/courses/options');
-        setCourseOptions(response.data.data || []);
-      } catch (configError) {
-        console.error('Failed to fetch course configuration', configError);
-        // non-fatal for public form - just log toasts for admin environment
+        // Fetch all data in parallel using Promise.allSettled - use public endpoints
+        const [coursesRes, collegesRes, yearsRes] = await Promise.allSettled([
+          api.get('/courses/options'),
+          api.get('/colleges/public'),
+          api.get('/academic-years/public')
+        ]);
+
+        // Process results
+        if (coursesRes.status === 'fulfilled') {
+          setCourseOptions(coursesRes.value.data.data || []);
+        }
+        if (collegesRes.status === 'fulfilled') {
+          setColleges(collegesRes.value.data.data || []);
+        }
+        if (yearsRes.status === 'fulfilled') {
+          setAcademicYears(yearsRes.value.data.data || []);
+        }
+      } catch (error) {
+        // Silent fail - dropdowns will show text inputs as fallback
       } finally {
         setCourseOptionsLoading(false);
+        setCollegesLoading(false);
+        setAcademicYearsLoading(false);
       }
     };
 
-    loadCourseConfig();
+    loadAllData();
   }, []);
 
   // Separate useEffect for form fetching - runs only when formId changes
@@ -105,7 +136,6 @@ const PublicForm = () => {
     // Cleanup function to abort request if component unmounts or formId changes
     return () => {
       if (abortController) {
-        console.log('Aborting form fetch request');
         abortController.abort();
       }
     };
@@ -114,9 +144,7 @@ const PublicForm = () => {
   // Cleanup effect to clear cache on unmount
   useEffect(() => {
     return () => {
-      // Clear cache when component unmounts to prevent memory leaks
       setFormCache(new Map());
-      console.log('Form cache cleared on component unmount');
     };
   }, []);
 
@@ -124,7 +152,6 @@ const PublicForm = () => {
     // Check cache first
     const cachedForm = formCache.get(formId);
     if (cachedForm) {
-      console.log('Using cached form data for ID:', formId);
       setForm(cachedForm);
 
       // Initialize form data for enabled fields only
@@ -140,29 +167,22 @@ const PublicForm = () => {
 
     // Check if we already have the form data (avoid unnecessary fetch)
     if (form && form.form_id === formId && !loading) {
-      console.log('Form already loaded, skipping fetch');
       setLoading(false);
       return;
     }
 
     // Prevent multiple simultaneous requests
     if (fetchingForm) {
-      console.log('Form fetch already in progress, skipping duplicate request');
       return;
     }
 
     try {
       setFetchingForm(true);
       setError(null); // Clear any previous errors
-      console.log('Fetching form with ID:', formId);
 
-      const startTime = performance.now();
       const response = await api.get(`/forms/public/${formId}`, {
         signal: abortController?.signal
       });
-      const endTime = performance.now();
-
-      console.log(`Form fetched successfully in ${Math.round(endTime - startTime)}ms:`, response.data.data);
 
       // Reset retry count on successful fetch
       setRetryCount(0);
@@ -181,17 +201,12 @@ const PublicForm = () => {
 
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('Form fetch was aborted');
         return;
       }
 
-      console.error(`Error fetching form (attempt ${retryCount + 1}):`, error);
-
       // Retry logic for network errors
       if (retryCount < 2 && (error.code === 'NETWORK_ERROR' || error.response?.status >= 500)) {
-        console.log(`Retrying form fetch in 1 second... (attempt ${retryCount + 2})`);
         setRetryCount(prev => prev + 1);
-
         setTimeout(() => {
           if (!fetchingForm) {
             fetchForm(abortController);
@@ -470,9 +485,81 @@ const PublicForm = () => {
   };
 
   const renderField = (field) => {
-    const commonClasses = 'w-full px-4 py-3 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-base sm:text-sm';
+    const commonClasses = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm';
+    const fieldKey = field.key?.toLowerCase() || '';
+    const fieldLabel = field.label?.toLowerCase() || '';
 
+    // College dropdown
+    if (fieldKey.includes('college') || fieldLabel.includes('college')) {
+      if (collegesLoading) {
+        return (
+          <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2 text-sm">
+            <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+            Loading colleges...
+          </div>
+        );
+      }
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => {
+            handleInputChange(field.label, e.target.value, field.type);
+            // Find college ID for course filtering
+            const college = colleges.find(c => c.name === e.target.value);
+            setSelectedCollegeId(college?.id || null);
+          }}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select College</option>
+          {colleges.filter(c => c.isActive !== false).map((college) => (
+            <option key={college.id} value={college.name}>
+              {college.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    // Batch/Academic Year dropdown
+    if (fieldKey.includes('batch') || fieldLabel.includes('batch') || fieldLabel.includes('academic year')) {
+      if (academicYearsLoading) {
+        return (
+          <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2 text-sm">
+            <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+            Loading batches...
+          </div>
+        );
+      }
+      if (academicYears.length > 0) {
+        return (
+          <select
+            value={formData[field.label] || ''}
+            onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+            className={commonClasses}
+            required={field.required}
+          >
+            <option value="">Select Batch</option>
+            {academicYears.map((year) => (
+              <option key={year.id} value={year.yearLabel}>
+                {year.yearLabel}
+              </option>
+            ))}
+          </select>
+        );
+      }
+    }
+
+    // Course dropdown
     if (matchesFieldIdentifier(field, COURSE_FIELD_IDENTIFIERS) && availableCourses.length > 0) {
+      if (courseOptionsLoading) {
+        return (
+          <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2 text-sm">
+            <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+            Loading courses...
+          </div>
+        );
+      }
       return (
         <select
           value={formData[field.label] || ''}
@@ -490,10 +577,11 @@ const PublicForm = () => {
       );
     }
 
-    if (matchesFieldIdentifier(field, BRANCH_FIELD_IDENTIFIERS) && selectedCourseOption) {
-      const availableBranches = (selectedCourseOption.branches || []).filter(
-        (branch) => branch.isActive
-      );
+    // Branch dropdown
+    if (matchesFieldIdentifier(field, BRANCH_FIELD_IDENTIFIERS)) {
+      const availableBranches = selectedCourseOption 
+        ? (selectedCourseOption.branches || []).filter((branch) => branch.isActive)
+        : [];
 
       if (availableBranches.length === 0) {
         return (
@@ -502,7 +590,7 @@ const PublicForm = () => {
             value={formData[field.label] || ''}
             onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
             className={commonClasses}
-            placeholder="Enter branch"
+            placeholder={selectedCourseOption ? "No branches configured" : "Select a course first"}
             required={field.required}
           />
         );
@@ -558,6 +646,164 @@ const PublicForm = () => {
             </option>
           ))}
         </select>
+      );
+    }
+
+    // Gender dropdown
+    if (fieldKey.includes('gender') || fieldLabel.includes('gender') || fieldLabel.includes('m/f')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+      );
+    }
+
+    // Student Type dropdown
+    if (fieldKey.includes('stud_type') || fieldKey.includes('studtype') || fieldLabel.includes('student type')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Student Type</option>
+          <option value="CONV">CONV</option>
+          <option value="LATER">LATER</option>
+          <option value="LSPOT">LSPOT</option>
+          <option value="MANG">MANG</option>
+        </select>
+      );
+    }
+
+    // Student Status dropdown
+    if (fieldKey.includes('student_status') || fieldLabel.includes('student status')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Status</option>
+          <option value="Regular">Regular</option>
+          <option value="Discontinued from the second year">Discontinued from the second year</option>
+          <option value="Discontinued from the third year">Discontinued from the third year</option>
+          <option value="Discontinued from the fourth year">Discontinued from the fourth year</option>
+          <option value="Admission Cancelled">Admission Cancelled</option>
+          <option value="Long Absent">Long Absent</option>
+          <option value="Detained">Detained</option>
+        </select>
+      );
+    }
+
+    // Scholar Status dropdown
+    if (fieldKey.includes('scholar_status') || fieldLabel.includes('scholar status')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Scholar Status</option>
+          <option value="Eligible">Eligible</option>
+          <option value="Not Eligible">Not Eligible</option>
+        </select>
+      );
+    }
+
+    // Caste dropdown
+    if (fieldKey.includes('caste') || fieldLabel.includes('caste')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Caste</option>
+          <option value="OC">OC</option>
+          <option value="BC-A">BC-A</option>
+          <option value="BC-B">BC-B</option>
+          <option value="BC-C">BC-C</option>
+          <option value="BC-D">BC-D</option>
+          <option value="BC-E">BC-E</option>
+          <option value="SC">SC</option>
+          <option value="ST">ST</option>
+          <option value="EWS">EWS</option>
+          <option value="Other">Other</option>
+        </select>
+      );
+    }
+
+    // Certificates Status dropdown
+    if (fieldKey.includes('certificate') || fieldLabel.includes('certificate')) {
+      return (
+        <select
+          value={formData[field.label] || ''}
+          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
+          className={commonClasses}
+          required={field.required}
+        >
+          <option value="">Select Certificate Status</option>
+          <option value="Submitted">Submitted</option>
+          <option value="Pending">Pending</option>
+          <option value="Partial">Partial</option>
+          <option value="Originals Returned">Originals Returned</option>
+          <option value="Not Required">Not Required</option>
+        </select>
+      );
+    }
+
+    // Photo upload with preview
+    if (fieldKey.includes('photo') || fieldLabel.includes('photo')) {
+      return (
+        <div className="space-y-2">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 transition-colors bg-gray-50">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  if (file.size > 5 * 1024 * 1024) {
+                    toast.error('File size should be less than 5MB');
+                    return;
+                  }
+                  handleFileChange(field.label, file);
+                  // Create preview
+                  const reader = new FileReader();
+                  reader.onloadend = () => setPhotoPreview(reader.result);
+                  reader.readAsDataURL(file);
+                }
+              }}
+              className="hidden"
+              id="photo-upload-public"
+            />
+            <label htmlFor="photo-upload-public" className="cursor-pointer flex flex-col items-center gap-2">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview" className="w-20 h-20 object-cover rounded-lg border-2 border-purple-300" />
+              ) : (
+                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-purple-600" />
+                </div>
+              )}
+              <p className="text-sm font-medium text-gray-700">
+                {photoPreview ? 'Change Photo' : 'Upload Photo'}
+              </p>
+              <p className="text-xs text-gray-500">PNG, JPG up to 5MB</p>
+            </label>
+          </div>
+        </div>
       );
     }
 
@@ -705,12 +951,12 @@ const PublicForm = () => {
 
   if (loading || fetchingForm) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center space-y-4">
           <LoadingAnimation
             width={32}
             height={32}
-            message={fetchingForm ? "Loading form..." : "Please wait..."}
+            message="Loading form..."
             variant="minimal"
           />
         </div>
@@ -720,31 +966,15 @@ const PublicForm = () => {
 
   if (error && !form) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="text-red-600" size={32} />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Form Not Found</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-
-          {/* Debug information for troubleshooting */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="text-left bg-gray-50 rounded-lg p-4 mb-4 text-xs">
-              <p className="font-medium mb-2">Troubleshooting Information:</p>
-              <p><strong>Form ID:</strong> {formId}</p>
-              <p><strong>API URL:</strong> /forms/public/{formId}</p>
-              <p><strong>Full URL:</strong> {window.location.href}</p>
-              <p><strong>Mobile:</strong> {isMobile ? 'Yes' : 'No'}</p>
-              {isMobile && (
-                <p><strong>Platform:</strong> {isIOS ? 'iOS' : isAndroid ? 'Android' : 'Unknown'}</p>
-              )}
-            </div>
-          )}
-
-          {/* Alternative access methods */}
           <div className="text-sm text-gray-600">
-            <p className="mb-2">If this problem persists, try:</p>
+            <p className="mb-2">Please try:</p>
             <ul className="text-left space-y-1">
               <li>• Check your internet connection</li>
               <li>• Refresh the page</li>
@@ -758,7 +988,7 @@ const PublicForm = () => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="text-green-600" size={32} />
@@ -776,97 +1006,171 @@ const PublicForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 py-4 px-4 sm:py-8">
-      <div className="max-w-2xl mx-auto">
-        {/* Debug info for development */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mb-4 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800">
-            <strong>Debug Info:</strong> Form ID: {formId} | URL: {window.location.href} | Mobile: {isMobile ? 'Yes' : 'No'}
-            {isMobile && (
-              <div className="mt-1">
-                <strong>Mobile Details:</strong> iOS: {isIOS ? 'Yes' : 'No'} | Android: {isAndroid ? 'Yes' : 'No'}
-              </div>
-            )}
-            <div className="mt-1">
-              <strong>Performance:</strong> Fetching: {fetchingForm ? 'Yes' : 'No'} | Cached: {formCache.has(formId) ? 'Yes' : 'No'} | Retries: {retryCount}
-            </div>
-          </div>
-        )}
-
-        {/* Mobile-specific instructions */}
-        {isMobile && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="text-sm text-blue-800">
-                <p className="font-medium mb-1">Mobile Access Instructions:</p>
-                <p>If the form doesn't load properly, try refreshing the page or check your internet connection.</p>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-4 px-4 sm:py-6 lg:py-8">
+      <Toaster position="top-right" />
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-6">
+            <div className="flex items-center gap-4">
+              <img
+                src="/logo.png"
+                alt="Pydah DB Logo"
+                className="h-14 w-auto object-contain bg-white/20 rounded-lg p-1"
+                loading="lazy"
+              />
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold break-words">{form.form_name}</h1>
+                {form.form_description && (
+                  <p className="text-purple-100 text-sm mt-1">{form.form_description}</p>
+                )}
               </div>
             </div>
           </div>
-        )}
-        <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
-          <div className="mb-6 text-center">
-            <img
-              src="/logo.png"
-              alt="Pydah DB Logo"
-              className="h-16 w-auto max-w-full object-contain mx-auto mb-4"
-              loading="lazy"
-            />
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">{form.form_name}</h1>
-            {form.form_description && (
-              <p className="text-gray-600 text-sm sm:text-base">{form.form_description}</p>
-            )}
-          </div>
-
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
-              <p className="text-red-800 text-sm">{error}</p>
-            </div>
-          )}
-
+          
+          <div className="p-4 sm:p-6 lg:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Form Fields</h3>
-              <div className="space-y-5">
-                {form.form_fields
-                  .filter(field => field.isEnabled !== false) // Only show enabled fields
-                  .map((field, index) => (
-                    <div key={index}>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {field.label}
-                        {field.required && <span className="text-red-500 ml-1">*</span>}
-                      </label>
-                      {renderField(field)}
+            {/* Categorize fields */}
+            {(() => {
+              const enabledFields = form.form_fields.filter(field => field.isEnabled !== false);
+              const basicFields = enabledFields.filter(f => categorizeField(f) === 'basic');
+              const academicFields = enabledFields.filter(f => categorizeField(f) === 'academic');
+              const contactFields = enabledFields.filter(f => categorizeField(f) === 'contact');
+              const addressFields = enabledFields.filter(f => categorizeField(f) === 'address');
+              const additionalFields = enabledFields.filter(f => categorizeField(f) === 'additional');
+              const otherFields = enabledFields.filter(f => categorizeField(f) === 'other');
+
+              return (
+                <>
+                  {/* Basic Information */}
+                  {basicFields.length > 0 && (
+                    <div className="border-b border-gray-200 pb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        Basic Information
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {basicFields.map((field, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-              </div>
-            </div>
+                  )}
 
-            <div className="flex items-center gap-4 pt-4">
-             <button
-  type="submit"
-  disabled={submitting}
-  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 text-white py-4 sm:py-3.5 px-6 rounded-xl font-semibold shadow-md hover:from-cyan-600 hover:to-blue-700 hover:shadow-lg focus:ring-4 focus:ring-cyan-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] relative overflow-hidden group text-base sm:text-sm min-h-[48px]"
->
-  {/* Shine effect */}
-  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  {/* Academic Information */}
+                  {academicFields.length > 0 && (
+                    <div className="border-b border-gray-200 pb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        Academic Information
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {academicFields.map((field, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-  {submitting ? (
-    <>
-      <Loader2 className="animate-spin text-blue-600" size={20} />
-      <span className="text-sm font-medium">Submitting...</span>
-    </>
-  ) : (
-    <span className="text-sm font-medium">Submit Form</span>
-  )}
-</button>
+                  {/* Contact Information */}
+                  {contactFields.length > 0 && (
+                    <div className="border-b border-gray-200 pb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                        Contact Information
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {contactFields.map((field, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
+                  {/* Address Information */}
+                  {addressFields.length > 0 && (
+                    <div className="border-b border-gray-200 pb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        Address Information
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {addressFields.map((field, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Additional Information */}
+                  {(additionalFields.length > 0 || otherFields.length > 0) && (
+                    <div className="pb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                        Additional Information
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[...additionalFields, ...otherFields].map((field, index) => (
+                          <div key={index} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 px-6 rounded-xl font-semibold shadow-md hover:from-purple-700 hover:to-indigo-700 hover:shadow-lg focus:ring-4 focus:ring-purple-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={20} />
+                    <span>Submit for Approval</span>
+                  </>
+                )}
+              </button>
             </div>
           </form>
+          </div>
         </div>
 
         <p className="text-center text-gray-600 text-sm mt-6">

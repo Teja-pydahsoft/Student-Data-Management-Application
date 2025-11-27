@@ -251,6 +251,9 @@ exports.getActiveAcademicYears = async (req, res) => {
       'SELECT * FROM academic_years WHERE is_active = 1 ORDER BY year_label DESC'
     );
 
+    // Add cache headers for better performance (cache for 5 minutes)
+    res.set('Cache-Control', 'public, max-age=300');
+    
     res.json({
       success: true,
       data: rows.map(row => ({
@@ -265,6 +268,37 @@ exports.getActiveAcademicYears = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch active academic years'
+    });
+  }
+};
+
+/**
+ * Public endpoint for active academic years (no auth required)
+ * Used by public forms
+ */
+exports.getPublicActiveAcademicYears = async (req, res) => {
+  try {
+    const [rows] = await masterPool.query(
+      'SELECT * FROM academic_years WHERE is_active = 1 ORDER BY year_label DESC'
+    );
+
+    // Add cache headers for better performance (cache for 5 minutes)
+    res.set('Cache-Control', 'public, max-age=300');
+    
+    res.json({
+      success: true,
+      data: rows.map(row => ({
+        id: row.id,
+        yearLabel: row.year_label,
+        startDate: row.start_date,
+        endDate: row.end_date
+      }))
+    });
+  } catch (error) {
+    console.error('getPublicActiveAcademicYears error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch academic years'
     });
   }
 };

@@ -303,6 +303,9 @@ exports.getCourses = async (req, res) => {
       courses = filterCoursesByScope(courses, req.userScope);
     }
 
+    // No caching to ensure fresh data after updates
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
     res.json({
       success: true,
       data: courses
@@ -333,6 +336,9 @@ exports.getCourseOptions = async (_req, res) => {
       }))
     }));
 
+    // No caching to ensure fresh data after updates
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    
     res.json({
       success: true,
       data: sanitized
@@ -484,6 +490,21 @@ exports.updateCourse = async (req, res) => {
   }
 
   try {
+    // Fetch existing course to get old name for cascade update
+    const [existingCourse] = await masterPool.query(
+      'SELECT * FROM courses WHERE id = ? LIMIT 1',
+      [courseId]
+    );
+
+    if (!existingCourse || existingCourse.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+
+    const oldCourseName = existingCourse[0].name;
+
     const { errors, sanitized } = validateCoursePayload(req.body || {}, {
       isUpdate: true
     });
@@ -497,9 +518,11 @@ exports.updateCourse = async (req, res) => {
 
     const fields = [];
     const values = [];
+    let newCourseName = null;
 
     if (sanitized.name !== undefined) {
       fields.push('name = ?');
+      newCourseName = sanitized.name;
       values.push(sanitized.name);
     }
 
@@ -566,16 +589,21 @@ exports.updateCourse = async (req, res) => {
 
     values.push(courseId);
 
-    const [result] = await masterPool.query(
+    // Update course in courses table
+    await masterPool.query(
       `UPDATE courses SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       values
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Course not found'
-      });
+    // If course name was changed, cascade update to students table
+    let studentsUpdated = 0;
+    if (newCourseName && newCourseName !== oldCourseName) {
+      const [updateResult] = await masterPool.query(
+        `UPDATE students SET course = ?, updated_at = CURRENT_TIMESTAMP WHERE course = ?`,
+        [newCourseName, oldCourseName]
+      );
+      studentsUpdated = updateResult.affectedRows || 0;
+      console.log(`Course rename cascade: Updated ${studentsUpdated} students from "${oldCourseName}" to "${newCourseName}"`);
     }
 
     const [courseRows] = await masterPool.query(
@@ -590,8 +618,11 @@ exports.updateCourse = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Course updated successfully',
-      data: formatCourse(courseRows[0], branchRows)
+      message: studentsUpdated > 0
+        ? `Course updated successfully. ${studentsUpdated} student record(s) updated.`
+        : 'Course updated successfully',
+      data: formatCourse(courseRows[0], branchRows),
+      studentsUpdated
     });
   } catch (error) {
     console.error('updateCourse error:', error);
@@ -896,6 +927,9 @@ exports.getBranches = async (req, res) => {
       branches = filterBranchesByScope(branches, req.userScope);
     }
 
+    // No caching to ensure fresh data after updates
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
     res.json({
       success: true,
       data: branches
@@ -946,6 +980,7 @@ exports.updateBranch = async (req, res) => {
     }
 
     const course = courseRows[0];
+    const oldBranchName = existingBranchRows[0].name;
 
     const { errors, sanitized } = validateBranchPayload(req.body || {}, {
       defaultYears: existingBranchRows[0].total_years ?? course.total_years,
@@ -963,10 +998,12 @@ exports.updateBranch = async (req, res) => {
 
     const fields = [];
     const values = [];
+    let newBranchName = null;
 
     if (sanitized.name !== undefined) {
       fields.push('name = ?');
-      values.push(sanitized.name?.trim());
+      newBranchName = sanitized.name?.trim();
+      values.push(newBranchName);
     }
 
     if (req.body.totalYears !== undefined || req.body.total_years !== undefined) {
@@ -1010,12 +1047,25 @@ exports.updateBranch = async (req, res) => {
 
     values.push(courseId, branchId);
 
-    const [result] = await masterPool.query(
+    // Update branch in course_branches table
+    await masterPool.query(
       `UPDATE course_branches
        SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
        WHERE course_id = ? AND id = ?`,
       values
     );
+
+    // If branch name was changed, cascade update to students table
+    let studentsUpdated = 0;
+    if (newBranchName && newBranchName !== oldBranchName) {
+      const [updateResult] = await masterPool.query(
+        `UPDATE students SET branch = ?, updated_at = CURRENT_TIMESTAMP 
+         WHERE branch = ? AND course = ?`,
+        [newBranchName, oldBranchName, course.name]
+      );
+      studentsUpdated = updateResult.affectedRows || 0;
+      console.log(`Branch rename cascade: Updated ${studentsUpdated} students from "${oldBranchName}" to "${newBranchName}"`);
+    }
 
     const [branchRows] = await masterPool.query(
       `SELECT cb.*, ay.year_label as academic_year_label 
@@ -1027,8 +1077,11 @@ exports.updateBranch = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Branch updated successfully',
-      data: serializeBranchRow(branchRows[0])
+      message: studentsUpdated > 0 
+        ? `Branch updated successfully. ${studentsUpdated} student record(s) updated.`
+        : 'Branch updated successfully',
+      data: serializeBranchRow(branchRows[0]),
+      studentsUpdated
     });
   } catch (error) {
     console.error('updateBranch error:', error);

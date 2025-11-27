@@ -3,6 +3,30 @@ const { masterPool } = require('../config/database');
 const { filterCollegesByScope } = require('../utils/scoping');
 
 /**
+ * GET /api/colleges/public
+ * Get all active colleges (public route for forms - no auth required)
+ */
+exports.getPublicColleges = async (req, res) => {
+  try {
+    const colleges = await collegeService.fetchColleges({ includeInactive: false });
+
+    // Add cache headers for better performance (cache for 5 minutes)
+    res.set('Cache-Control', 'public, max-age=300');
+    
+    res.json({
+      success: true,
+      data: colleges
+    });
+  } catch (error) {
+    console.error('getPublicColleges error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch colleges'
+    });
+  }
+};
+
+/**
  * GET /api/colleges
  * Get all colleges (filtered by user scope)
  */
@@ -141,12 +165,16 @@ exports.updateCollege = async (req, res) => {
       });
     }
 
-    const college = await collegeService.updateCollege(collegeId, updates);
+    const result = await collegeService.updateCollege(collegeId, updates);
+    const { studentsUpdated, ...college } = result;
 
     res.json({
       success: true,
       data: college,
-      message: 'College updated successfully'
+      studentsUpdated: studentsUpdated || 0,
+      message: studentsUpdated > 0
+        ? `College updated successfully. ${studentsUpdated} student record(s) updated.`
+        : 'College updated successfully'
     });
   } catch (error) {
     console.error('updateCollege error:', error);

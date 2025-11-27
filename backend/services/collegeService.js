@@ -201,7 +201,7 @@ const createCollege = async (collegeData) => {
  * Update a college
  * @param {number} collegeId - College ID
  * @param {Object} updates - Update data
- * @returns {Promise<Object>} Updated college object
+ * @returns {Promise<Object>} Updated college object with studentsUpdated count
  */
 const updateCollege = async (collegeId, updates) => {
   if (!collegeId || Number.isNaN(Number(collegeId))) {
@@ -214,8 +214,10 @@ const updateCollege = async (collegeId, updates) => {
     throw new Error('College not found');
   }
 
+  const oldCollegeName = existing.name;
   const updateFields = [];
   const updateValues = [];
+  let newCollegeName = null;
 
   // Handle name update
   if (updates.name !== undefined) {
@@ -226,8 +228,9 @@ const updateCollege = async (collegeId, updates) => {
     if (!nameUnique) {
       throw new Error('College with this name already exists');
     }
+    newCollegeName = updates.name.trim();
     updateFields.push('name = ?');
-    updateValues.push(updates.name.trim());
+    updateValues.push(newCollegeName);
   }
 
   // Handle code update
@@ -257,18 +260,31 @@ const updateCollege = async (collegeId, updates) => {
   }
 
   if (updateFields.length === 0) {
-    return existing; // No updates
+    return { ...existing, studentsUpdated: 0 }; // No updates
   }
 
   updateValues.push(collegeId);
 
   try {
+    // Update college
     await masterPool.query(
       `UPDATE colleges SET ${updateFields.join(', ')} WHERE id = ?`,
       updateValues
     );
 
-    return await fetchCollegeById(collegeId);
+    // If college name was changed, cascade update to students table
+    let studentsUpdated = 0;
+    if (newCollegeName && newCollegeName !== oldCollegeName) {
+      const [updateResult] = await masterPool.query(
+        `UPDATE students SET college = ?, updated_at = CURRENT_TIMESTAMP WHERE college = ?`,
+        [newCollegeName, oldCollegeName]
+      );
+      studentsUpdated = updateResult.affectedRows || 0;
+      console.log(`College rename cascade: Updated ${studentsUpdated} students from "${oldCollegeName}" to "${newCollegeName}"`);
+    }
+
+    const updatedCollege = await fetchCollegeById(collegeId);
+    return { ...updatedCollege, studentsUpdated };
   } catch (error) {
     console.error('updateCollege error:', error);
     if (error.code === 'ER_DUP_ENTRY') {

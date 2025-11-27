@@ -266,7 +266,7 @@ exports.deleteForm = async (req, res) => {
   }
 };
 
-// Get form for public submission (no auth required)
+// Get form for public submission (no auth required) - Optimized with caching
 exports.getPublicForm = async (req, res) => {
   try {
     const { formId } = req.params;
@@ -294,6 +294,9 @@ exports.getPublicForm = async (req, res) => {
       });
     }
 
+    // Add cache headers for better performance (cache for 5 minutes)
+    res.set('Cache-Control', 'public, max-age=300');
+    
     res.json({
       success: true,
       data: {

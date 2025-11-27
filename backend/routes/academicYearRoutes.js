@@ -3,10 +3,13 @@ const router = express.Router();
 const academicYearController = require('../controllers/academicYearController');
 const authMiddleware = require('../middleware/auth');
 
-// Get all academic years
+// Public route for forms (no auth required)
+router.get('/public', academicYearController.getPublicActiveAcademicYears);
+
+// Get all academic years (admin only)
 router.get('/', authMiddleware, academicYearController.getAcademicYears);
 
-// Get only active academic years (for student forms)
+// Get only active academic years (for student forms - admin only)
 router.get('/active', authMiddleware, academicYearController.getActiveAcademicYears);
 
 // Create new academic year

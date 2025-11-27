@@ -28,8 +28,7 @@ import toast from 'react-hot-toast';
 // Navigation items with frontend module keys as permissions
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
-  { path: '/forms', icon: FileText, label: 'Pre Registration', permission: FRONTEND_MODULES.FORMS },
-  { path: '/submissions', icon: ClipboardList, label: 'Submissions', permission: FRONTEND_MODULES.SUBMISSIONS },
+  { path: '/submissions', icon: ClipboardList, label: 'Pre Registration', permission: FRONTEND_MODULES.SUBMISSIONS },
   { path: '/students', icon: Users, label: 'Student Management', permission: FRONTEND_MODULES.STUDENTS },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },

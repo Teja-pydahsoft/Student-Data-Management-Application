@@ -1794,27 +1794,55 @@ exports.deleteSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
 
-    const { data, error } = await supabase
+    console.log('Attempting to delete submission:', submissionId);
+
+    // First, check if the submission exists
+    const { data: existingSubmission, error: checkError } = await supabase
       .from('form_submissions')
-      .delete()
+      .select('submission_id, status')
       .eq('submission_id', submissionId)
-      .select('submission_id');
-    if (error) throw error;
-    if (!data || data.length === 0) {
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking submission:', checkError);
+      throw checkError;
+    }
+
+    if (!existingSubmission) {
       return res.status(404).json({ 
         success: false, 
         message: 'Submission not found' 
       });
     }
 
+    console.log('Found submission to delete:', existingSubmission);
+
+    // Perform delete without select (Supabase RLS can block select after delete)
+    const { error: deleteError } = await supabase
+      .from('form_submissions')
+      .delete()
+      .eq('submission_id', submissionId);
+
+    if (deleteError) {
+      console.error('Delete error:', deleteError);
+      throw deleteError;
+    }
+
+    console.log('Successfully deleted submission:', submissionId);
+
     // Log action
-    const masterConn3 = await masterPool.getConnection();
-    await masterConn3.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
-       VALUES (?, ?, ?, ?)`,
-      ['DELETE', 'SUBMISSION', submissionId, req.admin.id]
-    );
-    masterConn3.release();
+    try {
+      const masterConn3 = await masterPool.getConnection();
+      await masterConn3.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+         VALUES (?, ?, ?, ?)`,
+        ['DELETE', 'SUBMISSION', submissionId, req.admin.id]
+      );
+      masterConn3.release();
+    } catch (logError) {
+      console.error('Error logging delete action:', logError);
+      // Don't fail the request if logging fails
+    }
 
     res.json({
       success: true,
@@ -1825,7 +1853,7 @@ exports.deleteSubmission = async (req, res) => {
     console.error('Delete submission error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Server error while deleting submission' 
+      message: error.message || 'Server error while deleting submission' 
     });
   }
 };

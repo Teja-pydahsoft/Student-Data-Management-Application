@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
-  GraduationCap
+  GraduationCap,
+  FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -171,6 +172,31 @@ const Settings = () => {
   const [academicYearDrafts, setAcademicYearDrafts] = useState({});
   const [savingAcademicYearId, setSavingAcademicYearId] = useState(null);
   
+  // Registration Forms state
+  const [registrationForms, setRegistrationForms] = useState([]);
+  const [formsLoading, setFormsLoading] = useState(false);
+  const [savingFormId, setSavingFormId] = useState(null);
+  const [selectedFormId, setSelectedFormId] = useState(null);
+  const [isEditingForm, setIsEditingForm] = useState(false);
+  const [formEditData, setFormEditData] = useState({
+    formName: '',
+    formDescription: '',
+    formFields: []
+  });
+  
+  // Field types for form builder
+  const FIELD_TYPES = [
+    { key: 'text', label: 'Text', icon: '📝' },
+    { key: 'email', label: 'Email', icon: '📧' },
+    { key: 'tel', label: 'Phone', icon: '📱' },
+    { key: 'number', label: 'Number', icon: '🔢' },
+    { key: 'date', label: 'Date', icon: '📅' },
+    { key: 'textarea', label: 'Text Area', icon: '📄' },
+    { key: 'select', label: 'Dropdown', icon: '📋' },
+    { key: 'radio', label: 'Radio', icon: '🔘' },
+    { key: 'checkbox', label: 'Checkbox', icon: '☑️' }
+  ];
+  
   // Delete confirmation modal state
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
@@ -307,6 +333,173 @@ const Settings = () => {
         }
       }
     });
+  };
+
+  // Fetch registration forms
+  const fetchRegistrationForms = async ({ silent = false } = {}) => {
+    try {
+      if (!silent) {
+        setFormsLoading(true);
+      }
+      const response = await api.get('/forms');
+      setRegistrationForms(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch registration forms', error);
+      if (!silent) {
+        toast.error('Failed to fetch registration forms');
+      }
+    } finally {
+      if (!silent) {
+        setFormsLoading(false);
+      }
+    }
+  };
+
+  // Toggle form active status
+  const toggleFormActive = async (form) => {
+    try {
+      setSavingFormId(form.form_id);
+      await api.put(`/forms/${form.form_id}`, { isActive: !form.is_active });
+      toast.success(`Form ${!form.is_active ? 'activated' : 'deactivated'}`);
+      await fetchRegistrationForms({ silent: true });
+    } catch (error) {
+      console.error('Failed to toggle form status', error);
+      toast.error('Failed to update form status');
+    } finally {
+      setSavingFormId(null);
+    }
+  };
+
+  // Delete form
+  const handleDeleteForm = (form) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'form',
+      item: form,
+      onConfirm: async () => {
+        try {
+          setSavingFormId(form.form_id);
+          await api.delete(`/forms/${form.form_id}`);
+          toast.success('Form deleted successfully');
+          await fetchRegistrationForms({ silent: true });
+          setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null });
+        } catch (error) {
+          console.error('Failed to delete form', error);
+          toast.error('Failed to delete form');
+        } finally {
+          setSavingFormId(null);
+        }
+      }
+    });
+  };
+
+  // Start editing a form
+  const startEditingForm = (form) => {
+    setFormEditData({
+      formName: form.form_name,
+      formDescription: form.form_description || '',
+      formFields: form.form_fields || []
+    });
+    setSelectedFormId(form.form_id);
+    setIsEditingForm(true);
+  };
+
+  // Cancel editing
+  const cancelEditingForm = () => {
+    setIsEditingForm(false);
+    setFormEditData({ formName: '', formDescription: '', formFields: [] });
+  };
+
+  // Update form field
+  const updateFormField = (index, field, value) => {
+    const updatedFields = [...formEditData.formFields];
+    updatedFields[index] = { ...updatedFields[index], [field]: value };
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Toggle field enabled
+  const toggleFieldEnabled = (index) => {
+    const updatedFields = [...formEditData.formFields];
+    updatedFields[index].isEnabled = !updatedFields[index].isEnabled;
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Add field option
+  const addFieldOption = (fieldIndex) => {
+    const updatedFields = [...formEditData.formFields];
+    updatedFields[fieldIndex].options = [...(updatedFields[fieldIndex].options || []), `Option ${(updatedFields[fieldIndex].options?.length || 0) + 1}`];
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Update field option
+  const updateFieldOption = (fieldIndex, optionIndex, value) => {
+    const updatedFields = [...formEditData.formFields];
+    updatedFields[fieldIndex].options[optionIndex] = value;
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Remove field option
+  const removeFieldOption = (fieldIndex, optionIndex) => {
+    const updatedFields = [...formEditData.formFields];
+    updatedFields[fieldIndex].options = updatedFields[fieldIndex].options.filter((_, i) => i !== optionIndex);
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Add new field
+  const addFormField = (fieldType) => {
+    const newField = {
+      id: Date.now().toString(),
+      key: `field_${Date.now()}`,
+      label: '',
+      type: fieldType,
+      required: false,
+      placeholder: '',
+      options: fieldType === 'select' || fieldType === 'radio' || fieldType === 'checkbox' ? ['Option 1', 'Option 2'] : [],
+      isEnabled: true
+    };
+    setFormEditData({
+      ...formEditData,
+      formFields: [...formEditData.formFields, newField]
+    });
+  };
+
+  // Remove field
+  const removeFormField = (index) => {
+    const updatedFields = formEditData.formFields.filter((_, i) => i !== index);
+    setFormEditData({ ...formEditData, formFields: updatedFields });
+  };
+
+  // Save form
+  const saveFormChanges = async () => {
+    if (!formEditData.formName.trim()) {
+      toast.error('Form name is required');
+      return;
+    }
+
+    for (let i = 0; i < formEditData.formFields.length; i++) {
+      const field = formEditData.formFields[i];
+      if (!field.label.trim()) {
+        toast.error(`Field ${i + 1} label is required`);
+        return;
+      }
+    }
+
+    try {
+      setSavingFormId(selectedFormId);
+      await api.put(`/forms/${selectedFormId}`, {
+        formName: formEditData.formName,
+        formDescription: formEditData.formDescription,
+        formFields: formEditData.formFields
+      });
+      toast.success('Form updated successfully');
+      setIsEditingForm(false);
+      await fetchRegistrationForms({ silent: true });
+    } catch (error) {
+      console.error('Failed to save form', error);
+      toast.error('Failed to save form');
+    } finally {
+      setSavingFormId(null);
+    }
   };
 
   // Get courses for selected college (filtered by collegeId)
@@ -685,6 +878,7 @@ const Settings = () => {
       await fetchColleges();
       await fetchCourses();
       await fetchAcademicYears();
+      await fetchRegistrationForms();
     };
     initializeData();
   }, []);
@@ -823,6 +1017,7 @@ const Settings = () => {
   const handleRefresh = async () => {
     await fetchColleges({ silent: true });
     await fetchAcademicYears({ silent: true });
+    await fetchRegistrationForms({ silent: true });
     const updatedCourses = await fetchCourses({ silent: true, collegeId: selectedCollegeId });
     if (selectedCourseId && updatedCourses.some((course) => course.id === selectedCourseId)) {
       await loadBranches(selectedCourseId);
@@ -1188,11 +1383,12 @@ const Settings = () => {
   const courseOptionsSummary = useMemo(() => {
     const courseCount = coursesForSelectedCollege.filter((course) => course.isActive).length;
     
-    // Count unique branch names per course (not total across all batches)
+    // Count unique branch names per course (using course.branches directly, not courseBranches state)
     const branchCount = coursesForSelectedCollege.reduce((acc, course) => {
-      const branches = courseBranches[course.id] || [];
+      // Use course.branches directly (from API response) instead of courseBranches state
+      const branches = course.branches || [];
       const activeBranches = branches.filter((branch) => branch.isActive);
-      // Get unique branch names
+      // Get unique branch names (not counting duplicates across batches)
       const uniqueBranchNames = new Set(activeBranches.map((branch) => branch.name));
       return acc + uniqueBranchNames.size;
     }, 0);
@@ -1203,7 +1399,7 @@ const Settings = () => {
       defaultYears: 4,
       defaultSemesters: 2
     };
-  }, [coursesForSelectedCollege, courseBranches]);
+  }, [coursesForSelectedCollege]);
 
   if (loading) {
     return (
@@ -1236,49 +1432,66 @@ const Settings = () => {
       </div>
 
       {/* Navigation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xl:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <button
           onClick={() => setActiveSection('courses')}
-          className={`rounded-lg border-2 p-4 text-left transition-all ${
+          className={`rounded-lg border-2 p-3 text-left transition-all ${
             activeSection === 'courses'
               ? 'border-blue-500 bg-blue-50 shadow-md'
               : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
           }`}
         >
-          <div className="flex items-center gap-3">
-            <div className={`rounded-full p-2.5 ${
+          <div className="flex items-center gap-2">
+            <div className={`rounded-full p-2 ${
               activeSection === 'courses' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
             }`}>
-              <BookOpen size={20} />
+              <BookOpen size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Colleges and Courses</h2>
-              <p className="text-sm text-gray-600 mt-0.5">
-                Manage colleges, courses, branches, and academic configurations
-              </p>
+              <h2 className="text-sm font-semibold text-gray-900">Colleges & Courses</h2>
+              <p className="text-xs text-gray-500">Manage colleges, courses & branches</p>
             </div>
           </div>
         </button>
 
         <button
           onClick={() => setActiveSection('calendar')}
-          className={`rounded-lg border-2 p-4 text-left transition-all ${
+          className={`rounded-lg border-2 p-3 text-left transition-all ${
             activeSection === 'calendar'
               ? 'border-blue-500 bg-blue-50 shadow-md'
               : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
           }`}
         >
-          <div className="flex items-center gap-3">
-            <div className={`rounded-full p-2.5 ${
+          <div className="flex items-center gap-2">
+            <div className={`rounded-full p-2 ${
               activeSection === 'calendar' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
             }`}>
-              <CalendarDays size={20} />
+              <CalendarDays size={18} />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Academic Calendar</h2>
-              <p className="text-sm text-gray-600 mt-0.5">
-                Manage public holidays, institute holidays, and view attendance status
-              </p>
+              <h2 className="text-sm font-semibold text-gray-900">Academic Calendar</h2>
+              <p className="text-xs text-gray-500">Holidays & attendance calendar</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('forms')}
+          className={`rounded-lg border-2 p-3 text-left transition-all ${
+            activeSection === 'forms'
+              ? 'border-purple-500 bg-purple-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div className={`rounded-full p-2 ${
+              activeSection === 'forms' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'
+            }`}>
+              <FileText size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Registration Form</h2>
+              <p className="text-xs text-gray-500">Student registration form fields</p>
             </div>
           </div>
         </button>
@@ -1372,6 +1585,13 @@ const Settings = () => {
                             </span>
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEditCollege(college); }}
+                              className="p-1 text-gray-400 hover:text-blue-500"
+                              title="Edit"
+                            >
+                              <Pencil size={14} />
+                            </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); toggleCollegeActive(college); }}
                               className="p-1 text-gray-400 hover:text-gray-600"
@@ -1551,14 +1771,23 @@ const Settings = () => {
                               </div>
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
+                                  onClick={(e) => { e.stopPropagation(); handleEditCourse(course); }}
+                                  className="p-1 text-gray-400 hover:text-blue-500"
+                                  title="Edit"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
                                   onClick={(e) => { e.stopPropagation(); toggleCourseActive(course); }}
                                   className="p-1 text-gray-400 hover:text-gray-600"
+                                  title={course.isActive ? 'Deactivate' : 'Activate'}
                                 >
                                   {course.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course); }}
                                   className="p-1 text-gray-400 hover:text-red-500"
+                                  title="Delete"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -1660,9 +1889,18 @@ const Settings = () => {
                                     </div>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button
+                                        onClick={() => startEditBranch(selectedCourse.id, branch, selectedCourse)}
+                                        disabled={savingBranchId === branch.id}
+                                        className="p-1 text-gray-400 hover:text-blue-500"
+                                        title="Edit"
+                                      >
+                                        <Pencil size={14} />
+                                      </button>
+                                      <button
                                         onClick={() => toggleBranchActive(selectedCourse.id, branch)}
                                         disabled={savingBranchId === branch.id}
                                         className="p-1 text-gray-400 hover:text-gray-600"
+                                        title={branch.isActive ? 'Deactivate' : 'Activate'}
                                       >
                                         {branch.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
                                       </button>
@@ -1670,6 +1908,7 @@ const Settings = () => {
                                         onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
                                         disabled={savingBranchId === branch.id}
                                         className="p-1 text-gray-400 hover:text-red-500"
+                                        title="Delete"
                                       >
                                         <Trash2 size={14} />
                                       </button>
@@ -2040,13 +2279,528 @@ const Settings = () => {
         </div>
       )}
 
+      {/* Registration Forms Section */}
+      {activeSection === 'forms' && (
+        <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+          {formsLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <LoadingAnimation width={32} height={32} message="Loading form..." />
+            </div>
+          ) : registrationForms.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="text-purple-600" size={32} />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Registration Form</h3>
+              <p className="text-gray-600">Contact administrator to set up the registration form.</p>
+            </div>
+          ) : (() => {
+            const form = registrationForms[0]; // Only show the first/single form
+            
+            return isEditingForm ? (
+              // Inline Form Editor
+              <div className="p-4">
+                {/* Editor Header */}
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-purple-100 p-2 rounded-lg">
+                      <Pencil size={20} className="text-purple-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">Edit Registration Form</h2>
+                      <p className="text-sm text-gray-500">Customize form fields and settings</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={cancelEditingForm}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveFormChanges}
+                      disabled={savingFormId}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                    >
+                      {savingFormId ? <LoadingAnimation width={16} height={16} showMessage={false} /> : <Settings2 size={16} />}
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Form Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Form Name *</label>
+                    <input
+                      type="text"
+                      value={formEditData.formName}
+                      onChange={(e) => setFormEditData({ ...formEditData, formName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <input
+                      type="text"
+                      value={formEditData.formDescription}
+                      onChange={(e) => setFormEditData({ ...formEditData, formDescription: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Add Field Types */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Add New Field</label>
+                  <div className="flex flex-wrap gap-2">
+                    {FIELD_TYPES.map((type) => (
+                      <button
+                        key={type.key}
+                        onClick={() => addFormField(type.key)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition-colors"
+                      >
+                        <span>{type.icon}</span>
+                        <span>{type.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Form Fields Editor */}
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Form Fields ({formEditData.formFields.length})</h4>
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                    {formEditData.formFields.map((field, index) => (
+                      <div
+                        key={field.id || index}
+                        className={`rounded-lg border-2 p-3 transition-all ${
+                          field.isEnabled !== false ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Label *</label>
+                              <input
+                                type="text"
+                                value={field.label}
+                                onChange={(e) => updateFormField(index, 'label', e.target.value)}
+                                placeholder="Field label"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Type</label>
+                              <select
+                                value={field.type}
+                                onChange={(e) => updateFormField(index, 'type', e.target.value)}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                              >
+                                {FIELD_TYPES.map((t) => (
+                                  <option key={t.key} value={t.key}>{t.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
+                              <input
+                                type="text"
+                                value={field.placeholder || ''}
+                                onChange={(e) => updateFormField(index, 'placeholder', e.target.value)}
+                                placeholder="Placeholder text"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                              />
+                            </div>
+                            <div className="flex items-end gap-2">
+                              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={field.required}
+                                  onChange={(e) => updateFormField(index, 'required', e.target.checked)}
+                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                Required
+                              </label>
+                              <button
+                                onClick={() => toggleFieldEnabled(index)}
+                                className={`p-1.5 rounded transition-colors ${
+                                  field.isEnabled !== false
+                                    ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                }`}
+                                title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
+                              >
+                                {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                              </button>
+                              <button
+                                onClick={() => removeFormField(index)}
+                                className="p-1.5 rounded bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                                title="Remove field"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Options for select/radio/checkbox */}
+                        {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
+                          <div className="mt-3 pl-3 border-l-2 border-purple-200">
+                            <label className="block text-xs text-gray-500 mb-1">Options</label>
+                            <div className="flex flex-wrap gap-2">
+                              {(field.options || []).map((option, optIndex) => (
+                                <div key={optIndex} className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={option}
+                                    onChange={(e) => updateFieldOption(index, optIndex, e.target.value)}
+                                    className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none w-24"
+                                  />
+                                  <button
+                                    onClick={() => removeFieldOption(index, optIndex)}
+                                    className="p-0.5 text-red-500 hover:bg-red-100 rounded"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => addFieldOption(index)}
+                                className="px-2 py-1 text-xs border border-dashed border-gray-300 rounded hover:border-purple-400 hover:bg-purple-50 transition-colors"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Form View Mode
+              <div className="p-4">
+                {/* Form Header */}
+                <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-purple-100 p-2.5 rounded-lg">
+                      <FileText size={24} className="text-purple-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-gray-900">{form.form_name}</h2>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          form.is_active 
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
+                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                        }`}>
+                          {form.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {form.form_description || 'Student registration form'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => startEditingForm(form)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <Pencil size={16} />
+                      Edit Form
+                    </button>
+                    <button
+                      onClick={() => toggleFormActive(form)}
+                      disabled={savingFormId === form.form_id}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                        form.is_active
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {form.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                      {form.is_active ? 'Active' : 'Inactive'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{form.form_fields?.length || 0}</p>
+                    <p className="text-xs text-gray-500">Total Fields</p>
+                  </div>
+                  <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-purple-600">{form.form_fields?.filter(f => f.isEnabled !== false).length || 0}</p>
+                    <p className="text-xs text-gray-500">Active Fields</p>
+                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600">{form.pending_count || 0}</p>
+                    <p className="text-xs text-gray-500">Pending</p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-600">{form.approved_count || 0}</p>
+                    <p className="text-xs text-gray-500">Approved</p>
+                  </div>
+                </div>
+
+                {/* Form Fields */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Layers size={14} className="text-purple-600" />
+                    Form Fields
+                  </h4>
+                  {form.form_fields && form.form_fields.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                      {form.form_fields.map((field, index) => (
+                        <div
+                          key={field.id || index}
+                          className={`rounded-lg border px-3 py-2 text-sm ${
+                            field.isEnabled !== false
+                              ? 'border-gray-200 bg-white'
+                              : 'border-gray-100 bg-gray-50 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`font-medium truncate ${
+                              field.isEnabled !== false ? 'text-gray-900' : 'text-gray-500'
+                            }`}>
+                              {field.label}
+                            </span>
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                              {field.required && <span className="text-red-500 text-xs">*</span>}
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                field.isEnabled !== false ? 'bg-emerald-500' : 'bg-gray-300'
+                              }`} />
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400 capitalize">{field.type}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No fields configured</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Edit College Modal */}
+      {editingCollegeId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Pencil size={18} className="text-blue-600" />
+                Edit College
+              </h3>
+              <button
+                onClick={() => cancelEditCollege(editingCollegeId)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College Name *</label>
+                <input
+                  type="text"
+                  value={collegeDrafts[editingCollegeId]?.name || ''}
+                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'name', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  placeholder="Enter college name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">College Code</label>
+                <input
+                  type="text"
+                  value={collegeDrafts[editingCollegeId]?.code || ''}
+                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'code', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  placeholder="Enter college code (optional)"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => cancelEditCollege(editingCollegeId)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => saveCollegeEdits(editingCollegeId)}
+                disabled={savingCollegeId === editingCollegeId}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingCollegeId === editingCollegeId ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Course Modal */}
+      {editingCourseId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Pencil size={18} className="text-purple-600" />
+                Edit Course
+              </h3>
+              <button
+                onClick={() => setEditingCourseId(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
+                <input
+                  type="text"
+                  value={courseDrafts[editingCourseId]?.name || ''}
+                  onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], name: e.target.value } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  placeholder="Enter course name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={courseDrafts[editingCourseId]?.totalYears || ''}
+                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], totalYears: e.target.value } }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={courseDrafts[editingCourseId]?.semestersPerYear || ''}
+                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], semestersPerYear: e.target.value } }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setEditingCourseId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => saveCourseEdits(editingCourseId)}
+                disabled={savingCourseId === editingCourseId}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                {savingCourseId === editingCourseId ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Branch Modal */}
+      {editingBranch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Pencil size={18} className="text-orange-600" />
+                Edit Branch
+              </h3>
+              <button
+                onClick={cancelEditBranch}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name *</label>
+                <input
+                  type="text"
+                  value={branchDrafts[editingBranch.branchId]?.name || ''}
+                  onChange={(e) => updateBranchDraft(editingBranch.branchId, 'name', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  placeholder="Enter branch name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={branchDrafts[editingBranch.branchId]?.totalYears || ''}
+                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'totalYears', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={branchDrafts[editingBranch.branchId]?.semestersPerYear || ''}
+                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'semestersPerYear', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                onClick={cancelEditBranch}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const branch = courseBranches[editingBranch.courseId]?.find(b => b.id === editingBranch.branchId);
+                  if (branch) saveBranchEdit(editingBranch.courseId, branch);
+                }}
+                disabled={savingBranchId === editingBranch.branchId}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+              >
+                {savingBranchId === editingBranch.branchId ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false })}
         onConfirm={deleteModal.onConfirm || (() => {})}
-        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : 'Branch'}`}
-        itemName={deleteModal.item?.name || deleteModal.item?.yearLabel}
+        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : deleteModal.type === 'form' ? 'Form' : 'Branch'}`}
+        itemName={deleteModal.item?.name || deleteModal.item?.yearLabel || deleteModal.item?.form_name}
         itemType={deleteModal.type}
         affectedStudents={deleteModal.affectedStudents || []}
         totalStudentCount={deleteModal.totalStudentCount || 0}

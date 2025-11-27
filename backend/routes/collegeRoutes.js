@@ -5,7 +5,10 @@ const collegeController = require('../controllers/collegeController');
 const authMiddleware = require('../middleware/auth');
 const { attachUserScope } = require('../middleware/rbac');
 
-// All routes require admin authentication
+// Public route for forms (no auth required) - must be BEFORE auth middleware
+router.get('/public', collegeController.getPublicColleges);
+
+// All routes below require admin authentication
 router.use(authMiddleware);
 
 // College CRUD operations - with scope filtering for list
