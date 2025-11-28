@@ -2,7 +2,15 @@
  * Script to update Diploma course: Year 1 has 1 semester, Year 2-3 have 2 semesters each
  * 
  * Run with: node scripts/update_diploma_course_semesters.js
+ * 
+ * Make sure to run this from the backend directory:
+ * cd backend
+ * node scripts/update_diploma_course_semesters.js
  */
+
+// Load environment variables from backend/.env
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const { masterPool } = require('../config/database');
 

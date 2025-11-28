@@ -313,7 +313,26 @@ const PublicForm = () => {
     );
   }, [activeStructure]);
 
+  const selectedYear = useMemo(() => {
+    for (const label of yearFieldLabels) {
+      const value = formData[label];
+      if (value) {
+        return Number(value) || 0;
+      }
+    }
+    return 0;
+  }, [yearFieldLabels, formData]);
+
   const semesterOptions = useMemo(() => {
+    // Check if structure has per-year semester configuration
+    if (activeStructure?.years && Array.isArray(activeStructure.years) && selectedYear > 0) {
+      const yearConfig = activeStructure.years.find(y => y.yearNumber === selectedYear);
+      if (yearConfig && yearConfig.semesters && Array.isArray(yearConfig.semesters)) {
+        return yearConfig.semesters.map(sem => String(sem.semesterNumber));
+      }
+    }
+    
+    // Fallback to default semestersPerYear
     if (!activeStructure?.semestersPerYear) {
       return ['1', '2'];
     }
@@ -321,7 +340,7 @@ const PublicForm = () => {
       { length: activeStructure.semestersPerYear },
       (_value, index) => String(index + 1)
     );
-  }, [activeStructure]);
+  }, [activeStructure, selectedYear, yearFieldLabels]);
 
   useEffect(() => {
     if (!activeStructure) return;
