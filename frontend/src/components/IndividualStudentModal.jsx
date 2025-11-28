@@ -8,12 +8,11 @@ import LoadingAnimation from './LoadingAnimation';
 const STUDENT_TYPE_OPTIONS = ['CONV', 'LATER', 'LSPOT', 'MANG'];
 const STUDENT_STATUS_OPTIONS = [
   'Regular',
-  'Discontinued from the second year',
-  'Discontinued from the third year',
-  'Discontinued from the fourth year',
   'Admission Cancelled',
+  'Detained',
+  'Discontinued',
   'Long Absent',
-  'Detained'
+  'Rejoined'
 ];
 const SCHOLAR_STATUS_OPTIONS = ['Eligible', 'Not Eligible'];
 const CASTE_OPTIONS = ['OC', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST', 'EWS', 'Other'];

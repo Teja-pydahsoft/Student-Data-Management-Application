@@ -25,6 +25,16 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
 
+// Student status options
+const STUDENT_STATUS_OPTIONS = [
+  'Regular',
+  'Admission Cancelled',
+  'Detained',
+  'Discontinued',
+  'Long Absent',
+  'Rejoined'
+];
+
 const Students = () => {
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -2550,13 +2560,18 @@ const Students = () => {
                               Student Status
                             </label>
                             {editMode ? (
-                              <input
-                                type="text"
+                              <select
                                 value={editData.student_status || editData['Student Status'] || ''}
                                 onChange={(e) => updateEditField('student_status', e.target.value)}
-                                placeholder="Enter student status"
                                 className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
-                              />
+                              >
+                                <option value="">Select Status</option>
+                                {STUDENT_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
                                 {editData.student_status || editData['Student Status'] || selectedStudent?.student_status || '-'}
