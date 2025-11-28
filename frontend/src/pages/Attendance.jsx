@@ -10,7 +10,10 @@ import {
   AlertTriangle,
   BarChart3,
   History as HistoryIcon,
-  Download
+  Download,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -114,6 +117,11 @@ const Attendance = () => {
     years: [],
     semesters: []
   });
+  const [coursesWithBranches, setCoursesWithBranches] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  const [columnOrder, setColumnOrder] = useState([
+    'student', 'pin', 'batch', 'course', 'branch', 'year', 'semester', 'parentContact', 'attendance', 'smsStatus', 'insights'
+  ]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -122,6 +130,13 @@ const Attendance = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalStudents, setTotalStudents] = useState(0);
+  const [attendanceStatistics, setAttendanceStatistics] = useState({
+    total: 0,
+    present: 0,
+    absent: 0,
+    marked: 0,
+    unmarked: 0
+  });
   const pageSizeOptions = [10, 25, 50, 100];
   const [smsResults, setSmsResults] = useState([]);
   const [smsStatusMap, setSmsStatusMap] = useState({}); // Map studentId to SMS status
@@ -267,23 +282,44 @@ const Attendance = () => {
     return status ? status.toLowerCase() : 'present';
   };
 
+  // Use statistics from API (based on total students, not just current page)
   const presentCount = useMemo(() => {
-    return students.reduce((count, student) => {
-      const status = effectiveStatus(student.id);
-      return status === 'present' ? count + 1 : count;
-    }, 0);
-  }, [students, statusMap]);
+    return attendanceStatistics.present || 0;
+  }, [attendanceStatistics.present]);
 
   const absentCount = useMemo(() => {
-    return students.reduce((count, student) => {
-      const status = effectiveStatus(student.id);
-      return status === 'absent' ? count + 1 : count;
-    }, 0);
-  }, [students, statusMap]);
+    return attendanceStatistics.absent || 0;
+  }, [attendanceStatistics.absent]);
 
   const unmarkedCount = useMemo(() => {
-    return students.length - presentCount - absentCount;
-  }, [students.length, presentCount, absentCount]);
+    return attendanceStatistics.unmarked || 0;
+  }, [attendanceStatistics.unmarked]);
+
+  // Calculate marked count (students with attendance status in DB) - from API
+  const markedCount = useMemo(() => {
+    return attendanceStatistics.marked || 0;
+  }, [attendanceStatistics.marked]);
+
+  // Pending Marked = Total unmarked students (students that need to be marked)
+  // This should be based on total students, not just current page
+  const pendingCount = useMemo(() => {
+    return attendanceStatistics.unmarked || 0;
+  }, [attendanceStatistics.unmarked]);
+
+  // Filter branches based on selected course
+  const availableBranches = useMemo(() => {
+    if (!filters.course) {
+      return filterOptions.branches;
+    }
+    const selectedCourse = coursesWithBranches.find(c => c.name === filters.course);
+    if (!selectedCourse || !selectedCourse.branches) {
+      return [];
+    }
+    // Get unique branch names from the course's branches
+    const branchNames = [...new Set(selectedCourse.branches.map(b => b.name))];
+    // Filter to only show branches that exist in filterOptions.branches (to respect user scope)
+    return branchNames.filter(name => filterOptions.branches.includes(name));
+  }, [filters.course, coursesWithBranches, filterOptions.branches]);
 
   // Pagination calculations
   const safePageSize = pageSize || 1;
@@ -528,9 +564,20 @@ const Attendance = () => {
 
   const loadFilterOptions = async () => {
     try {
-      const response = await api.get('/attendance/filters');
-      if (response.data?.success) {
-        const data = response.data.data || {};
+      // Build query params based on current filters for cascading
+      const params = new URLSearchParams();
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      // Note: year and semester are not included so they cascade properly
+      
+      const [filtersResponse, coursesResponse] = await Promise.all([
+        api.get(`/attendance/filters?${params.toString()}`),
+        api.get('/courses', { params: { includeInactive: false } })
+      ]);
+      
+      if (filtersResponse.data?.success) {
+        const data = filtersResponse.data.data || {};
         setFilterOptions({
           batches: data.batches || [],
           courses: data.courses || [],
@@ -538,6 +585,10 @@ const Attendance = () => {
           years: data.years || [],
           semesters: data.semesters || []
         });
+      }
+
+      if (coursesResponse.data?.success) {
+        setCoursesWithBranches(coursesResponse.data.data || []);
       }
     } catch (error) {
       console.warn('Unable to load attendance filter options', error);
@@ -587,10 +638,34 @@ const Attendance = () => {
       const paginationData = response.data?.pagination || {};
       const total = paginationData.total ?? fetchedStudents.length ?? 0;
 
+      // Get statistics from API response (based on total students, not just current page)
+      const statistics = response.data?.data?.statistics;
+      
+      // If statistics not provided, calculate defaults
+      let finalStatistics;
+      if (!statistics) {
+        finalStatistics = {
+          total: total,
+          present: 0,
+          absent: 0,
+          marked: 0,
+          unmarked: total
+        };
+      } else {
+        // Ensure unmarked is calculated correctly
+        const calculatedUnmarked = Math.max(0, (statistics.total || total) - (statistics.marked || 0));
+        finalStatistics = {
+          ...statistics,
+          total: statistics.total || total,
+          unmarked: statistics.unmarked !== undefined ? statistics.unmarked : calculatedUnmarked
+        };
+      }
+
       setStudents(fetchedStudents);
       setStatusMap(statusSnapshot);
       setInitialStatusMap({ ...statusSnapshot });
       setTotalStudents(total);
+      setAttendanceStatistics(finalStatistics);
       setCurrentPage(pageToUse);
       setSmsResults([]);
       setSmsStatusMap({});
@@ -631,6 +706,12 @@ const Attendance = () => {
     loadFilterOptions();
   }, []);
 
+  // Reload filter options when batch, course, or branch changes (for cascading years/semesters)
+  useEffect(() => {
+    loadFilterOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.batch, filters.course, filters.branch]);
+
   useEffect(() => {
     setCurrentPage(1);
     loadAttendance(1);
@@ -661,10 +742,124 @@ const Attendance = () => {
   }, [filters.studentName, filters.parentMobile]);
 
   const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [field]: value
-    }));
+    setFilters((prev) => {
+      const newFilters = {
+        ...prev,
+        [field]: value
+      };
+      // Reset branch when course changes
+      if (field === 'course') {
+        newFilters.branch = '';
+      }
+      return newFilters;
+    });
+  };
+
+  // Sorting handler
+  const handleSort = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return {
+          field,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc'
+        };
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  // Column reordering handlers
+  const moveColumn = (columnKey, direction) => {
+    setColumnOrder((prev) => {
+      const index = prev.indexOf(columnKey);
+      if (index === -1) return prev;
+      
+      const newOrder = [...prev];
+      if (direction === 'left' && index > 0) {
+        [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      } else if (direction === 'right' && index < newOrder.length - 1) {
+        [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      }
+      return newOrder;
+    });
+  };
+
+  // Sort students based on sortConfig
+  const sortedStudents = useMemo(() => {
+    if (!sortConfig.field) return students;
+    
+    return [...students].sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortConfig.field) {
+        case 'student':
+          aValue = a.studentName || '';
+          bValue = b.studentName || '';
+          break;
+        case 'pin':
+          aValue = a.pinNumber || '';
+          bValue = b.pinNumber || '';
+          break;
+        case 'batch':
+          aValue = a.batch || '';
+          bValue = b.batch || '';
+          break;
+        case 'course':
+          aValue = a.course || '';
+          bValue = b.course || '';
+          break;
+        case 'branch':
+          aValue = a.branch || '';
+          bValue = b.branch || '';
+          break;
+        case 'year':
+          aValue = a.currentYear || '';
+          bValue = b.currentYear || '';
+          break;
+        case 'semester':
+          aValue = a.currentSemester || '';
+          bValue = b.currentSemester || '';
+          break;
+        case 'parentContact':
+          aValue = a.parentMobile1 || a.parentMobile2 || '';
+          bValue = b.parentMobile1 || b.parentMobile2 || '';
+          break;
+        case 'attendance':
+          aValue = effectiveStatus(a.id);
+          bValue = effectiveStatus(b.id);
+          break;
+        default:
+          return 0;
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
+      }
+      
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [students, sortConfig]);
+
+  // Handle student row click to show report
+  const handleStudentClick = async (student) => {
+    setSelectedStudent(student);
+    setHistoryData(null);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+
+    try {
+      const data = await fetchStudentHistoryData(student.id);
+      setHistoryData(data);
+    } catch (error) {
+      console.error('Failed to load student attendance history:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to load attendance history');
+      setHistoryModalOpen(false);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleStatusChange = (studentId, status) => {
@@ -1001,6 +1196,9 @@ const Attendance = () => {
         }))
       );
 
+      // Reload attendance to get updated statistics
+      await loadAttendance(currentPage);
+
       const results = response.data.data?.smsResults || [];
       setSmsResults(results);
       
@@ -1328,9 +1526,10 @@ const Attendance = () => {
             value={filters.branch}
             onChange={(event) => handleFilterChange('branch', event.target.value)}
             className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={filters.course && availableBranches.length === 0}
           >
             <option value="">All Branches</option>
-            {filterOptions.branches.map((branchOption) => (
+            {availableBranches.map((branchOption) => (
               <option key={branchOption} value={branchOption}>
                 {branchOption}
               </option>
@@ -1394,34 +1593,106 @@ const Attendance = () => {
         </div>
       </section>
 
+      {/* Attendance Statistics */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-green-100 p-2">
+              <Check size={20} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Present</p>
+              <p className="text-2xl font-bold text-green-700">{presentCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-blue-100 p-2">
+              <CalendarCheck size={20} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Marked</p>
+              <p className="text-2xl font-bold text-blue-700">{markedCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-amber-100 p-2">
+              <AlertTriangle size={20} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Pending Marked</p>
+              <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-red-100 p-2">
+              <X size={20} className="text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Absent</p>
+              <p className="text-2xl font-bold text-red-700">{absentCount}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2 text-gray-700 font-semibold">
             <CalendarCheck size={18} />
             <span>Daily Attendance</span>
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || saving || editingLocked}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-              hasChanges && !saving && !editingLocked
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {saving ? (
-              <>
-                <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Check size={16} />
-                Save Attendance
-              </>
+          <div className="flex items-center gap-2">
+            {isAdmin && isToday && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm(`Are you sure you want to delete all attendance records for ${attendanceDate}? This action cannot be undone.`)) {
+                    return;
+                  }
+                  try {
+                    await api.delete(`/attendance?date=${attendanceDate}`);
+                    toast.success('Attendance records deleted successfully');
+                    await loadAttendance(1);
+                  } catch (error) {
+                    console.error('Failed to delete attendance:', error);
+                    toast.error(error.response?.data?.message || 'Failed to delete attendance records');
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                <X size={16} />
+                Clear Today's Data
+              </button>
             )}
-          </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!hasChanges || saving || editingLocked}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
+                hasChanges && !saving && !editingLocked
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {saving ? (
+                <>
+                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check size={16} />
+                  Save Attendance
+                </>
+              )}
+            </button>
+          </div>
         </div>
         {editingLocked && (
           <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
@@ -1444,48 +1715,141 @@ const Attendance = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  <th className="px-4 py-3">Student</th>
-                  <th className="px-4 py-3">PIN</th>
-                  <th className="px-4 py-3">Batch</th>
-                  <th className="px-4 py-3">Course</th>
-                  <th className="px-4 py-3">Branch</th>
-                  <th className="px-4 py-3">Year</th>
-                  <th className="px-4 py-3">Semester</th>
-                  <th className="px-4 py-3">Parent Contact</th>
-                  <th className="px-4 py-3">Attendance</th>
-                  <th className="px-4 py-3">SMS Status</th>
-                  <th className="px-4 py-3 text-right">Insights</th>
+                  {columnOrder.map((columnKey) => {
+                    const columnConfig = {
+                      student: { label: 'Student', sortable: true },
+                      pin: { label: 'PIN', sortable: true },
+                      batch: { label: 'Batch', sortable: true },
+                      course: { label: 'Course', sortable: true },
+                      branch: { label: 'Branch', sortable: true },
+                      year: { label: 'Year', sortable: true },
+                      semester: { label: 'Semester', sortable: true },
+                      parentContact: { label: 'Parent Contact', sortable: true },
+                      attendance: { label: 'Attendance', sortable: true },
+                      smsStatus: { label: 'SMS Status', sortable: false },
+                      insights: { label: 'Insights', sortable: false, align: 'right' }
+                    };
+                    const config = columnConfig[columnKey];
+                    if (!config) return null;
+                    
+                    return (
+                      <th key={columnKey} className={`px-4 py-3 ${config.align === 'right' ? 'text-right' : ''}`}>
+                        <div className={`flex items-center gap-2 ${config.align === 'right' ? 'justify-end' : ''}`}>
+                          <div className={`flex items-center gap-1 ${config.align === 'right' ? '' : 'flex-1'}`}>
+                            {config.sortable ? (
+                              <button
+                                onClick={() => handleSort(columnKey)}
+                                className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                              >
+                                <span>{config.label}</span>
+                                {sortConfig.field === columnKey && (
+                                  <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                                )}
+                              </button>
+                            ) : (
+                              <span>{config.label}</span>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              onClick={() => moveColumn(columnKey, 'left')}
+                              disabled={columnOrder.indexOf(columnKey) === 0}
+                              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move left"
+                            >
+                              <ChevronLeft size={12} />
+                            </button>
+                            <button
+                              onClick={() => moveColumn(columnKey, 'right')}
+                              disabled={columnOrder.indexOf(columnKey) === columnOrder.length - 1}
+                              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move right"
+                            >
+                              <ChevronRight size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
-                {students.map((student) => {
+                {sortedStudents.map((student) => {
                   const status = effectiveStatus(student.id);
                   const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
                   return (
-                    <tr key={student.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {renderPhoto(student)}
-                          <div className="font-semibold text-gray-900">
-                            {student.studentName || 'Unknown Student'}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{student.pinNumber || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{student.batch || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{student.course || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{student.branch || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        <div>{parentContact}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {/* Attendance status logic:
+                    <tr 
+                      key={student.id} 
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleStudentClick(student)}
+                    >
+                      {columnOrder.map((columnKey) => {
+                        if (columnKey === 'student') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-3">
+                                {renderPhoto(student)}
+                                <div className="font-semibold text-gray-900">
+                                  {student.studentName || 'Unknown Student'}
+                                </div>
+                              </div>
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'pin') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.pinNumber || 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'batch') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.batch || 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'course') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.course || 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'branch') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.branch || 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'year') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'semester') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'parentContact') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              <div>{parentContact}</div>
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'attendance') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              {/* Attendance status logic:
                             - hasDbRecord: student.attendanceStatus is not null (record exists in DB for this date)
                             - statusChanged: current status differs from initial loaded status
                             - justSaved: attendance was saved in this session
@@ -1577,143 +1941,136 @@ const Attendance = () => {
                             </div>
                           );
                         })()}
-                      </td>
-                      <td className="px-4 py-3">
-                        {/* SMS Status Column */}
-                        {(() => {
-                          const smsStatus = smsStatusMap[student.id];
-                          if (!smsStatus) {
-                            // No SMS sent yet (student wasn't marked absent or attendance not saved)
-                            if (status === 'absent') {
-                              return (
-                                <button
-                                  onClick={() => handleRetrySms(student)}
-                                  disabled={retryingSmsFor === student.id}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
-                                  title="Click to send SMS notification"
-                                >
-                                  {retryingSmsFor === student.id ? (
-                                    <>
-                                      <RefreshCw size={12} className="animate-spin" />
-                                      Sending...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <AlertTriangle size={12} />
-                                      Pending - Send
-                                    </>
-                                  )}
-                                </button>
-                              );
-                            }
-                            return (
-                              <span className="text-xs text-gray-400">-</span>
-                            );
-                          }
-                          
-                          if (smsStatus.success) {
-                            return smsStatus.mocked ? (
-                              <button
-                                onClick={() => handleRetrySms(student)}
-                                disabled={retryingSmsFor === student.id}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
-                                title="Test mode - Click to send again"
-                              >
-                                {retryingSmsFor === student.id ? (
-                                  <>
-                                    <RefreshCw size={12} className="animate-spin" />
-                                    Sending...
-                                  </>
-                                ) : (
-                                  <>
-                                    <RefreshCw size={12} />
-                                    Test - Send Again
-                                  </>
-                                )}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleRetrySms(student)}
-                                disabled={retryingSmsFor === student.id}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
-                                title="SMS sent - Click to send again"
-                              >
-                                {retryingSmsFor === student.id ? (
-                                  <>
-                                    <RefreshCw size={12} className="animate-spin" />
-                                    Sending...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check size={12} />
-                                    Sent - Send Again
-                                  </>
-                                )}
-                              </button>
-                            );
-                          }
-                          
-                          if (smsStatus.skipped) {
-                            return (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
-                                <AlertTriangle size={12} />
-                                {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
-                              </span>
-                            );
-                          }
-                          
-                          // Failed - show retry button
-                          return (
-                            <button
-                              onClick={() => handleRetrySms(student)}
-                              disabled={retryingSmsFor === student.id}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
-                              title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
-                            >
-                              {retryingSmsFor === student.id ? (
-                                <>
-                                  <RefreshCw size={12} className="animate-spin" />
-                                  Retrying...
-                                </>
-                              ) : (
-                                <>
-                                  <X size={12} />
-                                  Failed - Retry
-                                </>
-                              )}
-                            </button>
+                            </td>
                           );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenHistory(student)}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-                          >
-                            <HistoryIcon size={16} />
-                            View history
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadReport(student)}
-                            disabled={downloadingStudentId === student.id}
-                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                              downloadingStudentId === student.id
-                                ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-                                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                            }`}
-                          >
-                            {downloadingStudentId === student.id ? (
-                              <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <Download size={16} />
-                            )}
-                            Download
-                          </button>
-                        </div>
-                      </td>
+                        }
+                        if (columnKey === 'smsStatus') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              {(() => {
+                                const smsStatus = smsStatusMap[student.id];
+                                if (!smsStatus) {
+                                  if (status === 'absent') {
+                                    return (
+                                      <button
+                                        onClick={() => handleRetrySms(student)}
+                                        disabled={retryingSmsFor === student.id}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
+                                        title="Click to send SMS notification"
+                                      >
+                                        {retryingSmsFor === student.id ? (
+                                          <>
+                                            <RefreshCw size={12} className="animate-spin" />
+                                            Sending...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <AlertTriangle size={12} />
+                                            Pending - Send
+                                          </>
+                                        )}
+                                      </button>
+                                    );
+                                  }
+                                  return <span className="text-xs text-gray-400">-</span>;
+                                }
+                                
+                                if (smsStatus.success) {
+                                  return smsStatus.mocked ? (
+                                    <button
+                                      onClick={() => handleRetrySms(student)}
+                                      disabled={retryingSmsFor === student.id}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
+                                      title="Test mode - Click to send again"
+                                    >
+                                      {retryingSmsFor === student.id ? (
+                                        <>
+                                          <RefreshCw size={12} className="animate-spin" />
+                                          Sending...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <RefreshCw size={12} />
+                                          Test - Send Again
+                                        </>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleRetrySms(student)}
+                                      disabled={retryingSmsFor === student.id}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
+                                      title="SMS sent - Click to send again"
+                                    >
+                                      {retryingSmsFor === student.id ? (
+                                        <>
+                                          <RefreshCw size={12} className="animate-spin" />
+                                          Sending...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Check size={12} />
+                                          Sent - Send Again
+                                        </>
+                                      )}
+                                    </button>
+                                  );
+                                }
+                                
+                                if (smsStatus.skipped) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
+                                      <AlertTriangle size={12} />
+                                      {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                                    </span>
+                                  );
+                                }
+                                
+                                return (
+                                  <button
+                                    onClick={() => handleRetrySms(student)}
+                                    disabled={retryingSmsFor === student.id}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
+                                    title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
+                                  >
+                                    {retryingSmsFor === student.id ? (
+                                      <>
+                                        <RefreshCw size={12} className="animate-spin" />
+                                        Retrying...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <X size={12} />
+                                        Failed - Retry
+                                      </>
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'insights') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStudentClick(student);
+                                  }}
+                                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                                >
+                                  <BarChart3 size={16} />
+                                  View Report
+                                </button>
+                              </div>
+                            </td>
+                          );
+                        }
+                        return null;
+                      })}
                     </tr>
                   );
                 })}

@@ -48,8 +48,8 @@ exports.getFilterOptions = async (req, res) => {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
     
-    // Build WHERE clause based on applied filters
-    let whereClause = 'WHERE 1=1';
+    // Build WHERE clause based on applied filters - only regular students
+    let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
     const params = [];
     
     // Apply user scope filtering first
@@ -91,13 +91,48 @@ exports.getFilterOptions = async (req, res) => {
       `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
       params
     );
+    
+    // For years and semesters, build separate WHERE clauses that exclude year/semester filters
+    // so they cascade properly based on batch/course/branch
+    let yearWhereClause = `WHERE 1=1 AND student_status = 'Regular'`;
+    const yearParams = [];
+    
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        yearWhereClause += ` AND ${scopeCondition}`;
+        yearParams.push(...scopeParams);
+      }
+    }
+    
+    if (college) {
+      yearWhereClause += ' AND college = ?';
+      yearParams.push(college);
+    }
+    if (course) {
+      yearWhereClause += ' AND course = ?';
+      yearParams.push(course);
+    }
+    if (branch) {
+      yearWhereClause += ' AND branch = ?';
+      yearParams.push(branch);
+    }
+    if (batch) {
+      yearWhereClause += ' AND batch = ?';
+      yearParams.push(batch);
+    }
+    // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
+    
     const [yearRows] = await masterPool.query(
-      `SELECT DISTINCT current_year AS currentYear FROM students ${whereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
-      params
+      `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
+      yearParams
     );
+    
+    // For semesters, use the same WHERE clause as years
     const [semesterRows] = await masterPool.query(
-      `SELECT DISTINCT current_semester AS currentSemester FROM students ${whereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
-      params
+      `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
+      yearParams
     );
     
     // For courses, if college is selected, filter courses by college
@@ -319,6 +354,9 @@ exports.getAttendance = async (req, res) => {
 
     const params = [attendanceDate];
 
+    // Filter for regular students only
+    query += ` AND s.student_status = 'Regular'`;
+
     // Apply user scope filtering
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
@@ -403,6 +441,122 @@ exports.getAttendance = async (req, res) => {
     const [countRows] = await masterPool.query(countQuery, params);
     const total = countRows?.[0]?.total || 0;
 
+    // Get statistics for all students (not just current page) - use same query structure
+    // Build WHERE clause for statistics (same filters as main query)
+    let statsWhereClause = 'WHERE 1=1 AND s.student_status = \'Regular\'';
+    const statsParams = [];
+    
+    // Apply same filters to stats query
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        statsWhereClause += ` AND ${scopeCondition}`;
+        statsParams.push(...scopeParams);
+      }
+    }
+
+    if (batch) {
+      statsWhereClause += ' AND s.batch = ?';
+      statsParams.push(batch);
+    }
+
+    if (currentYear) {
+      const parsedYear = parseInt(currentYear, 10);
+      if (!Number.isNaN(parsedYear)) {
+        statsWhereClause += ' AND s.current_year = ?';
+        statsParams.push(parsedYear);
+      }
+    }
+
+    if (currentSemester) {
+      const parsedSemester = parseInt(currentSemester, 10);
+      if (!Number.isNaN(parsedSemester)) {
+        statsWhereClause += ' AND s.current_semester = ?';
+        statsParams.push(parsedSemester);
+      }
+    }
+
+    if (course) {
+      statsWhereClause += ' AND s.course = ?';
+      statsParams.push(course);
+    }
+
+    if (branch) {
+      statsWhereClause += ' AND s.branch = ?';
+      statsParams.push(branch);
+    }
+
+    if (studentName) {
+      const keyword = `%${studentName}%`;
+      statsWhereClause += `
+        AND (
+          s.student_name LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+          OR s.pin_no LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+        )
+      `;
+      statsParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
+    }
+
+    if (parentMobile) {
+      const mobileLike = `%${parentMobile}%`;
+      statsWhereClause += `
+        AND (
+          s.parent_mobile1 LIKE ?
+          OR s.parent_mobile2 LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+        )
+      `;
+      statsParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
+    }
+
+    // Use separate queries for accurate counting
+    // Get present count
+    const presentQuery = `
+      SELECT COUNT(DISTINCT s.id) AS count
+      FROM students s
+      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'present'
+      ${statsWhereClause}
+    `;
+    
+    // Get absent count
+    const absentQuery = `
+      SELECT COUNT(DISTINCT s.id) AS count
+      FROM students s
+      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'absent'
+      ${statsWhereClause}
+    `;
+    
+    // Get marked count (any status)
+    const markedQuery = `
+      SELECT COUNT(DISTINCT s.id) AS count
+      FROM students s
+      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
+      ${statsWhereClause}
+    `;
+    
+    const [presentRows] = await masterPool.query(presentQuery, [attendanceDate, ...statsParams]);
+    const [absentRows] = await masterPool.query(absentQuery, [attendanceDate, ...statsParams]);
+    const [markedRows] = await masterPool.query(markedQuery, [attendanceDate, ...statsParams]);
+    
+    const presentCount = parseInt(presentRows[0]?.count || 0, 10);
+    const absentCount = parseInt(absentRows[0]?.count || 0, 10);
+    const markedCount = parseInt(markedRows[0]?.count || 0, 10);
+    const unmarkedCount = Math.max(0, total - markedCount);
+    
+    const statistics = {
+      total: total,
+      present: presentCount,
+      absent: absentCount,
+      marked: markedCount,
+      unmarked: unmarkedCount
+    };
+
     // Apply pagination to data query
     if (parsedLimit && parsedLimit > 0) {
       query += ' LIMIT ? OFFSET ?';
@@ -467,7 +621,8 @@ exports.getAttendance = async (req, res) => {
       data: {
         date: attendanceDate,
         students,
-        holiday: holidayInfo
+        holiday: holidayInfo,
+        statistics
       },
       pagination: {
         total,
@@ -480,6 +635,40 @@ exports.getAttendance = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while fetching attendance'
+    });
+  }
+};
+
+exports.deleteAttendanceForDate = async (req, res) => {
+  try {
+    const attendanceDate = getDateOnlyString(req.query.date || req.body.date);
+    
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid attendance date supplied'
+      });
+    }
+
+    // Delete all attendance records for the specified date
+    const [result] = await masterPool.query(
+      'DELETE FROM attendance_records WHERE attendance_date = ?',
+      [attendanceDate]
+    );
+
+    res.json({
+      success: true,
+      message: `Deleted ${result.affectedRows} attendance record(s) for ${attendanceDate}`,
+      data: {
+        date: attendanceDate,
+        deletedCount: result.affectedRows
+      }
+    });
+  } catch (error) {
+    console.error('Failed to delete attendance records:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting attendance records'
     });
   }
 };

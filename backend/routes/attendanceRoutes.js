@@ -14,6 +14,7 @@ router.get('/student/:studentId/history', attachUserScope, attendanceController.
 router.get('/download', attachUserScope, attendanceController.downloadAttendanceReport);
 router.get('/', attachUserScope, attendanceController.getAttendance);
 router.post('/', attachUserScope, attendanceController.markAttendance);
+router.delete('/', attachUserScope, attendanceController.deleteAttendanceForDate);
 router.post('/retry-sms', attendanceController.retrySms);
 
 module.exports = router;
