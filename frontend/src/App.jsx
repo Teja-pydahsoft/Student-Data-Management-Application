@@ -73,9 +73,9 @@ function App() {
           <Route path="forms" element={<Forms />} />
           <Route path="forms/new" element={<FormBuilder />} />
           <Route path="forms/edit/:formId" element={<FormBuilder />} />
-          <Route path="submissions" element={<Submissions />} />
           <Route path="students" element={<Students />} />
           <Route path="students/add" element={<AddStudent />} />
+          <Route path="students/self-registration" element={<Submissions />} />
           <Route path="promotions" element={<StudentPromotions />} />
           <Route path="courses" element={<Settings />} />
           <Route path="attendance" element={<Attendance />} />

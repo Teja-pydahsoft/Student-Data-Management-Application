@@ -12,7 +12,9 @@ import {
   CalendarCheck,
   ShieldCheck,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { 
@@ -28,8 +30,16 @@ import toast from 'react-hot-toast';
 // Navigation items with frontend module keys as permissions
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
-  { path: '/submissions', icon: ClipboardList, label: 'Pre Registration', permission: FRONTEND_MODULES.SUBMISSIONS },
-  { path: '/students', icon: Users, label: 'Student Management', permission: FRONTEND_MODULES.STUDENTS },
+  { 
+    path: '/students', 
+    icon: Users, 
+    label: 'Student Management', 
+    permission: FRONTEND_MODULES.STUDENTS,
+    subItems: [
+      { path: '/students', label: 'Students Database', permission: FRONTEND_MODULES.STUDENTS },
+      { path: '/students/self-registration', label: 'Self Registration', permission: FRONTEND_MODULES.SUBMISSIONS }
+    ]
+  },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },
   { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
@@ -43,6 +53,7 @@ const AdminLayout = () => {
   const { user, logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [expandedItems, setExpandedItems] = useState(new Set()); // Collapsed by default
 
   const handleLogout = () => {
     logout();
@@ -83,8 +94,59 @@ const AdminLayout = () => {
       
       // Legacy staff users
       return allowedModules.includes(item.permission);
+    }).map((item) => {
+      // Filter sub-items based on permissions
+      if (item.subItems) {
+        const filteredSubItems = item.subItems.filter((subItem) => {
+          if (!subItem.permission) return true;
+          
+          if (isFullAccessRole(user?.role)) return true;
+          
+          if (user?.permissions) {
+            return hasModuleAccess(user.permissions, subItem.permission);
+          }
+          
+          return allowedModules.includes(subItem.permission);
+        });
+        
+        return { ...item, subItems: filteredSubItems };
+      }
+      return item;
     });
   }, [allowedModules, user?.role, user?.permissions]);
+
+  // Check if a route is active (including sub-routes)
+  const isRouteActive = (path) => {
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(path);
+  };
+
+  // Toggle submenu expansion
+  const toggleSubmenu = (path) => {
+    setExpandedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  };
+
+  // Auto-expand parent menu when on a sub-route
+  useEffect(() => {
+    filteredNavItems.forEach((item) => {
+      if (item.subItems) {
+        const hasActiveSubItem = item.subItems.some(subItem => location.pathname === subItem.path);
+        if (hasActiveSubItem && !expandedItems.has(item.path)) {
+          setExpandedItems(prev => new Set([...prev, item.path]));
+        }
+      }
+    });
+  }, [location.pathname, filteredNavItems]);
 
   // Redirect user if they try to access a module they don't have access to
   useEffect(() => {
@@ -154,7 +216,110 @@ const AdminLayout = () => {
           <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const hasSubItems = item.subItems && item.subItems.length > 0;
+              const isExpanded = expandedItems.has(item.path);
+              const isActive = isRouteActive(item.path);
+
+              if (hasSubItems && !sidebarCollapsed) {
+                // Auto-expand if any sub-item is active
+                const shouldAutoExpand = item.subItems.some(subItem => location.pathname === subItem.path);
+                const isActuallyExpanded = isExpanded || shouldAutoExpand;
+
+                return (
+                  <div key={item.path} className="space-y-1">
+                    <button
+                      onClick={() => {
+                        toggleSubmenu(item.path);
+                        setSidebarOpen(false);
+                      }}
+                      className={`
+                        w-full flex items-center justify-between rounded-lg transition-all duration-200
+                        gap-3 px-4 py-3
+                        ${
+                          isActive && !isActuallyExpanded
+                            ? 'bg-blue-600 text-white font-semibold shadow-md'
+                            : isActuallyExpanded
+                            ? 'bg-gray-50 text-gray-900 font-medium'
+                            : 'text-gray-800 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                      `}
+                      aria-label={isActuallyExpanded ? 'Collapse menu' : 'Expand menu'}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <Icon size={20} className="flex-shrink-0" />
+                        <span className="whitespace-nowrap font-medium">{item.label}</span>
+                      </div>
+                      {isActuallyExpanded ? (
+                        <ChevronDown size={18} className="flex-shrink-0 transition-transform duration-200" />
+                      ) : (
+                        <ChevronRight size={18} className="flex-shrink-0 transition-transform duration-200" />
+                      )}
+                    </button>
+                    {isActuallyExpanded && (
+                      <div className="ml-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
+                        {item.subItems.map((subItem, index) => {
+                          const isSubActive = location.pathname === subItem.path;
+                          return (
+                            <Link
+                              key={subItem.path}
+                              to={subItem.path}
+                              onClick={() => {
+                                setSidebarOpen(false);
+                                // Keep expanded when clicking sub-items
+                                if (!expandedItems.has(item.path)) {
+                                  setExpandedItems(prev => new Set([...prev, item.path]));
+                                }
+                              }}
+                              className={`
+                                flex items-center rounded-md transition-all duration-200
+                                gap-2.5 px-3 py-2.5 text-sm font-medium relative
+                                ${
+                                  isSubActive
+                                    ? 'bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400'
+                                    : 'text-gray-700 hover:bg-blue-100 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm'
+                                }
+                              `}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isSubActive ? 'bg-white' : 'bg-blue-500'}`}></div>
+                              <span className="whitespace-nowrap">{subItem.label}</span>
+                              {isSubActive && (
+                                <div className="absolute right-2 w-1 h-1 bg-white rounded-full"></div>
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Handle collapsed sidebar - show as simple link for items with sub-items
+              if (hasSubItems && sidebarCollapsed) {
+                // If on a sub-route, show parent as active
+                const hasActiveSubItem = item.subItems?.some(subItem => location.pathname === subItem.path);
+                const isActiveState = isActive || hasActiveSubItem;
+                
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.subItems[0]?.path || item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`
+                      flex items-center justify-center rounded-md transition-colors
+                      px-2 py-3
+                      ${
+                        isActiveState
+                          ? 'bg-blue-600 text-white font-semibold shadow-md'
+                          : 'text-gray-800 hover:bg-blue-100 hover:text-blue-700'
+                      }
+                    `}
+                    title={item.label}
+                  >
+                    <Icon size={20} className="flex-shrink-0" />
+                  </Link>
+                );
+              }
 
               return (
                 <Link

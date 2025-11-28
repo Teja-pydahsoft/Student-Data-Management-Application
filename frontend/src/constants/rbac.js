@@ -86,7 +86,7 @@ export const MODULE_PERMISSIONS = {
 // Module Labels for UI
 export const MODULE_LABELS = {
   [BACKEND_MODULES.DASHBOARD]: 'Dashboard',
-  [BACKEND_MODULES.PRE_REGISTRATION]: 'Pre-Registration',
+  [BACKEND_MODULES.PRE_REGISTRATION]: 'Self Registration',
   [BACKEND_MODULES.STUDENT_MANAGEMENT]: 'Student Management',
   [BACKEND_MODULES.PROMOTIONS]: 'Promotions',
   [BACKEND_MODULES.ATTENDANCE]: 'Attendance',
@@ -137,7 +137,7 @@ export const BACKEND_TO_FRONTEND_MAP = {
 export const MODULE_ROUTE_MAP = {
   [FRONTEND_MODULES.DASHBOARD]: '/',
   [FRONTEND_MODULES.FORMS]: '/forms',
-  [FRONTEND_MODULES.SUBMISSIONS]: '/submissions',
+  [FRONTEND_MODULES.SUBMISSIONS]: '/students/self-registration',
   [FRONTEND_MODULES.STUDENTS]: '/students',
   [FRONTEND_MODULES.PROMOTIONS]: '/promotions',
   [FRONTEND_MODULES.ATTENDANCE]: '/attendance',
@@ -150,7 +150,7 @@ export const MODULE_ROUTE_MAP = {
 export const getModuleKeyForPath = (path = '/') => {
   if (path === '/' || path.startsWith('/dashboard')) return FRONTEND_MODULES.DASHBOARD;
   if (path.startsWith('/forms')) return FRONTEND_MODULES.FORMS;
-  if (path.startsWith('/submissions')) return FRONTEND_MODULES.SUBMISSIONS;
+  if (path.startsWith('/students/self-registration')) return FRONTEND_MODULES.SUBMISSIONS;
   if (path.startsWith('/students')) return FRONTEND_MODULES.STUDENTS;
   if (path.startsWith('/promotions')) return FRONTEND_MODULES.PROMOTIONS;
   if (path.startsWith('/attendance')) return FRONTEND_MODULES.ATTENDANCE;

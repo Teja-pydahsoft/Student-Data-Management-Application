@@ -6,6 +6,19 @@ import {
   Clock,
   ArrowRight,
   Eye,
+  CheckCircle,
+  XCircle,
+  TrendingUp,
+  FileText,
+  AlertCircle,
+  BarChart3,
+  CalendarCheck,
+  ShieldCheck,
+  Settings,
+  GraduationCap,
+  UserCheck,
+  Database,
+  Building2
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../config/api';
@@ -17,6 +30,27 @@ import { useStudentStats } from '../hooks/useStudents';
 const Dashboard = () => {
   // Use React Query for stats
   const { data: stats, isLoading: loadingStats } = useStudentStats();
+
+  // Fetch attendance summary for today
+  const { data: attendanceData, isLoading: loadingAttendance } = useQuery({
+    queryKey: ['attendance', 'summary', 'today'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await api.get(`/attendance/summary?date=${today}`);
+      return response.data?.data || null;
+    },
+    staleTime: 1 * 60 * 1000, // 1 minute (attendance changes frequently)
+  });
+
+  // Fetch colleges count
+  const { data: collegesData, isLoading: loadingColleges } = useQuery({
+    queryKey: ['colleges', 'count'],
+    queryFn: async () => {
+      const response = await api.get('/colleges');
+      return response.data?.data || [];
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Use React Query for recent submissions
   const { data: recentSubmissionsData, isLoading: loadingSubmissions } = useQuery({
@@ -33,7 +67,11 @@ const Dashboard = () => {
   });
 
   const recentSubmissions = recentSubmissionsData || [];
-  const loading = loadingStats;
+  const presentToday = attendanceData?.daily?.present || 0;
+  const absentToday = attendanceData?.daily?.absent || 0;
+  const totalCampuses = collegesData?.length || 0;
+
+  const loading = loadingStats || loadingAttendance || loadingColleges;
 
   const statCards = [
     {
@@ -41,13 +79,40 @@ const Dashboard = () => {
       value: stats?.totalStudents || 0,
       icon: Users,
       bgGradient: 'from-blue-600 to-blue-700',
+      textColor: 'text-blue-600',
+      bgColor: 'bg-blue-50',
       subtitle: 'Regular students',
+      change: null,
     },
     {
-      title: 'Pending Submissions',
-      value: stats?.pendingSubmissions || 0,
-      icon: Clock,
-      bgGradient: 'from-blue-400 to-blue-500',
+      title: 'Present Today',
+      value: presentToday,
+      icon: CheckCircle,
+      bgGradient: 'from-green-500 to-green-600',
+      textColor: 'text-green-600',
+      bgColor: 'bg-green-50',
+      subtitle: 'Students marked present',
+      change: null,
+    },
+    {
+      title: 'Absent Today',
+      value: absentToday,
+      icon: XCircle,
+      bgGradient: 'from-red-500 to-red-600',
+      textColor: 'text-red-600',
+      bgColor: 'bg-red-50',
+      subtitle: 'Students marked absent',
+      change: null,
+    },
+    {
+      title: 'Total Campuses',
+      value: totalCampuses,
+      icon: Building2,
+      bgGradient: 'from-purple-500 to-purple-600',
+      textColor: 'text-purple-600',
+      bgColor: 'bg-purple-50',
+      subtitle: 'Active campuses',
+      change: null,
     },
   ];
 
@@ -62,30 +127,47 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-8 p-6 bg-gradient-to-br from-white via-gray-50 to-blue-50 min-h-screen">
-      <div>
-          <h1 className="text-3xl font-bold text-gray-900 heading-font">Dashboard</h1>
-          <p className="text-gray-600 mt-2 body-font">Overview of your student management system</p>
+    <div className="space-y-6 p-6 bg-gradient-to-br from-gray-50 via-white to-blue-50/30 min-h-screen">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg">
+            <Database className="text-white" size={32} />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 heading-font">Student Database Portal</h1>
+            <p className="text-gray-600 body-font mt-1">Complete control over admissions, student management, attendance, users, and reports</p>
+          </div>
         </div>
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <div
               key={index}
-              className="rounded-xl p-6 bg-white border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-xl bg-white border border-gray-200 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-4xl font-extrabold text-gray-900 mt-1">{stat.value}</p>
-                  {stat.subtitle && (
-                    <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
+              <div className="relative p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.bgGradient} shadow-lg`}>
+                    <Icon className="text-white" size={24} />
+                  </div>
+                  {stat.change !== null && (
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${stat.change >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      <TrendingUp size={12} className={stat.change < 0 ? 'rotate-180' : ''} />
+                      {Math.abs(stat.change)}%
+                    </div>
                   )}
                 </div>
-                <div className={`p-3 rounded-lg bg-gradient-to-br ${stat.bgGradient} shadow`}>
-                  <Icon className="text-white" size={26} />
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">{stat.title}</p>
+                  <p className="text-3xl font-bold text-gray-900 mb-2">{stat.value.toLocaleString()}</p>
+                  {stat.subtitle && (
+                    <p className="text-xs font-medium text-gray-400">{stat.subtitle}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -95,107 +177,117 @@ const Dashboard = () => {
 
       {/* Quick Actions */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Self Registration */}
           <Link
-            to="/submissions"
-            className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group shadow-sm"
+            to="/students/self-registration"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-blue-200 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 group shadow-sm"
           >
-            <div className="bg-blue-100 p-2 rounded-md group-hover:bg-blue-200 transition-colors">
-              <ClipboardList className="text-blue-700" size={20} />
+            <div className="p-3 rounded-lg bg-blue-100 group-hover:bg-blue-200 transition-colors">
+              <ClipboardList className="text-blue-700" size={24} />
             </div>
-            <div>
-              <p className="font-semibold text-gray-900">Review Submissions</p>
-              <p className="text-sm text-gray-600">
-                {stats?.pendingSubmissions || 0} pending
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">Self Registration</p>
+              <p className="text-sm text-gray-600 mt-1">
+                {stats?.pendingSubmissions || 0} pending reviews
               </p>
             </div>
+            <ArrowRight className="text-gray-400 group-hover:text-blue-600" size={20} />
           </Link>
 
+          {/* Students Database */}
           <Link
             to="/students"
-            className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-600 hover:bg-blue-50 transition-all duration-200 group shadow-sm"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-green-200 hover:border-green-500 hover:bg-green-50 transition-all duration-200 group shadow-sm"
           >
-            <div className="bg-blue-100 p-2 rounded-md group-hover:bg-blue-200 transition-colors">
-              <Users className="text-blue-700" size={20} />
+            <div className="p-3 rounded-lg bg-green-100 group-hover:bg-green-200 transition-colors">
+              <Database className="text-green-700" size={24} />
             </div>
-            <div>
-              <p className="font-semibold text-gray-900">View Students</p>
-              <p className="text-sm text-gray-600">Manage database</p>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">Students Database</p>
+              <p className="text-sm text-gray-600 mt-1">
+                {stats?.totalStudents || 0} total students
+              </p>
             </div>
+            <ArrowRight className="text-gray-400 group-hover:text-green-600" size={20} />
           </Link>
-        </div>
-      </div>
 
-      {/* Recent Submissions Card */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Recent Submissions</h2>
+          {/* Promotions */}
           <Link
-            to="/submissions"
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
+            to="/promotions"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-green-200 hover:border-green-500 hover:bg-green-50 transition-all duration-200 group shadow-sm"
           >
-            View All
-            <ArrowRight size={16} />
+            <div className="p-3 rounded-lg bg-green-100 group-hover:bg-green-200 transition-colors">
+              <TrendingUp className="text-green-700" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">Promotions</p>
+              <p className="text-sm text-gray-600 mt-1">Manage student promotions</p>
+            </div>
+            <ArrowRight className="text-gray-400 group-hover:text-green-600" size={20} />
+          </Link>
+
+          {/* Attendance */}
+          <Link
+            to="/attendance"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-purple-200 hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 group shadow-sm"
+          >
+            <div className="p-3 rounded-lg bg-purple-100 group-hover:bg-purple-200 transition-colors">
+              <CalendarCheck className="text-purple-700" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">Mark Attendance</p>
+              <p className="text-sm text-gray-600 mt-1">Track student attendance</p>
+            </div>
+            <ArrowRight className="text-gray-400 group-hover:text-purple-600" size={20} />
+          </Link>
+
+          {/* User Management */}
+          <Link
+            to="/users"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50 transition-all duration-200 group shadow-sm"
+          >
+            <div className="p-3 rounded-lg bg-indigo-100 group-hover:bg-indigo-200 transition-colors">
+              <UserCheck className="text-indigo-700" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">User Management</p>
+              <p className="text-sm text-gray-600 mt-1">Manage users and roles</p>
+            </div>
+            <ArrowRight className="text-gray-400 group-hover:text-indigo-600" size={20} />
+          </Link>
+
+          {/* Settings */}
+          <Link
+            to="/courses"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50 transition-all duration-200 group shadow-sm"
+          >
+            <div className="p-3 rounded-lg bg-indigo-100 group-hover:bg-indigo-200 transition-colors">
+              <Settings className="text-indigo-700" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">Settings</p>
+              <p className="text-sm text-gray-600 mt-1">Configure system settings</p>
+            </div>
+            <ArrowRight className="text-gray-400 group-hover:text-indigo-600" size={20} />
+          </Link>
+
+          {/* Reports */}
+          <Link
+            to="/reports"
+            className="flex items-center gap-4 p-5 rounded-lg border-2 border-amber-200 hover:border-amber-500 hover:bg-amber-50 transition-all duration-200 group shadow-sm"
+          >
+            <div className="p-3 rounded-lg bg-amber-100 group-hover:bg-amber-200 transition-colors">
+              <BarChart3 className="text-amber-700" size={24} />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900 text-lg">View Reports</p>
+              <p className="text-sm text-gray-600 mt-1">Generate insights and analytics</p>
+            </div>
+            <ArrowRight className="text-gray-400 group-hover:text-amber-600" size={20} />
           </Link>
         </div>
-
-        {loadingSubmissions || !recentSubmissionsData ? (
-          <div className="flex items-center justify-center py-12">
-            <LoadingAnimation width={32} height={32} message="Loading submissions..." />
-          </div>
-        ) : recentSubmissions.length > 0 ? (
-          <div className="space-y-3">
-            {recentSubmissions.map((submission) => (
-              <div
-                key={submission.submission_id}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 group"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">
-                      {submission.form_name || 'Unknown Form'}
-                    </h3>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize flex-shrink-0 ${
-                        submission.status === 'pending'
-                          ? 'bg-blue-100 text-blue-800'
-                          : submission.status === 'approved'
-                          ? 'bg-blue-200 text-blue-900'
-                          : 'bg-gray-200 text-gray-800'
-                      }`}
-                    >
-                      {submission.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <span className="font-medium">Admission:</span>
-                      {submission.admission_number || 'N/A'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock size={12} />
-                      {formatDate(submission.created_at || submission.submitted_at)}
-                    </span>
-                  </div>
-                </div>
-                <Link
-                  to={`/submissions`}
-                  className="ml-4 p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
-                  title="View Details"
-                >
-                  <Eye size={16} />
-                </Link>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <ClipboardList className="mx-auto text-gray-400 mb-3" size={48} />
-            <p className="text-gray-600 font-medium">No submissions yet</p>
-            <p className="text-sm text-gray-500 mt-1">Submissions will appear here once received</p>
-          </div>
-        )}
       </div>
     </div>
   );
