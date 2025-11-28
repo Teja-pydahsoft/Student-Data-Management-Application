@@ -106,6 +106,13 @@ exports.createCollege = async (req, res) => {
       });
     }
 
+    if (!code || !code.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'College code is required'
+      });
+    }
+
     const college = await collegeService.createCollege({
       name,
       code,

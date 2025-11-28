@@ -1055,7 +1055,7 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
 
   const student = students[0];
   const parsedStudentData = parseJSON(student.student_data) || {};
-
+  
   const currentStage = resolveStageFromData(parsedStudentData, {
     year: student.current_year || 1,
     semester: student.current_semester || 1
@@ -1064,7 +1064,37 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
   let nextStage = targetStage;
 
   if (!nextStage) {
-    nextStage = getNextStage(currentStage.year, currentStage.semester);
+    // Fetch course configuration if student has a course
+    let courseConfig = null;
+    if (student.course) {
+      try {
+        const [courseRows] = await connection.query(
+          `SELECT total_years, semesters_per_year, year_semester_config 
+           FROM courses 
+           WHERE name = ? AND is_active = 1 
+           LIMIT 1`,
+          [student.course]
+        );
+        
+        if (courseRows.length > 0) {
+          const course = courseRows[0];
+          courseConfig = {
+            totalYears: course.total_years,
+            semestersPerYear: course.semesters_per_year,
+            yearSemesterConfig: course.year_semester_config 
+              ? (typeof course.year_semester_config === 'string' 
+                  ? JSON.parse(course.year_semester_config) 
+                  : course.year_semester_config)
+              : null
+          };
+        }
+      } catch (error) {
+        console.warn('Failed to fetch course config for promotion:', error.message);
+        // Continue with default behavior if course fetch fails
+      }
+    }
+
+    nextStage = getNextStage(currentStage.year, currentStage.semester, courseConfig);
 
     if (!nextStage) {
       return { status: 'MAX_STAGE', student, currentStage };

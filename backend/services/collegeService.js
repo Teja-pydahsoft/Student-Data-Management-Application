@@ -157,17 +157,19 @@ const createCollege = async (collegeData) => {
     throw new Error('College name is required');
   }
 
+  if (!code || !code.trim()) {
+    throw new Error('College code is required');
+  }
+
   // Validate uniqueness
   const nameUnique = await isCollegeNameUnique(name);
   if (!nameUnique) {
     throw new Error('College with this name already exists');
   }
 
-  if (code && code.trim()) {
-    const codeUnique = await isCollegeCodeUnique(code);
-    if (!codeUnique) {
-      throw new Error('College with this code already exists');
-    }
+  const codeUnique = await isCollegeCodeUnique(code);
+  if (!codeUnique) {
+    throw new Error('College with this code already exists');
   }
 
   try {
@@ -176,7 +178,7 @@ const createCollege = async (collegeData) => {
        VALUES (?, ?, ?, ?)`,
       [
         name.trim(),
-        code && code.trim() ? code.trim() : null,
+        code.trim(),
         isActive ? 1 : 0,
         metadata ? JSON.stringify(metadata) : null
       ]

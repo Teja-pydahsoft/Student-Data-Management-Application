@@ -30,6 +30,7 @@ const PromoteStudentModal = ({ isOpen, student, onClose, onPromoted }) => {
   const [targetYear, setTargetYear] = useState(1);
   const [targetSemester, setTargetSemester] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [courseConfig, setCourseConfig] = useState(null);
 
   const currentStage = useMemo(() => {
     if (!student) return { year: 1, semester: 1 };
@@ -39,9 +40,77 @@ const PromoteStudentModal = ({ isOpen, student, onClose, onPromoted }) => {
     };
   }, [student]);
 
+  // Fetch course configuration when student changes
+  useEffect(() => {
+    if (!isOpen || !student || !student.course) {
+      setCourseConfig(null);
+      return;
+    }
+
+    const fetchCourseConfig = async () => {
+      try {
+        const response = await api.get('/courses?includeInactive=false');
+        const courses = response.data?.data || [];
+        const course = courses.find(c => c.name === student.course);
+        if (course) {
+          setCourseConfig({
+            semestersPerYear: course.semestersPerYear,
+            yearSemesterConfig: course.yearSemesterConfig
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to fetch course configuration:', error);
+        setCourseConfig(null);
+      }
+    };
+
+    fetchCourseConfig();
+  }, [isOpen, student]);
+
+  const getNextStageWithConfig = (year, semester, config) => {
+    const normalizedYear = Number(year);
+    const normalizedSemester = Number(semester);
+
+    if (!Number.isInteger(normalizedYear) || !Number.isInteger(normalizedSemester) || normalizedYear < 1 || normalizedSemester < 1) {
+      return null;
+    }
+
+    // Get semester count for current year from course configuration
+    let semestersForCurrentYear = 2; // Default
+    
+    if (config) {
+      if (config.yearSemesterConfig && Array.isArray(config.yearSemesterConfig)) {
+        const yearConfig = config.yearSemesterConfig.find(y => y.year === normalizedYear);
+        if (yearConfig && yearConfig.semesters) {
+          semestersForCurrentYear = yearConfig.semesters;
+        }
+      } else if (config.semestersPerYear) {
+        semestersForCurrentYear = config.semestersPerYear;
+      }
+    }
+
+    // If current semester is less than the semester count for this year, move to next semester
+    if (normalizedSemester < semestersForCurrentYear) {
+      return {
+        year: normalizedYear,
+        semester: normalizedSemester + 1
+      };
+    }
+
+    // If we've completed all semesters for this year, move to next year
+    if (normalizedYear >= 10) {
+      return null;
+    }
+
+    return {
+      year: normalizedYear + 1,
+      semester: 1
+    };
+  };
+
   const automaticNextStage = useMemo(() => {
-    return getNextStage(currentStage.year, currentStage.semester);
-  }, [currentStage]);
+    return getNextStageWithConfig(currentStage.year, currentStage.semester, courseConfig);
+  }, [currentStage, courseConfig]);
 
   useEffect(() => {
     if (!student) {

@@ -48,10 +48,32 @@ const buildStructure = (courseConfig, branchConfig) => {
       branchConfig?.semesters_per_year ?? courseConfig.semesters_per_year
   });
 
+  // Check for per-year semester configuration
+  const yearSemesterConfig = branchConfig?.year_semester_config 
+    ? (typeof branchConfig.year_semester_config === 'string' 
+        ? JSON.parse(branchConfig.year_semester_config) 
+        : branchConfig.year_semester_config)
+    : courseConfig?.year_semester_config
+      ? (typeof courseConfig.year_semester_config === 'string'
+          ? JSON.parse(courseConfig.year_semester_config)
+          : courseConfig.year_semester_config)
+      : null;
+
   const years = Array.from({ length: yearsConfig.totalYears }, (_, index) => {
     const yearNumber = index + 1;
+    
+    // Get semester count for this year
+    let semesterCount = yearsConfig.semestersPerYear; // Default fallback
+    
+    if (Array.isArray(yearSemesterConfig)) {
+      const yearConfig = yearSemesterConfig.find(y => y.year === yearNumber);
+      if (yearConfig && yearConfig.semesters) {
+        semesterCount = yearConfig.semesters;
+      }
+    }
+    
     const semesters = Array.from(
-      { length: yearsConfig.semestersPerYear },
+      { length: semesterCount },
       (__unused, semIndex) => {
         const semesterNumber = semIndex + 1;
         return {
@@ -81,6 +103,11 @@ const serializeBranchRow = (branchRow) => ({
   isActive: branchRow.is_active === 1 || branchRow.is_active === true,
   totalYears: branchRow.total_years ?? null,
   semestersPerYear: branchRow.semesters_per_year ?? null,
+  yearSemesterConfig: branchRow.year_semester_config 
+    ? (typeof branchRow.year_semester_config === 'string' 
+        ? JSON.parse(branchRow.year_semester_config) 
+        : branchRow.year_semester_config)
+    : null,
   academicYearId: branchRow.academic_year_id ?? null,
   academicYearLabel: branchRow.academic_year_label ?? null,
   metadata: branchRow.metadata ? JSON.parse(branchRow.metadata) : null
@@ -99,6 +126,11 @@ const formatCourse = (courseRow, branchRows = []) => {
     isActive: courseRow.is_active === 1 || courseRow.is_active === true,
     totalYears: courseRow.total_years,
     semestersPerYear: courseRow.semesters_per_year,
+    yearSemesterConfig: courseRow.year_semester_config 
+      ? (typeof courseRow.year_semester_config === 'string' 
+          ? JSON.parse(courseRow.year_semester_config) 
+          : courseRow.year_semester_config)
+      : null,
     metadata: courseRow.metadata ? JSON.parse(courseRow.metadata) : null,
     structure: buildStructure(courseRow),
     branches
@@ -161,6 +193,7 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
   const errors = [];
 
   const name = payload.name?.trim();
+  const code = payload.code?.trim();
 
   if (!isUpdate || name !== undefined) {
     if (!name) {
@@ -170,11 +203,45 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     }
   }
 
+  if (!isUpdate || code !== undefined) {
+    if (!code) {
+      errors.push('Course code is required');
+    } else if (code.length > 50) {
+      errors.push('Course code must be less than 50 characters');
+    }
+  }
+
   const totalYears = toInt(payload.totalYears ?? payload.total_years, 0);
   const semestersPerYear = toInt(
     payload.semestersPerYear ?? payload.semesters_per_year,
     DEFAULT_SEMESTERS_PER_YEAR
   );
+
+  // Validate yearSemesterConfig if provided
+  let yearSemesterConfig = null;
+  if (payload.yearSemesterConfig || payload.year_semester_config) {
+    const config = payload.yearSemesterConfig || payload.year_semester_config;
+    if (Array.isArray(config)) {
+      // Validate each year config
+      for (const yearConfig of config) {
+        if (!yearConfig.year || !yearConfig.semesters) {
+          errors.push('Each year in yearSemesterConfig must have year and semesters');
+          break;
+        }
+        if (yearConfig.year < 1 || yearConfig.year > MAX_YEARS) {
+          errors.push(`Year number must be between 1 and ${MAX_YEARS}`);
+          break;
+        }
+        if (yearConfig.semesters < 1 || yearConfig.semesters > MAX_SEMESTERS_PER_YEAR) {
+          errors.push(`Semesters per year must be between 1 and ${MAX_SEMESTERS_PER_YEAR}`);
+          break;
+        }
+      }
+      yearSemesterConfig = config;
+    } else {
+      errors.push('yearSemesterConfig must be an array');
+    }
+  }
 
   if (!isUpdate || payload.totalYears !== undefined || payload.total_years !== undefined) {
     if (totalYears <= 0 || totalYears > MAX_YEARS) {
@@ -207,8 +274,10 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     errors,
     sanitized: {
       name,
+      code,
       totalYears,
       semestersPerYear,
+      yearSemesterConfig,
       isActive: parseBoolean(payload.isActive ?? payload.is_active, true),
       metadata: payload.metadata ?? null,
       branches
@@ -230,12 +299,24 @@ const validateBranchPayload = (
     branchPayload.name !== undefined
       ? branchPayload.name?.trim()
       : undefined;
+  const code =
+    branchPayload.code !== undefined
+      ? branchPayload.code?.trim()
+      : undefined;
 
   if (!isUpdate || name !== undefined) {
     if (!name) {
       errors.push('Branch name is required');
     } else if (name.length > 255) {
       errors.push('Branch name must be less than 255 characters');
+    }
+  }
+
+  if (!isUpdate || code !== undefined) {
+    if (!code) {
+      errors.push('Branch code is required');
+    } else if (code.length > 50) {
+      errors.push('Branch code must be less than 50 characters');
     }
   }
 
@@ -276,6 +357,7 @@ const validateBranchPayload = (
     errors,
     sanitized: {
       name,
+      code,
       totalYears,
       semestersPerYear,
       academicYearId: academicYearId ? parseInt(academicYearId, 10) : null,
@@ -417,14 +499,20 @@ exports.createCourse = async (req, res) => {
 
     await connection.beginTransaction();
 
+    const yearSemesterConfigJson = sanitized.yearSemesterConfig 
+      ? JSON.stringify(sanitized.yearSemesterConfig) 
+      : null;
+
     const [courseResult] = await connection.query(
-      `INSERT INTO courses (name, college_id, total_years, semesters_per_year, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO courses (name, code, college_id, total_years, semesters_per_year, year_semester_config, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         sanitized.name,
+        sanitized.code,
         collegeId,
         sanitized.totalYears,
         sanitized.semestersPerYear,
+        yearSemesterConfigJson,
         metadataJson || null,
         sanitized.isActive
       ]
@@ -441,6 +529,7 @@ exports.createCourse = async (req, res) => {
         return [
           courseId,
           branch.name.trim(),
+          branch.code,
           branch.totalYears,
           branch.semestersPerYear,
           branchMetadata || null,
@@ -450,7 +539,7 @@ exports.createCourse = async (req, res) => {
 
       await connection.query(
         `INSERT INTO course_branches
-          (course_id, name, total_years, semesters_per_year, metadata, is_active)
+          (course_id, name, code, total_years, semesters_per_year, metadata, is_active)
          VALUES ?`,
         [branchValues]
       );
@@ -476,11 +565,19 @@ exports.createCourse = async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error('createCourse error:', error);
+    let errorMessage = 'Failed to create course';
+    if (error.code === 'ER_DUP_ENTRY') {
+      if (error.message.includes('unique_course_name')) {
+        errorMessage = 'Course with the same name already exists';
+      } else if (error.message.includes('unique_course_code')) {
+        errorMessage = 'Course with the same code already exists';
+      } else {
+        errorMessage = 'Course with the same name or code already exists';
+      }
+    }
     res.status(500).json({
       success: false,
-      message: error.code === 'ER_DUP_ENTRY'
-        ? 'Course with the same name already exists'
-        : 'Failed to create course'
+      message: errorMessage
     });
   } finally {
     connection.release();
@@ -534,6 +631,11 @@ exports.updateCourse = async (req, res) => {
       values.push(sanitized.name);
     }
 
+    if (sanitized.code !== undefined) {
+      fields.push('code = ?');
+      values.push(sanitized.code);
+    }
+
     if (
       req.body.totalYears !== undefined ||
       req.body.total_years !== undefined
@@ -548,6 +650,14 @@ exports.updateCourse = async (req, res) => {
     ) {
       fields.push('semesters_per_year = ?');
       values.push(sanitized.semestersPerYear);
+    }
+
+    if (
+      req.body.yearSemesterConfig !== undefined ||
+      req.body.year_semester_config !== undefined
+    ) {
+      fields.push('year_semester_config = ?');
+      values.push(sanitized.yearSemesterConfig ? JSON.stringify(sanitized.yearSemesterConfig) : null);
     }
 
     if (req.body.collegeId !== undefined) {
@@ -866,11 +976,12 @@ exports.createBranch = async (req, res) => {
 
     const [result] = await masterPool.query(
       `INSERT INTO course_branches
-        (course_id, name, total_years, semesters_per_year, academic_year_id, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (course_id, name, code, total_years, semesters_per_year, academic_year_id, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         courseId,
         sanitized.name?.trim(),
+        sanitized.code,
         sanitized.totalYears,
         sanitized.semestersPerYear,
         sanitized.academicYearId || null,
@@ -896,11 +1007,19 @@ exports.createBranch = async (req, res) => {
     });
   } catch (error) {
     console.error('createBranch error:', error);
+    let errorMessage = 'Failed to create branch';
+    if (error.code === 'ER_DUP_ENTRY') {
+      if (error.message.includes('unique_branch_per_course')) {
+        errorMessage = 'Branch with the same name already exists for this course';
+      } else if (error.message.includes('unique_branch_code_per_course')) {
+        errorMessage = 'Branch with the same code already exists for this course';
+      } else {
+        errorMessage = 'Branch with the same name or code already exists for this course';
+      }
+    }
     res.status(500).json({
       success: false,
-      message: error.code === 'ER_DUP_ENTRY'
-        ? 'Branch with the same name already exists for this course'
-        : 'Failed to create branch'
+      message: errorMessage
     });
   }
 };
@@ -1014,6 +1133,11 @@ exports.updateBranch = async (req, res) => {
       values.push(newBranchName);
     }
 
+    if (sanitized.code !== undefined) {
+      fields.push('code = ?');
+      values.push(sanitized.code);
+    }
+
     if (req.body.totalYears !== undefined || req.body.total_years !== undefined) {
       fields.push('total_years = ?');
       values.push(sanitized.totalYears);
@@ -1096,7 +1220,9 @@ exports.updateBranch = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Branch with the same name already exists for this course'
+        ? (error.message.includes('unique_branch_code_per_course')
+            ? 'Branch with the same code already exists for this course'
+            : 'Branch with the same name or code already exists for this course')
         : 'Failed to update branch'
     });
   }

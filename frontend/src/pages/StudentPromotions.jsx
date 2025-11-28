@@ -309,7 +309,7 @@ const StudentPromotions = () => {
     return { year, semester };
   };
 
-  const getNextStage = (year, semester) => {
+  const getNextStage = (year, semester, courseConfig = null) => {
     const normalizedYear = Number(year);
     const normalizedSemester = Number(semester);
 
@@ -322,13 +322,34 @@ const StudentPromotions = () => {
       return null;
     }
 
-    if (normalizedSemester < DEFAULT_SEMESTERS_PER_YEAR) {
+    // Get semester count for current year from course configuration
+    let semestersForCurrentYear = DEFAULT_SEMESTERS_PER_YEAR;
+    
+    if (courseConfig) {
+      // Check for per-year semester configuration (prioritize this)
+      if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig) && courseConfig.yearSemesterConfig.length > 0) {
+        const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === normalizedYear);
+        if (yearConfig && yearConfig.semesters) {
+          semestersForCurrentYear = Number(yearConfig.semesters);
+        } else {
+          // If year config not found, fallback to default semesters per year
+          semestersForCurrentYear = courseConfig.semestersPerYear || DEFAULT_SEMESTERS_PER_YEAR;
+        }
+      } else if (courseConfig.semestersPerYear) {
+        // Fallback to default semesters per year if no per-year config
+        semestersForCurrentYear = Number(courseConfig.semestersPerYear) || DEFAULT_SEMESTERS_PER_YEAR;
+      }
+    }
+
+    // If current semester is less than the semester count for this year, move to next semester
+    if (normalizedSemester < semestersForCurrentYear) {
       return {
         year: normalizedYear,
         semester: normalizedSemester + 1
       };
     }
 
+    // If we've completed all semesters for this year, move to next year
     if (normalizedYear >= DEFAULT_MAX_YEAR) {
       return null;
     }
@@ -369,11 +390,39 @@ const StudentPromotions = () => {
         }
       });
 
+      // Fetch course configurations for all unique courses
+      const uniqueCourses = new Set();
+      fetchedStudents.forEach(student => {
+        if (student && student.course) {
+          uniqueCourses.add(student.course);
+        }
+      });
+
+      const courseConfigMap = new Map();
+      if (uniqueCourses.size > 0) {
+        try {
+          const coursesResponse = await api.get('/courses?includeInactive=false');
+          const allCourses = coursesResponse.data?.data || [];
+          uniqueCourses.forEach(courseName => {
+            const course = allCourses.find(c => c.name === courseName);
+            if (course) {
+              courseConfigMap.set(courseName, {
+                semestersPerYear: course.semestersPerYear,
+                yearSemesterConfig: course.yearSemesterConfig
+              });
+            }
+          });
+        } catch (error) {
+          console.warn('Failed to fetch course configurations:', error);
+        }
+      }
+
       // Create promotion plan with fetched student data
       const plan = selectedIds.map((admissionNumber) => {
         const student = studentMap.get(admissionNumber) || students.find((s) => s.admission_number === admissionNumber);
         const currentStage = student ? getCurrentStageFromStudent(student) : null;
-        const nextStage = currentStage ? getNextStage(currentStage.year, currentStage.semester) : null;
+        const courseConfig = student && student.course ? courseConfigMap.get(student.course) : null;
+        const nextStage = currentStage ? getNextStage(currentStage.year, currentStage.semester, courseConfig) : null;
 
         const issues = [];
 

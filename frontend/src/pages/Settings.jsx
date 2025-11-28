@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus,
   Layers,
@@ -16,13 +17,16 @@ import {
   ChevronRight,
   AlertTriangle,
   GraduationCap,
-  FileText
+  FileText,
+  Calendar
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { SkeletonBox, SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
+import AcademicCalendar from '../components/AcademicCalendar';
 import { isFullAccessRole } from '../constants/rbac';
 
 const formatDateInput = (date) => {
@@ -133,8 +137,11 @@ const formatIsoDate = (isoDate, formatOptions = {}) => {
 
 const defaultCourseForm = {
   name: '',
+  code: '',
   totalYears: 4,
   semestersPerYear: 2,
+  usePerYearConfig: false, // Toggle for per-year configuration
+  yearSemesterConfig: [], // Array of {year: number, semesters: number}
   isActive: true
 };
 
@@ -145,12 +152,14 @@ const Settings = () => {
   const [savingCollegeId, setSavingCollegeId] = useState(null);
   const [creatingCollege, setCreatingCollege] = useState(false);
   const [newCollege, setNewCollege] = useState({ name: '', code: '', isActive: true });
+  const [isAddCollegeModalOpen, setIsAddCollegeModalOpen] = useState(false);
   const [collegeDrafts, setCollegeDrafts] = useState({});
   
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [newCourse, setNewCourse] = useState(defaultCourseForm);
+  const [isAddCourseModalOpen, setIsAddCourseModalOpen] = useState(false);
   const [courseDrafts, setCourseDrafts] = useState({});
   const [editingCourseId, setEditingCourseId] = useState(null);
   const [savingCourseId, setSavingCourseId] = useState(null);
@@ -162,6 +171,9 @@ const Settings = () => {
   const [editingBranch, setEditingBranch] = useState(null);
   const [savingBranchId, setSavingBranchId] = useState(null);
   const [branchBatchFilter, setBranchBatchFilter] = useState(''); // Filter branches by batch
+  const [isAddBranchModalOpen, setIsAddBranchModalOpen] = useState(false);
+  const [branchModalCourseId, setBranchModalCourseId] = useState(null);
+  const [newBranch, setNewBranch] = useState({ name: '', code: '', academicYearId: '' });
   
   // Academic Years state
   const [academicYears, setAcademicYears] = useState([]);
@@ -208,7 +220,7 @@ const Settings = () => {
     hasMoreStudents: false,
     isLoadingStudents: false
   });
-  const [activeSection, setActiveSection] = useState('courses'); // 'courses' or 'calendar'
+  const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', or 'forms'
 
   // Calendar state
   const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(() => {
@@ -509,6 +521,11 @@ const Settings = () => {
   }, [courses, selectedCollegeId]);
 
   // College management functions
+  const resetNewCollege = () => {
+    setNewCollege({ name: '', code: '', isActive: true });
+    setIsAddCollegeModalOpen(false);
+  };
+
   const handleCreateCollege = async (event) => {
     event.preventDefault();
     if (!newCollege.name.trim()) {
@@ -516,17 +533,22 @@ const Settings = () => {
       return;
     }
 
+    if (!newCollege.code?.trim()) {
+      toast.error('College code is required');
+      return;
+    }
+
     try {
       setCreatingCollege(true);
       const response = await api.post('/colleges', {
         name: newCollege.name.trim(),
-        code: newCollege.code?.trim() || null,
+        code: newCollege.code.trim(),
         isActive: newCollege.isActive !== undefined ? newCollege.isActive : true
       });
       
       const createdCollege = response.data.data;
       toast.success('College created successfully');
-      setNewCollege({ name: '', code: '', isActive: true });
+      resetNewCollege();
       await fetchColleges({ silent: true });
       setSelectedCollegeId(createdCollege.id);
     } catch (error) {
@@ -563,7 +585,13 @@ const Settings = () => {
       setSavingCollegeId(collegeId);
       const updates = {};
       if (draft.name !== undefined) updates.name = draft.name.trim();
-      if (draft.code !== undefined) updates.code = draft.code?.trim() || null;
+      if (draft.code !== undefined) {
+        if (!draft.code || !draft.code.trim()) {
+          toast.error('College code is required');
+          return;
+        }
+        updates.code = draft.code.trim();
+      }
       
       await api.put(`/colleges/${collegeId}`, updates);
       toast.success('College updated successfully');
@@ -940,15 +968,35 @@ const Settings = () => {
     });
   }, [activeSection, calendarViewMonthKey]);
 
+  // Handle body scroll when modal is open/closed
+  useEffect(() => {
+    if (isAddCourseModalOpen) {
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Re-enable body scroll when modal closes
+      document.body.style.overflow = '';
+    }
+    
+    return () => {
+      // Cleanup: re-enable body scroll
+      document.body.style.overflow = '';
+    };
+  }, [isAddCourseModalOpen]);
+
   const resetNewCourse = () => {
     setNewCourse(defaultCourseForm);
+    setIsAddCourseModalOpen(false);
   };
 
   const handleCreateCourse = async (event) => {
     event.preventDefault();
 
-    if (!selectedCollegeId) {
+    const collegeIdToUse = selectedCollegeId || (selectedCollege?.id);
+    
+    if (!collegeIdToUse) {
       toast.error('Please select a college first');
+      setIsAddCourseModalOpen(false);
       return;
     }
 
@@ -957,29 +1005,77 @@ const Settings = () => {
       return;
     }
 
+    if (!newCourse.code?.trim()) {
+      toast.error('Course code is required');
+      return;
+    }
+
     if (!newCourse.totalYears || Number(newCourse.totalYears) <= 0) {
       toast.error('Total years must be greater than zero');
       return;
     }
 
-    if (!newCourse.semestersPerYear || Number(newCourse.semestersPerYear) <= 0) {
-      toast.error('Semesters per year must be greater than zero');
-      return;
+    if (!newCourse.usePerYearConfig) {
+      if (!newCourse.semestersPerYear || Number(newCourse.semestersPerYear) <= 0) {
+        toast.error('Semesters per year must be greater than zero');
+        return;
+      }
+    } else {
+      // Validate per-year configuration
+      if (!newCourse.yearSemesterConfig || newCourse.yearSemesterConfig.length === 0) {
+        toast.error('Please configure semesters for each year');
+        return;
+      }
+      const totalYears = Number(newCourse.totalYears);
+      if (newCourse.yearSemesterConfig.length !== totalYears) {
+        toast.error(`Please configure semesters for all ${totalYears} years`);
+        return;
+      }
     }
 
     try {
       setCreatingCourse(true);
-      const response = await api.post('/courses', {
+      
+      // Ensure semestersPerYear is always a valid number (backend requires it)
+      const semestersPerYearValue = newCourse.usePerYearConfig 
+        ? (Number(newCourse.semestersPerYear) || 2) // Default to 2 if not set when using per-year config
+        : Number(newCourse.semestersPerYear);
+      
+      if (!semestersPerYearValue || semestersPerYearValue <= 0 || semestersPerYearValue > 4) {
+        toast.error('Semesters per year must be between 1 and 4');
+        setCreatingCourse(false);
+        return;
+      }
+      
+      const payload = {
         name: newCourse.name.trim(),
-        collegeId: selectedCollegeId,
+        code: newCourse.code.trim(),
+        collegeId: collegeIdToUse,
         totalYears: Number(newCourse.totalYears),
-        semestersPerYear: Number(newCourse.semestersPerYear),
+        semestersPerYear: semestersPerYearValue,
         isActive: newCourse.isActive
-      });
+      };
+
+      // Add per-year configuration if enabled
+      if (newCourse.usePerYearConfig && newCourse.yearSemesterConfig && Array.isArray(newCourse.yearSemesterConfig) && newCourse.yearSemesterConfig.length > 0) {
+        // Validate each year config has required fields
+        const validConfig = newCourse.yearSemesterConfig.filter(config => 
+          config && typeof config.year === 'number' && typeof config.semesters === 'number'
+        );
+        if (validConfig.length === Number(newCourse.totalYears)) {
+          payload.yearSemesterConfig = validConfig;
+        } else {
+          toast.error('Invalid year semester configuration. Please check all years are configured.');
+          setCreatingCourse(false);
+          return;
+        }
+      }
+
+      const response = await api.post('/courses', payload);
       toast.success('Course created successfully');
-      resetNewCourse();
       const createdCourse = response.data?.data;
-      const updatedCourses = await fetchCourses({ silent: true, collegeId: selectedCollegeId });
+      resetNewCourse();
+      const updatedCourses = await fetchCourses({ silent: true, collegeId: collegeIdToUse });
       const nextSelectedId = createdCourse?.id || updatedCourses[0]?.id || null;
       if (nextSelectedId) {
         setSelectedCourseId(nextSelectedId);
@@ -1123,6 +1219,7 @@ const Settings = () => {
       ...prev,
       [course.id]: {
         name: course.name,
+        code: course.code || '',
         collegeId: course.collegeId,
         totalYears: course.totalYears,
         semestersPerYear: course.semestersPerYear
@@ -1151,6 +1248,11 @@ const Settings = () => {
       return;
     }
 
+    if (!draft.code || !draft.code.trim()) {
+      toast.error('Course code is required');
+      return;
+    }
+
     if (!draft.totalYears || Number(draft.totalYears) <= 0) {
       toast.error('Total years must be greater than zero');
       return;
@@ -1165,6 +1267,7 @@ const Settings = () => {
       setSavingCourseId(courseId);
       const updates = {
         name: draft.name.trim(),
+        code: draft.code.trim(),
         totalYears: Number(draft.totalYears),
         semestersPerYear: Number(draft.semestersPerYear)
       };
@@ -1202,11 +1305,24 @@ const Settings = () => {
     }));
   };
 
+  const resetNewBranch = () => {
+    setNewBranch({ name: '', code: '', academicYearId: '' });
+    setIsAddBranchModalOpen(false);
+    setBranchModalCourseId(null);
+  };
+
   const handleAddBranch = async (course) => {
-    const payload = branchForms[course.id] || {};
+    // If course is null, we're calling from the modal, so use newBranch state
+    // Otherwise, use branchForms for backward compatibility
+    const payload = course === null ? { ...newBranch } : (branchForms[course?.id] || {});
 
     if (!payload.name || !payload.name.trim()) {
       toast.error('Branch name is required');
+      return;
+    }
+
+    if (!payload.code || !payload.code.trim()) {
+      toast.error('Branch code is required');
       return;
     }
 
@@ -1215,22 +1331,32 @@ const Settings = () => {
       return;
     }
 
+    // If course is null, find the course from branchModalCourseId
+    // Otherwise, use the provided course
+    const courseToUse = course || coursesForSelectedCollege.find(c => c.id === branchModalCourseId);
+    if (!courseToUse) {
+      toast.error('Course not found');
+      return;
+    }
+
     try {
-      setSavingBranchId(`new-${course.id}`);
-      await api.post(`/courses/${course.id}/branches`, {
+      setSavingBranchId(`new-${courseToUse.id}`);
+      await api.post(`/courses/${courseToUse.id}/branches`, {
         name: payload.name.trim(),
-        totalYears: Number(payload.totalYears || course.totalYears),
-        semestersPerYear: Number(payload.semestersPerYear || course.semestersPerYear),
+        code: payload.code.trim(),
+        totalYears: Number(payload.totalYears || courseToUse.totalYears),
+        semestersPerYear: Number(payload.semestersPerYear || courseToUse.semestersPerYear),
         academicYearId: Number(payload.academicYearId),
         isActive: true
       });
       toast.success('Branch added successfully');
+      resetNewBranch();
       setBranchForms((prev) => {
         const updated = { ...prev };
-        delete updated[course.id];
+        delete updated[courseToUse.id];
         return updated;
       });
-      await loadBranches(course.id);
+      await loadBranches(courseToUse.id);
       await fetchCourses({ silent: true });
     } catch (error) {
       console.error('Failed to add branch', error);
@@ -1246,6 +1372,7 @@ const Settings = () => {
       ...prev,
       [branch.id]: {
         name: branch.name || '',
+        code: branch.code || '',
         totalYears: branch.totalYears ?? courseDefaults.totalYears,
         semestersPerYear: branch.semestersPerYear ?? courseDefaults.semestersPerYear
       }
@@ -1274,10 +1401,16 @@ const Settings = () => {
       return;
     }
 
+    if (!draft.code || !draft.code.trim()) {
+      toast.error('Branch code is required');
+      return;
+    }
+
     try {
       setSavingBranchId(branch.id);
       await api.put(`/courses/${courseId}/branches/${branch.id}`, {
         name: draft.name.trim(),
+        code: draft.code.trim(),
         totalYears: draft.totalYears ? Number(draft.totalYears) : undefined,
         semestersPerYear: draft.semestersPerYear ? Number(draft.semestersPerYear) : undefined
       });
@@ -1403,17 +1536,39 @@ const Settings = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingAnimation
-          width={32}
-          height={32}
-          message="Loading settings..."
-        />
+      <div className="space-y-4 bg-white p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <SkeletonBox height="h-7" width="w-32" />
+            <SkeletonBox height="h-4" width="w-64" className="mt-2" />
+          </div>
+          <SkeletonBox height="h-10" width="w-24" className="rounded-md" />
+        </div>
+        
+        {/* Navigation Cards Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        
+        {/* Content Skeleton */}
+        <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
+    <>
     <div className="space-y-4 bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1432,7 +1587,7 @@ const Settings = () => {
       </div>
 
       {/* Navigation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <button
           onClick={() => setActiveSection('courses')}
           className={`rounded-lg border-2 p-3 text-left transition-all ${
@@ -1471,6 +1626,27 @@ const Settings = () => {
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Attendance Calendar</h2>
               <p className="text-xs text-gray-500">Holidays & attendance calendar</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('academic-calendar')}
+          className={`rounded-lg border-2 p-3 text-left transition-all ${
+            activeSection === 'academic-calendar'
+              ? 'border-green-500 bg-green-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-green-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div className={`rounded-full p-2 ${
+              activeSection === 'academic-calendar' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+            }`}>
+              <Calendar size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Academic Calendar</h2>
+              <p className="text-xs text-gray-500">Manage semester dates</p>
             </div>
           </div>
         </button>
@@ -1528,9 +1704,9 @@ const Settings = () => {
           </div>
 
           {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
-          <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+          <div className="grid gap-4 lg:grid-cols-[320px,1fr] min-w-0">
             {/* Left Column */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               {/* Colleges Card */}
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="border-b border-gray-100 px-4 py-3">
@@ -1545,28 +1721,21 @@ const Settings = () => {
                   </div>
                 </div>
                 <div className="p-3">
-                  {/* Add College Form */}
-                  <form onSubmit={handleCreateCollege} className="mb-3 flex gap-2">
-                    <input
-                      type="text"
-                      value={newCollege.name}
-                      onChange={(e) => setNewCollege((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="New college name..."
-                      className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={creatingCollege || !newCollege.name.trim()}
-                      className="rounded-lg bg-blue-600 px-3 py-2 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </form>
+                  {/* Add College Button */}
+                  <button
+                    onClick={() => setIsAddCollegeModalOpen(true)}
+                    className="mb-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  >
+                    <Plus size={16} />
+                    Add New College
+                  </button>
                   
                   {/* College List */}
-                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
-                    {colleges.length === 0 ? (
+                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto min-h-0">
+                    {colleges.length === 0 && !loading ? (
                       <p className="py-4 text-center text-sm text-gray-400">No colleges yet</p>
+                    ) : colleges.length === 0 ? (
+                      <SkeletonList count={3} />
                     ) : (
                       colleges.map((college) => (
                         <div
@@ -1648,8 +1817,14 @@ const Settings = () => {
                   
                   {/* Year Tags */}
                   <div className="flex flex-wrap gap-2">
-                    {academicYears.length === 0 ? (
+                    {academicYears.length === 0 && !loading ? (
                       <p className="py-2 text-sm text-gray-400">No batches yet</p>
+                    ) : academicYears.length === 0 ? (
+                      <div className="flex flex-wrap gap-2 w-full">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <SkeletonBox key={i} height="h-8" width="w-20" className="rounded-full" />
+                        ))}
+                      </div>
                     ) : (
                       academicYears.map((year) => (
                         <div
@@ -1684,7 +1859,7 @@ const Settings = () => {
             </div>
 
             {/* Right Column - Courses & Branches */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0 overflow-hidden">
               {!selectedCollege ? (
                 <div className="flex h-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8">
                   <div className="text-center">
@@ -1694,61 +1869,16 @@ const Settings = () => {
                 </div>
               ) : (
                 <>
-                  {/* Add Course Form */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-                        <BookOpen size={16} className="text-purple-600" />
-                        Courses
-                      </h3>
-                      <span className="text-xs text-gray-500">
-                        for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
-                      </span>
-                    </div>
-                    <form onSubmit={handleCreateCourse} className="flex flex-wrap gap-2">
-                      <input
-                        type="text"
-                        value={newCourse.name}
-                        onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Course name (e.g., B.Tech)"
-                        className="flex-1 min-w-[150px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={newCourse.totalYears}
-                        onChange={(e) => setNewCourse((prev) => ({ ...prev, totalYears: e.target.value }))}
-                        placeholder="Years"
-                        className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        max={4}
-                        value={newCourse.semestersPerYear}
-                        onChange={(e) => setNewCourse((prev) => ({ ...prev, semestersPerYear: e.target.value }))}
-                        placeholder="Sem/Yr"
-                        className="w-20 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      />
-                      <button
-                        type="submit"
-                        disabled={creatingCourse || !newCourse.name.trim()}
-                        className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {creatingCourse ? <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" /> : 'Add Course'}
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Course List & Branches */}
-                  <div className="grid gap-4 lg:grid-cols-[240px,1fr]">
+{/* Course List & Branches */}
+                  <div className="grid gap-4 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
                     {/* Course List */}
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 min-w-0 overflow-hidden">
                       <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Select Course</div>
-                      <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                        {coursesForSelectedCollege.length === 0 ? (
+                      <div className="space-y-1.5 max-h-[400px] overflow-y-auto min-w-0">
+                        {coursesForSelectedCollege.length === 0 && !loading ? (
                           <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
+                        ) : coursesForSelectedCollege.length === 0 ? (
+                          <SkeletonList count={3} />
                         ) : (
                           coursesForSelectedCollege.map((course) => (
                             <div
@@ -1796,10 +1926,32 @@ const Settings = () => {
                           ))
                         )}
                       </div>
+                      {/* Add Course Button Below List */}
+                      {selectedCollege ? (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsAddCourseModalOpen(true);
+                            }}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer"
+                            style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
+                          >
+                            <Plus size={16} />
+                            Add New Course
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-400 text-center">
+                          Select a college to add courses
+                        </div>
+                      )}
                     </div>
 
                     {/* Branches Panel */}
-                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden">
                       {selectedCourse ? (
                         <>
                           <div className="border-b border-gray-100 px-4 py-3">
@@ -1826,41 +1978,18 @@ const Settings = () => {
                             </div>
                           </div>
 
-                          {/* Add Branch Form */}
+                          {/* Add Branch Button */}
                           <div className="border-b border-gray-100 p-4">
-                            <form 
-                              onSubmit={(e) => { e.preventDefault(); handleAddBranch(selectedCourse); }}
-                              className="flex flex-wrap gap-2"
+                            <button
+                              onClick={() => {
+                                setBranchModalCourseId(selectedCourse.id);
+                                setIsAddBranchModalOpen(true);
+                              }}
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-colors"
                             >
-                              <select
-                                value={branchForms[selectedCourse.id]?.academicYearId || ''}
-                                onChange={(e) => updateBranchForm(selectedCourse.id, 'academicYearId', e.target.value)}
-                                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                              >
-                                <option value="">Batch</option>
-                                {academicYears.filter(y => y.isActive).map((year) => (
-                                  <option key={year.id} value={year.id}>{year.yearLabel}</option>
-                                ))}
-                              </select>
-                              <input
-                                type="text"
-                                value={branchForms[selectedCourse.id]?.name || ''}
-                                onChange={(e) => updateBranchForm(selectedCourse.id, 'name', e.target.value)}
-                                placeholder="Branch name (e.g., CSE)"
-                                className="flex-1 min-w-[120px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
-                              />
-                              <button
-                                type="submit"
-                                disabled={savingBranchId === `new-${selectedCourse.id}` || !branchForms[selectedCourse.id]?.name?.trim() || !branchForms[selectedCourse.id]?.academicYearId}
-                                className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {savingBranchId === `new-${selectedCourse.id}` ? (
-                                  <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                                ) : (
-                                  <Plus size={16} />
-                                )}
-                              </button>
-                            </form>
+                              <Plus size={16} />
+                              Add New Branch
+                            </button>
                           </div>
 
                           {/* Branch List */}
@@ -2279,6 +2408,17 @@ const Settings = () => {
         </div>
       )}
 
+      {/* Academic Calendar Section */}
+      {activeSection === 'academic-calendar' && (
+        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
+          <AcademicCalendar
+            colleges={colleges}
+            courses={courses}
+            academicYears={academicYears}
+          />
+        </div>
+      )}
+
       {/* Registration Forms Section */}
       {activeSection === 'forms' && (
         <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -2620,13 +2760,17 @@ const Settings = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">College Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  College Code <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={collegeDrafts[editingCollegeId]?.code || ''}
-                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'code', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Enter college code (optional)"
+                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'code', e.target.value.toUpperCase())}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none uppercase"
+                  placeholder="Enter college code (e.g., PCE)"
+                  required
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -2674,6 +2818,20 @@ const Settings = () => {
                   onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], name: e.target.value } }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
                   placeholder="Enter course name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Course Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={courseDrafts[editingCourseId]?.code || ''}
+                  onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], code: e.target.value.toUpperCase() } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none uppercase"
+                  placeholder="Enter course code (e.g., BTECH)"
+                  required
+                  maxLength={20}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -2747,6 +2905,20 @@ const Settings = () => {
                   placeholder="Enter branch name"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Branch Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={branchDrafts[editingBranch.branchId]?.code || ''}
+                  onChange={(e) => updateBranchDraft(editingBranch.branchId, 'code', e.target.value.toUpperCase())}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none uppercase"
+                  placeholder="Enter branch code (e.g., CSE)"
+                  required
+                  maxLength={10}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
@@ -2808,6 +2980,527 @@ const Settings = () => {
         isLoadingStudents={deleteModal.isLoadingStudents || false}
       />
     </div>
+    
+      {/* Add College Modal - Using createPortal to render to document.body */}
+      {isAddCollegeModalOpen && typeof document !== 'undefined' && document.body && createPortal(
+        <div 
+          data-modal="add-college"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            zIndex: 99999
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAddCollegeModalOpen(false);
+              resetNewCollege();
+            }
+          }}
+        >
+          <div 
+            className="w-full max-w-md rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()}
+            style={{ zIndex: 10000 }}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Add New College</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Create a new college to organize courses
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddCollegeModalOpen(false);
+                  resetNewCollege();
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateCollege} className="p-6 space-y-4">
+              {/* College Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  College Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCollege.name}
+                  onChange={(e) => setNewCollege((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="College name (e.g., Pydah College of Engineering)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  required
+                />
+              </div>
+
+              {/* College Code */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  College Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCollege.code}
+                  onChange={(e) => setNewCollege((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="College code (e.g., PCE)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 uppercase"
+                  required
+                  maxLength={10}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Unique code for the college (e.g., PCE, PDC)
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCollegeModalOpen(false);
+                    resetNewCollege();
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    creatingCollege || 
+                    !newCollege.name.trim() || 
+                    !newCollege.code?.trim()
+                  }
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingCollege ? (
+                    <>
+                      <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Create College
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add Branch Modal - Using createPortal to render to document.body */}
+      {isAddBranchModalOpen && typeof document !== 'undefined' && document.body && createPortal(
+        <div 
+          data-modal="add-branch"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            zIndex: 99999
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAddBranchModalOpen(false);
+              resetNewBranch();
+            }
+          }}
+        >
+          <div 
+            className="w-full max-w-md rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()}
+            style={{ zIndex: 10000 }}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Add New Branch</h3>
+                {selectedCourse && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    for <span className="font-medium text-orange-600">{selectedCourse.name}</span>
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddBranchModalOpen(false);
+                  resetNewBranch();
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                handleAddBranch(null); 
+              }} 
+              className="p-6 space-y-4"
+            >
+              {/* Batch Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Batch (Academic Year) <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newBranch.academicYearId}
+                  onChange={(e) => setNewBranch((prev) => ({ ...prev, academicYearId: e.target.value }))}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  required
+                >
+                  <option value="">Select a batch</option>
+                  {academicYears.filter(y => y.isActive).map((year) => (
+                    <option key={year.id} value={year.id}>{year.yearLabel}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Select the academic year/batch for this branch
+                </p>
+              </div>
+
+              {/* Branch Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Branch Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newBranch.name}
+                  onChange={(e) => setNewBranch((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Branch name (e.g., CSE, ECE)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  required
+                />
+              </div>
+
+              {/* Branch Code */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Branch Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newBranch.code}
+                  onChange={(e) => setNewBranch((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="Branch code (e.g., CSE)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 uppercase"
+                  required
+                  maxLength={10}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Unique code for the branch (e.g., CSE, ECE)
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddBranchModalOpen(false);
+                    resetNewBranch();
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    savingBranchId === `new-${branchModalCourseId}` || 
+                    !newBranch.name.trim() || 
+                    !newBranch.code.trim() || 
+                    !newBranch.academicYearId
+                  }
+                  className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingBranchId === `new-${branchModalCourseId}` ? (
+                    <>
+                      <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Create Branch
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add Course Modal - Using createPortal to render to document.body */}
+      {isAddCourseModalOpen && typeof document !== 'undefined' && document.body && createPortal(
+        <div 
+          data-modal="add-course"
+        className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          zIndex: 99999
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setIsAddCourseModalOpen(false);
+            resetNewCourse();
+          }
+        }}
+      >
+        <div 
+          className="w-full max-w-2xl rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
+          onClick={(e) => e.stopPropagation()}
+          style={{ zIndex: 10000 }}
+        >
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Add New Course</h3>
+              {selectedCollege && (
+                <p className="text-sm text-gray-500 mt-0.5">
+                  for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setIsAddCourseModalOpen(false);
+                resetNewCourse();
+              }}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
+            {/* Course Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Course Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newCourse.name}
+                onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Course name (e.g., B.Tech, Diploma)"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                required
+              />
+            </div>
+
+            {/* Course Code */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Course Code <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newCourse.code}
+                onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                placeholder="Course code (e.g., BTECH, DIP)"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 uppercase"
+                required
+                maxLength={20}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Unique code for the course (e.g., BTECH, DIP)
+              </p>
+            </div>
+
+            {/* Total Years */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Total Years <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={newCourse.totalYears}
+                onChange={(e) => {
+                  const years = parseInt(e.target.value) || 1;
+                  setNewCourse((prev) => {
+                    const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
+                    let config;
+                    if (prev.usePerYearConfig) {
+                      if (prev.yearSemesterConfig && prev.yearSemesterConfig.length > 0) {
+                        config = Array.from({ length: years }, (_, i) => {
+                          const existing = prev.yearSemesterConfig[i];
+                          return existing || { year: i + 1, semesters: defaultSemesters };
+                        });
+                      } else {
+                        config = Array.from({ length: years }, (_, i) => ({
+                          year: i + 1,
+                          semesters: defaultSemesters
+                        }));
+                      }
+                    } else {
+                      config = [];
+                    }
+                    return { ...prev, totalYears: years, yearSemesterConfig: config };
+                  });
+                }}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                required
+              />
+            </div>
+
+            {/* Semesters Per Year (if not using per-year config) */}
+            {!newCourse.usePerYearConfig && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Semesters Per Year <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={4}
+                  value={newCourse.semestersPerYear}
+                  onChange={(e) => setNewCourse((prev) => ({ ...prev, semestersPerYear: e.target.value }))}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Same number of semesters for all years
+                </p>
+              </div>
+            )}
+
+            {/* Per-year configuration toggle */}
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="modalUsePerYearConfig"
+                checked={newCourse.usePerYearConfig}
+                onChange={(e) => {
+                  const usePerYear = e.target.checked;
+                  setNewCourse((prev) => {
+                    if (usePerYear) {
+                      const totalYears = parseInt(prev.totalYears) || 4;
+                      const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
+                      let config = prev.yearSemesterConfig && prev.yearSemesterConfig.length === totalYears
+                        ? [...prev.yearSemesterConfig]
+                        : Array.from({ length: totalYears }, (_, i) => ({
+                            year: i + 1,
+                            semesters: defaultSemesters
+                          }));
+                      return { ...prev, usePerYearConfig: true, yearSemesterConfig: config };
+                    } else {
+                      return { ...prev, usePerYearConfig: false };
+                    }
+                  });
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+              />
+              <label htmlFor="modalUsePerYearConfig" className="text-sm text-gray-700 cursor-pointer">
+                Configure semesters per year (e.g., Diploma Year 1: 1 sem, Year 2-3: 2 sems)
+              </label>
+            </div>
+
+            {/* Per-year semester configuration table */}
+            {newCourse.usePerYearConfig && newCourse.yearSemesterConfig && Array.isArray(newCourse.yearSemesterConfig) && newCourse.yearSemesterConfig.length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="mb-3 text-sm font-medium text-gray-700">Semesters per Year:</div>
+                <div className="space-y-3">
+                  {newCourse.yearSemesterConfig.map((yearConfig, index) => {
+                    if (!yearConfig || typeof yearConfig.year !== 'number' || typeof yearConfig.semesters !== 'number') {
+                      return null;
+                    }
+                    return (
+                      <div key={`year-${yearConfig.year}-${index}`} className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 p-3">
+                        <span className="w-20 text-sm font-medium text-gray-700">Year {yearConfig.year}:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={4}
+                          value={yearConfig.semesters || 2}
+                          onChange={(e) => {
+                            const semesters = parseInt(e.target.value) || 1;
+                            setNewCourse((prev) => {
+                              if (!prev.yearSemesterConfig || !Array.isArray(prev.yearSemesterConfig)) {
+                                return prev;
+                              }
+                              const config = [...prev.yearSemesterConfig];
+                              if (config[index]) {
+                                config[index] = { ...config[index], semesters };
+                              }
+                              return { ...prev, yearSemesterConfig: config };
+                            });
+                          }}
+                          className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                        />
+                        <span className="text-sm text-gray-600">semester(s)</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCourseModalOpen(false);
+                  resetNewCourse();
+                }}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  creatingCourse || 
+                  !newCourse.name.trim() || 
+                  !newCourse.code?.trim() ||
+                  !newCourse.totalYears || 
+                  Number(newCourse.totalYears) <= 0 ||
+                  (!newCourse.usePerYearConfig && (!newCourse.semestersPerYear || Number(newCourse.semestersPerYear) <= 0)) ||
+                  (newCourse.usePerYearConfig && (!newCourse.yearSemesterConfig || newCourse.yearSemesterConfig.length !== Number(newCourse.totalYears)))
+                }
+                className="inline-flex items-center gap-2 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingCourse ? (
+                  <>
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    Create Course
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 };
 
@@ -2899,9 +3592,11 @@ const CollegeCard = ({
           <input
             type="text"
             value={draft?.code || college.code || ''}
-            onChange={(e) => onUpdateDraft('code', e.target.value)}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-            placeholder="College code (optional)"
+            onChange={(e) => onUpdateDraft('code', e.target.value.toUpperCase())}
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors uppercase"
+            placeholder="College code (e.g., PCE)"
+            required
+            maxLength={10}
           />
           <div className="flex gap-2">
             <button

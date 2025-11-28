@@ -44,16 +44,37 @@ const normalizeStage = (year, semester) => {
   return { year: y, semester: s };
 };
 
-const getNextStage = (year, semester) => {
+const getNextStage = (year, semester, courseConfig = null) => {
   const { year: normalizedYear, semester: normalizedSemester } = normalizeStage(year, semester);
 
-  if (normalizedSemester < DEFAULT_SEMESTERS_PER_YEAR) {
+  // Get semester count for current year from course configuration
+  let semestersForCurrentYear = DEFAULT_SEMESTERS_PER_YEAR;
+  
+  if (courseConfig) {
+    // Check for per-year semester configuration (prioritize this)
+    if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig) && courseConfig.yearSemesterConfig.length > 0) {
+      const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === normalizedYear);
+      if (yearConfig && yearConfig.semesters) {
+        semestersForCurrentYear = Number(yearConfig.semesters);
+      } else {
+        // If year config not found, fallback to default semesters per year
+        semestersForCurrentYear = courseConfig.semestersPerYear || DEFAULT_SEMESTERS_PER_YEAR;
+      }
+    } else if (courseConfig.semestersPerYear) {
+      // Fallback to default semesters per year if no per-year config
+      semestersForCurrentYear = Number(courseConfig.semestersPerYear) || DEFAULT_SEMESTERS_PER_YEAR;
+    }
+  }
+
+  // If current semester is less than the semester count for this year, move to next semester
+  if (normalizedSemester < semestersForCurrentYear) {
     return {
       year: normalizedYear,
       semester: normalizedSemester + 1
     };
   }
 
+  // If we've completed all semesters for this year, move to next year
   if (normalizedYear >= MAX_YEARS) {
     return null;
   }
