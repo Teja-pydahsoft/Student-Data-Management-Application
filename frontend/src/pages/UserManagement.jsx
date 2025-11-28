@@ -678,7 +678,15 @@ const UserManagement = () => {
       const response = await api.post('/rbac/users', payload);
       if (response.data?.success) {
         if (form.sendCredentials) {
-          toast.success('User created and credentials sent to email!');
+          if (response.data?.emailSent) {
+            toast.success('User created and credentials sent to email!');
+          } else {
+            // User created but email failed
+            const emailError = response.data?.emailError || 'Unknown error';
+            toast.warning(`User created successfully, but email notification failed: ${emailError}`, {
+              duration: 5000
+            });
+          }
         } else {
           toast.success('User created successfully!');
         }

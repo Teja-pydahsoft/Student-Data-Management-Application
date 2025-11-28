@@ -1,59 +1,196 @@
-const nodemailer = require('nodemailer');
+/**
+ * Brevo Email Service using API
+ * Uses Brevo REST API to send transactional emails
+ */
 
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
 const appUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 /**
- * Send email via Brevo SMTP (more reliable than API in restricted networks)
+ * Send email via Brevo API
  */
 const sendBrevoEmail = async ({ to, toName, subject, htmlContent }) => {
-  const smtpKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
-  const senderEmail = process.env.EMAIL_FROM || 'careers@pydahsoft.in';
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_FROM || 'team@pydahsoft.in';
   const senderName = process.env.EMAIL_SENDER_NAME || 'Pydah Student Database';
 
-  console.log('📧 Sending email via Brevo SMTP:', {
+  console.log('📧 Sending email via Brevo API:', {
     to,
     from: senderEmail,
-    smtpKey: smtpKey ? `${smtpKey.substring(0, 15)}...` : 'NOT SET'
+    apiKey: apiKey ? `${apiKey.substring(0, 15)}...` : 'NOT SET'
   });
 
-  if (!smtpKey) {
-    console.warn('⚠️ BREVO_SMTP_KEY not set in .env');
-    return { success: false, message: 'Email service not configured - BREVO_SMTP_KEY missing' };
+  if (!apiKey) {
+    const errorMsg = 'Email service not configured - BREVO_API_KEY missing in environment variables';
+    console.warn('⚠️ BREVO_API_KEY not set in .env');
+    console.warn('⚠️ Please add BREVO_API_KEY to your .env file');
+    return { success: false, message: errorMsg, errorCode: 'EMAIL_CONFIG_MISSING' };
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(to)) {
+    const errorMsg = `Invalid email address: ${to}`;
+    console.error('❌ Invalid email address:', to);
+    return { success: false, message: errorMsg, errorCode: 'INVALID_EMAIL' };
+  }
+
+  if (!emailRegex.test(senderEmail)) {
+    const errorMsg = `Invalid sender email: ${senderEmail}`;
+    console.error('❌ Invalid sender email:', senderEmail);
+    return { success: false, message: errorMsg, errorCode: 'INVALID_SENDER_EMAIL' };
   }
 
   try {
-    // Create transporter with Brevo SMTP
-    const transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: senderEmail,
-        pass: smtpKey
+    // Brevo API endpoint for sending transactional emails
+    const https = require('https');
+    const { URL } = require('url');
+    
+    const apiUrl = 'https://api.brevo.com/v3/smtp/email';
+    
+    const emailData = {
+      sender: {
+        name: senderName,
+        email: senderEmail
       },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    const mailOptions = {
-      from: `"${senderName}" <${senderEmail}>`,
-      to: toName ? `"${toName}" <${to}>` : to,
+      to: [
+        {
+          email: to,
+          name: toName || to
+        }
+      ],
       subject: subject,
-      html: htmlContent
+      htmlContent: htmlContent
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent successfully to ${to} (Message ID: ${info.messageId})`);
-    return { success: true, message: 'Email sent successfully', messageId: info.messageId };
-  } catch (error) {
-    console.error('❌ Failed to send email:', error.message);
+    const postData = JSON.stringify(emailData);
+    const urlObj = new URL(apiUrl);
     
-    // If SMTP fails, log but don't fail the entire operation
-    // User was still created successfully
-    return { success: false, message: error.message };
+    const options = {
+      hostname: urlObj.hostname,
+      port: 443,
+      path: urlObj.pathname,
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(postData)
+      }
+    };
+
+    const responseData = await new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            resolve({ 
+              status: res.statusCode, 
+              ok: res.statusCode >= 200 && res.statusCode < 300, 
+              data: parsed 
+            });
+          } catch (e) {
+            reject(new Error(`Failed to parse response: ${e.message}`));
+          }
+        });
+      });
+      
+      req.on('error', (error) => {
+        reject(error);
+      });
+      
+      req.write(postData);
+      req.end();
+    });
+    
+    const response = responseData;
+
+    if (!response.ok) {
+      let errorMsg = response.data?.message || `API request failed with status ${response.status}`;
+      let errorCode = 'EMAIL_SEND_FAILED';
+      
+      console.error('❌ Brevo API error:', {
+        status: response.status,
+        error: response.data
+      });
+      
+      if (response.status === 401) {
+        errorCode = 'API_AUTH_FAILED';
+        
+        // Check for IP address restriction error
+        if (response.data?.message && response.data.message.includes('unrecognised IP address')) {
+          const ipMatch = response.data.message.match(/IP address (\d+\.\d+\.\d+\.\d+)/);
+          const ipAddress = ipMatch ? ipMatch[1] : 'your current IP';
+          
+          errorMsg = `Brevo API: IP address not authorized. 
+          
+Your current IP address (${ipAddress}) is not authorized in your Brevo account.
+
+To fix this:
+1. Go to https://app.brevo.com/security/authorised_ips
+2. Add your IP address: ${ipAddress}
+3. Or disable IP restrictions in Brevo security settings
+
+Note: If your IP changes frequently, consider disabling IP restrictions in Brevo settings.`;
+        } else {
+          errorMsg = `Brevo API authentication failed. Please check your BREVO_API_KEY is correct and valid.`;
+        }
+      } else if (response.status === 400) {
+        errorCode = 'INVALID_REQUEST';
+        errorMsg = `Invalid request: ${errorMsg}`;
+      } else if (response.status === 402) {
+        errorCode = 'QUOTA_EXCEEDED';
+        errorMsg = `Brevo API quota exceeded. Please check your Brevo account limits.`;
+      } else if (response.status === 403) {
+        errorCode = 'FORBIDDEN';
+        errorMsg = `Brevo API: Access forbidden. Please check your API key permissions.`;
+      } else if (response.status === 404) {
+        errorCode = 'NOT_FOUND';
+        errorMsg = `Brevo API endpoint not found.`;
+      } else if (response.status >= 500) {
+        errorCode = 'SERVER_ERROR';
+        errorMsg = `Brevo API server error. Please try again later.`;
+      }
+
+      return { 
+        success: false, 
+        message: errorMsg, 
+        errorCode,
+        apiResponse: response.data
+      };
+    }
+
+    console.log(`✅ Email sent successfully to ${to} (Message ID: ${response.data?.messageId || 'N/A'})`);
+    return { 
+      success: true, 
+      message: 'Email sent successfully', 
+      messageId: response.data?.messageId 
+    };
+
+  } catch (error) {
+    let errorMessage = error.message;
+    let errorCode = 'EMAIL_SEND_FAILED';
+    
+    // Provide more specific error messages
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      errorMessage = 'Failed to connect to Brevo API. Please check your network connection.';
+      errorCode = 'API_CONNECTION_FAILED';
+    } else if (error.message && error.message.includes('fetch')) {
+      errorMessage = 'Network error while sending email. Please check your internet connection.';
+      errorCode = 'NETWORK_ERROR';
+    }
+    
+    console.error('❌ Failed to send email:', {
+      to,
+      error: errorMessage,
+      code: error.code,
+      stack: error.stack
+    });
+    
+    return { success: false, message: errorMessage, errorCode };
   }
 };
 
@@ -220,4 +357,3 @@ module.exports = {
   sendPasswordResetEmail,
   sendBrevoEmail
 };
-

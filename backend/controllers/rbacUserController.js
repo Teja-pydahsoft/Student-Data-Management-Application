@@ -536,23 +536,45 @@ exports.createUser = async (req, res) => {
 
     // Send credentials email if requested
     let emailSent = false;
+    let emailError = null;
     if (sendCredentials) {
-      const emailResult = await sendCredentialsEmail({
-        email: email.trim().toLowerCase(),
-        name: name.trim(),
-        username: username.trim(),
-        password: password,
-        role: ROLE_LABELS[role] || role
-      });
-      emailSent = emailResult.success;
+      try {
+        const emailResult = await sendCredentialsEmail({
+          email: email.trim().toLowerCase(),
+          name: name.trim(),
+          username: username.trim(),
+          password: password,
+          role: ROLE_LABELS[role] || role
+        });
+        emailSent = emailResult.success;
+        if (!emailResult.success) {
+          emailError = emailResult.message || 'Failed to send email';
+          console.error('❌ Email notification failed for user creation:', {
+            userId: newUser.id,
+            email: email.trim().toLowerCase(),
+            error: emailError
+          });
+        }
+      } catch (emailErr) {
+        emailError = emailErr.message || 'Unexpected error while sending email';
+        console.error('❌ Exception while sending email notification:', {
+          userId: newUser.id,
+          email: email.trim().toLowerCase(),
+          error: emailError,
+          stack: emailErr.stack
+        });
+      }
     }
 
     res.status(201).json({
       success: true,
       message: sendCredentials && emailSent 
         ? 'User created and credentials sent to email!' 
+        : sendCredentials && !emailSent
+        ? `User created successfully, but email notification failed: ${emailError || 'Unknown error'}`
         : 'User created successfully',
       emailSent,
+      emailError: emailError || undefined,
       data: {
         id: newUser.id,
         name: newUser.name,
@@ -976,20 +998,42 @@ exports.resetPassword = async (req, res) => {
     );
 
     // Send email with new password
-    const emailResult = await sendPasswordResetEmail({
-      email: user.email,
-      name: user.name,
-      username: user.username,
-      newPassword: newPassword,
-      role: ROLE_LABELS[user.role] || user.role
-    });
+    let emailSent = false;
+    let emailError = null;
+    try {
+      const emailResult = await sendPasswordResetEmail({
+        email: user.email,
+        name: user.name,
+        username: user.username,
+        newPassword: newPassword,
+        role: ROLE_LABELS[user.role] || user.role
+      });
+      emailSent = emailResult.success;
+      if (!emailResult.success) {
+        emailError = emailResult.message || 'Failed to send email';
+        console.error('❌ Email notification failed for password reset:', {
+          userId: id,
+          email: user.email,
+          error: emailError
+        });
+      }
+    } catch (emailErr) {
+      emailError = emailErr.message || 'Unexpected error while sending email';
+      console.error('❌ Exception while sending password reset email:', {
+        userId: id,
+        email: user.email,
+        error: emailError,
+        stack: emailErr.stack
+      });
+    }
 
     res.json({
       success: true,
-      message: emailResult.success 
+      message: emailSent 
         ? 'Password reset successfully and email sent!' 
-        : 'Password reset successfully but email could not be sent',
-      emailSent: emailResult.success
+        : `Password reset successfully but email could not be sent: ${emailError || 'Unknown error'}`,
+      emailSent,
+      emailError: emailError || undefined
     });
   } catch (error) {
     console.error('Failed to reset password:', error);
