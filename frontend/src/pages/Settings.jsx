@@ -1419,7 +1419,7 @@ const Settings = () => {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
           <p className="text-sm text-gray-600">
-            Manage colleges, courses, branches, and academic calendar.
+            Manage colleges, courses, branches, and attendance calendar.
           </p>
         </div>
         <button
@@ -1469,7 +1469,7 @@ const Settings = () => {
               <CalendarDays size={18} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Academic Calendar</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Attendance Calendar</h2>
               <p className="text-xs text-gray-500">Holidays & attendance calendar</p>
             </div>
           </div>
@@ -1944,7 +1944,7 @@ const Settings = () => {
                 <CalendarDays size={20} />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Academic Calendar</h2>
+                <h2 className="text-base font-semibold text-gray-900">Attendance Calendar</h2>
                 <p className="text-sm text-gray-500 mt-0.5">
                   Review public holidays, institute breaks, and mark custom holidays.
                 </p>

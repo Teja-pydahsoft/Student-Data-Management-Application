@@ -264,7 +264,7 @@ const HolidayCalendarModal = ({
               <CalendarDays size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Academic Calendar</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Attendance Calendar</h2>
               <p className="text-sm text-gray-500">
                 Review public holidays, institute breaks, and mark custom holidays.
               </p>
