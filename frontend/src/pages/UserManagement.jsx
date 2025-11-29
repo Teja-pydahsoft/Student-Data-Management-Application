@@ -70,8 +70,7 @@ const initialFormState = {
   branchIds: [],
   allCourses: false,
   allBranches: false,
-  permissions: {},
-  sendCredentials: true
+  permissions: {}
 };
 
 // Selection Modal Component
@@ -672,23 +671,19 @@ const UserManagement = () => {
         allCourses: form.allCourses,
         allBranches: form.allBranches,
         permissions: initializePermissions(),
-        sendCredentials: form.sendCredentials
+        sendCredentials: true // Always send credentials
       };
 
       const response = await api.post('/rbac/users', payload);
       if (response.data?.success) {
-        if (form.sendCredentials) {
-          if (response.data?.emailSent) {
-            toast.success('User created and credentials sent to email!');
-          } else {
-            // User created but email failed
-            const emailError = response.data?.emailError || 'Unknown error';
-            toast.warning(`User created successfully, but email notification failed: ${emailError}`, {
-              duration: 5000
-            });
-          }
+        if (response.data?.emailSent) {
+          toast.success('User created and credentials sent to email!');
         } else {
-          toast.success('User created successfully!');
+          // User created but email failed
+          const emailError = response.data?.emailError || 'Unknown error';
+          toast.warning(`User created successfully, but email notification failed: ${emailError}`, {
+            duration: 5000
+          });
         }
         resetForm();
         await loadUsers();
@@ -1136,22 +1131,6 @@ const UserManagement = () => {
                       </button>
                     </div>
                   </div>
-                  {/* Send Credentials Option */}
-                  <label className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={form.sendCredentials}
-                      onChange={(e) => handleFormChange('sendCredentials', e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <Send size={14} className="text-blue-500" />
-                        <span className="text-sm font-medium text-blue-700">Send credentials to email</span>
-                      </div>
-                      <p className="text-[11px] text-blue-600 mt-0.5">Username & password will be sent to user's email</p>
-                    </div>
-                  </label>
                 </div>
               </div>
 

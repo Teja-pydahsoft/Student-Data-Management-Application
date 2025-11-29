@@ -1,0 +1,147 @@
+const { masterPool } = require('../config/database');
+
+/**
+ * Get all attendance data for a specific date, grouped by batch/course/branch/year/semester
+ * This is used to check if all batches are marked and to generate comprehensive reports
+ */
+const getAllAttendanceForDate = async (attendanceDate) => {
+  try {
+    // Get all students with their attendance for the date
+    const [rows] = await masterPool.query(
+      `
+        SELECT
+          s.id,
+          s.admission_number,
+          s.student_name,
+          s.pin_no,
+          s.student_mobile,
+          s.parent_mobile1,
+          s.parent_mobile2,
+          s.batch,
+          s.course,
+          s.branch,
+          s.current_year,
+          s.current_semester,
+          s.college,
+          s.student_data,
+          s.student_status,
+          ar.status AS attendance_status
+        FROM students s
+        LEFT JOIN attendance_records ar
+          ON ar.student_id = s.id
+         AND ar.attendance_date = ?
+        WHERE s.student_status = 'Regular'
+        ORDER BY s.college, s.course, s.batch, s.branch, s.current_year, s.current_semester, s.student_name
+      `,
+      [attendanceDate]
+    );
+
+    // Group by College → Course → Batch → Branch → Year → Semester
+    const groups = new Map();
+
+    for (const row of rows) {
+      const studentData = typeof row.student_data === 'string' 
+        ? JSON.parse(row.student_data || '{}') 
+        : (row.student_data || {});
+
+      const college = row.college || studentData['College'] || studentData['college'] || 'Unknown';
+      const course = row.course || studentData['Course'] || studentData['course'] || 'Unknown';
+      const branch = row.branch || studentData['Branch'] || studentData['branch'] || 'Unknown';
+      const batch = row.batch || studentData['Batch'] || studentData['batch'] || 'Unknown';
+      const year = row.current_year || studentData['Current Academic Year'] || 'Unknown';
+      const semester = row.current_semester || studentData['Current Semester'] || 'Unknown';
+
+      const groupKey = `${college}|${course}|${batch}|${branch}|${year}|${semester}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          college,
+          course,
+          batch,
+          branch,
+          year,
+          semester,
+          students: [],
+          attendanceRecords: []
+        });
+      }
+
+      const group = groups.get(groupKey);
+      group.students.push({
+        id: row.id,
+        admission_number: row.admission_number,
+        student_name: row.student_name,
+        pin_no: row.pin_no,
+        student_mobile: row.student_mobile,
+        parent_mobile1: row.parent_mobile1,
+        parent_mobile2: row.parent_mobile2,
+        student_data: studentData,
+        student_status: row.student_status
+      });
+
+      if (row.attendance_status) {
+        group.attendanceRecords.push({
+          studentId: row.id,
+          status: row.attendance_status
+        });
+      }
+    }
+
+    // Convert to array and calculate statistics
+    const result = Array.from(groups.values()).map(group => {
+      const totalStudents = group.students.length;
+      const markedCount = group.attendanceRecords.length;
+      const presentCount = group.attendanceRecords.filter(r => r.status === 'present').length;
+      const absentCount = group.attendanceRecords.filter(r => r.status === 'absent').length;
+      const unmarkedCount = totalStudents - markedCount;
+      const attendancePercentage = totalStudents > 0 
+        ? ((presentCount / totalStudents) * 100).toFixed(2) 
+        : '0.00';
+
+      return {
+        ...group,
+        statistics: {
+          totalStudents,
+          markedCount,
+          unmarkedCount,
+          presentCount,
+          absentCount,
+          attendancePercentage: parseFloat(attendancePercentage)
+        },
+        isFullyMarked: unmarkedCount === 0 && totalStudents > 0
+      };
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Error getting all attendance for date:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if all batches are marked for a specific date
+ */
+const areAllBatchesMarked = async (attendanceDate) => {
+  try {
+    const allAttendance = await getAllAttendanceForDate(attendanceDate);
+    
+    if (allAttendance.length === 0) {
+      return false; // No students found
+    }
+
+    // Check if all groups are fully marked
+    const allMarked = allAttendance.every(group => group.isFullyMarked);
+    
+    return allMarked;
+  } catch (error) {
+    console.error('Error checking if all batches are marked:', error);
+    return false;
+  }
+};
+
+module.exports = {
+  getAllAttendanceForDate,
+  areAllBatchesMarked
+};
+

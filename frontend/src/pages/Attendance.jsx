@@ -331,11 +331,24 @@ const Attendance = () => {
   const isLastPage = currentPage >= totalPages;
 
   const hasChanges = useMemo(() => {
-    return students.some((student) => {
+    // Allow saving if there are students, even if no changes detected
+    // This ensures attendance can be saved even when all students are present
+    if (students.length === 0) return false;
+    
+    // Check if there are any changes
+    const hasStatusChanges = students.some((student) => {
       const current = effectiveStatus(student.id);
       const initial = initialStatusMap[student.id] || 'present';
       return current !== initial;
     });
+    
+    // Also check if there are students that need to be saved (not yet marked)
+    // A student needs to be saved if they don't have an initial status (not yet marked in DB)
+    const hasUnmarkedStudents = students.some((student) => {
+      return initialStatusMap[student.id] === undefined;
+    });
+    
+    return hasStatusChanges || hasUnmarkedStudents;
   }, [students, statusMap, initialStatusMap]);
 
   const calendarMonthKey = useMemo(() => {
@@ -611,9 +624,19 @@ const Attendance = () => {
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
-      // Add pagination parameters
-      params.append('limit', pageSize.toString());
-      params.append('offset', ((pageToUse - 1) * pageSize).toString());
+      // Check if any filters are applied (batch, course, branch, year, semester)
+      // If filters are applied, load ALL students without pagination
+      const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+      
+      if (hasFilters) {
+        // Load all students when filters are applied - use a very large limit
+        params.append('limit', '10000'); // Large enough to get all students
+        params.append('offset', '0');
+      } else {
+        // Use pagination when no filters are applied
+        params.append('limit', pageSize.toString());
+        params.append('offset', ((pageToUse - 1) * pageSize).toString());
+      }
 
       const response = await api.get(`/attendance?${params.toString()}`);
       if (!response.data?.success) {
@@ -621,17 +644,24 @@ const Attendance = () => {
       }
 
       const fetchedStudents = (response.data.data?.students || []).map((student) => {
+        // If student has attendanceStatus, use it; otherwise default to 'present' for display
         const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : 'present';
         return {
           ...student,
-          attendanceStatus: status
+          attendanceStatus: status,
+          // Keep track of whether student was actually marked in DB
+          hasAttendanceRecord: !!student.attendanceStatus
         };
       });
 
       const statusSnapshot = {};
       fetchedStudents.forEach((student) => {
-        // Default to 'present' if no status exists
-        statusSnapshot[student.id] = student.attendanceStatus || 'present';
+        // Only set initial status if student was actually marked in database
+        // If not marked, leave undefined so we know it needs to be saved
+        if (student.hasAttendanceRecord) {
+          statusSnapshot[student.id] = student.attendanceStatus || 'present';
+        }
+        // If not marked, don't set initial status - this allows saving even when all are present
       });
 
       // Get pagination data
@@ -666,7 +696,14 @@ const Attendance = () => {
       setInitialStatusMap({ ...statusSnapshot });
       setTotalStudents(total);
       setAttendanceStatistics(finalStatistics);
-      setCurrentPage(pageToUse);
+      
+      // When filters are applied, reset to page 1 since we're loading all students
+      // Reuse hasFilters variable declared earlier in the function
+      if (hasFilters) {
+        setCurrentPage(1);
+      } else {
+        setCurrentPage(pageToUse);
+      }
       setSmsResults([]);
       setSmsStatusMap({});
       setLastUpdatedAt(null); // Clear last updated when loading new data
@@ -784,64 +821,148 @@ const Attendance = () => {
     });
   };
 
+  // Helper function to extract numeric part from PIN (last 4-5 digits)
+  const extractPinNumeric = (pinString) => {
+    if (!pinString) return 0;
+    const pin = String(pinString);
+    // Extract the last 4-5 consecutive digits from the end
+    // Match digits at the end of the string (greedy, up to 5 digits)
+    const match = pin.match(/(\d{4,5})$/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    // Fallback: try to extract any numeric part
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      // Take the last group of digits
+      return parseInt(allDigits[allDigits.length - 1], 10);
+    }
+    // If no digits found, try parsing the whole string
+    const parsed = parseFloat(pin);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Helper function to extract series prefix from PIN
+  const extractPinSeries = (pinString) => {
+    if (!pinString) return '';
+    const pin = String(pinString);
+    // Remove the last 4-5 digits to get the series prefix
+    const numericMatch = pin.match(/(\d{4,5})$/);
+    if (numericMatch) {
+      return pin.substring(0, pin.length - numericMatch[1].length);
+    }
+    // Fallback: return everything except the last numeric part
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      const lastDigits = allDigits[allDigits.length - 1];
+      const lastIndex = pin.lastIndexOf(lastDigits);
+      return pin.substring(0, lastIndex);
+    }
+    return pin;
+  };
+
   // Sort students based on sortConfig
   const sortedStudents = useMemo(() => {
     if (!sortConfig.field) return students;
     
     return [...students].sort((a, b) => {
       let aValue, bValue;
+      let isNumeric = false; // Flag to determine if we should sort numerically
       
       switch (sortConfig.field) {
         case 'student':
-          aValue = a.studentName || '';
-          bValue = b.studentName || '';
+          // Name: string sorting (alphabetical)
+          aValue = (a.studentName || '').toLowerCase();
+          bValue = (b.studentName || '').toLowerCase();
+          isNumeric = false;
           break;
         case 'pin':
-          aValue = a.pinNumber || '';
-          bValue = b.pinNumber || '';
+          // PIN/Roll Number: extract numeric part from the end (last 4-5 digits)
+          // First compare by series, then by numeric part
+          const aPin = String(a.pinNumber || '');
+          const bPin = String(b.pinNumber || '');
+          const aSeries = extractPinSeries(aPin);
+          const bSeries = extractPinSeries(bPin);
+          
+          // If series are different, sort by series first
+          if (aSeries !== bSeries) {
+            const seriesComparison = aSeries.localeCompare(bSeries);
+            return sortConfig.direction === 'asc' ? seriesComparison : -seriesComparison;
+          }
+          
+          // Same series, sort by numeric part
+          aValue = extractPinNumeric(aPin);
+          bValue = extractPinNumeric(bPin);
+          isNumeric = true;
           break;
         case 'batch':
+          // Batch: try numeric first, fallback to string
           aValue = a.batch || '';
           bValue = b.batch || '';
+          const aBatchNum = parseFloat(aValue);
+          const bBatchNum = parseFloat(bValue);
+          if (!isNaN(aBatchNum) && !isNaN(bBatchNum)) {
+            aValue = aBatchNum;
+            bValue = bBatchNum;
+            isNumeric = true;
+          } else {
+            aValue = String(aValue).toLowerCase();
+            bValue = String(bValue).toLowerCase();
+            isNumeric = false;
+          }
           break;
         case 'course':
-          aValue = a.course || '';
-          bValue = b.course || '';
+          // Course: string sorting
+          aValue = (a.course || '').toLowerCase();
+          bValue = (b.course || '').toLowerCase();
+          isNumeric = false;
           break;
         case 'branch':
-          aValue = a.branch || '';
-          bValue = b.branch || '';
+          // Branch: string sorting
+          aValue = (a.branch || '').toLowerCase();
+          bValue = (b.branch || '').toLowerCase();
+          isNumeric = false;
           break;
         case 'year':
-          aValue = a.currentYear || '';
-          bValue = b.currentYear || '';
+          // Year: numeric sorting
+          aValue = parseFloat(a.currentYear) || 0;
+          bValue = parseFloat(b.currentYear) || 0;
+          isNumeric = true;
           break;
         case 'semester':
-          aValue = a.currentSemester || '';
-          bValue = b.currentSemester || '';
+          // Semester: numeric sorting
+          aValue = parseFloat(a.currentSemester) || 0;
+          bValue = parseFloat(b.currentSemester) || 0;
+          isNumeric = true;
           break;
         case 'parentContact':
-          aValue = a.parentMobile1 || a.parentMobile2 || '';
-          bValue = b.parentMobile1 || b.parentMobile2 || '';
+          // Parent Contact: string sorting (phone numbers as strings)
+          aValue = (a.parentMobile1 || a.parentMobile2 || '').toLowerCase();
+          bValue = (b.parentMobile1 || b.parentMobile2 || '').toLowerCase();
+          isNumeric = false;
           break;
         case 'attendance':
-          aValue = effectiveStatus(a.id);
-          bValue = effectiveStatus(b.id);
+          // Attendance: string sorting (present/absent)
+          aValue = (effectiveStatus(a.id) || '').toLowerCase();
+          bValue = (effectiveStatus(b.id) || '').toLowerCase();
+          isNumeric = false;
           break;
         default:
           return 0;
       }
       
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        const comparison = aValue.localeCompare(bValue);
-        return sortConfig.direction === 'asc' ? comparison : -comparison;
+      // Handle numeric sorting
+      if (isNumeric) {
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
       }
       
-      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
+      // Handle string sorting
+      const comparison = String(aValue).localeCompare(String(bValue));
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
-  }, [students, sortConfig]);
+  }, [students, sortConfig, statusMap]);
 
   // Handle student row click to show report
   const handleStudentClick = async (student) => {
@@ -1126,14 +1247,18 @@ const Attendance = () => {
 
     const report = prepareAttendanceReport();
     
-    // Check if there are any changes
+    // Check if there are any changes or unmarked students
     const hasChanges = students.some((student) => {
       const current = effectiveStatus(student.id);
-      const initial = initialStatusMap[student.id] || 'present';
+      const initial = initialStatusMap[student.id];
+      // If student doesn't have initial status, they need to be saved
+      if (initial === undefined) return true;
       return current !== initial;
     });
 
-    if (!hasChanges && report.presentCount === 0 && report.absentCount === 0) {
+    // Allow saving if there are students, even if all are present
+    // Only prevent if there are truly no students to save
+    if (!hasChanges && students.length === 0) {
       toast('Nothing to save');
       return;
     }
@@ -1150,10 +1275,14 @@ const Attendance = () => {
     const records = students
       .map((student) => {
         const current = effectiveStatus(student.id);
-        const initial = initialStatusMap[student.id] || 'present';
-        // Only save if status has changed from initial
-        if (current === initial) {
-          return null;
+        const initial = initialStatusMap[student.id];
+        
+        // Save if:
+        // 1. Status has changed from initial, OR
+        // 2. Student doesn't have an initial status (not yet marked in database)
+        // This allows saving even when all students are present
+        if (initial !== undefined && current === initial) {
+          return null; // No change, skip
         }
 
         return {
@@ -2081,27 +2210,44 @@ const Attendance = () => {
             <div className="text-sm text-gray-600">
               {totalStudents === 0
                 ? 'No students to display'
-                : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`}
+                : (() => {
+                    // Check if filters are applied
+                    const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+                    if (hasFilters) {
+                      // When filters are applied, show all students loaded
+                      return `Showing all ${totalStudents.toLocaleString()} student${totalStudents !== 1 ? 's' : ''}`;
+                    } else {
+                      // When no filters, show pagination info
+                      return `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`;
+                    }
+                  })()}
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                Rows per page
-                <select
-                  value={pageSize}
-                  onChange={handlePageSizeChange}
-                  className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-                  disabled={loading}
-                >
-                  {pageSizeOptions.map(option => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={isFirstPage || loading || totalStudents === 0}
+            {(() => {
+              // Check if filters are applied - hide pagination controls when filters are active
+              const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+              if (hasFilters) {
+                return null; // Don't show pagination controls when filters are applied
+              }
+              return (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                    Rows per page
+                    <select
+                      value={pageSize}
+                      onChange={handlePageSizeChange}
+                      className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      disabled={loading}
+                    >
+                      {pageSizeOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={isFirstPage || loading || totalStudents === 0}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Previous
@@ -2119,6 +2265,8 @@ const Attendance = () => {
                 </button>
               </div>
             </div>
+              );
+            })()}
           </div>
           </>
         )}

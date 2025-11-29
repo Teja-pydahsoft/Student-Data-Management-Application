@@ -14,7 +14,93 @@ const {
   MODULES,
   ALL_MODULES
 } = require('../constants/rbac');
-const { sendCredentialsEmail, sendPasswordResetEmail } = require('../utils/emailService');
+const { sendCredentialsEmail, sendPasswordResetEmail, sendBrevoEmail } = require('../utils/emailService');
+const { getNotificationSetting } = require('./settingsController');
+
+// App configuration from environment
+const appName = process.env.APP_NAME || 'Pydah Student Database';
+
+// Helper function to replace template variables
+const replaceTemplateVariables = (template, variables) => {
+  let result = template;
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+    result = result.replace(regex, value || '');
+  }
+  return result;
+};
+
+// Helper function to convert plain text to HTML (basic conversion)
+const textToHtml = (text) => {
+  return text
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '<p></p>';
+      return `<p>${trimmed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`;
+    })
+    .join('\n');
+};
+
+// Helper function to send SMS (using the same service pattern as attendance)
+const sendSms = async ({ to, message, templateId, peId }) => {
+  const SMS_API_URL = process.env.SMS_API_URL || process.env.BULKSMS_API_URL || 'http://www.bulksmsapps.com/api/apismsv2.aspx';
+  const SMS_API_KEY = process.env.SMS_API_KEY || process.env.BULKSMS_API_KEY;
+  const SMS_SENDER_ID = process.env.SMS_SENDER_ID || process.env.BULKSMS_SENDER_ID || 'PYDAHK';
+  const SMS_TEST_MODE = String(process.env.SMS_TEST_MODE || '').toLowerCase() === 'true';
+  const SMS_TEMPLATE_ID = templateId || process.env.SMS_TEMPLATE_ID || '1607100000000150000';
+  const SMS_PE_ID = peId || process.env.SMS_PE_ID || '1102395590000010000';
+
+  if (!to) {
+    return { success: false, skipped: true, reason: 'missing_destination' };
+  }
+
+  if (SMS_TEST_MODE) {
+    console.log(`[SMS] 🧪 TEST MODE - SMS simulated to ${to}: ${message}`);
+    return { success: true, mocked: true, testMode: true, sentTo: to };
+  }
+
+  if (!SMS_API_URL || !SMS_API_KEY) {
+    console.warn(`[SMS] ⚠️ SKIPPED - SMS not configured`);
+    return { success: false, skipped: true, reason: 'config_missing' };
+  }
+
+  try {
+    const params = new URLSearchParams();
+    params.append('apikey', SMS_API_KEY);
+    params.append('sender', SMS_SENDER_ID);
+    params.append('number', to);
+    params.append('message', message);
+    params.append('templateid', SMS_TEMPLATE_ID);
+    params.append('peid', SMS_PE_ID);
+
+    let apiUrl = SMS_API_URL;
+    if (apiUrl.startsWith('https://')) {
+      apiUrl = apiUrl.replace('https://', 'http://');
+    }
+
+    const fullUrl = `${apiUrl}?${params.toString()}`;
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/plain, application/json, */*',
+        'User-Agent': 'NodeJS-SMS-Client/1.0'
+      }
+    });
+
+    const text = await response.text();
+    console.log(`[SMS] Response for ${to}: ${text.substring(0, 100)}`);
+
+    if (response.ok) {
+      return { success: true, sentTo: to, data: text };
+    }
+
+    return { success: false, skipped: false, reason: 'api_error', details: text, sentTo: to };
+  } catch (error) {
+    console.error(`[SMS] Exception: ${error.message}`);
+    return { success: false, skipped: false, reason: 'exception', details: error.message, sentTo: to };
+  }
+};
 
 /**
  * Check if user is a super admin (including legacy 'admin' role)
@@ -534,47 +620,339 @@ exports.createUser = async (req, res) => {
 
     const newUser = rows[0];
 
-    // Send credentials email if requested
+    // Send credentials notifications (email and/or SMS) based on settings
     let emailSent = false;
+    let smsSent = false;
     let emailError = null;
+    let smsError = null;
+    
     if (sendCredentials) {
       try {
-        const emailResult = await sendCredentialsEmail({
-          email: email.trim().toLowerCase(),
-          name: name.trim(),
-          username: username.trim(),
-          password: password,
-          role: ROLE_LABELS[role] || role
-        });
-        emailSent = emailResult.success;
-        if (!emailResult.success) {
-          emailError = emailResult.message || 'Failed to send email';
-          console.error('❌ Email notification failed for user creation:', {
-            userId: newUser.id,
-            email: email.trim().toLowerCase(),
-            error: emailError
-          });
+        // Get notification settings
+        const notificationSettings = await getNotificationSetting('user_creation');
+        
+        if (notificationSettings && notificationSettings.enabled) {
+          // Get app URL - use production URL if FRONTEND_URL contains multiple URLs
+          let appUrl = process.env.FRONTEND_URL || 'https://pydahsdms.vercel.app';
+          // If multiple URLs (comma-separated), extract only the production URL
+          if (appUrl.includes(',')) {
+            const urls = appUrl.split(',').map(url => url.trim());
+            // Prefer vercel.app URL (production)
+            const productionUrl = urls.find(url => url.includes('vercel.app'));
+            appUrl = productionUrl || urls.find(url => url.startsWith('https://')) || 'https://pydahsdms.vercel.app';
+          }
+          // Clean up URL - remove /login if present and ensure it's just the base URL
+          appUrl = appUrl.replace(/\/login\/?$/, '').replace(/\/$/, '');
+          // Ensure we only use the production URL
+          if (!appUrl.includes('pydahsdms.vercel.app') && !appUrl.includes('pydahsdbms.vercel.app')) {
+            appUrl = 'https://pydahsdms.vercel.app';
+          }
+          const variables = {
+            name: name.trim(),
+            username: username.trim(),
+            password: password,
+            role: ROLE_LABELS[role] || role,
+            loginUrl: `${appUrl}/login`
+          };
+
+          // Send email if enabled
+          if (notificationSettings.emailEnabled) {
+            try {
+              // Use custom template if available, otherwise use default function
+              if (notificationSettings.emailTemplate) {
+                const emailSubject = replaceTemplateVariables(
+                  notificationSettings.emailSubject || 'Your Account Has Been Created',
+                  variables
+                );
+                const emailBody = replaceTemplateVariables(notificationSettings.emailTemplate, variables);
+                const logoUrl = 'https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png';
+                
+                // Parse email body to extract and format credentials
+                let formattedBody = emailBody;
+                const hasCredentials = /(?:Username|Password|Role)/i.test(emailBody);
+                
+                // If credentials are found, format them in a styled table
+                if (hasCredentials) {
+                  const usernameMatch = emailBody.match(/(?:Username|username):\s*([^\n\r]+)/i);
+                  const passwordMatch = emailBody.match(/(?:Password|password):\s*([^\n\r]+)/i);
+                  const roleMatch = emailBody.match(/(?:Role|role):\s*([^\n\r]+)/i);
+                  
+                  // Extract credential values from variables if not found in template
+                  const usernameValue = usernameMatch ? usernameMatch[1].trim() : variables.username;
+                  const passwordValue = passwordMatch ? passwordMatch[1].trim() : variables.password;
+                  const roleValue = roleMatch ? roleMatch[1].trim() : variables.role;
+                  
+                  // Remove credential lines from body
+                  formattedBody = emailBody
+                    .replace(/(?:Username|username):\s*[^\n\r]+\n?/gi, '')
+                    .replace(/(?:Password|password):\s*[^\n\r]+\n?/gi, '')
+                    .replace(/(?:Role|role):\s*[^\n\r]+\n?/gi, '')
+                    .replace(/\n{3,}/g, '\n\n') // Clean up multiple newlines
+                    .trim();
+                  
+                  // Create credentials table HTML
+                  const credentialsTable = `
+                    <div class="credentials-box">
+                      <table class="credentials-table">
+                        <tr><td class="credential-label">Username</td><td><span class="credential-value">${usernameValue}</span></td></tr>
+                        <tr><td class="credential-label">Password</td><td><span class="credential-value">${passwordValue}</span></td></tr>
+                        <tr><td class="credential-label">Role</td><td><span class="role-badge">${roleValue}</span></td></tr>
+                      </table>
+                    </div>
+                  `;
+                  
+                  // Insert credentials table before login URL or at the end
+                  if (formattedBody.includes('Login URL') || formattedBody.includes('loginUrl') || formattedBody.includes('{{loginUrl}}')) {
+                    formattedBody = formattedBody.replace(/(Login URL|loginUrl|{{loginUrl}})[^\n\r]*/i, credentialsTable + '\n\n$&');
+                  } else {
+                    formattedBody = formattedBody + '\n\n' + credentialsTable;
+                  }
+                }
+                
+                const htmlContent = `
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                      body { 
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                        background-color: #f5f7fa; 
+                        margin: 0; 
+                        padding: 15px 0;
+                        line-height: 1.5;
+                      }
+                      .email-wrapper { 
+                        max-width: 600px; 
+                        margin: 0 auto; 
+                        background: #ffffff;
+                      }
+                      .header { 
+                        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%); 
+                        padding: 25px 20px; 
+                        text-align: center;
+                      }
+                      .logo {
+                        max-width: 150px;
+                        height: auto;
+                        display: block;
+                        margin: 0 auto 10px;
+                      }
+                      .content { 
+                        padding: 25px 20px; 
+                        background: #ffffff;
+                        color: #1e293b;
+                        font-size: 14px;
+                        line-height: 1.6;
+                      }
+                      .content p {
+                        margin: 10px 0;
+                      }
+                      .content strong {
+                        color: #FF6B35;
+                      }
+                      .credentials-box { 
+                        background: #f8fafc; 
+                        border: 1px solid #e2e8f0; 
+                        border-radius: 8px; 
+                        padding: 15px; 
+                        margin: 15px 0;
+                      }
+                      .credentials-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                      }
+                      .credentials-table tr {
+                        border-bottom: 1px solid #e2e8f0;
+                      }
+                      .credentials-table tr:last-child {
+                        border-bottom: none;
+                      }
+                      .credentials-table td {
+                        padding: 12px 0;
+                        vertical-align: middle;
+                      }
+                      .credential-label { 
+                        color: #64748b; 
+                        font-weight: 600;
+                        font-size: 14px;
+                        width: 120px;
+                        padding-right: 15px;
+                      }
+                      .credential-value { 
+                        color: #1e293b; 
+                        font-family: 'Courier New', monospace; 
+                        background: #ffffff; 
+                        padding: 6px 12px; 
+                        border-radius: 4px;
+                        font-weight: 600;
+                        font-size: 14px;
+                        border: 1px solid #cbd5e1;
+                        display: inline-block;
+                        min-width: 150px;
+                      }
+                      .role-badge { 
+                        display: inline-block; 
+                        background: #3b82f6; 
+                        color: #ffffff; 
+                        padding: 4px 12px; 
+                        border-radius: 12px; 
+                        font-weight: 600; 
+                        font-size: 12px;
+                      }
+                      .footer { 
+                        background: #f8fafc; 
+                        padding: 15px 20px; 
+                        text-align: center; 
+                        color: #64748b; 
+                        font-size: 11px;
+                        border-top: 1px solid #e2e8f0;
+                      }
+                      .footer p {
+                        margin: 3px 0;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="email-wrapper">
+                      <div class="header">
+                        <img src="${logoUrl}" alt="${appName} Logo" class="logo" />
+                        <h1 style="color: #ffffff; font-size: 22px; font-weight: 700; margin: 0;">Account Created</h1>
+                      </div>
+                      <div class="content">
+                        ${textToHtml(formattedBody)}
+                      </div>
+                      <div class="footer">
+                        <p><strong>${appName}</strong></p>
+                        <p>&copy; ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+                      </div>
+                    </div>
+                  </body>
+                  </html>
+                `;
+                
+                const emailResult = await sendBrevoEmail({
+                  to: email.trim().toLowerCase(),
+                  toName: name.trim(),
+                  subject: emailSubject,
+                  htmlContent
+                });
+                emailSent = emailResult.success;
+                if (!emailResult.success) {
+                  emailError = emailResult.message || 'Failed to send email';
+                }
+              } else {
+                // Fallback to default email function
+                const emailResult = await sendCredentialsEmail({
+                  email: email.trim().toLowerCase(),
+                  name: name.trim(),
+                  username: username.trim(),
+                  password: password,
+                  role: ROLE_LABELS[role] || role
+                });
+                emailSent = emailResult.success;
+                if (!emailResult.success) {
+                  emailError = emailResult.message || 'Failed to send email';
+                }
+              }
+            } catch (emailErr) {
+              emailError = emailErr.message || 'Unexpected error while sending email';
+              console.error('❌ Exception while sending email notification:', {
+                userId: newUser.id,
+                email: email.trim().toLowerCase(),
+                error: emailError,
+                stack: emailErr.stack
+              });
+            }
+          }
+
+          // Send SMS if enabled and phone number is available
+          if (notificationSettings.smsEnabled && phone) {
+            try {
+              if (notificationSettings.smsTemplate) {
+                const smsMessage = replaceTemplateVariables(notificationSettings.smsTemplate, variables);
+                const smsResult = await sendSms({
+                  to: phone.trim(),
+                  message: smsMessage
+                });
+                smsSent = smsResult.success;
+                if (!smsResult.success) {
+                  smsError = smsResult.reason || 'Failed to send SMS';
+                }
+              }
+            } catch (smsErr) {
+              smsError = smsErr.message || 'Unexpected error while sending SMS';
+              console.error('❌ Exception while sending SMS notification:', {
+                userId: newUser.id,
+                phone: phone.trim(),
+                error: smsError,
+                stack: smsErr.stack
+              });
+            }
+          }
+        } else {
+          // Fallback to default email if settings not available
+          try {
+            const emailResult = await sendCredentialsEmail({
+              email: email.trim().toLowerCase(),
+              name: name.trim(),
+              username: username.trim(),
+              password: password,
+              role: ROLE_LABELS[role] || role
+            });
+            emailSent = emailResult.success;
+            if (!emailResult.success) {
+              emailError = emailResult.message || 'Failed to send email';
+            }
+          } catch (emailErr) {
+            emailError = emailErr.message || 'Unexpected error while sending email';
+          }
         }
-      } catch (emailErr) {
-        emailError = emailErr.message || 'Unexpected error while sending email';
-        console.error('❌ Exception while sending email notification:', {
-          userId: newUser.id,
-          email: email.trim().toLowerCase(),
-          error: emailError,
-          stack: emailErr.stack
-        });
+      } catch (notifErr) {
+        console.error('❌ Error getting notification settings:', notifErr);
+        // Fallback to default email
+        try {
+          const emailResult = await sendCredentialsEmail({
+            email: email.trim().toLowerCase(),
+            name: name.trim(),
+            username: username.trim(),
+            password: password,
+            role: ROLE_LABELS[role] || role
+          });
+          emailSent = emailResult.success;
+          if (!emailResult.success) {
+            emailError = emailResult.message || 'Failed to send email';
+          }
+        } catch (emailErr) {
+          emailError = emailErr.message || 'Unexpected error while sending email';
+        }
+      }
+    }
+
+    // Build success message
+    let successMessage = 'User created successfully';
+    if (sendCredentials) {
+      const notifications = [];
+      if (emailSent) notifications.push('email');
+      if (smsSent) notifications.push('SMS');
+      if (notifications.length > 0) {
+        successMessage = `User created and credentials sent via ${notifications.join(' and ')}!`;
+      } else if (emailError || smsError) {
+        const errors = [];
+        if (emailError) errors.push(`email: ${emailError}`);
+        if (smsError) errors.push(`SMS: ${smsError}`);
+        successMessage = `User created successfully, but notifications failed (${errors.join(', ')})`;
       }
     }
 
     res.status(201).json({
       success: true,
-      message: sendCredentials && emailSent 
-        ? 'User created and credentials sent to email!' 
-        : sendCredentials && !emailSent
-        ? `User created successfully, but email notification failed: ${emailError || 'Unknown error'}`
-        : 'User created successfully',
+      message: successMessage,
       emailSent,
+      smsSent,
       emailError: emailError || undefined,
+      smsError: smsError || undefined,
       data: {
         id: newUser.id,
         name: newUser.name,
@@ -736,13 +1114,21 @@ exports.updateUser = async (req, res) => {
     }
 
     if (branchIds !== undefined) {
+      // Always update branch_ids, even if it's an empty array
+      const branchIdsJson = JSON.stringify(Array.isArray(branchIds) ? branchIds : []);
       updates.push('branch_ids = CAST(? AS JSON)');
-      params.push(JSON.stringify(branchIds || []));
+      params.push(branchIdsJson);
+      
       // Also update the single branch_id for backward compatibility
-      if (branchIds && branchIds.length > 0) {
+      if (Array.isArray(branchIds) && branchIds.length > 0) {
         updates.push('branch_id = ?');
         params.push(branchIds[0]);
+      } else {
+        // Clear branch_id when branchIds is empty or not an array
+        updates.push('branch_id = NULL');
       }
+      
+      console.log(`[Update User] Updating branchIds: ${branchIdsJson}, branch_id: ${Array.isArray(branchIds) && branchIds.length > 0 ? branchIds[0] : 'NULL'}`);
     }
 
     if (allCourses !== undefined) {
@@ -750,9 +1136,27 @@ exports.updateUser = async (req, res) => {
       params.push(allCourses ? 1 : 0);
     }
 
+    // Handle allBranches update
     if (allBranches !== undefined) {
       updates.push('all_branches = ?');
       params.push(allBranches ? 1 : 0);
+      
+      // When allBranches is true, ensure branch_ids and branch_id are cleared
+      // (branch_ids will be handled by branchIds check above if provided)
+      if (allBranches && branchIds === undefined) {
+        // If branchIds wasn't provided but allBranches is true, clear branch_ids
+        updates.push('branch_ids = CAST(? AS JSON)');
+        params.push(JSON.stringify([]));
+        // Clear branch_id if not already cleared
+        const hasBranchIdUpdate = updates.some(u => 
+          u.includes('branch_id = NULL') || u.includes('branch_id = ?')
+        );
+        if (!hasBranchIdUpdate) {
+          updates.push('branch_id = NULL');
+        }
+      }
+      
+      console.log(`[Update User] Updating allBranches: ${allBranches}, branchIds provided: ${branchIds !== undefined}`);
     }
 
     if (permissions !== undefined) {
@@ -776,10 +1180,12 @@ exports.updateUser = async (req, res) => {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
 
-    await masterPool.query(
-      `UPDATE rbac_users SET ${updates.join(', ')} WHERE id = ?`,
-      params
-    );
+    const updateQuery = `UPDATE rbac_users SET ${updates.join(', ')} WHERE id = ?`;
+    console.log(`[Update User] Executing update query for user ${id}:`, updateQuery);
+    console.log(`[Update User] Update params (excluding id):`, params.slice(0, -1));
+    
+    const [updateResult] = await masterPool.query(updateQuery, params);
+    console.log(`[Update User] Update result - affected rows: ${updateResult.affectedRows}`);
 
     // Fetch updated user
     const [rows] = await masterPool.query(
@@ -973,9 +1379,9 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Get user details
+    // Get user details including phone
     const [users] = await masterPool.query(
-      'SELECT id, name, email, username, role FROM rbac_users WHERE id = ?',
+      'SELECT id, name, email, username, role, phone FROM rbac_users WHERE id = ?',
       [id]
     );
 
@@ -997,43 +1403,139 @@ exports.resetPassword = async (req, res) => {
       [hashedPassword, id]
     );
 
-    // Send email with new password
+    // Send notifications (email and/or SMS) based on settings
     let emailSent = false;
+    let smsSent = false;
     let emailError = null;
+    let smsError = null;
+
     try {
-      const emailResult = await sendPasswordResetEmail({
-        email: user.email,
-        name: user.name,
-        username: user.username,
-        newPassword: newPassword,
-        role: ROLE_LABELS[user.role] || user.role
-      });
-      emailSent = emailResult.success;
-      if (!emailResult.success) {
-        emailError = emailResult.message || 'Failed to send email';
-        console.error('❌ Email notification failed for password reset:', {
-          userId: id,
-          email: user.email,
-          error: emailError
-        });
+      // Get notification settings for password update
+      const notificationSettings = await getNotificationSetting('password_update');
+      
+      if (notificationSettings && notificationSettings.enabled) {
+        // Get app URL - use production URL if FRONTEND_URL contains multiple URLs
+        let appUrl = process.env.FRONTEND_URL || 'https://pydahsdms.vercel.app';
+        // If multiple URLs (comma-separated), extract only the production URL
+        if (appUrl.includes(',')) {
+          const urls = appUrl.split(',').map(url => url.trim());
+          // Prefer vercel.app URL (production)
+          const productionUrl = urls.find(url => url.includes('vercel.app'));
+          appUrl = productionUrl || urls.find(url => url.startsWith('https://')) || 'https://pydahsdms.vercel.app';
+        }
+        // Clean up URL - remove /login if present and ensure it's just the base URL
+        appUrl = appUrl.replace(/\/login\/?$/, '').replace(/\/$/, '');
+        // Ensure we only use the production URL
+        if (!appUrl.includes('pydahsdms.vercel.app') && !appUrl.includes('pydahsdbms.vercel.app')) {
+          appUrl = 'https://pydahsdms.vercel.app';
+        }
+        const variables = {
+          name: user.name,
+          username: user.username,
+          password: newPassword,
+          newPassword: newPassword,
+          role: ROLE_LABELS[user.role] || user.role,
+          loginUrl: `${appUrl}/login`
+        };
+
+        // Send email if enabled
+        if (notificationSettings.emailEnabled) {
+          try {
+            const emailResult = await sendPasswordResetEmail({
+              email: user.email,
+              name: user.name,
+              username: user.username,
+              newPassword: newPassword,
+              role: ROLE_LABELS[user.role] || user.role
+            });
+            emailSent = emailResult.success;
+            if (!emailResult.success) {
+              emailError = emailResult.message || 'Failed to send email';
+            }
+          } catch (emailErr) {
+            emailError = emailErr.message || 'Unexpected error while sending email';
+            console.error('❌ Exception while sending password reset email:', {
+              userId: id,
+              email: user.email,
+              error: emailError,
+              stack: emailErr.stack
+            });
+          }
+        }
+
+        // Send SMS if enabled and phone number is available
+        if (notificationSettings.smsEnabled && user.phone) {
+          try {
+            if (notificationSettings.smsTemplate) {
+              const smsMessage = replaceTemplateVariables(notificationSettings.smsTemplate, variables);
+              const smsResult = await sendSms({
+                to: user.phone.trim(),
+                message: smsMessage
+              });
+              smsSent = smsResult.success;
+              if (!smsResult.success) {
+                smsError = smsResult.reason || 'Failed to send SMS';
+              }
+            }
+          } catch (smsErr) {
+            smsError = smsErr.message || 'Unexpected error while sending SMS';
+            console.error('❌ Exception while sending password reset SMS:', {
+              userId: id,
+              phone: user.phone,
+              error: smsError,
+              stack: smsErr.stack
+            });
+          }
+        }
+      } else {
+        // Fallback to default email if settings not available
+        try {
+          const emailResult = await sendPasswordResetEmail({
+            email: user.email,
+            name: user.name,
+            username: user.username,
+            newPassword: newPassword,
+            role: ROLE_LABELS[user.role] || user.role
+          });
+          emailSent = emailResult.success;
+          if (!emailResult.success) {
+            emailError = emailResult.message || 'Failed to send email';
+          }
+        } catch (emailErr) {
+          emailError = emailErr.message || 'Unexpected error while sending email';
+        }
       }
-    } catch (emailErr) {
-      emailError = emailErr.message || 'Unexpected error while sending email';
-      console.error('❌ Exception while sending password reset email:', {
+    } catch (notifErr) {
+      emailError = notifErr.message || 'Unexpected error while sending notifications';
+      console.error('❌ Exception while sending password reset notifications:', {
         userId: id,
-        email: user.email,
         error: emailError,
-        stack: emailErr.stack
+        stack: notifErr.stack
       });
+    }
+
+    // Build success message
+    const notifications = [];
+    if (emailSent) notifications.push('email');
+    if (smsSent) notifications.push('SMS');
+    
+    let successMessage = 'Password reset successfully';
+    if (notifications.length > 0) {
+      successMessage += ` and credentials sent via ${notifications.join(' and ')}!`;
+    } else if (emailError || smsError) {
+      const errors = [];
+      if (emailError) errors.push(`email: ${emailError}`);
+      if (smsError) errors.push(`SMS: ${smsError}`);
+      successMessage += `, but notifications failed (${errors.join(', ')})`;
     }
 
     res.json({
       success: true,
-      message: emailSent 
-        ? 'Password reset successfully and email sent!' 
-        : `Password reset successfully but email could not be sent: ${emailError || 'Unknown error'}`,
+      message: successMessage,
       emailSent,
-      emailError: emailError || undefined
+      smsSent,
+      emailError: emailError || undefined,
+      smsError: smsError || undefined
     });
   } catch (error) {
     console.error('Failed to reset password:', error);

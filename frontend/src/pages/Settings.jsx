@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   GraduationCap,
   FileText,
-  Calendar
+  Calendar,
+  Bell
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -27,6 +28,7 @@ import { SkeletonBox, SkeletonList, SkeletonCard } from '../components/SkeletonL
 import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import AcademicCalendar from '../components/AcademicCalendar';
+import NotificationSettings from '../components/NotificationSettings';
 import { isFullAccessRole } from '../constants/rbac';
 
 const formatDateInput = (date) => {
@@ -220,7 +222,7 @@ const Settings = () => {
     hasMoreStudents: false,
     isLoadingStudents: false
   });
-  const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', or 'forms'
+  const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', or 'notifications'
 
   // Calendar state
   const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(() => {
@@ -1671,6 +1673,27 @@ const Settings = () => {
             </div>
           </div>
         </button>
+
+        <button
+          onClick={() => setActiveSection('notifications')}
+          className={`rounded-lg border-2 p-3 text-left transition-all ${
+            activeSection === 'notifications'
+              ? 'border-indigo-500 bg-indigo-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <div className={`rounded-full p-2 ${
+              activeSection === 'notifications' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+            }`}>
+              <Bell size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Notifications</h2>
+              <p className="text-xs text-gray-500">SMS & Email templates</p>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Content Section */}
@@ -2729,6 +2752,13 @@ const Settings = () => {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Notifications Section */}
+      {activeSection === 'notifications' && (
+        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
+          <NotificationSettings />
         </div>
       )}
 

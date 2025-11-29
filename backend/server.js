@@ -22,6 +22,7 @@ const rbacUserRoutes = require('./routes/rbacUserRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
 const academicYearRoutes = require('./routes/academicYearRoutes');
 const semesterRoutes = require('./routes/semesterRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -109,6 +110,7 @@ app.use('/api/rbac/users', rbacUserRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/academic-years', academicYearRoutes);
 app.use('/api/semesters', semesterRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
@@ -124,6 +126,7 @@ app.use('/rbac/users', rbacUserRoutes);
 app.use('/calendar', calendarRoutes);
 app.use('/academic-years', academicYearRoutes);
 app.use('/semesters', semesterRoutes);
+app.use('/settings', settingsRoutes);
 
 // Root API endpoint
 app.get('/api', (req, res) => {

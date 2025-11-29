@@ -300,9 +300,50 @@ const buildAbsenceMessage = (template, variables) => {
   return message;
 };
 
+/**
+ * Convert template with {{variable}} format to DLT format with {#var#}
+ * Handles the conversion from UI template format to DLT SMS format
+ */
+const convertTemplateToDLT = (template, variables) => {
+  // If template already uses {#var#} format, use it as-is
+  if (template.includes('{#var#}')) {
+    return template;
+  }
+
+  // Convert {{variable}} format to {#var#} format
+  // For attendance, we need to map:
+  // {{studentName}} -> "your ward" (first variable)
+  // {{admissionNumber}} -> can be included in the message
+  // {{date}} -> formatted date (second variable)
+  
+  let dltTemplate = template;
+  const dltVariables = [];
+  
+  // Replace {{studentName}} with first {#var#} and add "your ward" to variables
+  if (dltTemplate.includes('{{studentName}}')) {
+    dltTemplate = dltTemplate.replace(/\{\{studentName\}\}/g, '{#var#}');
+    dltVariables.push('your ward');
+  }
+  
+  // Replace {{admissionNumber}} - include it in the message if present
+  if (dltTemplate.includes('{{admissionNumber}}')) {
+    const admissionNumber = variables.studentName || variables.admissionNumber || '';
+    dltTemplate = dltTemplate.replace(/\{\{admissionNumber\}\}/g, admissionNumber);
+  }
+  
+  // Replace {{date}} with second {#var#} and add formatted date to variables
+  if (dltTemplate.includes('{{date}}')) {
+    dltTemplate = dltTemplate.replace(/\{\{date\}\}/g, '{#var#}');
+    dltVariables.push(variables.date || formatDateForMessage(variables.attendanceDate));
+  }
+  
+  return { template: dltTemplate, variables: dltVariables };
+};
+
 exports.sendAbsenceNotification = async ({
   student,
-  attendanceDate
+  attendanceDate,
+  notificationSettings = null
 }) => {
   const logPrefix = `[SMS] ${student.admission_number || 'unknown'}`;
   const parentMobile = resolveParentContact(student);
@@ -316,16 +357,38 @@ exports.sendAbsenceNotification = async ({
     };
   }
 
-  const template = process.env.SMS_ABSENCE_TEMPLATE || DEFAULT_TEMPLATE;
-  const formattedDate = formatDateForMessage(attendanceDate);
+  // Use notification settings if provided, otherwise fall back to env/default
+  let template;
+  if (notificationSettings && notificationSettings.smsTemplate) {
+    template = notificationSettings.smsTemplate;
+  } else {
+    template = process.env.SMS_ABSENCE_TEMPLATE || DEFAULT_TEMPLATE;
+  }
 
-  // DLT Template variables:
-  // Variable 1: "your ward" (always use this as per requirement)
-  // Variable 2: the attendance date
-  const message = buildAbsenceMessage(template, [
-    'your ward',
-    formattedDate
-  ]);
+  const formattedDate = formatDateForMessage(attendanceDate);
+  const studentName = student.student_name || 
+                     (student.student_data && (student.student_data['Student Name'] || student.student_data['student_name'])) || 
+                     'your ward';
+  const admissionNumber = student.admission_number || '';
+
+  // Convert template format if needed
+  let message;
+  if (template.includes('{#var#}')) {
+    // DLT format - use as-is
+    message = buildAbsenceMessage(template, [
+      'your ward',
+      formattedDate
+    ]);
+  } else {
+    // UI format with {{variables}} - convert to DLT
+    const converted = convertTemplateToDLT(template, {
+      studentName,
+      admissionNumber,
+      date: formattedDate,
+      attendanceDate
+    });
+    message = buildAbsenceMessage(converted.template, converted.variables);
+  }
 
   // Log the message being sent
   console.log(`${logPrefix} 📱 Preparing SMS for parent: ${parentMobile}`);
