@@ -1024,66 +1024,7 @@ exports.markAttendance = async (req, res) => {
           }
         }
 
-        // Send Email if enabled
-        if (notificationSettings?.emailEnabled !== false && studentDetails.parentEmail) {
-          try {
-            const formattedDate = new Date(normalizedDate).toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            });
-
-            const variables = {
-              studentName: studentDetails.studentName,
-              admissionNumber: studentDetails.admissionNumber,
-              date: formattedDate
-            };
-
-            const emailSubject = notificationSettings?.emailSubject 
-              ? replaceTemplateVariables(notificationSettings.emailSubject, variables)
-              : 'Attendance Alert - Student Absent';
-
-            const emailBody = notificationSettings?.emailTemplate
-              ? replaceTemplateVariables(notificationSettings.emailTemplate, variables)
-              : `Dear Parent/Guardian,\n\nThis is to inform you that your ward ${studentDetails.studentName} (Admission No: ${studentDetails.admissionNumber}) was marked absent on ${formattedDate}.\n\nPlease contact the college if you have any concerns.\n\nThank you.`;
-
-            const htmlContent = `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <meta charset="utf-8">
-                <style>
-                  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
-                  .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                  .content { padding: 30px; }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <div class="content">
-                    ${textToHtml(emailBody)}
-                  </div>
-                </div>
-              </body>
-              </html>
-            `;
-
-            const emailResult = await sendBrevoEmail({
-              to: studentDetails.parentEmail,
-              toName: `Parent of ${studentDetails.studentName}`,
-              subject: emailSubject,
-              htmlContent
-            });
-
-            result.emailSent = emailResult?.success || false;
-            if (!emailResult?.success) {
-              result.emailError = emailResult?.message || 'Failed to send email';
-            }
-          } catch (error) {
-            console.error(`Email notification failed for ${student.admission_number}:`, error);
-            result.emailError = error.message || 'unknown_error';
-          }
-        }
+        // Email notifications removed for attendance - only SMS is sent
       } else {
         // Notifications disabled - skip
         result.smsError = 'notifications_disabled';

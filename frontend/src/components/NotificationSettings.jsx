@@ -61,15 +61,7 @@ Login URL: {{loginUrl}}`,
     label: 'Attendance - Absent',
     icon: CalendarCheck,
     description: 'Notification sent to parents when a student is marked absent',
-    channels: ['sms', 'email'],
-    defaultEmailSubject: 'Attendance Alert - Student Absent',
-    defaultEmailTemplate: `Dear Parent/Guardian,
-
-This is to inform you that your ward {{studentName}} (Admission No: {{admissionNumber}}) was marked absent on {{date}}.
-
-Please contact the college if you have any concerns.
-
-Thank you.`,
+    channels: ['sms'],
     defaultSmsTemplate: `Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH.`
   }
 };

@@ -34,14 +34,6 @@ Login URL: {{loginUrl}}`,
   },
   attendance_absent: {
     key: 'attendance_absent',
-    defaultEmailSubject: 'Attendance Alert - Student Absent',
-    defaultEmailTemplate: `Dear Parent/Guardian,
-
-This is to inform you that your ward {{studentName}} (Admission No: {{admissionNumber}}) was marked absent on {{date}}.
-
-Please contact the college if you have any concerns.
-
-Thank you.`,
     defaultSmsTemplate: `Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH.`
   }
 };
