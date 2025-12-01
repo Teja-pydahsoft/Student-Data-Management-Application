@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload, Plus, Hash, CheckSquare, Square, UserPlus, User, Phone, MapPin, GraduationCap, Calendar, FileText, X, QrCode, Link2, Copy } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CheckCircle, XCircle, Eye, Trash2, Filter, Upload, Plus, Hash, CheckSquare, Square, UserPlus, User, Phone, MapPin, GraduationCap, Calendar, FileText, X, QrCode, Link2, Copy, File, Image, FileCheck, FileX } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -30,6 +30,9 @@ const Submissions = () => {
   const [showDeleteProgressModal, setShowDeleteProgressModal] = useState(false);
   const [deletingProgress, setDeletingProgress] = useState({ current: 0, total: 0, isDeleting: false });
   const [globalAutoAssign, setGlobalAutoAssign] = useState(false);
+  const [approvedDocuments, setApprovedDocuments] = useState(new Set());
+  const [expandedDocument, setExpandedDocument] = useState(null);
+  const [googleDriveDocuments, setGoogleDriveDocuments] = useState({});
 
   useEffect(() => {
     setAutoAssign(globalAutoAssign);
@@ -105,6 +108,39 @@ const Submissions = () => {
       const submissionData = response.data.data;
       setSelectedSubmission(submissionData);
       setAdmissionNumber(submissionData.admission_number || '');
+
+      // Initialize approved documents from submission data if available
+      const submissionDataObj = submissionData.submission_data || {};
+      const initialApproved = new Set();
+      Object.keys(submissionDataObj).forEach(key => {
+        // Check if document was already approved (stored in uploaded_documents or similar)
+        if (submissionDataObj[key] && typeof submissionDataObj[key] === 'object' && submissionDataObj[key].approved) {
+          initialApproved.add(key);
+        }
+      });
+      setApprovedDocuments(initialApproved);
+      setExpandedDocument(null);
+      setGoogleDriveDocuments({});
+
+      // If submission is approved, fetch student data to get Google Drive document links
+      if (submissionData.status === 'approved' && submissionData.admission_number) {
+        try {
+          const studentResponse = await api.get(`/students/${submissionData.admission_number}`);
+          const student = studentResponse.data.data;
+          
+          // Extract uploaded_documents from student_data (already parsed by backend)
+          if (student && student.student_data) {
+            const studentDataObj = student.student_data;
+            
+            if (studentDataObj.uploaded_documents && typeof studentDataObj.uploaded_documents === 'object') {
+              setGoogleDriveDocuments(studentDataObj.uploaded_documents);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch student data for Google Drive documents:', error);
+          // Non-fatal error, continue with base64 previews
+        }
+      }
 
       // Auto-generate admission number if auto-assign is enabled and no admission number exists
       if (globalAutoAssign && !submissionData.admission_number) {
@@ -643,8 +679,8 @@ const Submissions = () => {
                 </div>
 
                 {/* Right Side - All Student Data */}
-                <div className="flex-1 p-6 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="flex-1 p-6 overflow-y-auto max-h-[calc(95vh-200px)]">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Academic Information */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                       <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -822,6 +858,248 @@ const Submissions = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Documents Section */}
+                    {(() => {
+                      // Extract documents from submission_data or Google Drive
+                      const submissionData = selectedSubmission.submission_data || {};
+                      const documents = [];
+                      const isApproved = selectedSubmission.status === 'approved';
+                      
+                      // First, collect all document keys from submission_data
+                      const documentKeys = new Set();
+                      Object.entries(submissionData).forEach(([key, value]) => {
+                        if (typeof value === 'string' && (
+                          value.startsWith('data:') || // Base64 data URL
+                          key.toLowerCase().includes('document') ||
+                          key.toLowerCase().startsWith('document_')
+                        )) {
+                          documentKeys.add(key);
+                        }
+                      });
+                      
+                      // Also check Google Drive documents if approved
+                      if (isApproved && googleDriveDocuments) {
+                        Object.keys(googleDriveDocuments).forEach(key => {
+                          documentKeys.add(key);
+                        });
+                      }
+                      
+                      // Build documents array with priority: Google Drive > Base64
+                      documentKeys.forEach(key => {
+                        let docName = key.replace(/^document_/i, '').replace(/_/g, ' ');
+                        if (!docName || docName === key) {
+                          docName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        }
+                        
+                        // Check if we have Google Drive link (for approved submissions)
+                        const driveDoc = googleDriveDocuments[key];
+                        let docData = null;
+                        let isImage = false;
+                        let isPdf = false;
+                        let isGoogleDrive = false;
+                        let webViewLink = null;
+                        let fileName = docName;
+                        
+                        if (isApproved && driveDoc && driveDoc.webViewLink) {
+                          // Use Google Drive link
+                          isGoogleDrive = true;
+                          webViewLink = driveDoc.webViewLink;
+                          fileName = driveDoc.fileName || docName;
+                          
+                          // Determine file type from fileName or MIME type
+                          const fileExt = fileName.toLowerCase().split('.').pop();
+                          isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExt);
+                          isPdf = fileExt === 'pdf' || fileName.toLowerCase().includes('pdf');
+                          
+                          // For images, use Google Drive preview URL
+                          if (isImage) {
+                            // Convert Google Drive webViewLink to preview URL
+                            const fileId = driveDoc.fileId;
+                            if (fileId) {
+                              docData = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+                            } else {
+                              docData = webViewLink;
+                            }
+                          } else {
+                            docData = webViewLink;
+                          }
+                        } else {
+                          // Use base64 data from submission_data
+                          const base64Value = submissionData[key];
+                          if (base64Value && typeof base64Value === 'string' && base64Value.startsWith('data:')) {
+                            docData = base64Value;
+                            isImage = base64Value.startsWith('data:image/');
+                            isPdf = base64Value.startsWith('data:application/pdf');
+                          }
+                        }
+                        
+                        if (docData) {
+                          documents.push({
+                            key,
+                            name: docName,
+                            fileName: fileName,
+                            data: docData,
+                            webViewLink: webViewLink,
+                            isImage,
+                            isPdf,
+                            isGoogleDrive
+                          });
+                        }
+                      });
+
+                      if (documents.length === 0) {
+                        return null;
+                      }
+
+                      return (
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 col-span-2">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <FileText size={16} className="text-teal-600" />
+                            Uploaded Documents ({documents.length})
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {documents.map((doc, index) => {
+                              const isApproved = approvedDocuments.has(doc.key);
+                              const isExpanded = expandedDocument === doc.key;
+                              
+                              return (
+                                <div
+                                  key={index}
+                                  className={`border-2 rounded-lg p-3 transition-all ${
+                                    isApproved
+                                      ? 'border-green-500 bg-green-50'
+                                      : 'border-gray-200 bg-white hover:border-teal-300'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isApproved}
+                                        onChange={(e) => {
+                                          const newApproved = new Set(approvedDocuments);
+                                          if (e.target.checked) {
+                                            newApproved.add(doc.key);
+                                          } else {
+                                            newApproved.delete(doc.key);
+                                          }
+                                          setApprovedDocuments(newApproved);
+                                        }}
+                                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded flex-shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <span className="text-xs font-medium text-gray-700 truncate" title={doc.name}>
+                                        {doc.name}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Document Preview */}
+                                  <div
+                                    className="relative cursor-pointer group"
+                                    onClick={() => setExpandedDocument(isExpanded ? null : doc.key)}
+                                  >
+                                    {doc.isImage ? (
+                                      <div className="relative w-full aspect-square bg-gray-100 rounded overflow-hidden">
+                                        <img
+                                          src={doc.data}
+                                          alt={doc.name}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            e.target.style.display = 'none';
+                                            e.target.nextSibling.style.display = 'flex';
+                                          }}
+                                        />
+                                        <div className="hidden absolute inset-0 items-center justify-center bg-gray-100">
+                                          <Image size={24} className="text-gray-400" />
+                                        </div>
+                                        {isExpanded && (
+                                          <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-10">
+                                            <div className="relative max-w-full max-h-full">
+                                              <img
+                                                src={doc.data}
+                                                alt={doc.name}
+                                                className="max-w-full max-h-[90vh] object-contain"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                              {doc.isGoogleDrive && doc.webViewLink && (
+                                                <a
+                                                  href={doc.webViewLink}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <Link2 size={16} />
+                                                  Open in Google Drive
+                                                </a>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="w-full aspect-square bg-gray-100 rounded flex flex-col items-center justify-center p-4 relative">
+                                        <File size={32} className="text-gray-400 mb-2" />
+                                        <span className="text-xs text-gray-600 text-center line-clamp-2">{doc.fileName || doc.name}</span>
+                                        {doc.isGoogleDrive && (
+                                          <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-medium">
+                                            Drive
+                                          </div>
+                                        )}
+                                        {isExpanded && (
+                                          <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-10 rounded">
+                                            <div className="bg-white rounded-lg p-4 max-w-md max-h-[80vh] overflow-auto">
+                                              <p className="text-sm font-semibold text-gray-900 mb-2">Document: {doc.fileName || doc.name}</p>
+                                              {doc.isGoogleDrive && doc.webViewLink ? (
+                                                <a
+                                                  href={doc.webViewLink}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <Link2 size={16} />
+                                                  Open in Google Drive
+                                                </a>
+                                              ) : (
+                                                <a
+                                                  href={doc.data}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-blue-600 hover:underline text-sm"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  Open in new tab
+                                                </a>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Hover overlay */}
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <Eye size={20} className="text-white" />
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Approval Status Badge */}
+                                  {isApproved && (
+                                    <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                                      <FileCheck size={12} />
+                                      <span>Approved</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

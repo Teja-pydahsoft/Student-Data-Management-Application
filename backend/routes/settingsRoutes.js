@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const settingsController = require('../controllers/settingsController');
+const documentSettingsController = require('../controllers/documentSettingsController');
 const authMiddleware = require('../middleware/auth');
 
 // All routes require authentication
@@ -9,6 +10,17 @@ router.use(authMiddleware);
 // Notification settings routes
 router.get('/notifications', settingsController.getNotificationSettings);
 router.put('/notifications', settingsController.updateNotificationSettings);
+
+// Document requirements settings routes (new CRUD API)
+router.get('/documents', documentSettingsController.getAllDocumentRequirements);
+router.get('/documents/:courseType/:academicStage', documentSettingsController.getDocumentRequirements);
+router.post('/documents', documentSettingsController.upsertDocumentRequirements);
+router.delete('/documents/:courseType/:academicStage', documentSettingsController.deleteDocumentRequirements);
+
+// Legacy document requirements routes (for backward compatibility)
+router.get('/document-requirements', documentSettingsController.getDocumentRequirementsLegacy);
+router.put('/document-requirements', documentSettingsController.updateDocumentRequirements);
+router.get('/document-requirements/:courseType', documentSettingsController.getDocumentRequirementsByCourseType);
 
 module.exports = router;
 

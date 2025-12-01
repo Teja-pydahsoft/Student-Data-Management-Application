@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Upload, FileText } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
@@ -35,6 +35,13 @@ const AddStudent = () => {
   const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
   const [admissionNumberLoading, setAdmissionNumberLoading] = useState(false);
   const [isAdmissionNumberManual, setIsAdmissionNumberManual] = useState(false);
+  
+  // Document upload state
+  const [enableDocumentUpload, setEnableDocumentUpload] = useState(false);
+  const [documentRequirements, setDocumentRequirements] = useState([]);
+  const [documentFiles, setDocumentFiles] = useState({});
+  const [documentRequirementsLoading, setDocumentRequirementsLoading] = useState(false);
+  
   const [studentData, setStudentData] = useState({
     pin_no: '',
     current_year: '1',
@@ -107,6 +114,58 @@ const AddStudent = () => {
     loadColleges();
     loadAcademicYears();
   }, []);
+
+  // Determine course type (UG or PG) based on course name
+  const courseType = useMemo(() => {
+    if (!studentData.course) return null;
+    const courseNameLower = studentData.course.toLowerCase();
+    if (courseNameLower.includes('pg') || courseNameLower.includes('post graduate') || courseNameLower.includes('m.tech') || courseNameLower.includes('mtech')) {
+      return 'PG';
+    }
+    return 'UG';
+  }, [studentData.course]);
+
+  // Fetch document requirements when course type changes and upload is enabled
+  useEffect(() => {
+    if (!courseType || !enableDocumentUpload) {
+      setDocumentRequirements([]);
+      return;
+    }
+
+    const fetchDocumentRequirements = async () => {
+      try {
+        setDocumentRequirementsLoading(true);
+        const stages = courseType === 'PG' ? ['10th', 'Inter', 'Diploma', 'UG'] : ['10th', 'Inter', 'Diploma'];
+        const allRequirements = [];
+        
+        for (const stage of stages) {
+          try {
+            const response = await api.get(`/settings/documents/${courseType}/${stage}`);
+            if (response.data.success && response.data.data) {
+              allRequirements.push(response.data.data);
+            }
+          } catch (error) {
+            console.log(`No requirements for ${courseType}/${stage}`);
+          }
+        }
+        
+        setDocumentRequirements(allRequirements);
+      } catch (error) {
+        console.error('Error fetching document requirements:', error);
+      } finally {
+        setDocumentRequirementsLoading(false);
+      }
+    };
+
+    fetchDocumentRequirements();
+  }, [courseType, enableDocumentUpload]);
+
+  const handleDocumentFileChange = (documentName, file) => {
+    setDocumentFiles({
+      ...documentFiles,
+      [documentName]: file,
+    });
+  };
 
   useEffect(() => {
     const loadCourseConfig = async () => {
@@ -536,13 +595,61 @@ const AddStudent = () => {
         return;
       }
     }
+
+    // Check document upload status and set certificates_status accordingly
+    let finalCertificatesStatus = studentData.certificates_status;
+    if (enableDocumentUpload && documentRequirements.length > 0) {
+      let allDocumentsUploaded = true;
+      for (const req of documentRequirements) {
+        if (!req.is_enabled || !req.required_documents) continue;
+        for (const docName of req.required_documents) {
+          if (!documentFiles[docName]) {
+            allDocumentsUploaded = false;
+            break;
+          }
+        }
+        if (!allDocumentsUploaded) break;
+      }
+      
+      // Auto-set certificates_status based on document upload completion
+      if (!allDocumentsUploaded) {
+        finalCertificatesStatus = 'Pending';
+      } else if (!finalCertificatesStatus || finalCertificatesStatus === 'Pending') {
+        finalCertificatesStatus = 'Submitted';
+      }
+    }
     
     try {
       setLoading(true);
-      const response = await api.post('/students', {
+      
+      // Create FormData for multipart submission (to handle file uploads)
+      const formData = new FormData();
+      
+      // Add all student data fields
+      Object.entries({
         ...studentData,
+        certificates_status: finalCertificatesStatus,
         current_year: Number(studentData.current_year),
         current_semester: Number(studentData.current_semester)
+      }).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          formData.append(key, value);
+        }
+      });
+      
+      // Add document files if document upload is enabled
+      if (enableDocumentUpload) {
+        Object.entries(documentFiles).forEach(([docName, file]) => {
+          if (file) {
+            formData.append(`document_${docName.replace(/\s+/g, '_')}`, file);
+          }
+        });
+      }
+      
+      const response = await api.post('/students', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
       
       if (response.data.success) {
@@ -1116,13 +1223,19 @@ const AddStudent = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Certificates Status <span className="text-red-500">*</span>
+                  {enableDocumentUpload && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      (Auto-set based on document upload)
+                    </span>
+                  )}
                 </label>
                 <select
                   name="certificates_status"
                   value={studentData.certificates_status}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  disabled={enableDocumentUpload && documentRequirements.length > 0}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none ${enableDocumentUpload && documentRequirements.length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 >
                   <option value="">Select Certificate Status</option>
                   {CERTIFICATES_STATUS_OPTIONS.map((status) => (
@@ -1131,6 +1244,11 @@ const AddStudent = () => {
                     </option>
                   ))}
                 </select>
+                {enableDocumentUpload && documentRequirements.length > 0 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Status will be set to "Pending" if documents are incomplete, "Submitted" when all documents are uploaded.
+                  </p>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-text-primary mb-2">
@@ -1231,6 +1349,113 @@ const AddStudent = () => {
               </div>
             </div>
           </div>
+
+          {/* Document Upload Section */}
+          {studentData.course && (
+            <div className="border-b border-border-light pb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary mb-2 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                    Document Uploads
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Upload required documents based on course selection.
+                  </p>
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <span className="text-sm font-medium text-gray-700">Upload Documents?</span>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={enableDocumentUpload}
+                      onChange={(e) => setEnableDocumentUpload(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                  </div>
+                </label>
+              </div>
+
+              {enableDocumentUpload && courseType && (
+                <div className="space-y-4">
+                  {documentRequirementsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <LoadingAnimation width={24} height={24} message="Loading document requirements..." />
+                    </div>
+                  ) : documentRequirements.length === 0 ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+                      <p className="text-sm text-gray-600">
+                        No document requirements configured for {courseType} courses.
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Please configure document requirements in Settings → Registration Form → Document Requirements.
+                      </p>
+                    </div>
+                  ) : (
+                    documentRequirements.map((req, reqIndex) => {
+                      if (!req.is_enabled || !req.required_documents || req.required_documents.length === 0) {
+                        return null;
+                      }
+                      
+                      return (
+                        <div key={reqIndex} className="rounded-lg border border-gray-200 bg-white p-4">
+                          <h4 className="text-base font-semibold text-gray-900 mb-3">
+                            {req.academic_stage} Documents
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {req.required_documents.map((docName, docIndex) => (
+                              <div key={docIndex}>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  {docName}
+                                  <span className="text-red-500 ml-1">*</span>
+                                </label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-teal-400 transition-colors bg-gray-50">
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0];
+                                      if (file) {
+                                        if (file.size > 10 * 1024 * 1024) {
+                                          toast.error(`${docName} file size should be less than 10MB`);
+                                          return;
+                                        }
+                                        handleDocumentFileChange(docName, file);
+                                      }
+                                    }}
+                                    className="hidden"
+                                    id={`doc-add-${reqIndex}-${docIndex}`}
+                                  />
+                                  <label
+                                    htmlFor={`doc-add-${reqIndex}-${docIndex}`}
+                                    className="cursor-pointer flex flex-col items-center gap-2"
+                                  >
+                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
+                                      <Upload className="w-5 h-5 text-teal-600" />
+                                    </div>
+                                    <p className="text-xs font-medium text-gray-700">
+                                      {documentFiles[docName] ? 'Change File' : 'Upload File'}
+                                    </p>
+                                    <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
+                                  </label>
+                                  {documentFiles[docName] && (
+                                    <p className="text-xs text-teal-600 mt-2 text-center">
+                                      Selected: {documentFiles[docName].name}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end pt-6">
             <button

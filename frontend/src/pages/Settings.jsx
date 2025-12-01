@@ -29,6 +29,7 @@ import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import AcademicCalendar from '../components/AcademicCalendar';
 import NotificationSettings from '../components/NotificationSettings';
+import DocumentRequirements from '../components/DocumentRequirements';
 import { isFullAccessRole } from '../constants/rbac';
 
 const formatDateInput = (date) => {
@@ -208,7 +209,8 @@ const Settings = () => {
     { key: 'textarea', label: 'Text Area', icon: '📄' },
     { key: 'select', label: 'Dropdown', icon: '📋' },
     { key: 'radio', label: 'Radio', icon: '🔘' },
-    { key: 'checkbox', label: 'Checkbox', icon: '☑️' }
+    { key: 'checkbox', label: 'Checkbox', icon: '☑️' },
+    { key: 'file', label: 'File Upload', icon: '📎' }
   ];
   
   // Delete confirmation modal state
@@ -222,7 +224,7 @@ const Settings = () => {
     hasMoreStudents: false,
     isLoadingStudents: false
   });
-  const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', or 'notifications'
+  const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', 'notifications'
 
   // Calendar state
   const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(() => {
@@ -409,10 +411,124 @@ const Settings = () => {
 
   // Start editing a form
   const startEditingForm = (form) => {
+    let formFields = form.form_fields || [];
+    
+    // CRITICAL: Ensure required system fields exist in the form builder
+    // These fields are needed for document upload and proper form functionality
+    const requiredSystemFields = [
+      {
+        id: 'system_batch',
+        key: 'batch',
+        label: 'Batch',
+        type: 'select',
+        required: true,
+        placeholder: 'Select Batch',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_college',
+        key: 'college',
+        label: 'College',
+        type: 'select',
+        required: true,
+        placeholder: 'Select College',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_course',
+        key: 'course',
+        label: 'Course',
+        type: 'select',
+        required: true,
+        placeholder: 'Select Course',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_branch',
+        key: 'branch',
+        label: 'Branch',
+        type: 'select',
+        required: true,
+        placeholder: 'Select Branch',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_current_year',
+        key: 'current_year',
+        label: 'Current Academic Year',
+        type: 'select',
+        required: true,
+        placeholder: 'Select Year',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_current_semester',
+        key: 'current_semester',
+        label: 'Current Semester',
+        type: 'select',
+        required: true,
+        placeholder: 'Select Semester',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      },
+      {
+        id: 'system_apaar_id',
+        key: 'apaar_id',
+        label: 'APAAR ID',
+        type: 'text',
+        required: false,
+        placeholder: 'Enter 12-digit APAAR ID',
+        options: [],
+        isEnabled: true,
+        isSystemField: true
+      }
+    ];
+    
+    // Add system fields if they don't exist, or update existing ones to ensure they have isSystemField flag
+    requiredSystemFields.forEach(systemField => {
+      const existingFieldIndex = formFields.findIndex(f => {
+        const fieldKey = (f.key || '').toLowerCase();
+        const fieldLabel = (f.label || '').toLowerCase();
+        const systemKey = systemField.key.toLowerCase();
+        const systemLabel = systemField.label.toLowerCase();
+        
+        return fieldKey === systemKey || 
+               fieldLabel === systemLabel ||
+               fieldKey.includes(systemKey) ||
+               fieldLabel.includes(systemLabel);
+      });
+      
+      if (existingFieldIndex === -1) {
+        // Field doesn't exist, add it
+        formFields.push(systemField);
+        console.log(`➕ Added system field to form builder: ${systemField.label}`);
+      } else {
+        // Field exists, ensure it has isSystemField flag and preserve its current required status
+        const existingField = formFields[existingFieldIndex];
+        formFields[existingFieldIndex] = {
+          ...existingField,
+          isSystemField: true,
+          // Preserve existing required status if set, otherwise use system field default
+          required: existingField.required !== undefined ? existingField.required : systemField.required
+        };
+      }
+    });
+    
     setFormEditData({
       formName: form.form_name,
       formDescription: form.form_description || '',
-      formFields: form.form_fields || []
+      formFields: formFields
     });
     setSelectedFormId(form.form_id);
     setIsEditingForm(true);
@@ -1694,6 +1810,7 @@ const Settings = () => {
             </div>
           </div>
         </button>
+
       </div>
 
       {/* Content Section */}
@@ -2535,13 +2652,29 @@ const Settings = () => {
                 <div className="border-t border-gray-200 pt-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3">Form Fields ({formEditData.formFields.length})</h4>
                   <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                    {formEditData.formFields.map((field, index) => (
+                    {formEditData.formFields.map((field, index) => {
+                      const isSystemField = field.isSystemField || 
+                        ['batch', 'college', 'course', 'branch', 'current_year', 'current_semester', 'apaar_id'].includes(
+                          (field.key || '').toLowerCase()
+                        );
+                      
+                      return (
                       <div
                         key={field.id || index}
                         className={`rounded-lg border-2 p-3 transition-all ${
-                          field.isEnabled !== false ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'
+                          field.isEnabled !== false 
+                            ? isSystemField 
+                              ? 'border-blue-200 bg-blue-50' 
+                              : 'border-gray-200 bg-white'
+                            : 'border-gray-100 bg-gray-50'
                         }`}
                       >
+                        {isSystemField && (
+                          <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
+                            <Settings2 size={12} />
+                            System Field (Required for document upload)
+                          </div>
+                        )}
                         <div className="flex items-start gap-3">
                           <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div>
@@ -2552,6 +2685,7 @@ const Settings = () => {
                                 onChange={(e) => updateFormField(index, 'label', e.target.value)}
                                 placeholder="Field label"
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                disabled={isSystemField}
                               />
                             </div>
                             <div>
@@ -2560,6 +2694,7 @@ const Settings = () => {
                                 value={field.type}
                                 onChange={(e) => updateFormField(index, 'type', e.target.value)}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                disabled={isSystemField}
                               >
                                 {FIELD_TYPES.map((t) => (
                                   <option key={t.key} value={t.key}>{t.label}</option>
@@ -2594,13 +2729,25 @@ const Settings = () => {
                                     : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                 }`}
                                 title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
+                                disabled={isSystemField}
                               >
                                 {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                               </button>
                               <button
-                                onClick={() => removeFormField(index)}
-                                className="p-1.5 rounded bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                                title="Remove field"
+                                onClick={() => {
+                                  if (isSystemField) {
+                                    toast.error('System fields cannot be removed. They are required for form functionality.');
+                                    return;
+                                  }
+                                  removeFormField(index);
+                                }}
+                                className={`p-1.5 rounded transition-colors ${
+                                  isSystemField
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-red-100 text-red-600 hover:bg-red-200'
+                                }`}
+                                title={isSystemField ? 'System field - cannot be removed' : 'Remove field'}
+                                disabled={isSystemField}
                               >
                                 <Trash2 size={16} />
                               </button>
@@ -2639,8 +2786,21 @@ const Settings = () => {
                           </div>
                         )}
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
+                </div>
+
+                {/* Document Requirements Section - Integrated into Form Editor */}
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <FileText size={16} className="text-purple-600" />
+                    Document Requirements Configuration
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Configure which documents are required for UG and PG courses at different academic stages.
+                  </p>
+                  <DocumentRequirements />
                 </div>
               </div>
             ) : (
@@ -2761,6 +2921,7 @@ const Settings = () => {
           <NotificationSettings />
         </div>
       )}
+
 
       {/* Edit College Modal */}
       {editingCollegeId && (

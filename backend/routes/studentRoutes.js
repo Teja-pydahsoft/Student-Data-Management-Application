@@ -8,6 +8,12 @@ const multer = require('multer');
 // Configure multer for photo uploads
 const photoUpload = multer({ dest: 'uploads/' });
 
+// Configure multer for document uploads (multiple files)
+const documentUpload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
+});
+
 // All routes are protected and scoped by user's assigned colleges/courses/branches
 router.get('/', authMiddleware, attachUserScope, studentController.getAllStudents);
 router.get('/filter-fields', authMiddleware, attachUserScope, studentController.getFilterFields);
@@ -32,7 +38,7 @@ router.post('/bulk-update-pin-numbers', authMiddleware, attachUserScope, student
 router.post('/bulk-delete', authMiddleware, attachUserScope, studentController.bulkDeleteStudents);
 router.post('/upload-photo', authMiddleware, photoUpload.single('photo'), studentController.uploadStudentPhoto);
 router.post('/promotions/bulk', authMiddleware, attachUserScope, studentController.bulkPromoteStudents);
-router.post('/', authMiddleware, attachUserScope, studentController.createStudent);
+router.post('/', authMiddleware, attachUserScope, documentUpload.any(), studentController.createStudent);
 router.post('/:admissionNumber/promote', authMiddleware, attachUserScope, studentController.promoteStudent);
 router.get('/:admissionNumber', authMiddleware, attachUserScope, studentController.getStudentByAdmission);
 router.put('/:admissionNumber', authMiddleware, attachUserScope, studentController.updateStudent);

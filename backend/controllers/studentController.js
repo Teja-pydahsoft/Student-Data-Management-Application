@@ -2832,11 +2832,26 @@ exports.getDashboardStats = async (req, res) => {
 exports.createStudent = async (req, res) => {
   try {
     console.log('📝 Create Student - Incoming request body:', JSON.stringify(req.body, null, 2));
+    console.log('📝 Create Student - Files:', req.files ? req.files.map(f => ({ name: f.originalname, fieldname: f.fieldname })) : 'none');
     
-    const incomingData =
-      req.body.studentData && typeof req.body.studentData === 'object'
-        ? { ...req.body.studentData }
-        : { ...req.body };
+    // Handle both JSON and FormData
+    let incomingData;
+    if (req.body.studentData && typeof req.body.studentData === 'object') {
+      incomingData = { ...req.body.studentData };
+    } else if (typeof req.body === 'object' && !Array.isArray(req.body)) {
+      // Handle FormData - all fields are strings, need to parse numbers
+      incomingData = { ...req.body };
+      
+      // Convert numeric fields
+      if (incomingData.current_year) {
+        incomingData.current_year = parseInt(incomingData.current_year, 10) || 1;
+      }
+      if (incomingData.current_semester) {
+        incomingData.current_semester = parseInt(incomingData.current_semester, 10) || 1;
+      }
+    } else {
+      incomingData = {};
+    }
 
     delete incomingData.studentData;
     
@@ -2983,6 +2998,169 @@ exports.createStudent = async (req, res) => {
     });
     
     await masterPool.query(insertQuery, insertValues);
+
+    // Handle document uploads if files are present
+    const uploadedDocuments = {};
+    if (req.files && req.files.length > 0) {
+      try {
+        const googleDriveService = require('../services/googleDriveService');
+        const { ensureFolderStructure, uploadFile } = googleDriveService;
+        const fs = require('fs');
+        const path = require('path');
+        const { v4: uuidv4 } = require('uuid');
+
+        // Extract student info for folder structure
+        const collegeName = incomingData.college || 'Unknown_College';
+        const batch = incomingData.batch || 'Unknown_Batch';
+        const course = incomingData.course || 'Unknown_Course';
+        const branch = incomingData.branch || 'Unknown_Branch';
+
+        const folderPathSegments = [
+          collegeName.replace(/[^a-zA-Z0-9_]/g, '_'),
+          batch.replace(/[^a-zA-Z0-9_]/g, '_'),
+          course.replace(/[^a-zA-Z0-9_]/g, '_'),
+          branch.replace(/[^a-zA-Z0-9_]/g, '_'),
+          admissionNumber.replace(/[^a-zA-Z0-9_]/g, '_')
+        ];
+
+        const studentFolderId = await ensureFolderStructure(folderPathSegments);
+        console.log(`📁 Ensured Google Drive folder structure. Student folder ID: ${studentFolderId}`);
+
+        // Process each uploaded file
+        for (const file of req.files) {
+          try {
+            // Extract document name from fieldname (format: document_Document_Name)
+            const docName = file.fieldname.replace(/^document_/, '').replace(/_/g, ' ');
+            
+            const uploadedFile = await uploadFile(
+              file.originalname || `${docName}_${admissionNumber}`,
+              file.path,
+              file.mimetype || 'application/pdf',
+              studentFolderId
+            );
+            
+            uploadedDocuments[docName] = uploadedFile.webViewLink;
+            console.log(`⬆️ Uploaded ${docName} to Google Drive: ${uploadedFile.webViewLink}`);
+
+            // Clean up temp file
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          } catch (uploadError) {
+            console.error(`❌ Failed to upload file ${file.originalname} to Google Drive:`, uploadError);
+            // Continue processing other files even if one fails
+          }
+        }
+
+        // Update student_data with document links
+        if (Object.keys(uploadedDocuments).length > 0) {
+          const [currentStudentRows] = await masterPool.query(
+            'SELECT student_data FROM students WHERE admission_number = ?',
+            [admissionNumber]
+          );
+          
+          if (currentStudentRows.length > 0) {
+            const currentStudentData = parseJSON(currentStudentRows[0].student_data) || {};
+            const updatedStudentData = {
+              ...currentStudentData,
+              google_drive_documents: {
+                ...currentStudentData.google_drive_documents,
+                ...uploadedDocuments
+              }
+            };
+            
+            await masterPool.query(
+              'UPDATE students SET student_data = ? WHERE admission_number = ?',
+              [JSON.stringify(updatedStudentData), admissionNumber]
+            );
+            console.log('🔗 Updated student record with Google Drive document links.');
+          }
+        }
+      } catch (driveError) {
+        console.error('Google Drive upload error (non-fatal):', driveError.message);
+        // Don't fail the student creation if Drive upload fails
+      }
+    }
+
+    // Auto-set certificates_status based on document requirements if certificates_status is not explicitly set
+    // Check if documents are required and if all are uploaded
+    if (!incomingData.certificates_status || incomingData.certificates_status === 'Pending') {
+      try {
+        const documentSettingsController = require('../controllers/documentSettingsController');
+        
+        // Determine course type
+        const courseNameLower = (incomingData.course || '').toLowerCase();
+        const courseType = courseNameLower.includes('pg') || courseNameLower.includes('post graduate') || 
+                          courseNameLower.includes('m.tech') || courseNameLower.includes('mtech') ? 'PG' : 'UG';
+        
+        // Get document requirements
+        const stages = courseType === 'PG' ? ['10th', 'Inter', 'Diploma', 'UG'] : ['10th', 'Inter', 'Diploma'];
+        let allDocumentsUploaded = true;
+        let hasRequirements = false;
+        
+        for (const stage of stages) {
+          try {
+            const [reqRows] = await masterPool.query(
+              'SELECT * FROM document_requirements WHERE course_type = ? AND academic_stage = ? AND is_enabled = 1',
+              [courseType, stage]
+            );
+            
+            if (reqRows.length > 0) {
+              hasRequirements = true;
+              const req = reqRows[0];
+              const requiredDocs = parseJSON(req.required_documents) || [];
+              
+              for (const docName of requiredDocs) {
+                // Check if document was uploaded (check both uploadedDocuments and student_data)
+                const docKey = docName.replace(/\s+/g, '_');
+                if (!uploadedDocuments[docName] && !uploadedDocuments[docKey]) {
+                  allDocumentsUploaded = false;
+                  break;
+                }
+              }
+              
+              if (!allDocumentsUploaded) break;
+            }
+          } catch (err) {
+            console.log(`No requirements for ${courseType}/${stage}`);
+          }
+        }
+        
+        // Auto-set certificates_status
+        if (hasRequirements) {
+          const finalStatus = allDocumentsUploaded ? 'Submitted' : 'Pending';
+          
+          // Update certificates_status in database if it's in the columns
+          if (insertColumns.includes('certificates_status')) {
+            const statusIndex = insertColumns.indexOf('certificates_status');
+            insertValues[statusIndex] = finalStatus;
+            await masterPool.query(
+              'UPDATE students SET certificates_status = ? WHERE admission_number = ?',
+              [finalStatus, admissionNumber]
+            );
+          } else {
+            // Add to student_data if not in columns
+            const [currentStudentRows] = await masterPool.query(
+              'SELECT student_data FROM students WHERE admission_number = ?',
+              [admissionNumber]
+            );
+            if (currentStudentRows.length > 0) {
+              const currentStudentData = parseJSON(currentStudentRows[0].student_data) || {};
+              currentStudentData.certificates_status = finalStatus;
+              await masterPool.query(
+                'UPDATE students SET student_data = ? WHERE admission_number = ?',
+                [JSON.stringify(currentStudentData), admissionNumber]
+              );
+            }
+          }
+          
+          console.log(`📋 Auto-set certificates_status to "${finalStatus}" based on document upload status`);
+        }
+      } catch (statusError) {
+        console.error('Error auto-setting certificates_status:', statusError);
+        // Non-fatal error
+      }
+    }
 
     // Fetch the created student data
     const [createdStudents] = await masterPool.query(

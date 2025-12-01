@@ -1229,8 +1229,8 @@ exports.submitForm = async (req, res) => {
         .single();
 
       if (!setErr && setting && setting.value === 'true') {
-        // Get academic year from submission data (batch field)
-        let academicYear = submissionData.batch || submissionData.academic_year;
+        // Get academic year from form data (batch field)
+        let academicYear = formData.batch || formData.academic_year;
         
         // Extract year if batch contains range like "2024-2028" or "2024-25"
         if (academicYear && typeof academicYear === 'string') {
@@ -1725,18 +1725,137 @@ exports.approveSubmission = async (req, res) => {
       }
     }
 
+    // Upload documents to Google Drive if enabled and documents exist
+    const uploadedDocuments = {};
+    try {
+      const googleDriveService = require('../services/googleDriveService');
+      const documentSettingsController = require('../controllers/documentSettingsController');
+      
+      // Get document requirements to determine which documents to upload
+      const { data: docSettings } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'document_requirements')
+        .single();
+      
+      let docRequirements = {};
+      if (docSettings && docSettings.value) {
+        try {
+          docRequirements = JSON.parse(docSettings.value);
+        } catch (e) {
+          console.warn('Could not parse document requirements:', e);
+        }
+      }
+
+      // Extract student info for folder structure
+      const studentInfo = {
+        college: submissionData.college || 'Unknown',
+        batch: submissionData.batch || 'Unknown',
+        course: submissionData.course || 'Unknown',
+        branch: submissionData.branch || 'Unknown',
+        admissionNumber: finalAdmissionNumber
+      };
+
+      // Upload documents that are present in submission data
+      // Look for all keys starting with "document_" in submission_data
+      const documentKeys = Object.keys(submissionData).filter(key => 
+        key.toLowerCase().startsWith('document_') && 
+        typeof submissionData[key] === 'string' && 
+        submissionData[key].startsWith('data:')
+      );
+
+      for (const docKey of documentKeys) {
+        const docValue = submissionData[docKey];
+        if (docValue && typeof docValue === 'string' && docValue.startsWith('data:')) {
+          try {
+            // Extract file extension from MIME type
+            const mimeMatch = docValue.match(/data:([^;]+);base64,/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'application/pdf';
+            const extension = mimeType.includes('pdf') ? 'pdf' : 
+                            mimeType.includes('image') ? (mimeType.includes('png') ? 'png' : 'jpg') : 'pdf';
+            
+            // Extract document name from key (e.g., "document_Diploma_Certificate" -> "Diploma Certificate")
+            let docLabel = docKey.replace(/^document_/i, '').replace(/_/g, ' ');
+            // Try to find matching label in docRequirements
+            const matchingReq = Object.entries(docRequirements).find(([key, req]) => 
+              key.toLowerCase().replace(/[^a-z0-9]/g, '') === docKey.toLowerCase().replace(/^document_/i, '').replace(/[^a-z0-9]/g, '') ||
+              req?.label?.toLowerCase().replace(/[^a-z0-9]/g, '') === docLabel.toLowerCase().replace(/[^a-z0-9]/g, '')
+            );
+            if (matchingReq && matchingReq[1]?.label) {
+              docLabel = matchingReq[1].label;
+            }
+            
+            const fileName = `${docLabel.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
+            
+            const uploadResult = await googleDriveService.uploadStudentDocument(
+              docValue,
+              fileName,
+              mimeType,
+              studentInfo
+            );
+            
+            uploadedDocuments[docKey] = {
+              fileId: uploadResult.fileId,
+              fileName: uploadResult.fileName,
+              webViewLink: uploadResult.webViewLink,
+              folderPath: uploadResult.folderPath
+            };
+            
+            console.log(`✅ Uploaded ${docKey} to Google Drive: ${uploadResult.fileId}`);
+          } catch (uploadError) {
+            console.error(`❌ Error uploading ${docKey} to Google Drive:`, uploadError.message);
+            // Continue with other documents even if one fails
+          }
+        }
+      }
+    } catch (driveError) {
+      console.error('Google Drive upload error (non-fatal):', driveError.message);
+      // Don't fail the approval if Drive upload fails
+    }
+
     // Update submission status
     const { error: updErr } = await supabase
       .from('form_submissions')
-      .update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: req.admin.id, admission_number: finalAdmissionNumber })
+      .update({ 
+        status: 'approved', 
+        reviewed_at: new Date().toISOString(), 
+        reviewed_by: req.admin.id, 
+        admission_number: finalAdmissionNumber 
+      })
       .eq('submission_id', submissionId);
     if (updErr) throw updErr;
+
+    // Store uploaded document links in student record if any documents were uploaded
+    if (Object.keys(uploadedDocuments).length > 0) {
+      try {
+        const [existingStudents] = await masterConn.query(
+          'SELECT student_data FROM students WHERE admission_number = ? OR admission_no = ?',
+          [finalAdmissionNumber, finalAdmissionNumber]
+        );
+        
+        if (existingStudents.length > 0) {
+          const existingData = parseJSON(existingStudents[0].student_data) || {};
+          existingData.uploaded_documents = uploadedDocuments;
+          
+          await masterConn.query(
+            'UPDATE students SET student_data = ? WHERE admission_number = ? OR admission_no = ?',
+            [safeJSONStringify(existingData), finalAdmissionNumber, finalAdmissionNumber]
+          );
+        }
+      } catch (docUpdateError) {
+        console.error('Error updating student with document links:', docUpdateError);
+        // Non-fatal error
+      }
+    }
 
     // Log action
     await masterConn.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
        VALUES (?, ?, ?, ?, ?)`,
-      ['APPROVE', 'SUBMISSION', submissionId, req.admin.id, JSON.stringify({ admissionNumber: finalAdmissionNumber })]
+      ['APPROVE', 'SUBMISSION', submissionId, req.admin.id, JSON.stringify({ 
+        admissionNumber: finalAdmissionNumber,
+        documentsUploaded: Object.keys(uploadedDocuments).length
+      })]
     );
 
     await masterConn.commit();
