@@ -1,16 +1,15 @@
-const { supabase } = require('../config/supabase');
+const { masterPool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 
 const createDefaultForm = async () => {
   try {
     // Check if the default student form already exists
-    const { data: forms, error: e0 } = await supabase
-      .from('forms')
-      .select('form_id')
-      .eq('form_name', 'Default Student Registration Form')
-      .limit(1);
-    if (e0) throw e0;
+    const [forms] = await masterPool.query(
+      'SELECT form_id FROM forms WHERE form_name = ? LIMIT 1',
+      ['Default Student Registration Form']
+    );
+    
     if (forms && forms.length > 0) {
       console.log('Default student form already exists. Skipping creation.');
       return;
@@ -53,26 +52,15 @@ const createDefaultForm = async () => {
         { key: 'remarks', label: 'Remarks', type: 'textarea', required: false, isEnabled: true },
     ];
 
-    // Assuming there's at least one admin, or created_by can be null/default
-    const { data: admins, error: e1 } = await supabase
-      .from('admins')
-      .select('id')
-      .limit(1);
-    if (e1) throw e1;
+    // Get first admin ID or use null
+    const [admins] = await masterPool.query('SELECT id FROM admins LIMIT 1');
     const adminId = admins && admins.length > 0 ? admins[0].id : null;
 
-    const { error: e2 } = await supabase
-      .from('forms')
-      .insert({
-        form_id: formId,
-        form_name: formName,
-        form_description: formDescription,
-        form_fields: defaultFormFields,
-        qr_code_data: qrCodeData,
-        created_by: adminId,
-        is_active: true
-      });
-    if (e2) throw e2;
+    await masterPool.query(
+      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [formId, formName, formDescription, JSON.stringify(defaultFormFields), qrCodeData, adminId, true]
+    );
 
     console.log('✅ Default student form created successfully with ID:', formId);
     console.log('📱 QR Code URL:', formUrl);

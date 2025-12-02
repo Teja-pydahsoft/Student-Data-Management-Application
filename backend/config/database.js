@@ -1,6 +1,5 @@
 const mysql = require('mysql2');
 require('dotenv').config();
-const { supabase } = require('./supabase');
 
 
 // Master DB connection pool with enhanced configuration
@@ -40,7 +39,7 @@ const stagingPoolRaw = mysql.createPool({
 const masterPool = masterPoolRaw.promise();
 const stagingPool = stagingPoolRaw.promise();
 
-// Test connections with retry logic and Supabase testing
+// Test connections with retry logic
 const testConnection = async (retries = 3) => {
   let dbConnected = false;
 
@@ -55,15 +54,6 @@ const testConnection = async (retries = 3) => {
         await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
       }
     }
-  }
-
-  try {
-    if (supabase) {
-      const { error } = await supabase.from('admins').select('id').limit(1);
-      if (error) throw error;
-    }
-  } catch (error) {
-    // Don't return false for Supabase errors, as the app can still work with just MySQL
   }
 
   return dbConnected;

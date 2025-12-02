@@ -1,6 +1,5 @@
 const bcrypt = require('bcryptjs');
 const { masterPool } = require('../config/database');
-const { supabase } = require('../config/supabase');
 const { createSuperAdminPermissions } = require('../constants/rbac');
 require('dotenv').config();
 
@@ -35,93 +34,50 @@ async function migrateExistingAdminToRBAC() {
       return;
     }
 
-    // Fetch existing admin from Supabase admins table
+    // Fetch existing admin from MySQL admins table
     let adminAccount = null;
 
-    if (supabase) {
-      try {
-        console.log('🔍 Checking Supabase for existing admin...');
-        // First try to find superadmin
-        let { data: admins, error } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('username', 'superadmin')
-          .limit(1);
+    try {
+      console.log('🔍 Checking MySQL for existing admin...');
+      // First try superadmin
+      let [mysqlAdmins] = await masterPool.query(
+        'SELECT * FROM admins WHERE username = ? LIMIT 1',
+        ['superadmin']
+      );
 
-        if (error) {
-          console.error('⚠️  Error fetching from Supabase:', error.message);
-          console.error('   Error details:', error);
-        } else if (admins && admins.length > 0) {
-          adminAccount = admins[0];
-          console.log('✅ Found admin in Supabase with username "superadmin"');
-        } else {
-          console.log('ℹ️  No admin found in Supabase with username "superadmin"');
-          // Try to find admin with username "admin"
-          const { data: adminUsers } = await supabase
-            .from('admins')
-            .select('*')
-            .eq('username', 'admin')
-            .limit(1);
-          
-          if (adminUsers && adminUsers.length > 0) {
-            adminAccount = adminUsers[0];
-            console.log('✅ Found admin in Supabase with username "admin"');
-            console.log('   Will migrate and rename to "superadmin"');
-          } else {
-            // Try to find any admin
-            const { data: allAdmins } = await supabase
-              .from('admins')
-              .select('*')
-              .limit(5);
-            
-            if (allAdmins && allAdmins.length > 0) {
-              console.log(`   Found ${allAdmins.length} admin(s) in Supabase:`);
-              allAdmins.forEach(admin => {
-                console.log(`     - ID: ${admin.id}, Username: ${admin.username}, Email: ${admin.email}`);
-              });
-              // Use the first admin found
-              adminAccount = allAdmins[0];
-              console.log(`   Using first admin: ${adminAccount.username}`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('⚠️  Supabase lookup failed:', error.message);
-        console.error('   This might mean Supabase is not configured or not accessible');
-      }
-    } else {
-      console.log('ℹ️  Supabase not configured, skipping Supabase lookup');
-    }
-
-    // If not found in Supabase, try MySQL admins table
-    if (!adminAccount) {
-      try {
-        console.log('🔍 Checking MySQL for existing admin...');
-        // First try superadmin
-        let [mysqlAdmins] = await masterPool.query(
+      if (mysqlAdmins && mysqlAdmins.length > 0) {
+        adminAccount = mysqlAdmins[0];
+        console.log('✅ Found admin in MySQL with username "superadmin"');
+      } else {
+        // Try admin
+        [mysqlAdmins] = await masterPool.query(
           'SELECT * FROM admins WHERE username = ? LIMIT 1',
-          ['superadmin']
+          ['admin']
         );
 
         if (mysqlAdmins && mysqlAdmins.length > 0) {
           adminAccount = mysqlAdmins[0];
-          console.log('✅ Found admin in MySQL with username "superadmin"');
+          console.log('✅ Found admin in MySQL with username "admin"');
+          console.log('   Will migrate and rename to "superadmin"');
         } else {
-          // Try admin
+          // Try to find any admin
           [mysqlAdmins] = await masterPool.query(
-            'SELECT * FROM admins WHERE username = ? LIMIT 1',
-            ['admin']
+            'SELECT * FROM admins LIMIT 5'
           );
-
+          
           if (mysqlAdmins && mysqlAdmins.length > 0) {
+            console.log(`   Found ${mysqlAdmins.length} admin(s) in MySQL:`);
+            mysqlAdmins.forEach(admin => {
+              console.log(`     - ID: ${admin.id}, Username: ${admin.username}, Email: ${admin.email}`);
+            });
+            // Use the first admin found
             adminAccount = mysqlAdmins[0];
-            console.log('✅ Found admin in MySQL with username "admin"');
-            console.log('   Will migrate and rename to "superadmin"');
+            console.log(`   Using first admin: ${adminAccount.username}`);
           }
         }
-      } catch (error) {
-        console.error('⚠️  MySQL admins table lookup failed:', error.message);
       }
+    } catch (error) {
+      console.error('⚠️  MySQL admins table lookup failed:', error.message);
     }
 
     if (!adminAccount) {

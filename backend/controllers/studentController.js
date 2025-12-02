@@ -1,5 +1,4 @@
 const { masterPool, stagingPool } = require('../config/database');
-const { supabase } = require('../config/supabase');
 const { studentsCache } = require('../services/cache');
 const multer = require('multer');
 const csv = require('csv-parser');
@@ -1239,30 +1238,13 @@ exports.previewBulkUploadStudents = async (req, res) => {
       }
     }
 
-    // Check if auto-generate series is enabled
-    let autoGenerateEnabled = false;
-
-    try {
-      const { data: setting, error: setErr } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'auto_assign_series')
-        .single();
-
-      if (!setErr && setting && setting.value === 'true') {
-        autoGenerateEnabled = true;
-      }
-    } catch (error) {
-      console.error('Error checking auto-assign setting:', error);
-    }
-
-    // Auto-generate admission numbers based on academic year (batch)
+    // Auto-assign is always enabled - auto-generate admission numbers based on academic year (batch)
     // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
-    if (autoGenerateEnabled) {
-      // Group records by academic year to find max admission number per year
-      const recordsByYear = new Map(); // year -> array of records without admission numbers
-      
-      processedRows.forEach((record) => {
+    // Auto-assign is always on, so always generate admission numbers
+    // Group records by academic year to find max admission number per year
+    const recordsByYear = new Map(); // year -> array of records without admission numbers
+    
+    processedRows.forEach((record) => {
         const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
         if (!normalizedAdmission) {
           // Get academic year from batch field
@@ -1345,7 +1327,6 @@ exports.previewBulkUploadStudents = async (req, res) => {
           masterConn.release();
         }
       }
-    }
 
     // Track duplicates: for each admission number, find the row with most filled fields
     const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
@@ -1580,30 +1561,13 @@ exports.commitBulkUploadStudents = async (req, res) => {
     }
   }
 
-  // Check if auto-generate series is enabled
-  let autoGenerateEnabled = false;
-
-  try {
-    const { data: setting, error: setErr } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'auto_assign_series')
-      .single();
-
-    if (!setErr && setting && setting.value === 'true') {
-      autoGenerateEnabled = true;
-    }
-  } catch (error) {
-    console.error('Error checking auto-assign setting:', error);
-  }
-
-  // Auto-generate admission numbers based on academic year (batch)
+  // Auto-assign is always enabled - auto-generate admission numbers based on academic year (batch)
   // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
-  if (autoGenerateEnabled) {
-    // Group records by academic year to find max admission number per year
-    const recordsByYear = new Map(); // year -> array of records without admission numbers
-    
-    preparedRecords.forEach((record) => {
+  // Auto-assign is always on, so always generate admission numbers
+  // Group records by academic year to find max admission number per year
+  const recordsByYear = new Map(); // year -> array of records without admission numbers
+  
+  preparedRecords.forEach((record) => {
       const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
       if (!normalizedAdmission) {
         // Get academic year from batch field
@@ -1686,7 +1650,6 @@ exports.commitBulkUploadStudents = async (req, res) => {
         masterConn.release();
       }
     }
-  }
 
   // Track duplicates: for each admission number, find the row with most filled fields
   const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
@@ -2722,19 +2685,6 @@ exports.deleteStudent = async (req, res) => {
 
 // Get dashboard statistics
 exports.getDashboardStats = async (req, res) => {
-  const safeSupabaseCount = async (promise, label) => {
-    try {
-      const { count, error } = await promise;
-      if (error) {
-        console.warn(`Dashboard stats: unable to fetch ${label}`, error.message || error);
-        return 0;
-      }
-      return count || 0;
-    } catch (error) {
-      console.warn(`Dashboard stats: unexpected error while fetching ${label}`, error.message || error);
-      return 0;
-    }
-  };
 
   try {
     let totalStudents = 0;
@@ -2761,25 +2711,24 @@ exports.getDashboardStats = async (req, res) => {
       console.warn('Dashboard stats: master database unavailable, returning fallback totals', dbError.message || dbError);
     }
 
-    const pendingSubmissions = await safeSupabaseCount(
-      supabase
-        .from('form_submissions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending'),
-      'pending submissions count'
-    );
+    let pendingSubmissions = 0;
+    try {
+      const [pendingResult] = await masterPool.query(
+        'SELECT COUNT(*) as count FROM form_submissions WHERE status = ?',
+        ['pending']
+      );
+      pendingSubmissions = pendingResult[0]?.count || 0;
+    } catch (error) {
+      console.warn('Dashboard stats: unable to count pending submissions', error.message || error);
+    }
 
     let recentWithNames = [];
     try {
-      const { data: recentSubmissions, error: recentError } = await supabase
-        .from('form_submissions')
-        .select('submission_id, admission_number, status, created_at, form_id')
-        .order('created_at', { ascending: false })
-        .limit(10);
+      const [recentSubmissions] = await masterPool.query(
+        'SELECT submission_id, admission_number, status, created_at, form_id FROM form_submissions ORDER BY created_at DESC LIMIT 10'
+      );
 
-      if (recentError) {
-        console.warn('Dashboard stats: unable to fetch recent submissions', recentError.message || recentError);
-      } else if (recentSubmissions) {
+      if (recentSubmissions) {
         recentWithNames = recentSubmissions.map((r) => ({
           ...r,
           submitted_at: r.created_at // Use created_at as submitted_at
@@ -2787,14 +2736,13 @@ exports.getDashboardStats = async (req, res) => {
         const formIds = Array.from(new Set(recentSubmissions.map((r) => r.form_id))).filter(Boolean);
 
         if (formIds.length > 0) {
-          const { data: formsRows, error: formsError } = await supabase
-            .from('forms')
-            .select('form_id, form_name')
-            .in('form_id', formIds);
+          const placeholders = formIds.map(() => '?').join(',');
+          const [formsRows] = await masterPool.query(
+            `SELECT form_id, form_name FROM forms WHERE form_id IN (${placeholders})`,
+            formIds
+          );
 
-          if (formsError) {
-            console.warn('Dashboard stats: unable to attach form names', formsError.message || formsError);
-          } else if (formsRows) {
+          if (formsRows) {
             const idToName = new Map(formsRows.map((f) => [f.form_id, f.form_name]));
             recentWithNames = recentWithNames.map((r) => ({
               ...r,
@@ -2803,8 +2751,8 @@ exports.getDashboardStats = async (req, res) => {
           }
         }
       }
-    } catch (supabaseError) {
-      console.warn('Dashboard stats: unexpected error while preparing recent submissions', supabaseError.message || supabaseError);
+    } catch (mysqlError) {
+      console.warn('Dashboard stats: unexpected error while preparing recent submissions', mysqlError.message || mysqlError);
       recentWithNames = [];
     }
 
@@ -3003,51 +2951,53 @@ exports.createStudent = async (req, res) => {
     const uploadedDocuments = {};
     if (req.files && req.files.length > 0) {
       try {
-        const googleDriveService = require('../services/googleDriveService');
-        const { ensureFolderStructure, uploadFile } = googleDriveService;
+        const s3Service = require('../services/s3Service');
         const fs = require('fs');
-        const path = require('path');
-        const { v4: uuidv4 } = require('uuid');
 
-        // Extract student info for folder structure
+        // Extract student info for S3 folder structure
         const collegeName = incomingData.college || 'Unknown_College';
         const batch = incomingData.batch || 'Unknown_Batch';
         const course = incomingData.course || 'Unknown_Course';
         const branch = incomingData.branch || 'Unknown_Branch';
 
-        const folderPathSegments = [
-          collegeName.replace(/[^a-zA-Z0-9_]/g, '_'),
-          batch.replace(/[^a-zA-Z0-9_]/g, '_'),
-          course.replace(/[^a-zA-Z0-9_]/g, '_'),
-          branch.replace(/[^a-zA-Z0-9_]/g, '_'),
-          admissionNumber.replace(/[^a-zA-Z0-9_]/g, '_')
-        ];
+        const studentInfo = {
+          college: collegeName,
+          batch: batch,
+          course: course,
+          branch: branch,
+          admissionNumber: admissionNumber
+        };
 
-        const studentFolderId = await ensureFolderStructure(folderPathSegments);
-        console.log(`📁 Ensured Google Drive folder structure. Student folder ID: ${studentFolderId}`);
+        console.log(`📁 Preparing to upload documents to S3 for student: ${admissionNumber}`);
 
         // Process each uploaded file
         for (const file of req.files) {
           try {
             // Extract document name from fieldname (format: document_Document_Name)
             const docName = file.fieldname.replace(/^document_/, '').replace(/_/g, ' ');
+            const fileName = file.originalname || `${docName.replace(/\s+/g, '_')}_${admissionNumber}`;
             
-            const uploadedFile = await uploadFile(
-              file.originalname || `${docName}_${admissionNumber}`,
+            const uploadResult = await s3Service.uploadStudentDocument(
               file.path,
+              fileName,
               file.mimetype || 'application/pdf',
-              studentFolderId
+              studentInfo
             );
             
-            uploadedDocuments[docName] = uploadedFile.webViewLink;
-            console.log(`⬆️ Uploaded ${docName} to Google Drive: ${uploadedFile.webViewLink}`);
+            uploadedDocuments[docName] = {
+              fileId: uploadResult.key,
+              fileName: uploadResult.fileName,
+              webViewLink: uploadResult.presignedUrl || uploadResult.publicUrl,
+              folderPath: uploadResult.folderPath
+            };
+            console.log(`⬆️ Uploaded ${docName} to S3: ${uploadResult.key}`);
 
             // Clean up temp file
             if (fs.existsSync(file.path)) {
               fs.unlinkSync(file.path);
             }
           } catch (uploadError) {
-            console.error(`❌ Failed to upload file ${file.originalname} to Google Drive:`, uploadError);
+            console.error(`❌ Failed to upload file ${file.originalname} to S3:`, uploadError);
             // Continue processing other files even if one fails
           }
         }
@@ -3063,8 +3013,8 @@ exports.createStudent = async (req, res) => {
             const currentStudentData = parseJSON(currentStudentRows[0].student_data) || {};
             const updatedStudentData = {
               ...currentStudentData,
-              google_drive_documents: {
-                ...currentStudentData.google_drive_documents,
+              uploaded_documents: {
+                ...currentStudentData.uploaded_documents,
                 ...uploadedDocuments
               }
             };
@@ -3073,12 +3023,12 @@ exports.createStudent = async (req, res) => {
               'UPDATE students SET student_data = ? WHERE admission_number = ?',
               [JSON.stringify(updatedStudentData), admissionNumber]
             );
-            console.log('🔗 Updated student record with Google Drive document links.');
+            console.log('🔗 Updated student record with S3 document links.');
           }
         }
-      } catch (driveError) {
-        console.error('Google Drive upload error (non-fatal):', driveError.message);
-        // Don't fail the student creation if Drive upload fails
+      } catch (s3Error) {
+        console.error('S3 upload error (non-fatal):', s3Error.message);
+        // Don't fail the student creation if S3 upload fails
       }
     }
 

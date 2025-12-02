@@ -36,7 +36,7 @@ const SQL_PATH = path.join(__dirname, 'scripts', 'migration_course_configuration
     console.log('✅ Migration applied successfully.');
     console.log(`   Master DB host: ${DB_HOST}`);
     console.log(`   Master schema: ${DB_NAME}`);
-    console.log('ℹ️  Staging/Supabase migrations must be run separately (Postgres is not handled here).');
+    console.log('ℹ️  All migrations are now handled in MySQL.');
   } catch (err) {
     console.error('❌ Migration failed:', err.message);
     process.exitCode = 1;

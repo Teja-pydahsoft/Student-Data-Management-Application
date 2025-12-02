@@ -100,7 +100,7 @@ async function createDocumentRequirementsTable() {
     } else {
       console.log('💡 Troubleshooting:');
       console.log('   1. Check your .env file has correct MySQL credentials');
-      console.log('   2. Verify MySQL connection: npm run test-supabase (tests DB connection)');
+      console.log('   2. Verify MySQL connection is working');
       console.log('   3. Ensure you have CREATE TABLE permissions');
       console.log('');
       console.log('📋 Manual SQL (if needed):');

@@ -109,7 +109,7 @@ async function testAPI() {
     console.log('📝 Next steps:');
     console.log('   1. Test the frontend UI in Settings → Document Requirements');
     console.log('   2. Test document upload in Public Form');
-    console.log('   3. Test Google Drive integration by approving a submission');
+    console.log('   3. Test S3 integration by approving a submission');
 
   } catch (error) {
     console.error('');

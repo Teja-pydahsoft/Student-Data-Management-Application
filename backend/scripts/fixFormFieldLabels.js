@@ -1,16 +1,13 @@
-const { supabase } = require('../config/supabase');
+const { masterPool } = require('../config/database');
 
 const fixFormFieldLabels = async () => {
   try {
     console.log('Fetching all forms...');
 
     // Get all forms
-    const { data: forms, error } = await supabase
-      .from('forms')
-      .select('form_id, form_name, form_fields')
-      .eq('is_active', true);
-
-    if (error) throw error;
+    const [forms] = await masterPool.query(
+      'SELECT form_id, form_name, form_fields FROM forms WHERE is_active = 1'
+    );
 
     console.log(`Found ${forms.length} forms to update`);
 
@@ -48,7 +45,7 @@ const fixFormFieldLabels = async () => {
       // Add missing fields if they don't exist
       const existingKeys = formFields.map(f => f.key);
       const missingFields = [
-        { key: 'admission_no', label: 'Admission No', type: 'text', required: false, isEnabled: true }
+        { key: 'student_photo', label: 'Student Photo', type: 'text', required: false, isEnabled: false }
       ];
 
       missingFields.forEach(missingField => {
@@ -59,25 +56,23 @@ const fixFormFieldLabels = async () => {
       });
 
       if (needsUpdate) {
-        const { error: updateError } = await supabase
-          .from('forms')
-          .update({ form_fields: JSON.stringify(formFields) })
-          .eq('form_id', form.form_id);
-
-        if (updateError) {
-          console.error(`Error updating form ${form.form_name}:`, updateError);
-        } else {
-          console.log(`✅ Updated form: ${form.form_name}`);
-          updatedCount++;
-        }
+        await masterPool.query(
+          'UPDATE forms SET form_fields = ? WHERE form_id = ?',
+          [JSON.stringify(formFields), form.form_id]
+        );
+        updatedCount++;
+        console.log(`✅ Updated form: ${form.form_name}`);
       }
     }
 
-    console.log(`\n✅ Fixed ${updatedCount} forms successfully!`);
+    console.log(`\n✅ Completed! Updated ${updatedCount} forms.`);
 
   } catch (error) {
     console.error('Error fixing form field labels:', error);
+    process.exit(1);
+  } finally {
+    process.exit(0);
   }
 };
 
-module.exports = { fixFormFieldLabels };
+fixFormFieldLabels();

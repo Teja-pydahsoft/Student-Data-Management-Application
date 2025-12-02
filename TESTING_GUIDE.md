@@ -113,16 +113,16 @@ Create requirements for:
 2. Should show validation error: "X is required"
 3. Upload documents and verify submission works
 
-### Step 4: Test Document Storage in Google Drive
+### Step 4: Test Document Storage in S3
 
 #### 4.1 Approve a Submission
 1. Go to **Submissions** page in admin panel
 2. Find a submission with uploaded documents
 3. **Approve** the submission
-4. **Check** that documents are uploaded to Google Drive
+4. **Check** that documents are uploaded to S3
 
-#### 4.2 Verify Google Drive Structure
-1. Go to your Google Drive folder: `1bfjkg0mtNFGDjiswdv9ljtlw-7QgU35O`
+#### 4.2 Verify S3 Structure
+1. Go to your AWS S3 bucket
 2. **Verify** folder structure:
    ```
    College/
@@ -137,12 +137,15 @@ Create requirements for:
 
 #### 4.3 Verify Student Record
 1. Check the **student record** in the database
-2. **Verify** `student_data` JSON contains `google_drive_documents` with links:
+2. **Verify** `student_data` JSON contains `uploaded_documents` with S3 links:
    ```json
    {
-     "google_drive_documents": {
-       "10th Certificate": "https://drive.google.com/...",
-       "10th Study Certificate": "https://drive.google.com/..."
+     "uploaded_documents": {
+       "10th Certificate": {
+         "fileId": "College/Batch/Course/Branch/AdmissionNumber/10th_Certificate.pdf",
+         "fileName": "10th_Certificate.pdf",
+         "webViewLink": "https://s3-presigned-url..."
+       }
      }
    }
    ```
@@ -174,11 +177,11 @@ Create requirements for:
 - **Verify:** API endpoint returns data: `GET /api/settings/documents`
 - **Check:** Network tab in browser DevTools
 
-### Documents Not Uploading to Google Drive
-- **Check:** `.env` file has all Google Drive credentials
-- **Verify:** Service account has access to the Drive folder
+### Documents Not Uploading to S3
+- **Check:** `.env` file has all AWS S3 credentials (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET_NAME)
+- **Verify:** IAM user has S3 permissions (s3:PutObject, s3:GetObject, s3:ListBucket)
 - **Check:** Backend logs for errors during approval
-- **Verify:** `googleapis` package is installed: `npm list googleapis`
+- **Verify:** AWS SDK packages are installed: `npm list @aws-sdk/client-s3`
 
 ### Form Not Showing Document Upload Section
 - **Check:** Course is selected in the form
@@ -193,9 +196,9 @@ Create requirements for:
 - [ ] Public form shows document upload section when course is selected
 - [ ] Documents can be uploaded in public form
 - [ ] Form validation works for required documents
-- [ ] Documents are stored in Google Drive on approval
-- [ ] Google Drive folder structure is correct
-- [ ] Student record contains Google Drive document links
+- [ ] Documents are stored in S3 on approval
+- [ ] S3 folder structure is correct
+- [ ] Student record contains S3 document links
 - [ ] APAAR ID field can be added and works in forms
 
 ## 📝 Quick Test Commands

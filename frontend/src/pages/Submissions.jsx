@@ -20,7 +20,7 @@ const Submissions = () => {
   const [showAdmissionSeries, setShowAdmissionSeries] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [formLink, setFormLink] = useState('');
-  const [autoAssign, setAutoAssign] = useState(false);
+  const [autoAssign, setAutoAssign] = useState(true); // Always enabled
   const [forms, setForms] = useState([]);
   const [formsLoading, setFormsLoading] = useState(true);
   const [fieldStatus, setFieldStatus] = useState(null);
@@ -29,14 +29,14 @@ const Submissions = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showDeleteProgressModal, setShowDeleteProgressModal] = useState(false);
   const [deletingProgress, setDeletingProgress] = useState({ current: 0, total: 0, isDeleting: false });
-  const [globalAutoAssign, setGlobalAutoAssign] = useState(false);
+  const [globalAutoAssign, setGlobalAutoAssign] = useState(true); // Always enabled
   const [approvedDocuments, setApprovedDocuments] = useState(new Set());
   const [expandedDocument, setExpandedDocument] = useState(null);
-  const [googleDriveDocuments, setGoogleDriveDocuments] = useState({});
+  const [s3Documents, setS3Documents] = useState({});
 
   useEffect(() => {
-    setAutoAssign(globalAutoAssign);
-  }, [globalAutoAssign]);
+    setAutoAssign(true); // Always enabled
+  }, []);
 
   useEffect(() => {
     fetchSubmissions();
@@ -65,29 +65,13 @@ const Submissions = () => {
   };
 
   const fetchAutoAssignStatus = async () => {
-    try {
-      const response = await api.get('/submissions/auto-assign-status');
-      setGlobalAutoAssign(response.data.data.enabled);
-    } catch (error) {
-      console.error('Failed to fetch auto-assign status:', error.response?.data?.message || error.message);
-      // Set default value if API fails
-      setGlobalAutoAssign(false);
-      // Show user-friendly error message
-      if (error.response?.status === 500) {
-        toast.error('Settings not configured. Please run the database initialization script.');
-      }
-    }
+    // Auto-assign is always enabled
+    setGlobalAutoAssign(true);
   };
 
   const toggleGlobalAutoAssign = async () => {
-    try {
-      await api.post('/submissions/toggle-auto-assign', { enabled: !globalAutoAssign });
-      setGlobalAutoAssign(!globalAutoAssign);
-      toast.success(`Auto-assign ${!globalAutoAssign ? 'enabled' : 'disabled'}`);
-    } catch (error) {
-      console.error('Failed to toggle auto-assign:', error.response?.data?.message || error.message);
-      toast.error(error.response?.data?.message || 'Failed to toggle auto-assign. Settings table may not be configured.');
-    }
+    // Auto-assign is always enabled, cannot be toggled
+    toast.info('Auto-assign is always enabled and cannot be disabled');
   };
 
   const fetchSubmissions = async () => {
@@ -120,9 +104,9 @@ const Submissions = () => {
       });
       setApprovedDocuments(initialApproved);
       setExpandedDocument(null);
-      setGoogleDriveDocuments({});
+      setS3Documents({});
 
-      // If submission is approved, fetch student data to get Google Drive document links
+      // If submission is approved, fetch student data to get S3 document links
       if (submissionData.status === 'approved' && submissionData.admission_number) {
         try {
           const studentResponse = await api.get(`/students/${submissionData.admission_number}`);
@@ -133,11 +117,11 @@ const Submissions = () => {
             const studentDataObj = student.student_data;
             
             if (studentDataObj.uploaded_documents && typeof studentDataObj.uploaded_documents === 'object') {
-              setGoogleDriveDocuments(studentDataObj.uploaded_documents);
+              setS3Documents(studentDataObj.uploaded_documents);
             }
           }
         } catch (error) {
-          console.error('Failed to fetch student data for Google Drive documents:', error);
+          console.error('Failed to fetch student data for S3 documents:', error);
           // Non-fatal error, continue with base64 previews
         }
       }
@@ -151,7 +135,7 @@ const Submissions = () => {
                            new Date().getFullYear().toString();
           
           const genResponse = await api.post('/submissions/generate-admission-series', { 
-            autoAssign: false,
+            autoAssign: true, // Always enabled
             academicYear: batchYear
           });
           setAdmissionNumber(genResponse.data.data.admissionNumbers[0]);
@@ -284,42 +268,34 @@ const Submissions = () => {
       return;
     }
 
-    setDeletingProgress({ current: 0, total: submissionIds.length, isDeleting: true });
+    try {
+      // Use bulk delete endpoint for better performance
+      const response = await api.post('/submissions/bulk-delete', {
+        submissionIds: submissionIds
+      });
 
-    let successCount = 0;
-    let failedCount = 0;
+      const { deletedCount, failedCount, errors } = response.data;
 
-    for (let i = 0; i < submissionIds.length; i++) {
-      if (!deletingProgress.isDeleting) {
-        // Cancelled
-        break;
+      if (deletedCount > 0) {
+        toast.success(`Successfully deleted ${deletedCount} submission${deletedCount !== 1 ? 's' : ''}`);
+      }
+      if (failedCount > 0) {
+        console.error('Failed deletions:', errors);
+        toast.error(`Failed to delete ${failedCount} submission${failedCount !== 1 ? 's' : ''}`);
       }
 
-      try {
-        await api.delete(`/submissions/${submissionIds[i]}`);
-        successCount++;
-        setDeletingProgress(prev => ({ ...prev, current: i + 1 }));
-      } catch (error) {
-        console.error(`Error deleting submission ${submissionIds[i]}:`, error);
-        failedCount++;
-      }
-
-      // Small delay for smooth animation
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Clear selection and refresh
+      setSelectedSubmissions(new Set());
+      setShowBulkDeleteModal(false);
+      setShowDeleteProgressModal(false);
+      setDeletingProgress({ current: 0, total: 0, isDeleting: false });
+      fetchSubmissions();
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete submissions');
+      setShowDeleteProgressModal(false);
+      setDeletingProgress({ current: 0, total: 0, isDeleting: false });
     }
-
-    setDeletingProgress({ current: 0, total: 0, isDeleting: false });
-    setShowDeleteProgressModal(false);
-    setSelectedSubmissions(new Set());
-
-    if (successCount > 0) {
-      toast.success(`Successfully deleted ${successCount} submissions`);
-    }
-    if (failedCount > 0) {
-      toast.error(`Failed to delete ${failedCount} submissions`);
-    }
-
-    fetchSubmissions();
   };
 
   
@@ -348,13 +324,17 @@ const Submissions = () => {
         <div className="flex items-center gap-2">
           {selectedSubmissions.size > 0 && (
             <button
-              onClick={() => {
-                if (filter === 'pending') {
-                  setShowBulkApproveModal(true);
-                } else {
-                  setShowBulkDeleteModal(true);
+            onClick={async () => {
+              if (filter === 'pending') {
+                setShowBulkApproveModal(true);
+              } else {
+                if (selectedSubmissions.size === 0) {
+                  toast.error('Please select submissions to delete');
+                  return;
                 }
-              }}
+                setShowBulkDeleteModal(true);
+              }
+            }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
                 filter === 'pending'
                   ? 'bg-green-600 text-white hover:bg-green-700'
@@ -424,12 +404,12 @@ const Submissions = () => {
           <input
             type="checkbox"
             id="globalAutoAssign"
-            checked={globalAutoAssign}
-            onChange={toggleGlobalAutoAssign}
-            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+            checked={true}
+            disabled={true}
+            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-not-allowed opacity-60"
           />
           <label htmlFor="globalAutoAssign" className="text-sm font-medium text-gray-700">
-            Auto-Assign Series
+            Auto-Assign Series (Always On)
           </label>
         </div>
       </div>
@@ -517,41 +497,59 @@ const Submissions = () => {
                       <td className="py-3 px-4 text-sm text-gray-600">{formatDate(submission.submitted_at)}</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <button onClick={(e) => {
-                            e.stopPropagation();
-                            if (submission.admission_number) {
-                              api.get(`/submissions/${submission.submission_id}`)
-                                .then(response => {
-                                  const data = response.data.data;
-                                  setSelectedSubmission(data);
-                                  setAdmissionNumber(data.admission_number);
-                                  // Directly approve using the fetched data
-                                  api.post(`/submissions/${submission.submission_id}/approve`, {
-                                    admissionNumber: data.admission_number,
-                                  })
-                                    .then(() => {
-                                      toast.success('Submission approved successfully');
-                                      fetchSubmissions();
+                          {submission.status === 'pending' && (
+                            <>
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                if (submission.admission_number) {
+                                  api.get(`/submissions/${submission.submission_id}`)
+                                    .then(response => {
+                                      const data = response.data.data;
+                                      setSelectedSubmission(data);
+                                      setAdmissionNumber(data.admission_number);
+                                      // Directly approve using the fetched data
+                                      api.post(`/submissions/${submission.submission_id}/approve`, {
+                                        admissionNumber: data.admission_number,
+                                      })
+                                        .then(() => {
+                                          toast.success('Submission approved successfully');
+                                          fetchSubmissions();
+                                        })
+                                        .catch(error => {
+                                          console.error('Approval error:', error);
+                                          toast.error('Failed to approve submission');
+                                        });
                                     })
                                     .catch(error => {
-                                      console.error('Approval error:', error);
-                                      toast.error('Failed to approve submission');
+                                      toast.error('Failed to fetch submission details');
                                     });
-                                })
-                                .catch(error => {
-                                  toast.error('Failed to fetch submission details');
-                                });
-                            } else {
-                              handleViewDetails(submission.submission_id);
-                            }
-                          }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve">
-                            <CheckCircle size={16} />
-                          </button>
+                                } else {
+                                  handleViewDetails(submission.submission_id);
+                                }
+                              }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve">
+                                <CheckCircle size={16} />
+                              </button>
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(submission.submission_id);
+                              }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Reject">
+                                <XCircle size={16} />
+                              </button>
+                            </>
+                          )}
+                          {(submission.status === 'rejected' || submission.status === 'approved') && (
+                            <button onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(submission.submission_id);
+                            }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                           <button onClick={(e) => {
                             e.stopPropagation();
                             handleViewDetails(submission.submission_id);
-                          }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Reject">
-                            <XCircle size={16} />
+                          }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
+                            <Eye size={16} />
                           </button>
                         </div>
                       </td>
@@ -878,49 +876,43 @@ const Submissions = () => {
                         }
                       });
                       
-                      // Also check Google Drive documents if approved
-                      if (isApproved && googleDriveDocuments) {
-                        Object.keys(googleDriveDocuments).forEach(key => {
+                      // Also check S3 documents if approved
+                      if (isApproved && s3Documents) {
+                        Object.keys(s3Documents).forEach(key => {
                           documentKeys.add(key);
                         });
                       }
                       
-                      // Build documents array with priority: Google Drive > Base64
+                      // Build documents array with priority: S3 > Base64
                       documentKeys.forEach(key => {
                         let docName = key.replace(/^document_/i, '').replace(/_/g, ' ');
                         if (!docName || docName === key) {
                           docName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         }
                         
-                        // Check if we have Google Drive link (for approved submissions)
-                        const driveDoc = googleDriveDocuments[key];
+                        // Check if we have S3 link (for approved submissions)
+                        const s3Doc = s3Documents[key];
                         let docData = null;
                         let isImage = false;
                         let isPdf = false;
-                        let isGoogleDrive = false;
+                        let isS3 = false;
                         let webViewLink = null;
                         let fileName = docName;
                         
-                        if (isApproved && driveDoc && driveDoc.webViewLink) {
-                          // Use Google Drive link
-                          isGoogleDrive = true;
-                          webViewLink = driveDoc.webViewLink;
-                          fileName = driveDoc.fileName || docName;
+                        if (isApproved && s3Doc && s3Doc.webViewLink) {
+                          // Use S3 link
+                          isS3 = true;
+                          webViewLink = s3Doc.webViewLink;
+                          fileName = s3Doc.fileName || docName;
                           
                           // Determine file type from fileName or MIME type
                           const fileExt = fileName.toLowerCase().split('.').pop();
                           isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExt);
                           isPdf = fileExt === 'pdf' || fileName.toLowerCase().includes('pdf');
                           
-                          // For images, use Google Drive preview URL
+                          // For images, use S3 URL directly
                           if (isImage) {
-                            // Convert Google Drive webViewLink to preview URL
-                            const fileId = driveDoc.fileId;
-                            if (fileId) {
-                              docData = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-                            } else {
-                              docData = webViewLink;
-                            }
+                            docData = webViewLink;
                           } else {
                             docData = webViewLink;
                           }
@@ -943,7 +935,7 @@ const Submissions = () => {
                             webViewLink: webViewLink,
                             isImage,
                             isPdf,
-                            isGoogleDrive
+                            isS3
                           });
                         }
                       });
@@ -1023,7 +1015,7 @@ const Submissions = () => {
                                                 className="max-w-full max-h-[90vh] object-contain"
                                                 onClick={(e) => e.stopPropagation()}
                                               />
-                                              {doc.isGoogleDrive && doc.webViewLink && (
+                                              {doc.isS3 && doc.webViewLink && (
                                                 <a
                                                   href={doc.webViewLink}
                                                   target="_blank"
@@ -1032,7 +1024,7 @@ const Submissions = () => {
                                                   onClick={(e) => e.stopPropagation()}
                                                 >
                                                   <Link2 size={16} />
-                                                  Open in Google Drive
+                                                  Open Document
                                                 </a>
                                               )}
                                             </div>
@@ -1043,16 +1035,16 @@ const Submissions = () => {
                                       <div className="w-full aspect-square bg-gray-100 rounded flex flex-col items-center justify-center p-4 relative">
                                         <File size={32} className="text-gray-400 mb-2" />
                                         <span className="text-xs text-gray-600 text-center line-clamp-2">{doc.fileName || doc.name}</span>
-                                        {doc.isGoogleDrive && (
+                                        {doc.isS3 && (
                                           <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-medium">
-                                            Drive
+                                            S3
                                           </div>
                                         )}
                                         {isExpanded && (
                                           <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-10 rounded">
                                             <div className="bg-white rounded-lg p-4 max-w-md max-h-[80vh] overflow-auto">
                                               <p className="text-sm font-semibold text-gray-900 mb-2">Document: {doc.fileName || doc.name}</p>
-                                              {doc.isGoogleDrive && doc.webViewLink ? (
+                                              {doc.isS3 && doc.webViewLink ? (
                                                 <a
                                                   href={doc.webViewLink}
                                                   target="_blank"
@@ -1061,7 +1053,7 @@ const Submissions = () => {
                                                   onClick={(e) => e.stopPropagation()}
                                                 >
                                                   <Link2 size={16} />
-                                                  Open in Google Drive
+                                                  Open Document
                                                 </a>
                                               ) : (
                                                 <a
@@ -1240,11 +1232,9 @@ const Submissions = () => {
 
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {
+                onClick={async () => {
                   setShowBulkDeleteModal(false);
-                  setDeletingProgress({ current: 0, total: selectedSubmissions.size, isDeleting: true });
-                  setShowDeleteProgressModal(true);
-                  handleBulkDelete();
+                  await handleBulkDelete();
                 }}
                 className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >

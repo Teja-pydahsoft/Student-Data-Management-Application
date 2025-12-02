@@ -1,18 +1,18 @@
-# Implementation Status - Document Upload & Google Drive Integration
+# Implementation Status - Document Upload & S3 Integration
 
 ## ✅ Completed Backend Tasks
 
 ### 1. Environment Configuration
-- ✅ Created `GOOGLE_DRIVE_ENV_SETUP.md` with comprehensive documentation
-- ✅ Defined all required environment variables for Google Service Account
-- ✅ Added instructions for private key formatting and escaping
+- ✅ Created S3 configuration in `ENV_CONFIGURATION.txt`
+- ✅ Defined all required environment variables for AWS S3
+- ✅ Added instructions for AWS credentials setup
 
-### 2. Google Drive Service
-- ✅ Created `backend/services/googleDriveService.js`
-- ✅ Implemented service account reconstruction from environment variables
+### 2. S3 Service
+- ✅ Created `backend/services/s3Service.js`
+- ✅ Implemented S3 client initialization from environment variables
 - ✅ Created folder structure: `College/Batch/Course/Branch/AdmissionNumber/`
-- ✅ Implemented document upload functionality
-- ✅ Added `googleapis` package to `package.json`
+- ✅ Implemented document upload functionality with presigned URLs
+- ✅ Added AWS SDK packages to `package.json`
 
 ### 3. Document Settings Controller
 - ✅ Created `backend/controllers/documentSettingsController.js`
@@ -22,9 +22,14 @@
 
 ### 4. Submission Approval Integration
 - ✅ Updated `approveSubmission` in `submissionController.js`
-- ✅ Integrated Google Drive upload during approval
+- ✅ Integrated S3 upload during approval
 - ✅ Stores document links in student record
 - ✅ Handles errors gracefully (non-fatal)
+
+### 5. Student Creation Integration
+- ✅ Updated `createStudent` in `studentController.js`
+- ✅ Integrated S3 upload during student creation
+- ✅ Stores document links in student record
 
 ## 🔄 Remaining Frontend Tasks
 
@@ -107,19 +112,11 @@ Optional:
 Add these to `backend/.env`:
 
 ```env
-# Google Service Account
-GOOGLE_PROJECT_ID=your-project-id
-GOOGLE_PRIVATE_KEY_ID=your-private-key-id
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-GOOGLE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
-GOOGLE_TOKEN_URI=https://oauth2.googleapis.com/token
-GOOGLE_AUTH_PROVIDER_X509_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
-GOOGLE_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/...
-
-# Google Drive
-DRIVE_MAIN_FOLDER_ID=1bfjkg0mtNFGDjiswdv9ljtlw-7QgU35O
+# AWS S3 Configuration
+AWS_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+S3_BUCKET_NAME=your_s3_bucket_name
 
 # App Environment
 NODE_ENV=production
@@ -136,15 +133,17 @@ DB_NAME=your-database
 1. **Install Dependencies:**
    ```bash
    cd backend
-   npm install googleapis
+   npm install
    ```
 
 2. **Configure Environment:**
-   - Copy Google Service Account JSON values to `.env`
-   - Follow formatting instructions in `GOOGLE_DRIVE_ENV_SETUP.md`
+   - Set up AWS S3 bucket
+   - Create IAM user with S3 permissions
+   - Add AWS credentials to `.env`
+   - Follow instructions in `S3_MIGRATION_GUIDE.md`
 
 3. **Test Backend:**
-   - Test Google Drive connection
+   - Test S3 connection
    - Test document upload during approval
 
 4. **Implement Frontend:**
@@ -156,7 +155,7 @@ DB_NAME=your-database
 5. **Test End-to-End:**
    - Submit form with documents
    - Approve submission
-   - Verify documents uploaded to Google Drive
+   - Verify documents uploaded to S3
    - Verify folder structure is correct
 
 ## 🎯 API Endpoints Available
@@ -168,12 +167,12 @@ DB_NAME=your-database
 
 ### Form Submission
 - `POST /api/submissions/:formId` - Submit form (handles document uploads)
-- `POST /api/submissions/:submissionId/approve` - Approve submission (uploads to Drive)
+- `POST /api/submissions/:submissionId/approve` - Approve submission (uploads to S3)
 
-## 📁 Google Drive Folder Structure
+## 📁 S3 Folder Structure
 
 ```
-DRIVE_MAIN_FOLDER_ID/
+s3://your-bucket-name/
   └── College Name/
       └── Batch (e.g., "2024-2028")/
           └── Course Name (e.g., "B.Tech")/
@@ -196,9 +195,9 @@ DRIVE_MAIN_FOLDER_ID/
 
 ## ⚠️ Important Notes
 
-1. **Private Key Formatting**: The private key in `.env` must use `\n` for newlines, not actual newlines
-2. **Drive Permissions**: Ensure the service account email has access to the main folder
+1. **AWS Credentials**: Ensure AWS credentials have proper S3 permissions
+2. **Bucket Permissions**: Configure bucket policy and IAM user permissions correctly
 3. **File Size Limits**: Consider implementing file size limits (currently handled by multer)
-4. **Error Handling**: Drive upload errors are non-fatal - approval will succeed even if upload fails
+4. **Error Handling**: S3 upload errors are non-fatal - approval will succeed even if upload fails
 5. **Document Links**: Uploaded document links are stored in `student_data.uploaded_documents` JSON field
-
+6. **Presigned URLs**: Documents are accessed via presigned URLs (valid for 1 year)

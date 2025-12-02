@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { masterPool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 
@@ -16,6 +16,7 @@ const parseJSON = (data) => {
 
 // Create new form
 exports.createForm = async (req, res) => {
+  let conn;
   try {
     const { formName, formDescription, formFields } = req.body;
 
@@ -39,24 +40,24 @@ exports.createForm = async (req, res) => {
     // Generate QR code
     const qrCodeData = await QRCode.toDataURL(formUrl);
 
+    conn = await masterPool.getConnection();
+    await conn.beginTransaction();
+
     // Insert form
-    const { error: insertErr } = await supabase
-      .from('forms')
-      .insert({
-        form_id: formId,
-        form_name: formName,
-        form_description: formDescription || '',
-        form_fields: formFields,
-        qr_code_data: qrCodeData,
-        created_by: req.admin.id
-      });
-    if (insertErr) throw insertErr;
+    await conn.query(
+      `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [formId, formName, formDescription || '', JSON.stringify(formFields), qrCodeData, req.admin.id]
+    );
 
     // Log action
-    await supabase.from('audit_logs').insert({
-      action_type: 'CREATE', entity_type: 'FORM', entity_id: formId,
-      admin_id: req.admin.id, details: { formName }
-    });
+    await conn.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['CREATE', 'FORM', formId, req.admin.id, JSON.stringify({ formName })]
+    );
+
+    await conn.commit();
 
     res.status(201).json({
       success: true,
@@ -70,27 +71,30 @@ exports.createForm = async (req, res) => {
     });
 
   } catch (error) {
+    if (conn) await conn.rollback();
     console.error('Create form error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error while creating form'
     });
+  } finally {
+    if (conn) conn.release();
   }
 };
 
 // Get all forms
 exports.getAllForms = async (req, res) => {
   try {
-    const { data: forms, error } = await supabase
-      .from('forms')
-      .select('*, admins!forms_created_by_fkey(username)')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+    const [forms] = await masterPool.query(`
+      SELECT f.*, a.username as created_by_name
+      FROM forms f
+      LEFT JOIN admins a ON f.created_by = a.id
+      ORDER BY f.created_at DESC
+    `);
 
     // Parse JSON fields
     const parsedForms = (forms || []).map(form => ({
       ...form,
-      created_by_name: form.admins?.username || null,
       form_fields: parseJSON(form.form_fields)
     }));
 
@@ -113,12 +117,13 @@ exports.getFormById = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    const { data: forms, error } = await supabase
-      .from('forms')
-      .select('*, admins!forms_created_by_fkey(username)')
-      .eq('form_id', formId)
-      .limit(1);
-    if (error) throw error;
+    const [forms] = await masterPool.query(`
+      SELECT f.*, a.username as created_by_name
+      FROM forms f
+      LEFT JOIN admins a ON f.created_by = a.id
+      WHERE f.form_id = ?
+      LIMIT 1
+    `, [formId]);
 
     if (forms.length === 0) {
       return res.status(404).json({ 
@@ -148,19 +153,22 @@ exports.getFormById = async (req, res) => {
 
 // Update form (fields can be updated, QR code remains same)
 exports.updateForm = async (req, res) => {
+  let conn;
   try {
     const { formId } = req.params;
     const { formName, formDescription, formFields, isActive } = req.body;
 
+    conn = await masterPool.getConnection();
+    await conn.beginTransaction();
+
     // Check if form exists
-    const { data: forms, error: e1 } = await supabase
-      .from('forms')
-      .select('*')
-      .eq('form_id', formId)
-      .limit(1);
-    if (e1) throw e1;
+    const [forms] = await conn.query(
+      'SELECT * FROM forms WHERE form_id = ? LIMIT 1',
+      [formId]
+    );
 
     if (forms.length === 0) {
+      await conn.rollback();
       return res.status(404).json({ 
         success: false, 
         message: 'Form not found' 
@@ -189,6 +197,7 @@ exports.updateForm = async (req, res) => {
     }
 
     if (updates.length === 0) {
+      await conn.rollback();
       return res.status(400).json({ 
         success: false, 
         message: 'No fields to update' 
@@ -197,22 +206,19 @@ exports.updateForm = async (req, res) => {
 
     values.push(formId);
 
-    const updatePayload = {};
-    if (formName !== undefined) updatePayload.form_name = formName;
-    if (formDescription !== undefined) updatePayload.form_description = formDescription;
-    if (formFields !== undefined) updatePayload.form_fields = formFields;
-    if (isActive !== undefined) updatePayload.is_active = isActive;
-    const { error: e2 } = await supabase
-      .from('forms')
-      .update(updatePayload)
-      .eq('form_id', formId);
-    if (e2) throw e2;
+    await conn.query(
+      `UPDATE forms SET ${updates.join(', ')} WHERE form_id = ?`,
+      values
+    );
 
     // Log action
-    await supabase.from('audit_logs').insert({
-      action_type: 'UPDATE', entity_type: 'FORM', entity_id: formId,
-      admin_id: req.admin.id, details: req.body
-    });
+    await conn.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+       VALUES (?, ?, ?, ?, ?)`,
+      ['UPDATE', 'FORM', formId, req.admin.id, JSON.stringify(req.body)]
+    );
+
+    await conn.commit();
 
     res.json({
       success: true,
@@ -220,26 +226,33 @@ exports.updateForm = async (req, res) => {
     });
 
   } catch (error) {
+    if (conn) await conn.rollback();
     console.error('Update form error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Server error while updating form' 
     });
+  } finally {
+    if (conn) conn.release();
   }
 };
 
 // Delete form
 exports.deleteForm = async (req, res) => {
+  let conn;
   try {
     const { formId } = req.params;
 
-    const { error: delErr, count } = await supabase
-      .from('forms')
-      .delete()
-      .eq('form_id', formId)
-      .select('form_id', { count: 'exact' });
-    if (delErr) throw delErr;
-    if (!count) {
+    conn = await masterPool.getConnection();
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
+      'DELETE FROM forms WHERE form_id = ?',
+      [formId]
+    );
+
+    if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ 
         success: false, 
         message: 'Form not found' 
@@ -247,10 +260,13 @@ exports.deleteForm = async (req, res) => {
     }
 
     // Log action
-    await supabase.from('audit_logs').insert({
-      action_type: 'DELETE', entity_type: 'FORM', entity_id: formId,
-      admin_id: req.admin.id
-    });
+    await conn.query(
+      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+       VALUES (?, ?, ?, ?)`,
+      ['DELETE', 'FORM', formId, req.admin.id]
+    );
+
+    await conn.commit();
 
     res.json({
       success: true,
@@ -258,11 +274,14 @@ exports.deleteForm = async (req, res) => {
     });
 
   } catch (error) {
+    if (conn) await conn.rollback();
     console.error('Delete form error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Server error while deleting form' 
     });
+  } finally {
+    if (conn) conn.release();
   }
 };
 
@@ -271,12 +290,13 @@ exports.getPublicForm = async (req, res) => {
   try {
     const { formId } = req.params;
 
-    const { data: forms, error: e3 } = await supabase
-      .from('forms')
-      .select('form_id, form_name, form_description, form_fields, is_active')
-      .eq('form_id', formId)
-      .limit(1);
-    if (e3) throw e3;
+    const [forms] = await masterPool.query(
+      `SELECT form_id, form_name, form_description, form_fields, is_active
+       FROM forms
+       WHERE form_id = ?
+       LIMIT 1`,
+      [formId]
+    );
 
     if (forms.length === 0) {
       return res.status(404).json({ 

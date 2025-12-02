@@ -36,23 +36,19 @@ async function seedSuperAdmin() {
     }
 
     // Check if existing admin exists in admins table
-    const { supabase } = require('../config/supabase');
     let existingAdmin = null;
 
-    if (supabase) {
-      try {
-        const { data: admins } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('username', 'superadmin')
-          .limit(1);
-        
-        if (admins && admins.length > 0) {
-          existingAdmin = admins[0];
-        }
-      } catch (error) {
-        // Ignore Supabase errors
+    try {
+      const [admins] = await masterPool.query(
+        'SELECT * FROM admins WHERE username = ? LIMIT 1',
+        ['superadmin']
+      );
+      
+      if (admins && admins.length > 0) {
+        existingAdmin = admins[0];
       }
+    } catch (error) {
+      // Ignore errors
     }
 
     if (existingAdmin) {

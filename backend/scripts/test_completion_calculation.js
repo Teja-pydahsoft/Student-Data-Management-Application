@@ -59,7 +59,7 @@ async function testCompletionCalculation() {
       return;
     }
 
-    // Get form fields from Supabase (this would normally be done in the actual endpoint)
+    // Get form fields from MySQL (this would normally be done in the actual endpoint)
     const mysqlConn2 = await mysql.createConnection({
       host: process.env.DB_HOST,
       user: process.env.DB_USER,

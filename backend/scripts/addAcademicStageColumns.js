@@ -78,7 +78,7 @@ async function run() {
       } catch (error) {
         console.warn('\n⚠️  Could not update staging MySQL database.');
         console.warn(
-          '   If you are using Supabase for staging forms, no action is needed here. ' +
+          '   All forms and submissions are now in MySQL. ' +
             'Otherwise verify your STAGING_DB_* environment variables and rerun this script.'
         );
         console.warn(`   Reason: ${error.message}`);
@@ -88,7 +88,7 @@ async function run() {
         '\nℹ️  No STAGING_DB_* environment variables detected. Skipping staging database update.'
       );
       console.log(
-        '    If your staging workflow runs through Supabase forms only, the master migration is sufficient.'
+        '    All forms and submissions are now in MySQL.'
       );
     }
 

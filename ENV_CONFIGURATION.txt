@@ -14,9 +14,8 @@ DB_PASSWORD=jzuy?28y_A8qB*x5OxdV)$h*90_A
 DB_NAME=student_database
 DB_SSL=true
 
-# Staging Database (Supabase) - For forms, submissions, admins, audit logs
-SUPABASE_URL=https://dxotfrooegqxqeuxarxv.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4b3Rmcm9vZWdxeHFldXhhcnh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MTcxNTYsImV4cCI6MjA3NjA5MzE1Nn0.oYqgtKW9wdg577ip5gARLP-O5hubw3KxsH5ZQ-r1N_k
+# Note: Supabase has been removed. All data is now stored in MySQL.
+# Forms, submissions, admins, and audit logs are all in the MySQL database.
 
 # Authentication
 JWT_SECRET=your_production_jwt_secret_key_change_this_to_something_secure
@@ -37,20 +36,17 @@ UPLOAD_DIR=uploads
 LOG_LEVEL=warn
 
 # ============================================
-# Google Service Account Configuration
+# AWS S3 Configuration
 # ============================================
-GOOGLE_PROJECT_ID=pydahsdms
-GOOGLE_PRIVATE_KEY_ID=4b1bafa87047b1f7ad8f3fde0ab43d924a3369b4
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDdhZT6ijhodtOX\nlOFlwN8w7a889l2eZhYmfT64/kV7hzig9RAJm+FIuGKp8jxWk/2Ul7Shdgwxzb43\nZEBUP2vhuPyOedB0TFynRRpBfL/cSSLlexO3cNeLXFBJX216zq/7uPtgxQ65JwKF\nezKLRWtIxTAuaNjGK14/UMzhFLrUCS5jG4+9yCswXQkD9vhN7PbzJifn66WeY5e+\nx2QTrBaN/WH34DxKxlGsfpyo6wArR9Ew2bhfqI0MZzTNWSIq3lyKMy+C7HNg5kbS\nkl+lqhGPr3Rhp2jHxbnjlgOoTf5QYFJVsSMCFAJsTL1/24yA4Wwzd8z4WHvlNd25\nxspdBBhRAgMBAAECggEAFSDbXfu2kZzzy+6ZT1+fNuCuT1dranyi+pzR6xcYs98b\n2ZsS71FJolDKQedaArzIYCNwFdskIp2H2dF01hRBsYMEihpR2/KeMh4QxdPXzaaN\nu4S+E3sIM/SXSJUSsVBRaX++1v+a/eUb0NtrrYW7fwwmIk109fT6kkaePY5naDdV\nqTwhknSBmex4yfwpwWxLFRUKzgxoeWYzuv4kk5u85ixyvL90eB9exhGRjzy9KWFk\nJqqPvkzlYsYowNsBKbadMcjBBcbdFv2zWuwKk0qD3f496PX7w+rB7mju+74uItOj\nmajcDYfBtuOEVapf96oPkCylqnpYmww3OdwzD+SJuQKBgQD8NT8IzU3WAJZtMOTB\n/FoNv9HBfY2Us4SdZSFN5zE6Wi9M5trvZ9+x6BO75BZqHKf0PGlrpUYzZp+gaj4b\n1PrQyQtia5tsJXdxipvhDY3iYLsirB1lPZDBrcOe+wYShYACBQAarXEWz5wwvQbG\nA71CH1wGQTt3V/bk6L6LgEreNwKBgQDg2jlUjrDqOlsEE5wPZVQU/5+QmnbUm3Cy\npZWGmLf6BWOYaq/3X6wJ2L/ytPGyZJcmltHWUS+pOl2f3K+CcrrqFOKvhDH/ieLi\nff+sLfnqQqQVpykA0xXAevea48CUKD7zbP88MjWeVB3VIxQbP0g0FAjL0CkpWpvQ\nOBTe+aM5twKBgQDyPqKA7dFpT78sud2/hYdp1Wi/lLy8q4EhPNW0Ye+iwKTWFJcN\nhJQT6Xmq6vWsjkG0EaKgRmsbS+Leza1CRlty1ugcbIcoZQRJBn2auM4jNg4Iy5Cg\ngXXc0e4ncazvdVLynaLv/M+2vUqkdatf3o+WR1C4oUdg5hi63eLHUz6WGQKBgH4q\nVILasfAroEhQTH/jBmPl7v2vfj/bnEfRW24zoP+cKH8sVeJC/4Bi64le+EN1584S\nUFmmIk0dX81EggJ7J+ASqgN79KYDE5isxFozTgihLfqsWfiJeKoRFYAGjVdUocXr\nAegf8DAP2NFwJmcHghceqrTZ706x9b3Gygc3IdxPAoGBAJkQG3umq5uAcLMKbrsp\nETHdjqIo7TeorTN04IQpNKw1vAB02F2eu4YY0wWwyAX0PpwlqNEDwxyNvkVIWlDY\nSlPcvy3nYByQkDYr0UB/VDFr8MRxCO9gF1KHSiLKeINJl8oHeVs0IrN/nuiTuRK5\niT2De/ipqPmiehDPPCsu6J/4\n-----END PRIVATE KEY-----\n"
-GOOGLE_CLIENT_EMAIL=pydahsdms-drive-service@pydahsdms.iam.gserviceaccount.com
-GOOGLE_CLIENT_ID=109948730636966664241
-GOOGLE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
-GOOGLE_TOKEN_URI=https://oauth2.googleapis.com/token
-GOOGLE_AUTH_PROVIDER_X509_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
-GOOGLE_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/pydahsdms-drive-service%40pydahsdms.iam.gserviceaccount.com
+AWS_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+S3_BUCKET_NAME=your_s3_bucket_name
 
-# ============================================
-# Google Drive Configuration
-# ============================================
-DRIVE_MAIN_FOLDER_ID=1bfjkg0mtNFGDjiswdv9ljtlw-7QgU35O
+# Note: Replace the above values with your actual AWS credentials and S3 bucket name
+# The S3 bucket should be created in the same region as specified in AWS_REGION
+# Make sure the IAM user/role has the following permissions:
+# - s3:PutObject
+# - s3:GetObject
+# - s3:ListBucket
 

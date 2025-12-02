@@ -106,16 +106,16 @@ Create these combinations:
 4. Enter an admission number
 5. Click **"Approve"**
 
-#### 6.2 Verify Google Drive
-1. Go to Google Drive: https://drive.google.com/drive/folders/1bfjkg0mtNFGDjiswdv9ljtlw-7QgU35O
-2. **Navigate** to: `College/Batch/Course/Branch/AdmissionNumber/`
+#### 6.2 Verify S3
+1. Go to AWS S3 Console
+2. **Navigate** to your bucket: `College/Batch/Course/Branch/AdmissionNumber/`
 3. **Verify** documents are uploaded with correct names
 
 #### 6.3 Verify Student Record
 1. Go to **"Students"** page
 2. Search for the student by admission number
 3. **Check** student details
-4. **Verify** `student_data` contains `google_drive_documents` with links
+4. **Verify** `student_data` contains `uploaded_documents` with S3 links
 
 ---
 
@@ -152,12 +152,12 @@ Create these combinations:
 - Check that document requirements are configured for that course type
 - Check browser console for JavaScript errors
 
-### Issue: Documents not uploading to Google Drive
+### Issue: Documents not uploading to S3
 **Solution:**
 - Check backend logs for errors
-- Verify `.env` has all Google Drive credentials
-- Verify service account has access to the Drive folder
-- Check: `npm list googleapis` (should be installed)
+- Verify `.env` has all AWS S3 credentials (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET_NAME)
+- Verify IAM user has S3 permissions
+- Check: `npm list @aws-sdk/client-s3` (should be installed)
 
 ### Issue: API returns 401 Unauthorized
 **Solution:**
@@ -175,9 +175,9 @@ You'll know everything works when:
 - ✅ Public form shows document upload section when course is selected
 - ✅ Can upload documents in public form
 - ✅ Form validation works (shows errors for missing documents)
-- ✅ Documents appear in Google Drive after approval
-- ✅ Google Drive folder structure is: `College/Batch/Course/Branch/AdmissionNumber/`
-- ✅ Student record contains Google Drive document links
+- ✅ Documents appear in S3 after approval
+- ✅ S3 folder structure is: `College/Batch/Course/Branch/AdmissionNumber/`
+- ✅ Student record contains S3 document links
 
 ---
 

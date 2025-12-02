@@ -1,4 +1,4 @@
--- Create settings table in Supabase
+-- Create settings table in MySQL
 CREATE TABLE IF NOT EXISTS settings (
   id SERIAL PRIMARY KEY,
   key VARCHAR(100) UNIQUE NOT NULL,

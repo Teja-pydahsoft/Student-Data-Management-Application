@@ -1,5 +1,4 @@
 const { masterPool } = require('../config/database');
-const { supabase } = require('../config/supabase');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const csv = require('csv-parser');
@@ -695,15 +694,10 @@ const buildTemplateResources = async (formId) => {
     throw error;
   }
 
-  const { data: forms, error } = await supabase
-    .from('forms')
-    .select('*')
-    .eq('form_id', formId)
-    .limit(1);
-
-  if (error) {
-    throw error;
-  }
+  const [forms] = await masterPool.query(
+    'SELECT * FROM forms WHERE form_id = ? LIMIT 1',
+    [formId]
+  );
 
   if (!forms || forms.length === 0) {
     const notFoundError = new Error('Form not found');
@@ -985,10 +979,10 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
 
       // Also check in form_submissions table
       const submissionCheckStart = Date.now();
-      const { data: existingSubmissions, error } = await supabase
-        .from('form_submissions')
-        .select('submission_id, admission_number, status')
-        .eq('admission_number', admissionNumber);
+      const [existingSubmissions] = await masterConn.query(
+        'SELECT submission_id, admission_number, status FROM form_submissions WHERE admission_number = ?',
+        [admissionNumber]
+      );
 
       const submissionCheckTime = Date.now() - submissionCheckStart;
       logBulkUploadEvent('info', 'SUBMISSION_CHECK_COMPLETED', {
@@ -999,7 +993,7 @@ const validateAndCheckDuplicates = async (submissionData, masterConn, rowNumber)
         submissionsTableResult: existingSubmissions && existingSubmissions.length > 0 ? existingSubmissions[0] : null
       });
 
-      if (!error && existingSubmissions && existingSubmissions.length > 0) {
+      if (existingSubmissions && existingSubmissions.length > 0) {
         duplicateChecks.push({
           field: 'admission_number',
           value: admissionNumber,
@@ -1197,14 +1191,11 @@ exports.submitForm = async (req, res) => {
       });
     }
 
-    // Verify form exists and is active - use Supabase instead of masterPool for consistency
-    const { data: forms, error: formErr } = await supabase
-      .from('forms')
-      .select('*')
-      .eq('form_id', formId)
-      .eq('is_active', true)
-      .limit(1);
-    if (formErr) throw formErr;
+    // Verify form exists and is active
+    const [forms] = await masterPool.query(
+      'SELECT * FROM forms WHERE form_id = ? AND is_active = 1 LIMIT 1',
+      [formId]
+    );
 
     if (!forms || forms.length === 0) {
       console.log('Form not found or inactive for formId:', formId);
@@ -1218,17 +1209,11 @@ exports.submitForm = async (req, res) => {
 
     const submissionId = uuidv4();
 
-    // Check if auto-assign is enabled and generate admission number based on academic year
+    // Auto-assign is always enabled - generate admission number based on academic year
     // Format: YEAR + 4-digit sequential number (e.g., 20250001, 20260001)
     let generatedAdmissionNumber = null;
     try {
-      const { data: setting, error: setErr } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'auto_assign_series')
-        .single();
-
-      if (!setErr && setting && setting.value === 'true') {
+      // Auto-assign is always enabled, so always generate admission number
         // Get academic year from form data (batch field)
         let academicYear = formData.batch || formData.academic_year;
         
@@ -1271,10 +1256,10 @@ exports.submitForm = async (req, res) => {
         });
 
         // Also check form_submissions for any pending numbers
-        const { data: submissions } = await supabase
-          .from('form_submissions')
-          .select('admission_number')
-          .like('admission_number', `${yearPrefix}%`);
+        const [submissions] = await masterPool.query(
+          'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
+          [`${yearPrefix}%`]
+        );
 
         if (submissions) {
           submissions.forEach(sub => {
@@ -1291,24 +1276,17 @@ exports.submitForm = async (req, res) => {
         const nextSeq = maxSeq + 1;
         generatedAdmissionNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
         console.log(`Generated admission number: ${generatedAdmissionNumber} for academic year ${academicYear}`);
-      }
     } catch (error) {
       console.error('Error generating admission number:', error);
       // Continue without assigning
     }
 
     // Insert submission
-    const { error: insErr } = await supabase
-      .from('form_submissions')
-      .insert({
-        submission_id: submissionId,
-        form_id: formId,
-        admission_number: generatedAdmissionNumber,
-        submission_data: formData,
-        status: 'pending',
-        submitted_by: 'student'
-      });
-    if (insErr) throw insErr;
+    await masterPool.query(
+      `INSERT INTO form_submissions (submission_id, form_id, admission_number, submission_data, status, submitted_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [submissionId, formId, generatedAdmissionNumber, JSON.stringify(formData), 'pending', 'student']
+    );
 
     res.status(201).json({
       success: true,
@@ -1332,12 +1310,22 @@ exports.getAllSubmissions = async (req, res) => {
   try {
     const { status, formId } = req.query;
 
-    // Supabase query without relationship joins
-    let q = supabase.from('form_submissions').select('*');
-    if (status) q = q.eq('status', status);
-    if (formId) q = q.eq('form_id', formId);
-    const { data: submissions, error } = await q.order('created_at', { ascending: false });
-    if (error) throw error;
+    // Build MySQL query
+    let query = 'SELECT * FROM form_submissions WHERE 1=1';
+    const params = [];
+    
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    if (formId) {
+      query += ' AND form_id = ?';
+      params.push(formId);
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const [submissions] = await masterPool.query(query, params);
 
     // Enrich with form/admin names via separate queries
     const formIds = Array.from(new Set((submissions || []).map(s => s.form_id))).filter(Boolean);
@@ -1346,28 +1334,31 @@ exports.getAllSubmissions = async (req, res) => {
 
     let idToFormName = new Map();
     if (formIds.length > 0) {
-      const { data: formsRows } = await supabase
-        .from('forms')
-        .select('form_id, form_name')
-        .in('form_id', formIds);
+      const placeholders = formIds.map(() => '?').join(',');
+      const [formsRows] = await masterPool.query(
+        `SELECT form_id, form_name FROM forms WHERE form_id IN (${placeholders})`,
+        formIds
+      );
       if (formsRows) idToFormName = new Map(formsRows.map(f => [f.form_id, f.form_name]));
     }
 
     let idToAdmin = new Map();
     if (reviewedIds.length > 0) {
-      const { data: adminsRows } = await supabase
-        .from('admins')
-        .select('id, username')
-        .in('id', reviewedIds);
+      const placeholders = reviewedIds.map(() => '?').join(',');
+      const [adminsRows] = await masterPool.query(
+        `SELECT id, username FROM admins WHERE id IN (${placeholders})`,
+        reviewedIds
+      );
       if (adminsRows) idToAdmin = new Map(adminsRows.map(a => [a.id, a.username]));
     }
 
     let idToSubmittedAdmin = new Map();
     if (submittedByAdminIds.length > 0) {
-      const { data: adminsRows2 } = await supabase
-        .from('admins')
-        .select('id, username')
-        .in('id', submittedByAdminIds);
+      const placeholders = submittedByAdminIds.map(() => '?').join(',');
+      const [adminsRows2] = await masterPool.query(
+        `SELECT id, username FROM admins WHERE id IN (${placeholders})`,
+        submittedByAdminIds
+      );
       if (adminsRows2) idToSubmittedAdmin = new Map(adminsRows2.map(a => [a.id, a.username]));
     }
 
@@ -1398,15 +1389,10 @@ exports.getSubmissionById = async (req, res) => {
 
     console.log('Fetching submission:', submissionId);
 
-    const { data: submissions, error } = await supabase
-      .from('form_submissions')
-      .select('*')
-      .eq('submission_id', submissionId)
-      .limit(1);
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
+    const [submissions] = await masterPool.query(
+      'SELECT * FROM form_submissions WHERE submission_id = ? LIMIT 1',
+      [submissionId]
+    );
 
     if (submissions.length === 0) {
       console.log('Submission not found:', submissionId);
@@ -1421,11 +1407,10 @@ exports.getSubmissionById = async (req, res) => {
     const base = submissions[0];
     let formName = null;
     let formFields = null;
-    const { data: formRows } = await supabase
-      .from('forms')
-      .select('form_name, form_fields')
-      .eq('form_id', base.form_id)
-      .limit(1);
+    const [formRows] = await masterPool.query(
+      'SELECT form_name, form_fields FROM forms WHERE form_id = ? LIMIT 1',
+      [base.form_id]
+    );
     if (formRows && formRows.length > 0) {
       formName = formRows[0].form_name || null;
       formFields = parseJSON(formRows[0].form_fields);
@@ -1486,16 +1471,10 @@ exports.approveSubmission = async (req, res) => {
     }
 
     // Get submission
-    const { data: submissions, error: subErr } = await supabase
-      .from('form_submissions')
-      .select('*')
-      .eq('submission_id', submissionId)
-      .eq('status', 'pending')
-      .limit(1);
-    if (subErr) {
-      console.error('Supabase error fetching submission:', subErr);
-      throw subErr;
-    }
+    const [submissions] = await masterConn.query(
+      'SELECT * FROM form_submissions WHERE submission_id = ? AND status = ? LIMIT 1',
+      [submissionId, 'pending']
+    );
 
     if (submissions.length === 0) {
       await masterConn.rollback();
@@ -1535,9 +1514,22 @@ exports.approveSubmission = async (req, res) => {
     for (const field of formFields) {
       const col = field.key?.replace(/[^a-zA-Z0-9_]/g, '_');
       if (!col) continue;
-      await masterConn.query(
-        `ALTER TABLE ${destinationTable} ADD COLUMN IF NOT EXISTS ${col} VARCHAR(1024) NULL`
+      
+      // Check if column exists (MySQL doesn't support IF NOT EXISTS in ALTER TABLE)
+      const [columns] = await masterConn.query(
+        `SELECT COUNT(*) as count 
+         FROM information_schema.COLUMNS 
+         WHERE TABLE_SCHEMA = DATABASE() 
+         AND TABLE_NAME = ? 
+         AND COLUMN_NAME = ?`,
+        [destinationTable, col]
       );
+      
+      if (columns[0].count === 0) {
+        await masterConn.query(
+          `ALTER TABLE ${destinationTable} ADD COLUMN ${col} VARCHAR(1024) NULL`
+        );
+      }
     }
 
     // Prepare insert columns/values for dynamic table
@@ -1725,29 +1717,28 @@ exports.approveSubmission = async (req, res) => {
       }
     }
 
-    // Upload documents to Google Drive if enabled and documents exist
+    // Upload documents to S3 if enabled and documents exist
     const uploadedDocuments = {};
     try {
-      const googleDriveService = require('../services/googleDriveService');
+      const s3Service = require('../services/s3Service');
       const documentSettingsController = require('../controllers/documentSettingsController');
       
       // Get document requirements to determine which documents to upload
-      const { data: docSettings } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'document_requirements')
-        .single();
+      const [docSettings] = await masterConn.query(
+        'SELECT value FROM settings WHERE `key` = ? LIMIT 1',
+        ['document_requirements']
+      );
       
       let docRequirements = {};
-      if (docSettings && docSettings.value) {
+      if (docSettings && docSettings.length > 0 && docSettings[0].value) {
         try {
-          docRequirements = JSON.parse(docSettings.value);
+          docRequirements = JSON.parse(docSettings[0].value);
         } catch (e) {
           console.warn('Could not parse document requirements:', e);
         }
       }
 
-      // Extract student info for folder structure
+      // Extract student info for S3 folder structure
       const studentInfo = {
         college: submissionData.college || 'Unknown',
         batch: submissionData.batch || 'Unknown',
@@ -1787,7 +1778,7 @@ exports.approveSubmission = async (req, res) => {
             
             const fileName = `${docLabel.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
             
-            const uploadResult = await googleDriveService.uploadStudentDocument(
+            const uploadResult = await s3Service.uploadStudentDocument(
               docValue,
               fileName,
               mimeType,
@@ -1795,35 +1786,31 @@ exports.approveSubmission = async (req, res) => {
             );
             
             uploadedDocuments[docKey] = {
-              fileId: uploadResult.fileId,
+              fileId: uploadResult.key,
               fileName: uploadResult.fileName,
-              webViewLink: uploadResult.webViewLink,
+              webViewLink: uploadResult.presignedUrl || uploadResult.publicUrl,
               folderPath: uploadResult.folderPath
             };
             
-            console.log(`✅ Uploaded ${docKey} to Google Drive: ${uploadResult.fileId}`);
+            console.log(`✅ Uploaded ${docKey} to S3: ${uploadResult.key}`);
           } catch (uploadError) {
-            console.error(`❌ Error uploading ${docKey} to Google Drive:`, uploadError.message);
+            console.error(`❌ Error uploading ${docKey} to S3:`, uploadError.message);
             // Continue with other documents even if one fails
           }
         }
       }
-    } catch (driveError) {
-      console.error('Google Drive upload error (non-fatal):', driveError.message);
-      // Don't fail the approval if Drive upload fails
+    } catch (s3Error) {
+      console.error('S3 upload error (non-fatal):', s3Error.message);
+      // Don't fail the approval if S3 upload fails
     }
 
     // Update submission status
-    const { error: updErr } = await supabase
-      .from('form_submissions')
-      .update({ 
-        status: 'approved', 
-        reviewed_at: new Date().toISOString(), 
-        reviewed_by: req.admin.id, 
-        admission_number: finalAdmissionNumber 
-      })
-      .eq('submission_id', submissionId);
-    if (updErr) throw updErr;
+    await masterConn.query(
+      `UPDATE form_submissions 
+       SET status = ?, reviewed_at = ?, reviewed_by = ?, admission_number = ?
+       WHERE submission_id = ?`,
+      ['approved', new Date(), req.admin.id, finalAdmissionNumber, submissionId]
+    );
 
     // Store uploaded document links in student record if any documents were uploaded
     if (Object.keys(uploadedDocuments).length > 0) {
@@ -1895,17 +1882,17 @@ exports.rejectSubmission = async (req, res) => {
       }
     }
 
-    const { data, error } = await supabase
-      .from('form_submissions')
-      .update({ status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: req.admin.id, rejection_reason: reason || 'No reason provided' })
-      .eq('submission_id', submissionId)
-      .eq('status', 'pending')
-      .select('submission_id');
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Pending submission not found' 
+    const [result] = await masterPool.query(
+      `UPDATE form_submissions 
+       SET status = ?, reviewed_at = ?, reviewed_by = ?, rejection_reason = ?
+       WHERE submission_id = ? AND status = ?`,
+      ['rejected', new Date(), req.admin.id, reason || 'No reason provided', submissionId, 'pending']
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pending submission not found'
       });
     }
 
@@ -1937,38 +1924,46 @@ exports.deleteSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
 
+    // Check for delete permission
+    const user = req.user || req.admin;
+    if (user && user.role !== 'super_admin' && user.role !== 'admin') {
+      const { hasPermission, MODULES } = require('../constants/rbac');
+      if (!hasPermission(user.permissions, MODULES.PRE_REGISTRATION, 'delete')) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to delete submissions'
+        });
+      }
+    }
+
     console.log('Attempting to delete submission:', submissionId);
 
     // First, check if the submission exists
-    const { data: existingSubmission, error: checkError } = await supabase
-      .from('form_submissions')
-      .select('submission_id, status')
-      .eq('submission_id', submissionId)
-      .single();
+    const [existingSubmission] = await masterPool.query(
+      'SELECT submission_id, status FROM form_submissions WHERE submission_id = ? LIMIT 1',
+      [submissionId]
+    );
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking submission:', checkError);
-      throw checkError;
-    }
-
-    if (!existingSubmission) {
+    if (!existingSubmission || existingSubmission.length === 0) {
       return res.status(404).json({ 
         success: false, 
         message: 'Submission not found' 
       });
     }
 
-    console.log('Found submission to delete:', existingSubmission);
+    console.log('Found submission to delete:', existingSubmission[0]);
 
-    // Perform delete without select (Supabase RLS can block select after delete)
-    const { error: deleteError } = await supabase
-      .from('form_submissions')
-      .delete()
-      .eq('submission_id', submissionId);
+    // Perform delete - allow deletion of any status (pending, approved, rejected)
+    const [deleteResult] = await masterPool.query(
+      'DELETE FROM form_submissions WHERE submission_id = ?',
+      [submissionId]
+    );
 
-    if (deleteError) {
-      console.error('Delete error:', deleteError);
-      throw deleteError;
+    if (deleteResult.affectedRows === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Submission not found or could not be deleted'
+      });
     }
 
     console.log('Successfully deleted submission:', submissionId);
@@ -1977,9 +1972,11 @@ exports.deleteSubmission = async (req, res) => {
     try {
       const masterConn3 = await masterPool.getConnection();
       await masterConn3.query(
-        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
-         VALUES (?, ?, ?, ?)`,
-        ['DELETE', 'SUBMISSION', submissionId, req.admin.id]
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['DELETE', 'SUBMISSION', submissionId, req.admin?.id || user?.id, JSON.stringify({ 
+          status: existingSubmission[0].status 
+        })]
       );
       masterConn3.release();
     } catch (logError) {
@@ -1994,9 +1991,16 @@ exports.deleteSubmission = async (req, res) => {
 
   } catch (error) {
     console.error('Delete submission error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      sqlState: error.sqlState,
+      sql: error.sql
+    });
     res.status(500).json({ 
       success: false, 
-      message: error.message || 'Server error while deleting submission' 
+      message: error.message || 'Server error while deleting submission',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -2486,17 +2490,11 @@ exports.bulkUploadSubmissions = async (req, res) => {
 
         // Insert submission with admin tracking
         const insertionStartTime = Date.now();
-        await supabase
-          .from('form_submissions')
-          .insert({
-            submission_id: submissionId,
-            form_id: formId,
-            admission_number: submissionData.admission_number,
-            submission_data: submissionData,
-            status: 'pending',
-            submitted_by: 'admin',
-            submitted_by_admin: req.admin.id
-          });
+        await masterConn.query(
+          `INSERT INTO form_submissions (submission_id, form_id, admission_number, submission_data, status, submitted_by, submitted_by_admin)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [submissionId, formId, submissionData.admission_number, JSON.stringify(submissionData), 'pending', 'admin', req.admin.id]
+        );
         const insertionTime = Date.now() - insertionStartTime;
 
         logBulkUploadEvent('info', 'SUBMISSION_INSERTED', {
@@ -2562,17 +2560,17 @@ exports.bulkUploadSubmissions = async (req, res) => {
     let dataIntegrityIssues = 0;
 
     // Verify submissions were actually inserted
-    const { data: insertedSubmissions, error: verifyError } = await supabase
-      .from('form_submissions')
-      .select('submission_id, admission_number, status')
-      .eq('form_id', formId)
-      .eq('submitted_by_admin', req.admin.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(successCount + 10); // Get a few extra to check for duplicates
+    const [insertedSubmissions] = await masterConn.query(
+      `SELECT submission_id, admission_number, status 
+       FROM form_submissions 
+       WHERE form_id = ? AND submitted_by_admin = ? AND status = ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+      [formId, req.admin.id, 'pending', successCount + 10]
+    );
 
-    if (verifyError) {
-      logBulkUploadError(null, 'INTEGRITY_VERIFICATION_FAILED', verifyError.message);
+    if (!insertedSubmissions) {
+      logBulkUploadError(null, 'INTEGRITY_VERIFICATION_FAILED', 'Failed to verify inserted submissions');
       dataIntegrityIssues++;
     } else {
       const actualInsertedCount = insertedSubmissions ? insertedSubmissions.length : 0;
@@ -2788,10 +2786,10 @@ exports.generateAdmissionSeries = async (req, res) => {
     });
 
     // Also check form_submissions for any pending numbers
-    const { data: submissions } = await supabase
-      .from('form_submissions')
-      .select('admission_number')
-      .like('admission_number', `${yearPrefix}%`);
+    const [submissions] = await masterPool.query(
+      'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
+      [`${yearPrefix}%`]
+    );
 
     if (submissions) {
       submissions.forEach(sub => {
@@ -2816,12 +2814,12 @@ exports.generateAdmissionSeries = async (req, res) => {
     if (autoAssign) {
       try {
         // Get pending submissions that don't have admission numbers and match the academic year
-        const { data: pendingSubmissions, error } = await supabase
-          .from('form_submissions')
-          .select('submission_id, submission_data')
-          .eq('status', 'pending')
-          .or('admission_number.is.null,admission_number.eq.')
-          .order('created_at', { ascending: true });
+        const [pendingSubmissions] = await masterPool.query(
+          `SELECT submission_id, submission_data 
+           FROM form_submissions 
+           WHERE status = 'pending' AND (admission_number IS NULL OR admission_number = '')
+           ORDER BY created_at ASC`
+        );
 
         if (error) {
           console.error('Error fetching pending submissions:', error);
@@ -2856,10 +2854,10 @@ exports.generateAdmissionSeries = async (req, res) => {
                 let currentMaxSeq = latestRows[0]?.max_seq || 0;
                 
                 // Also check form_submissions
-                const { data: latestSubs } = await supabase
-                  .from('form_submissions')
-                  .select('admission_number')
-                  .like('admission_number', `${yearPrefix}%`);
+                const [latestSubs] = await masterConnAssign.query(
+                  'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
+                  [`${yearPrefix}%`]
+                );
                 
                 if (latestSubs) {
                   latestSubs.forEach(sub => {
@@ -2876,20 +2874,13 @@ exports.generateAdmissionSeries = async (req, res) => {
                 
                 const newAdmNum = `${yearPrefix}${(currentMaxSeq + 1).toString().padStart(4, '0')}`;
                 
-                const { error: updateError } = await supabase
-                  .from('form_submissions')
-                  .update({
-                    admission_number: newAdmNum,
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('submission_id', submission.submission_id);
+                await masterConnAssign.query(
+                  'UPDATE form_submissions SET admission_number = ?, updated_at = ? WHERE submission_id = ?',
+                  [newAdmNum, new Date(), submission.submission_id]
+                );
 
-                if (!updateError) {
-                  assignedCount++;
-                  console.log(`Assigned ${newAdmNum} to submission ${submission.submission_id}`);
-                } else {
-                  console.error(`Error updating submission ${submission.submission_id}:`, updateError);
-                }
+                assignedCount++;
+                console.log(`Assigned ${newAdmNum} to submission ${submission.submission_id}`);
               }
             }
           } finally {
@@ -2906,9 +2897,12 @@ exports.generateAdmissionSeries = async (req, res) => {
     }
 
     // Save the academic year as the current setting
-    await supabase
-      .from('settings')
-      .upsert({ key: 'admission_prefix', value: academicYear });
+    await masterPool.query(
+      `INSERT INTO settings (\`key\`, value) 
+       VALUES (?, ?) 
+       ON DUPLICATE KEY UPDATE value = ?`,
+      ['admission_prefix', academicYear, academicYear]
+    );
 
     res.json({
       success: true,
@@ -2935,13 +2929,11 @@ exports.getFieldCompletionStatus = async (req, res) => {
     const { submissionId } = req.params;
 
     // Get submission with form details
-    const { data: submissions, error } = await supabase
-      .from('form_submissions')
-      .select('*')
-      .eq('submission_id', submissionId)
-      .limit(1);
+    const [submissions] = await masterPool.query(
+      'SELECT * FROM form_submissions WHERE submission_id = ? LIMIT 1',
+      [submissionId]
+    );
 
-    if (error) throw error;
     if (submissions.length === 0) {
       return res.status(404).json({
         success: false,
@@ -2953,13 +2945,10 @@ exports.getFieldCompletionStatus = async (req, res) => {
     const submissionData = parseJSON(submission.submission_data);
 
     // Get form fields
-    const { data: forms, error: formErr } = await supabase
-      .from('forms')
-      .select('form_fields')
-      .eq('form_id', submission.form_id)
-      .limit(1);
-
-    if (formErr) throw formErr;
+    const [forms] = await masterPool.query(
+      'SELECT form_fields FROM forms WHERE form_id = ? LIMIT 1',
+      [submission.form_id]
+    );
     if (forms.length === 0) {
       // Return default completion status if form is not found
       return res.json({
@@ -3056,13 +3045,12 @@ exports.getStudentCompletionStatus = async (req, res) => {
 
     // If not found in JSON, look it up from submissions
     if (!formId) {
-      const { data: submissions, error } = await supabase
-        .from('form_submissions')
-        .select('form_id')
-        .eq('admission_number', admissionNumber)
-        .limit(1);
+      const [submissions] = await masterPool.query(
+        'SELECT form_id FROM form_submissions WHERE admission_number = ? LIMIT 1',
+        [admissionNumber]
+      );
 
-      if (!error && submissions && submissions.length > 0) {
+      if (submissions && submissions.length > 0) {
         formId = submissions[0].form_id;
       }
     }
@@ -3085,13 +3073,10 @@ exports.getStudentCompletionStatus = async (req, res) => {
     }
 
     // Get form fields
-    const { data: forms, error: formErr } = await supabase
-      .from('forms')
-      .select('form_fields, form_name')
-      .eq('form_id', formId)
-      .limit(1);
-
-    if (formErr) throw formErr;
+    const [forms] = await masterPool.query(
+      'SELECT form_fields, form_name FROM forms WHERE form_id = ? LIMIT 1',
+      [formId]
+    );
     if (forms.length === 0) {
       return res.status(404).json({
         success: false,
@@ -3477,6 +3462,18 @@ exports.downloadExcelTemplate = async (req, res) => {
 // Bulk delete submissions (admin only)
 exports.bulkDeleteSubmissions = async (req, res) => {
   try {
+    // Check for delete permission
+    const user = req.user || req.admin;
+    if (user && user.role !== 'super_admin' && user.role !== 'admin') {
+      const { hasPermission, MODULES } = require('../constants/rbac');
+      if (!hasPermission(user.permissions, MODULES.PRE_REGISTRATION, 'delete')) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to delete submissions'
+        });
+      }
+    }
+
     const { submissionIds } = req.body;
 
     if (!submissionIds || !Array.isArray(submissionIds) || submissionIds.length === 0) {
@@ -3498,25 +3495,13 @@ exports.bulkDeleteSubmissions = async (req, res) => {
       try {
         console.log(`📋 Deleting submission: ${submissionId}`);
 
-        // Delete submission
-        const { data, error } = await supabase
-          .from('form_submissions')
-          .delete()
-          .eq('submission_id', submissionId)
-          .select('submission_id');
+        // Delete submission - allow deletion of any status
+        const [deleteResult] = await masterPool.query(
+          'DELETE FROM form_submissions WHERE submission_id = ?',
+          [submissionId]
+        );
 
-        if (error) {
-          console.error(`❌ Error deleting submission ${submissionId}:`, error);
-          errors.push({
-            submissionId,
-            error: error.message,
-            type: 'delete_error'
-          });
-          failedCount++;
-          continue;
-        }
-
-        if (!data || data.length === 0) {
+        if (deleteResult.affectedRows === 0) {
           console.error(`❌ Submission ${submissionId} not found`);
           errors.push({
             submissionId,
@@ -3537,6 +3522,11 @@ exports.bulkDeleteSubmissions = async (req, res) => {
 
       } catch (error) {
         console.error(`❌ Error deleting submission ${submissionId}:`, error);
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          sqlState: error.sqlState
+        });
         errors.push({
           submissionId,
           error: error.message,
@@ -3547,16 +3537,21 @@ exports.bulkDeleteSubmissions = async (req, res) => {
     }
 
     // Log action
-    const masterConn = await masterPool.getConnection();
-    await masterConn.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_DELETE', 'SUBMISSION', JSON.stringify(submissionIds), req.admin.id, JSON.stringify({
-        deletedCount,
-        failedCount
-      })]
-    );
-    masterConn.release();
+    try {
+      const masterConn = await masterPool.getConnection();
+      await masterConn.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['BULK_DELETE', 'SUBMISSION', JSON.stringify(submissionIds), user?.id || req.admin?.id, JSON.stringify({
+          deletedCount,
+          failedCount
+        })]
+      );
+      masterConn.release();
+    } catch (logError) {
+      console.error('Error logging bulk delete action:', logError);
+      // Don't fail the request if logging fails
+    }
 
     console.log(`✅ Bulk delete completed: ${deletedCount} deleted, ${failedCount} failed`);
 
@@ -3610,23 +3605,10 @@ exports.bulkApproveSubmissions = async (req, res) => {
         console.log(`📋 Processing submission: ${submissionId}`);
 
         // Get submission details
-        const { data: submissions, error: fetchError } = await supabase
-          .from('form_submissions')
-          .select('*')
-          .eq('submission_id', submissionId)
-          .eq('status', 'pending')
-          .limit(1);
-
-        if (fetchError) {
-          console.error(`❌ Error fetching submission ${submissionId}:`, fetchError);
-          errors.push({
-            submissionId,
-            error: fetchError.message,
-            type: 'fetch_error'
-          });
-          failedCount++;
-          continue;
-        }
+        const [submissions] = await masterPool.query(
+          'SELECT * FROM form_submissions WHERE submission_id = ? AND status = ? LIMIT 1',
+          [submissionId, 'pending']
+        );
 
         if (!submissions || submissions.length === 0) {
           console.error(`❌ Submission ${submissionId} not found or not pending`);
@@ -3743,9 +3725,22 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
   for (const field of formFields) {
     const col = field.key?.replace(/[^a-zA-Z0-9_]/g, '_');
     if (!col) continue;
-    await masterConn.query(
-      `ALTER TABLE ${destinationTable} ADD COLUMN IF NOT EXISTS ${col} VARCHAR(1024) NULL`
+    
+    // Check if column exists (MySQL doesn't support IF NOT EXISTS in ALTER TABLE)
+    const [columns] = await masterConn.query(
+      `SELECT COUNT(*) as count 
+       FROM information_schema.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() 
+       AND TABLE_NAME = ? 
+       AND COLUMN_NAME = ?`,
+      [destinationTable, col]
     );
+    
+    if (columns[0].count === 0) {
+      await masterConn.query(
+        `ALTER TABLE ${destinationTable} ADD COLUMN ${col} VARCHAR(1024) NULL`
+      );
+    }
   }
 
   // Prepare insert columns/values for dynamic table
@@ -3859,17 +3854,12 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
   }
 
   // Update submission status
-  const { error: updErr } = await supabase
-    .from('form_submissions')
-    .update({
-      status: 'approved',
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: admin.id,
-      admission_number: finalAdmissionNumber
-    })
-    .eq('submission_id', submission.submission_id);
-
-  if (updErr) throw updErr;
+  await masterConn.query(
+    `UPDATE form_submissions 
+     SET status = ?, reviewed_at = ?, reviewed_by = ?, admission_number = ?
+     WHERE submission_id = ?`,
+    ['approved', new Date(), admin.id, finalAdmissionNumber, submission.submission_id]
+  );
 };
 
 // Toggle auto-assign series setting
@@ -3884,29 +3874,13 @@ exports.toggleAutoAssignSeries = async (req, res) => {
       });
     }
 
-    // First, try to create the settings table if it doesn't exist
-    try {
-      const { error: tableCheckError } = await supabase
-        .from('settings')
-        .select('id')
-        .limit(1);
-
-      if (tableCheckError && tableCheckError.code === 'PGRST205') {
-        console.log('Settings table does not exist, cannot toggle setting');
-        return res.status(500).json({
-          success: false,
-          message: 'Settings table does not exist. Please create it in Supabase first.'
-        });
-      }
-    } catch (createError) {
-      console.error('Error checking settings table:', createError);
-    }
-
-    const { error } = await supabase
-      .from('settings')
-      .upsert({ key: 'auto_assign_series', value: enabled.toString() }, { onConflict: 'key' });
-
-    if (error) throw error;
+    // Update or insert setting
+    await masterPool.query(
+      `INSERT INTO settings (\`key\`, value) 
+       VALUES (?, ?) 
+       ON DUPLICATE KEY UPDATE value = ?`,
+      ['auto_assign_series', enabled.toString(), enabled.toString()]
+    );
 
     res.json({
       success: true,
@@ -3922,51 +3896,13 @@ exports.toggleAutoAssignSeries = async (req, res) => {
   }
 };
 
-// Get auto-assign series setting
+// Get auto-assign series setting (always returns enabled: true)
 exports.getAutoAssignSeries = async (req, res) => {
   try {
-    // First, try to create the settings table if it doesn't exist
-    try {
-      // Check if table exists by trying to query it
-      const { error: tableCheckError } = await supabase
-        .from('settings')
-        .select('id')
-        .limit(1);
-
-      if (tableCheckError && tableCheckError.code === 'PGRST205') {
-        // Table doesn't exist, try to create it
-        console.log('Settings table does not exist, attempting to create...');
-
-        // Since we can't create tables directly via Supabase client,
-        // we'll use a workaround by inserting with error handling
-        // For now, return default value and log the issue
-        console.warn('Settings table missing. Please create it manually in Supabase or run the init script.');
-
-        // Return default value
-        res.json({
-          success: true,
-          data: { enabled: false },
-          note: 'Settings table not found, using default value'
-        });
-        return;
-      }
-    } catch (createError) {
-      console.error('Error checking/creating settings table:', createError);
-    }
-
-    const { data: setting, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'auto_assign_series')
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is not found
-
-    const enabled = setting ? setting.value === 'true' : false;
-
+    // Always return enabled: true (auto-assign is always on)
     res.json({
       success: true,
-      data: { enabled }
+      data: { enabled: true }
     });
 
   } catch (error) {

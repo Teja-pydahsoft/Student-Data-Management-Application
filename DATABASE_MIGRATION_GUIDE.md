@@ -151,11 +151,11 @@ After migration:
 1. ✅ The table is created
 2. ✅ You can configure document requirements in Settings → Document Requirements
 3. ✅ Students can upload documents based on their course type (UG/PG)
-4. ✅ Documents will be stored in Google Drive during submission approval
+4. ✅ Documents will be stored in S3 during submission approval
 
 ### No Other Migrations Needed
 
-- **Google Drive Integration**: Uses existing `student_data` JSON field - no migration needed
+- **S3 Integration**: Uses existing `student_data` JSON field - no migration needed
 - **Form Fields**: Uses existing `forms` table - no migration needed
 - **APAAR ID**: Can be added as a regular form field - no migration needed
 

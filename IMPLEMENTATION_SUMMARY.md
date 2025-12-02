@@ -1,23 +1,20 @@
-# Implementation Summary - Document Upload & Google Drive Integration
+# Implementation Summary - Document Upload & S3 Integration
 
 ## Completed Tasks ✅
 
-1. ✅ Created `.env` structure and documentation for Google Drive Service Account
-2. ✅ Created `backend/services/googleDriveService.js` - Service to handle Google Drive operations
-3. ✅ Added `googleapis` package to `backend/package.json`
-4. ✅ Created `backend/controllers/documentSettingsController.js` - Document requirements CRUD
-5. ✅ Added routes for document settings in `backend/routes/settingsRoutes.js`
+1. ✅ Created S3 service (`backend/services/s3Service.js`) - Service to handle S3 operations
+2. ✅ Added AWS SDK packages to `backend/package.json`
+3. ✅ Created `backend/controllers/documentSettingsController.js` - Document requirements CRUD
+4. ✅ Added routes for document settings in `backend/routes/settingsRoutes.js`
+5. ✅ Updated `approveSubmission` in `submissionController.js` to upload documents to S3
+6. ✅ Updated `createStudent` in `studentController.js` to upload documents to S3
+7. ✅ Updated frontend `Submissions.jsx` to display S3 documents
 
 ## Remaining Tasks 🔄
 
 ### Backend Tasks
 
-1. **Update `approveSubmission` in `submissionController.js`**
-   - Extract document files from submission data
-   - Upload documents to Google Drive using organized folder structure
-   - Store Drive file IDs/links in student record
-
-2. **Update `submitForm` in `submissionController.js`**
+1. **Update `submitForm` in `submissionController.js`**
    - Handle document uploads from form submission
    - Store documents temporarily until approval
 
@@ -41,48 +38,38 @@
    - Add same document upload fields
    - Add APAAR ID field
 
-## Google Drive Folder Structure
+## S3 Folder Structure
 
 ```
-DRIVE_MAIN_FOLDER_ID/
+s3://your-bucket-name/
   └── College Name/
       └── Batch (Academic Year)/
           └── Course Name/
               └── Branch Name/
-                  └── Admission Number/
-                      ├── 10th_Certificate.pdf
-                      ├── 10th_Study_Certificate.pdf
-                      ├── 10th_TC.pdf
-                      ├── Inter_Certificate.pdf (if Inter selected)
-                      ├── Inter_Study_Certificate.pdf (if Inter selected)
-                      ├── Inter_TC.pdf (if Inter selected)
-                      ├── Diploma_Certificate.pdf (if Diploma selected)
-                      ├── Diploma_Study_Certificate.pdf (if Diploma selected)
-                      ├── Diploma_TC.pdf (if Diploma selected)
-                      ├── UG_Certificate.pdf (if PG course)
-                      ├── UG_Study_Certificate.pdf (if PG course)
-                      ├── UG_TC.pdf (if PG course)
-                      └── APAAR_ID.pdf (if provided)
+                  └── AdmissionNumber/
+                      └── Document_Name.pdf
 ```
 
-## Document Requirements Logic
+## Setup Instructions
 
-### UG Courses
-- **Required**: 10th Certificate, 10th Study Certificate, 10th TC
-- **Conditional**: 
-  - If Inter selected: Inter Certificate (2 years), Inter Study Certificate, Inter TC
-  - If Diploma selected: Diploma Certificate (3 years), Diploma Study Certificate, Diploma TC
-- **Optional**: APAAR ID
+1. Install dependencies: `cd backend && npm install`
+2. Configure AWS S3:
+   - Create S3 bucket
+   - Create IAM user with S3 permissions
+   - Add credentials to `.env` file
+3. Update environment variables:
+   ```env
+   AWS_REGION=ap-south-1
+   AWS_ACCESS_KEY_ID=your_aws_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+   S3_BUCKET_NAME=your_s3_bucket_name
+   ```
+4. Test S3 connection
+5. Test document upload functionality
 
-### PG Courses
-- **All UG documents** (as above)
-- **Plus Required**: UG Certificate, UG Study Certificate, UG TC
-- **Optional**: APAAR ID
+## Migration Notes
 
-## Next Steps
-
-1. Install googleapis: `cd backend && npm install googleapis`
-2. Update submission approval to upload documents to Drive
-3. Update frontend forms to include document upload sections
-4. Test end-to-end flow
-
+- Documents are now stored directly in S3 bucket
+- Presigned URLs are generated for document access (valid for 1 year)
+- Folder structure maintains organization: `College/Batch/Course/Branch/AdmissionNumber/`
+- Document links stored in `student_data.uploaded_documents` JSON field

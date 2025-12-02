@@ -1,6 +1,5 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { supabase } = require('../config/supabase');
 const { masterPool } = require('../config/database');
 const {
   ALL_OPERATION_KEYS,
@@ -60,22 +59,18 @@ exports.login = async (req, res) => {
     }
 
     let adminAccount = null;
-    let supabaseError = null;
 
     try {
-      const { data: admins, error } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('username', username)
-        .limit(1);
+      const [admins] = await masterPool.query(
+        'SELECT * FROM admins WHERE username = ? LIMIT 1',
+        [username]
+      );
 
-      if (error) {
-        supabaseError = error;
-      } else if (admins && admins.length > 0) {
+      if (admins && admins.length > 0) {
         adminAccount = admins[0];
       }
     } catch (error) {
-      supabaseError = error;
+      console.error('Error fetching admin:', error);
     }
 
     if (adminAccount) {
@@ -210,9 +205,6 @@ exports.login = async (req, res) => {
     );
 
     if (!staffRows || staffRows.length === 0) {
-      if (supabaseError) {
-        console.error('Admin lookup failed:', supabaseError);
-      }
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -340,12 +332,10 @@ exports.verifyToken = async (req, res) => {
       });
     }
 
-    const { data: admins, error } = await supabase
-      .from('admins')
-      .select('id, username, email')
-      .eq('id', authUser.id)
-      .limit(1);
-    if (error) throw error;
+    const [admins] = await masterPool.query(
+      'SELECT id, username, email FROM admins WHERE id = ? LIMIT 1',
+      [authUser.id]
+    );
     if (!admins || admins.length === 0) {
       return res.status(404).json({ 
         success: false, 
@@ -387,12 +377,10 @@ exports.changePassword = async (req, res) => {
     }
 
     // Get admin
-    const { data: admins, error: e1 } = await supabase
-      .from('admins')
-      .select('*')
-      .eq('id', authUser.id)
-      .limit(1);
-    if (e1) throw e1;
+    const [admins] = await masterPool.query(
+      'SELECT * FROM admins WHERE id = ? LIMIT 1',
+      [authUser.id]
+    );
     if (!admins || admins.length === 0) {
       return res.status(404).json({ 
         success: false, 
@@ -416,11 +404,10 @@ exports.changePassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    const { error: e2 } = await supabase
-      .from('admins')
-      .update({ password: hashedPassword })
-      .eq('id', authUser.id);
-    if (e2) throw e2;
+    await masterPool.query(
+      'UPDATE admins SET password = ? WHERE id = ?',
+      [hashedPassword, authUser.id]
+    );
 
     res.json({
       success: true,

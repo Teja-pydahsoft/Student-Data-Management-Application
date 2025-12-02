@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { masterPool } = require('../config/database');
 
 const NOTIFICATION_TYPES = {
   user_creation: {
@@ -44,15 +44,11 @@ Login URL: {{loginUrl}}`,
  */
 exports.getNotificationSettings = async (req, res) => {
   try {
-    // Try to fetch from Supabase
-    const { data: settings, error } = await supabase
-      .from('settings')
-      .select('key, value')
-      .like('key', 'notification_%');
-
-    if (error && error.code !== 'PGRST205') {
-      throw error;
-    }
+    // Fetch from MySQL
+    const [settings] = await masterPool.query(
+      'SELECT `key`, value FROM settings WHERE `key` LIKE ?',
+      ['notification_%']
+    );
 
     // Build settings object from database or use defaults
     const settingsObj = {};
@@ -151,20 +147,16 @@ exports.updateNotificationSettings = async (req, res) => {
       });
     }
 
-    // Save to Supabase using upsert
+    // Save to MySQL using INSERT ... ON DUPLICATE KEY UPDATE
     for (const setting of settingsToSave) {
-      const { error } = await supabase
-        .from('settings')
-        .upsert(
-          {
-            key: setting.key,
-            value: setting.value,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'key' }
+      try {
+        await masterPool.query(
+          `INSERT INTO settings (\`key\`, value, updated_at) 
+           VALUES (?, ?, ?) 
+           ON DUPLICATE KEY UPDATE value = ?, updated_at = ?`,
+          [setting.key, setting.value, new Date(), setting.value, new Date()]
         );
-
-      if (error) {
+      } catch (error) {
         console.error(`Error saving setting ${setting.key}:`, error);
         // Continue with other settings even if one fails
       }
@@ -189,19 +181,14 @@ exports.updateNotificationSettings = async (req, res) => {
  */
 exports.getNotificationSetting = async (typeKey) => {
   try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', `notification_${typeKey}`)
-      .single();
+    const [settings] = await masterPool.query(
+      'SELECT value FROM settings WHERE `key` = ? LIMIT 1',
+      [`notification_${typeKey}`]
+    );
 
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    if (data && data.value) {
+    if (settings && settings.length > 0 && settings[0].value) {
       try {
-        return JSON.parse(data.value);
+        return JSON.parse(settings[0].value);
       } catch (e) {
         // Return default if parsing fails
         const type = NOTIFICATION_TYPES[typeKey];
@@ -249,4 +236,3 @@ exports.getNotificationSetting = async (typeKey) => {
     return null;
   }
 };
-
