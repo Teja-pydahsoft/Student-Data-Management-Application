@@ -110,15 +110,15 @@ const Forms = () => {
   }
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-text-primary heading-font">Forms</h1>
-          <p className="text-text-secondary mt-2 body-font">Manage student registration forms</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary heading-font">Forms</h1>
+          <p className="text-sm sm:text-base text-text-secondary mt-1 sm:mt-2 body-font">Manage student registration forms</p>
         </div>
         <Link
           to="/forms/new"
-          className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+          className="flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-primary-700 active:bg-primary-800 transition-colors touch-manipulation min-h-[44px] font-medium"
         >
           <Plus size={18} />
           Create Form
@@ -136,9 +136,9 @@ const Forms = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {forms.map((form) => (
-            <div key={form.form_id} className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6 card-hover">
+            <div key={form.form_id} className="bg-card-bg rounded-lg sm:rounded-xl shadow-sm border border-border-light p-4 sm:p-6 card-hover">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-text-primary mb-1 heading-font">{form.form_name}</h3>
@@ -201,19 +201,20 @@ const Forms = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button onClick={() => handleShowQR(form)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors btn-hover" title="View QR Code">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => handleShowQR(form)} className="flex-1 min-w-[80px] flex items-center justify-center gap-2 px-3 py-2.5 sm:py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 active:bg-primary/30 transition-colors touch-manipulation min-h-[44px] font-medium text-sm" title="View QR Code">
                   <QrCode size={16} />
-                  QR
+                  <span className="hidden sm:inline">QR</span>
                 </button>
-                <Link to={`/forms/edit/${form.form_id}`} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-border-light text-text-primary rounded-lg hover:bg-accent/10 transition-colors btn-hover" title="Edit Form">
+                <Link to={`/forms/edit/${form.form_id}`} className="flex-1 min-w-[80px] flex items-center justify-center gap-2 px-3 py-2.5 sm:py-2 bg-border-light text-text-primary rounded-lg hover:bg-accent/10 active:bg-accent/20 transition-colors touch-manipulation min-h-[44px] font-medium text-sm" title="Edit Form">
                   <Edit size={16} />
-                  Edit
+                  <span className="hidden sm:inline">Edit</span>
                 </Link>
-                <button onClick={() => handleToggleActive(form.form_id, form.is_active)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-border-light text-text-secondary rounded-lg hover:bg-accent/10 transition-colors btn-hover" title={form.is_active ? 'Deactivate' : 'Activate'}>
+                <button onClick={() => handleToggleActive(form.form_id, form.is_active)} className="flex-1 min-w-[80px] flex items-center justify-center gap-2 px-3 py-2.5 sm:py-2 bg-border-light text-text-secondary rounded-lg hover:bg-accent/10 active:bg-accent/20 transition-colors touch-manipulation min-h-[44px]" title={form.is_active ? 'Deactivate' : 'Activate'}>
                   {form.is_active ? <EyeOff size={16} /> : <Eye size={16} />}
+                  <span className="hidden sm:inline ml-1">{form.is_active ? 'Hide' : 'Show'}</span>
                 </button>
-                <button onClick={() => handleDelete(form.form_id, form.form_name)} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete Form">
+                <button onClick={() => handleDelete(form.form_id, form.form_name)} className="px-3 py-2.5 sm:py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 active:bg-red-200 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center" title="Delete Form">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -223,8 +224,8 @@ const Forms = () => {
       )}
 
       {showQRModal && selectedForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card-bg rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-card-bg rounded-lg sm:rounded-xl shadow-2xl max-w-md w-full p-4 sm:p-6 my-auto">
             <h3 className="text-xl font-bold text-text-primary mb-4 heading-font">{selectedForm.form_name}</h3>
             <div className="bg-card-bg p-6 rounded-lg border-2 border-border-light mb-4 flex items-center justify-center">
               <QRCodeComponent
@@ -263,8 +264,8 @@ const Forms = () => {
               </button>
             </div>
 
-            <div className="flex gap-3">
-              <button onClick={downloadQRCode} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button onClick={downloadQRCode} className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-purple-700 active:bg-purple-800 transition-colors touch-manipulation min-h-[44px] font-medium">
                 <Download size={18} />
                 Download
               </button>
@@ -275,11 +276,11 @@ const Forms = () => {
                   window.open(testUrl, '_blank');
                   toast.success('Testing QR code URL in new tab');
                 }}
-                className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors touch-manipulation min-h-[44px] font-medium"
               >
                 Test URL
               </button>
-              <button onClick={() => setShowQRModal(false)} className="flex-1 bg-border-light text-text-primary px-4 py-2 rounded-lg hover:bg-accent/10 transition-colors btn-hover">
+              <button onClick={() => setShowQRModal(false)} className="flex-1 bg-border-light text-text-primary px-4 py-2.5 sm:py-2 rounded-lg hover:bg-accent/10 active:bg-accent/20 transition-colors touch-manipulation min-h-[44px] font-medium">
                 Close
               </button>
             </div>

@@ -153,17 +153,17 @@ const SelectionModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
-        <div className={`bg-gradient-to-r ${c.gradient} px-6 py-4`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <Icon size={22} className="text-white" />
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white w-full max-w-2xl rounded-lg sm:rounded-2xl shadow-2xl overflow-hidden my-auto">
+        <div className={`bg-gradient-to-r ${c.gradient} px-4 sm:px-6 py-3 sm:py-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/20 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                <Icon size={20} className="text-white" />
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{title}</h3>
-                <p className="text-sm text-white/80">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base sm:text-lg font-bold text-white truncate">{title}</h3>
+                <p className="text-xs sm:text-sm text-white/80">
                   {selectedIds.length} of {options.length} selected
                 </p>
               </div>
@@ -171,15 +171,15 @@ const SelectionModal = ({
             <button 
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors"
+              className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
             >
               <X size={20} />
             </button>
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-          <div className="flex items-center gap-3">
+        <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 bg-slate-50 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <div className="flex-1 relative">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -187,23 +187,25 @@ const SelectionModal = ({
                 placeholder={searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-200 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-slate-200 bg-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-200 transition-all touch-manipulation min-h-[44px]"
               />
             </div>
-            <button 
-              type="button"
-              onClick={selectAll}
-              className={`px-4 py-3 rounded-xl text-sm font-semibold ${c.light} ${c.text} hover:opacity-80 transition-all`}
-            >
-              Select All
-            </button>
-            <button 
-              type="button"
-              onClick={clearAll}
-              className="px-4 py-3 rounded-xl text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
-            >
-              Clear
-            </button>
+            <div className="flex gap-2 sm:gap-3">
+              <button 
+                type="button"
+                onClick={selectAll}
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-semibold ${c.light} ${c.text} hover:opacity-80 active:opacity-90 transition-all touch-manipulation min-h-[44px]`}
+              >
+                Select All
+              </button>
+              <button 
+                type="button"
+                onClick={clearAll}
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300 transition-all touch-manipulation min-h-[44px]"
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
           {allOption && onAllChange && (
@@ -229,7 +231,7 @@ const SelectionModal = ({
           )}
         </div>
 
-        <div className="p-6 max-h-[50vh] overflow-y-auto">
+        <div className="p-3 sm:p-4 lg:p-6 max-h-[50vh] overflow-y-auto">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <RefreshCw size={32} className={`${c.text} animate-spin mb-3`} />
@@ -277,14 +279,14 @@ const SelectionModal = ({
           )}
         </div>
 
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <p className="text-sm text-slate-500">
+        <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <p className="text-sm text-slate-500 text-center sm:text-left">
             <span className="font-semibold">{selectedIds.length}</span> items selected
           </p>
           <button
             type="button"
             onClick={onClose}
-            className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white ${c.bg} hover:opacity-90 transition-all shadow-sm`}
+            className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white ${c.bg} hover:opacity-90 active:opacity-80 transition-all shadow-sm touch-manipulation min-h-[44px]`}
           >
             Done
           </button>
@@ -949,67 +951,70 @@ const UserManagement = () => {
   const needsBranchSelection = form.role === 'branch_hod';
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30 overflow-hidden">
+    <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30">
       {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <ShieldCheck size={22} className="text-white" />
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 flex-shrink-0">
+              <ShieldCheck size={20} className="sm:hidden text-white" />
+              <ShieldCheck size={22} className="hidden sm:block text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-800">User Management</h1>
-              <p className="text-sm text-slate-500">Create and manage users with role-based access</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-800">User Management</h1>
+              <p className="text-xs sm:text-sm text-slate-500">Create and manage users with role-based access</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-center px-5 py-2.5 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl border border-blue-100">
-              <div className="text-lg font-bold text-blue-600">{filteredUsers.length}</div>
-              <div className="text-[11px] font-medium text-blue-500 uppercase tracking-wide">Total</div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="text-center px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg sm:rounded-xl border border-blue-100">
+              <div className="text-base sm:text-lg font-bold text-blue-600">{filteredUsers.length}</div>
+              <div className="text-[10px] sm:text-[11px] font-medium text-blue-500 uppercase tracking-wide">Total</div>
             </div>
-            <div className="text-center px-5 py-2.5 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl border border-emerald-100">
-              <div className="text-lg font-bold text-emerald-600">{filteredUsers.filter(u => u.isActive).length}</div>
-              <div className="text-[11px] font-medium text-emerald-500 uppercase tracking-wide">Active</div>
+            <div className="text-center px-3 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-lg sm:rounded-xl border border-emerald-100">
+              <div className="text-base sm:text-lg font-bold text-emerald-600">{filteredUsers.filter(u => u.isActive).length}</div>
+              <div className="text-[10px] sm:text-[11px] font-medium text-emerald-500 uppercase tracking-wide">Active</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('create')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${
               activeTab === 'create'
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
             }`}
           >
-            <UserPlus size={18} />
-            Create User
+            <UserPlus size={16} />
+            <span className="hidden sm:inline">Create User</span>
+            <span className="sm:hidden">Create</span>
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${
               activeTab === 'users'
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
             }`}
           >
-            <UsersIcon size={18} />
-            All Users ({filteredUsers.length})
+            <UsersIcon size={16} />
+            <span className="hidden sm:inline">All Users ({filteredUsers.length})</span>
+            <span className="sm:hidden">Users ({filteredUsers.length})</span>
           </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
         {/* Create User Form */}
         {activeTab === 'create' && (
           <form onSubmit={handleCreateUser}>
             {/* Step Headers */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
               <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
                   1
@@ -1040,7 +1045,7 @@ const UserManagement = () => {
             </div>
 
             {/* All 3 Sections Side by Side */}
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Section 1: User Information */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4">
@@ -1059,7 +1064,7 @@ const UserManagement = () => {
                       type="text"
                       value={form.name}
                       onChange={(e) => handleFormChange('name', e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-slate-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all touch-manipulation min-h-[44px]"
                       placeholder="Enter full name"
                       required
                     />
@@ -1078,7 +1083,7 @@ const UserManagement = () => {
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
                         <AtSign size={14} className="text-blue-500" />
@@ -1125,9 +1130,10 @@ const UserManagement = () => {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 active:text-slate-700 touch-manipulation p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                   </div>
@@ -1328,22 +1334,22 @@ const UserManagement = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-3 mt-6">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 mt-4 sm:mt-6">
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 active:bg-slate-100 transition-all touch-manipulation min-h-[44px] flex items-center justify-center gap-2"
               >
-                <RefreshCw size={16} className="inline mr-2" />
+                <RefreshCw size={16} />
                 Reset
               </button>
               <button
                 type="submit"
                 disabled={creatingUser || !form.name || !form.email || !form.username || !form.role || !form.password || form.collegeIds.length === 0}
-                className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 transition-all ${
+                className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all touch-manipulation min-h-[44px] ${
                   creatingUser || !form.name || !form.email || !form.username || !form.role || !form.password || form.collegeIds.length === 0
                     ? 'bg-slate-300 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
                 }`}
               >
                 {creatingUser ? (
@@ -1365,23 +1371,23 @@ const UserManagement = () => {
         {/* Users List */}
         {activeTab === 'users' && (
           <div className="w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <UsersIcon size={20} />
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <UsersIcon size={18} />
                 All Users
               </h2>
-              <div className="flex items-center gap-3">
-                <div className="relative">
+              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-none sm:w-56">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" />
                   <input
                     type="text"
                     placeholder="Search users..."
                     value={userSearchTerm}
                     onChange={(e) => setUserSearchTerm(e.target.value)}
-                    className="w-56 pl-10 pr-4 py-2.5 rounded-xl bg-white/20 text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30 transition-all"
+                    className="w-full sm:w-56 pl-10 pr-4 py-2.5 rounded-lg sm:rounded-xl bg-white/20 text-white placeholder-white/60 text-sm focus:outline-none focus:bg-white/30 transition-all touch-manipulation min-h-[44px]"
                   />
                 </div>
-                <button onClick={loadUsers} className="p-2.5 rounded-xl bg-white/20 text-white hover:bg-white/30 transition-colors">
+                <button onClick={loadUsers} className="p-2.5 rounded-lg sm:rounded-xl bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0">
                   <RefreshCw size={18} />
                 </button>
               </div>
@@ -1398,16 +1404,18 @@ const UserManagement = () => {
                 <p className="text-sm font-medium">No users found</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Scope</th>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Module Access</th>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                      <th className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Scope</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Module Access</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1531,6 +1539,132 @@ const UserManagement = () => {
                   </tbody>
                 </table>
               </div>
+              
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-3">
+                {filteredUsers.map((userData) => {
+                  const permStatus = countPermissions(userData);
+                  const hasModuleAccess = hasPermissions(userData);
+                  return (
+                    <div key={userData.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                      <div className="p-4 space-y-3">
+                        {/* User Info Header */}
+                        <div className="flex items-start gap-3 pb-3 border-b border-slate-100">
+                          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${ROLE_AVATAR_COLORS[userData.role] || 'from-slate-400 to-slate-600'} flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0`}>
+                            {userData.name?.charAt(0)?.toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-slate-800 text-base mb-1">{userData.name}</div>
+                            <div className="text-xs text-slate-500 truncate">{userData.email}</div>
+                            <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-1 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                              <ShieldCheck size={12} />
+                              {ROLE_LABELS[userData.role] || userData.role}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Scope */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Scope</h4>
+                          <div className="space-y-1.5 text-xs">
+                            {userData.collegeNames?.length > 0 && (
+                              <div className="flex items-start gap-1.5 text-slate-600">
+                                <Building2 size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                <span className="flex-1">{userData.collegeNames.map(c => c.name).join(', ')}</span>
+                              </div>
+                            )}
+                            {userData.allCourses ? (
+                              <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[11px] font-medium">
+                                All Courses
+                              </span>
+                            ) : userData.courseNames?.length > 0 && (
+                              <div className="flex items-start gap-1.5 text-slate-600">
+                                <GraduationCap size={13} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+                                <span className="flex-1">{userData.courseNames.map(c => c.name).join(', ')}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Module Access & Status */}
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                          <div>
+                            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Module Access</h4>
+                            {hasModuleAccess ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold w-fit">
+                                  <CheckCircle2 size={12} />
+                                  Granted
+                                </span>
+                                <span className="text-[10px] text-slate-500">{permStatus.granted}/{permStatus.total} modules</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold w-fit">
+                                  <AlertCircle size={12} />
+                                  Pending
+                                </span>
+                                <span className="text-[10px] text-slate-500">Needs config</span>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</h4>
+                            {userData.isActive ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
+                                <CheckCircle2 size={12} />
+                                Active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">
+                                <XCircle size={12} />
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => openEditModal(userData)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 transition-colors touch-manipulation min-h-[44px]"
+                            title="Edit User"
+                          >
+                            <Edit size={13} />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => openResetPasswordModal(userData)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 transition-colors touch-manipulation min-h-[44px]"
+                            title="Reset Password"
+                          >
+                            <KeyRound size={13} />
+                            Reset
+                          </button>
+                          {userData.isActive ? (
+                            <button
+                              onClick={() => handleDeactivateUser(userData.id)}
+                              className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                              title="Deactivate User"
+                            >
+                              <Power size={14} />
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => openDeleteModal(userData)}
+                            className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            title="Delete User Permanently"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
           </div>
         )}
@@ -1598,20 +1732,20 @@ const UserManagement = () => {
 
       {/* Edit Modal with Improved Permissions UI */}
       {editingUser && editForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-7xl rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Edit size={20} />
-                Edit User - {editForm.name}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-7xl rounded-lg sm:rounded-2xl shadow-2xl max-h-[95vh] my-auto overflow-hidden flex flex-col">
+            <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 min-w-0 flex-1">
+                <Edit size={18} className="sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="truncate">Edit User - {editForm.name}</span>
               </h2>
-              <button onClick={closeEditModal} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors">
+              <button onClick={closeEditModal} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 ml-2">
                 <X size={20} />
               </button>
             </div>
 
-            <form className="flex-1 overflow-y-auto p-6" onSubmit={handleUpdateUser}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <form className="flex-1 overflow-y-auto p-4 sm:p-6" onSubmit={handleUpdateUser}>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 {/* User Info */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
@@ -1932,15 +2066,15 @@ const UserManagement = () => {
                 </div>
               </div>
 
-              <div className="mt-6 pt-5 border-t border-slate-200 flex justify-end gap-3">
-                <button type="button" onClick={closeEditModal} className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+              <div className="mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
+                <button type="button" onClick={closeEditModal} className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 transition-colors touch-manipulation min-h-[44px]">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={updatingUser || editForm.collegeIds.length === 0}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 ${
-                    updatingUser || editForm.collegeIds.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25'
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
+                    updatingUser || editForm.collegeIds.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
                   }`}
                 >
                   {updatingUser ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -2004,9 +2138,9 @@ const UserManagement = () => {
 
       {/* Reset Password Modal */}
       {resetPasswordUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-lg sm:rounded-2xl shadow-2xl overflow-hidden my-auto">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                   <KeyRound size={22} className="text-white" />
@@ -2068,21 +2202,21 @@ const UserManagement = () => {
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-3">
                 <button 
                   type="button" 
                   onClick={closeResetPasswordModal} 
-                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 transition-colors touch-manipulation min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleResetPassword}
                   disabled={resettingPassword || !newPassword || newPassword.length < 6}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 ${
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
                     resettingPassword || !newPassword || newPassword.length < 6
                       ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:shadow-lg hover:shadow-amber-500/25'
+                      : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:shadow-lg hover:shadow-amber-500/25 active:from-amber-600 active:to-orange-700'
                   }`}
                 >
                   {resettingPassword ? (
@@ -2093,7 +2227,8 @@ const UserManagement = () => {
                   ) : (
                     <>
                       <KeyRound size={16} />
-                      Reset & Send Email
+                      <span className="hidden sm:inline">Reset & Send Email</span>
+                      <span className="sm:hidden">Reset Password</span>
                     </>
                   )}
                 </button>
@@ -2105,9 +2240,9 @@ const UserManagement = () => {
 
       {/* Delete User Confirmation Modal */}
       {deleteUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-rose-500 to-red-600 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-lg sm:rounded-2xl shadow-2xl overflow-hidden my-auto">
+            <div className="bg-gradient-to-r from-rose-500 to-red-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                   <AlertTriangle size={22} className="text-white" />
@@ -2117,7 +2252,7 @@ const UserManagement = () => {
                   <p className="text-sm text-white/80">Permanent action</p>
                 </div>
               </div>
-              <button onClick={closeDeleteModal} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors">
+              <button onClick={closeDeleteModal} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0">
                 <X size={20} />
               </button>
             </div>
@@ -2157,21 +2292,21 @@ const UserManagement = () => {
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-3">
                 <button 
                   type="button" 
                   onClick={closeDeleteModal} 
-                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 transition-colors touch-manipulation min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePermanentDelete}
                   disabled={deletingUser}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 ${
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
                     deletingUser
                       ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:shadow-lg hover:shadow-rose-500/25'
+                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:shadow-lg hover:shadow-rose-500/25 active:from-rose-600 active:to-red-700'
                   }`}
                 >
                   {deletingUser ? (

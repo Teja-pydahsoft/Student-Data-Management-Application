@@ -20,7 +20,7 @@ const DeleteConfirmModal = ({
   const hasStudents = totalStudentCount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       {/* Dim background */}
       <div 
         className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
@@ -28,26 +28,27 @@ const DeleteConfirmModal = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl max-w-lg w-full transform transition-all max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-lg sm:rounded-xl shadow-2xl max-w-lg w-full transform transition-all max-h-[90vh] flex flex-col my-auto">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100 z-10"
+          className="absolute top-3 sm:top-4 right-3 sm:right-4 p-2 text-gray-400 hover:text-gray-600 active:text-gray-700 transition-colors rounded-lg hover:bg-gray-100 active:bg-gray-200 z-10 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Close modal"
         >
           <X size={20} />
         </button>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto">
+        <div className="p-4 sm:p-6 overflow-y-auto">
           {/* Warning Icon */}
-          <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-100">
-              <AlertTriangle size={32} className="text-red-600" />
+          <div className="flex justify-center mb-3 sm:mb-4">
+            <div className="flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-red-100">
+              <AlertTriangle size={24} className="text-red-600 sm:w-8 sm:h-8" />
             </div>
           </div>
 
           {/* Title */}
-          <h3 className="text-xl font-bold text-gray-900 text-center mb-2">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-900 text-center mb-2">
             {title || 'Confirm Deletion'}
           </h3>
 
@@ -82,7 +83,7 @@ const DeleteConfirmModal = ({
               {/* Student count header */}
               <button
                 onClick={() => setShowStudentList(!showStudentList)}
-                className="w-full flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 transition-colors"
+                className="w-full flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 active:bg-red-200 transition-colors touch-manipulation min-h-[44px]"
               >
                 <div className="flex items-center gap-2">
                   <Users size={18} className="text-red-600" />
@@ -100,31 +101,51 @@ const DeleteConfirmModal = ({
               {/* Student list */}
               {showStudentList && affectedStudents.length > 0 && (
                 <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">Admission No</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">Name</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">Batch</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {affectedStudents.map((student, index) => (
-                        <tr key={student.admission_number || index} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-700 font-mono">{student.admission_number}</td>
-                          <td className="px-3 py-2 text-gray-900 truncate max-w-[150px]" title={student.student_name}>
-                            {student.student_name}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">{student.batch || '-'}</td>
+                  {/* Mobile Card View */}
+                  <div className="sm:hidden space-y-2 p-2">
+                    {affectedStudents.map((student, index) => (
+                      <div key={student.admission_number || index} className="p-2 bg-gray-50 rounded border border-gray-200">
+                        <p className="text-xs font-medium text-gray-900 truncate" title={student.student_name}>
+                          {student.student_name}
+                        </p>
+                        <p className="text-xs text-gray-600 font-mono">{student.admission_number}</p>
+                        <p className="text-xs text-gray-500">{student.batch || '-'}</p>
+                      </div>
+                    ))}
+                    {hasMoreStudents && (
+                      <div className="px-2 py-2 text-center text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded">
+                        ... and {totalStudentCount - affectedStudents.length} more students
+                      </div>
+                    )}
+                  </div>
+                  {/* Desktop Table View */}
+                  <div className="hidden sm:block">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Admission No</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Name</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Batch</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {hasMoreStudents && (
-                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
-                      ... and {totalStudentCount - affectedStudents.length} more students
-                    </div>
-                  )}
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {affectedStudents.map((student, index) => (
+                          <tr key={student.admission_number || index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-700 font-mono">{student.admission_number}</td>
+                            <td className="px-3 py-2 text-gray-900 truncate max-w-[150px]" title={student.student_name}>
+                              {student.student_name}
+                            </td>
+                            <td className="px-3 py-2 text-gray-600">{student.batch || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {hasMoreStudents && (
+                      <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
+                        ... and {totalStudentCount - affectedStudents.length} more students
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -137,17 +158,17 @@ const DeleteConfirmModal = ({
           )}
 
           {/* Buttons */}
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation min-h-[44px]"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               disabled={isLoadingStudents}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 active:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
             >
               {hasStudents ? `Delete ${totalStudentCount} Student${totalStudentCount !== 1 ? 's' : ''}` : 'Yes, Delete'}
             </button>

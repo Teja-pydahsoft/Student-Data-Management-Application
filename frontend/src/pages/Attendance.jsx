@@ -1593,15 +1593,15 @@ const Attendance = () => {
   const monthlyChartSeries = historyData ? buildChartSeries(historyData.monthly?.series) : [];
 
   return (
-    <div className="p-6 space-y-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="rounded-full bg-blue-100 p-3 text-blue-600">
-            <CalendarCheck size={32} />
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+      <header className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="rounded-full bg-blue-100 p-2 sm:p-3 text-blue-600 flex-shrink-0">
+            <CalendarCheck size={24} />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 heading-font">Attendance</h1>
-            <p className="text-sm text-gray-600">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 heading-font">Attendance</h1>
+            <p className="text-xs sm:text-sm text-gray-600">
               Filter students and mark daily attendance. Absent students trigger an SMS alert to parents.
             </p>
           </div>
@@ -1611,119 +1611,135 @@ const Attendance = () => {
             type="date"
             value={attendanceDate}
             onChange={(e) => setAttendanceDate(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="flex-1 sm:flex-none rounded-md border border-gray-300 px-3 py-2.5 sm:py-2 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
           />
           <button
             type="button"
             onClick={handleOpenCalendarModal}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-md border border-gray-300 px-3 py-2.5 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             title="Open calendar"
           >
-            <CalendarDays size={16} />
+            <CalendarDays size={18} />
           </button>
         </div>
       </header>
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Filter size={16} className="text-gray-600" />
-          <select
-            value={filters.batch}
-            onChange={(event) => handleFilterChange('batch', event.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">All Batches</option>
-            {filterOptions.batches.map((batchOption) => (
-              <option key={batchOption} value={batchOption}>
-                {batchOption}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.course}
-            onChange={(event) => handleFilterChange('course', event.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">All Courses</option>
-            {filterOptions.courses.map((courseOption) => (
-              <option key={courseOption} value={courseOption}>
-                {courseOption}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.branch}
-            onChange={(event) => handleFilterChange('branch', event.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            disabled={filters.course && availableBranches.length === 0}
-          >
-            <option value="">All Branches</option>
-            {availableBranches.map((branchOption) => (
-              <option key={branchOption} value={branchOption}>
-                {branchOption}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.currentYear}
-            onChange={(event) => handleFilterChange('currentYear', event.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">All Years</option>
-            {filterOptions.years.map((yearOption) => (
-              <option key={yearOption} value={yearOption}>
-                Year {yearOption}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.currentSemester}
-            onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">All Semesters</option>
-            {filterOptions.semesters.map((semesterOption) => (
-              <option key={semesterOption} value={semesterOption}>
-                Sem {semesterOption}
-              </option>
-            ))}
-          </select>
-          <div className="relative flex-1 min-w-[150px]">
-            <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Student name or PIN"
-              value={filters.studentName}
-              onChange={(event) => handleFilterChange('studentName', event.target.value)}
-              className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+      <section className="bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm p-3 sm:p-4">
+        <div className="space-y-3">
+          {/* Filter Header */}
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-gray-600 flex-shrink-0" />
+            <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
           </div>
-          <div className="relative min-w-[150px]">
-            <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Parent mobile"
-              value={filters.parentMobile}
-              onChange={(event) => handleFilterChange('parentMobile', event.target.value)}
-              className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+          
+          {/* Dropdown Filters - Grid Layout */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+            <select
+              value={filters.batch}
+              onChange={(event) => handleFilterChange('batch', event.target.value)}
+              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+            >
+              <option value="">All Batches</option>
+              {filterOptions.batches.map((batchOption) => (
+                <option key={batchOption} value={batchOption}>
+                  {batchOption}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.course}
+              onChange={(event) => handleFilterChange('course', event.target.value)}
+              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+            >
+              <option value="">All Courses</option>
+              {filterOptions.courses.map((courseOption) => (
+                <option key={courseOption} value={courseOption}>
+                  {courseOption}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.branch}
+              onChange={(event) => handleFilterChange('branch', event.target.value)}
+              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px] disabled:opacity-50 col-span-2 sm:col-span-1"
+              disabled={filters.course && availableBranches.length === 0}
+            >
+              <option value="">All Branches</option>
+              {availableBranches.map((branchOption) => (
+                <option key={branchOption} value={branchOption}>
+                  {branchOption}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.currentYear}
+              onChange={(event) => handleFilterChange('currentYear', event.target.value)}
+              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+            >
+              <option value="">All Years</option>
+              {filterOptions.years.map((yearOption) => (
+                <option key={yearOption} value={yearOption}>
+                  Year {yearOption}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.currentSemester}
+              onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
+              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+            >
+              <option value="">All Semesters</option>
+              {filterOptions.semesters.map((semesterOption) => (
+                <option key={semesterOption} value={semesterOption}>
+                  Sem {semesterOption}
+                </option>
+              ))}
+            </select>
           </div>
-          <button
-            type="button"
-            onClick={handleClearFilters}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-          >
-            <RefreshCw size={14} />
-            Clear
-          </button>
-          <div className="text-sm text-gray-500 whitespace-nowrap">
-            {totalStudents.toLocaleString()} found
+          
+          {/* Search Inputs - Full Width on Mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Student name or PIN"
+                value={filters.studentName}
+                onChange={(event) => handleFilterChange('studentName', event.target.value)}
+                className="w-full rounded-md border border-gray-300 pl-8 sm:pl-10 pr-2 sm:pr-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              />
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-2 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Parent mobile"
+                value={filters.parentMobile}
+                onChange={(event) => handleFilterChange('parentMobile', event.target.value)}
+                className="w-full rounded-md border border-gray-300 pl-8 sm:pl-10 pr-2 sm:pr-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              />
+            </div>
+          </div>
+          
+          {/* Action Buttons and Results Count */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation min-h-[44px]"
+            >
+              <RefreshCw size={14} />
+              Clear Filters
+            </button>
+            <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
+              <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
+            </div>
           </div>
         </div>
       </section>
 
       {/* Attendance Statistics */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-green-100 p-2">
@@ -1771,12 +1787,12 @@ const Attendance = () => {
       </section>
 
       <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2 text-gray-700 font-semibold">
             <CalendarCheck size={18} />
             <span>Daily Attendance</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             {isAdmin && isToday && (
               <button
                 type="button"
@@ -1793,7 +1809,7 @@ const Attendance = () => {
                     toast.error(error.response?.data?.message || 'Failed to delete attendance records');
                   }
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px]"
               >
                 <X size={16} />
                 Clear Today's Data
@@ -1803,9 +1819,9 @@ const Attendance = () => {
               type="button"
               onClick={handleSave}
               disabled={!hasChanges || saving || editingLocked}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold transition-colors touch-manipulation min-h-[44px] ${
                 hasChanges && !saving && !editingLocked
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
                   : 'bg-gray-200 text-gray-500 cursor-not-allowed'
               }`}
             >
@@ -1840,7 +1856,8 @@ const Attendance = () => {
           </div>
         ) : (
           <>
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -2206,7 +2223,135 @@ const Attendance = () => {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-4 py-4 border-t border-gray-100">
+          
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3 p-3 sm:p-4">
+            {sortedStudents.map((student) => {
+              const status = effectiveStatus(student.id);
+              const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
+              const hasDbRecord = student.attendanceStatus !== null;
+              const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+              const justSaved = lastUpdatedAt !== null;
+              const showMarked = justSaved || (hasDbRecord && !statusChanged);
+              
+              return (
+                <div
+                  key={student.id}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="p-4 space-y-3">
+                    {/* Header with Photo and Name */}
+                    <div className="flex items-start gap-3" onClick={() => handleStudentClick(student)}>
+                      {renderPhoto(student)}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{student.pinNumber || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Key Information */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                      <div>
+                        <p className="text-xs text-gray-500">Batch</p>
+                        <p className="text-sm font-medium text-gray-900">{student.batch || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Course</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Branch</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Year/Sem</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {student.currentYear ? `Y${student.currentYear}` : 'N/A'}/{student.currentSemester ? `S${student.currentSemester}` : 'N/A'}
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500">Parent Contact</p>
+                        <p className="text-sm font-medium text-gray-900">{parentContact}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Attendance Status */}
+                    <div className="pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                      {showMarked && !statusChanged ? (
+                        <div className="flex flex-col gap-2">
+                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                            status === 'present' 
+                              ? 'bg-green-100 text-green-700 border border-green-200' 
+                              : 'bg-red-100 text-red-700 border border-red-200'
+                          }`}>
+                            {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                            {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                            <input
+                              type="checkbox"
+                              checked={status === 'absent'}
+                              onChange={(e) => {
+                                if (editingLocked) {
+                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                  return;
+                                }
+                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                              }}
+                              disabled={editingLocked}
+                              className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                            />
+                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                              Change Status
+                            </span>
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                            status === 'present' 
+                              ? 'bg-green-50 text-green-600 border border-green-100' 
+                              : 'bg-red-50 text-red-600 border border-red-100'
+                          }`}>
+                            {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                            {status === 'present' ? 'Present' : 'Absent'}
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                            <input
+                              type="checkbox"
+                              checked={status === 'absent'}
+                              onChange={(e) => {
+                                if (editingLocked) {
+                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                  return;
+                                }
+                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                              }}
+                              disabled={editingLocked}
+                              className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                            />
+                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                              Mark as Absent
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Action Button */}
+                    <button
+                      onClick={() => handleStudentClick(student)}
+                      className="w-full mt-2 py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm min-h-[44px]"
+                    >
+                      View Report
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
             <div className="text-sm text-gray-600">
               {totalStudents === 0
                 ? 'No students to display'
@@ -2229,13 +2374,14 @@ const Attendance = () => {
                 return null; // Don't show pagination controls when filters are applied
               }
               return (
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    Rows per page
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                  <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                    <span className="hidden sm:inline">Rows per page</span>
+                    <span className="sm:hidden">Per page</span>
                     <select
                       value={pageSize}
                       onChange={handlePageSizeChange}
-                      className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
                       disabled={loading}
                     >
                       {pageSizeOptions.map(option => (
@@ -2243,27 +2389,27 @@ const Attendance = () => {
                       ))}
                     </select>
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={isFirstPage || loading || totalStudents === 0}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-gray-600">
-                  Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={isLastPage || loading || totalStudents === 0}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
+                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs sm:text-sm text-gray-600 px-2 text-center whitespace-nowrap">
+                      Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={isLastPage || loading || totalStudents === 0}
+                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                    >
+                      Next
+                    </button>
+                  </div>
             </div>
               );
             })()}

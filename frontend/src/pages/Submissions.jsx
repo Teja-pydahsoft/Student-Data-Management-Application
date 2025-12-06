@@ -310,18 +310,18 @@ const Submissions = () => {
   };
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Self Registration</h1>
-          <p className="text-gray-600 mt-2">Manage student registrations and approvals</p>
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Self Registration</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Manage student registrations and approvals</p>
           {selectedSubmissions.size > 0 && (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-xs sm:text-sm text-blue-600 mt-1">
               {selectedSubmissions.size} submission{selectedSubmissions.size !== 1 ? 's' : ''} selected
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedSubmissions.size > 0 && (
             <button
             onClick={async () => {
@@ -335,66 +335,70 @@ const Submissions = () => {
                 setShowBulkDeleteModal(true);
               }
             }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg transition-colors touch-manipulation min-h-[44px] text-sm font-medium ${
                 filter === 'pending'
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-red-600 text-white hover:bg-red-700'
+                  ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
+                  : 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800'
               }`}
             >
               {filter === 'pending' ? <CheckCircle size={18} /> : <Trash2 size={18} />}
-              {filter === 'pending'
+              <span className="hidden sm:inline">{filter === 'pending'
                 ? `Approve Selected (${selectedSubmissions.size})`
                 : `Delete All Selected (${selectedSubmissions.size})`
-              }
+              }</span>
+              <span className="sm:hidden">{filter === 'pending' ? 'Approve' : 'Delete'}</span>
             </button>
           )}
           <button
             onClick={() => setShowQRModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
             title="Show QR Code"
           >
             <QrCode size={18} />
-            QR Code
+            <span className="hidden sm:inline">QR Code</span>
           </button>
           <button
             onClick={copyFormLink}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
             title="Copy Form Link"
           >
             <Copy size={18} />
-            Copy Link
+            <span className="hidden sm:inline">Copy Link</span>
+            <span className="sm:hidden">Link</span>
           </button>
           <button
             onClick={() => setShowIndividualStudent(true)}
             disabled={formsLoading || forms.length === 0}
-            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 bg-purple-600 text-white px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg hover:bg-purple-700 active:bg-purple-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px] text-sm font-medium"
             title={formsLoading ? 'Loading forms...' : forms.length === 0 ? 'No forms available' : 'Add a new student'}
           >
             <UserPlus size={18} />
-            {formsLoading ? 'Loading...' : 'Add Student'}
+            <span className="hidden sm:inline">{formsLoading ? 'Loading...' : 'Add Student'}</span>
+            <span className="sm:hidden">Add</span>
           </button>
           <button
             onClick={() => setShowBulkUpload(true)}
             disabled={formsLoading || forms.length === 0}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 bg-green-600 text-white px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px] text-sm font-medium"
             title={formsLoading ? 'Loading forms...' : forms.length === 0 ? 'No forms available' : 'Upload students in bulk'}
           >
             <Upload size={18} />
-            {formsLoading ? 'Loading...' : 'Bulk Upload'}
+            <span className="hidden sm:inline">{formsLoading ? 'Loading...' : 'Bulk Upload'}</span>
+            <span className="sm:hidden">Upload</span>
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-fit">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-gray-200 w-full sm:w-fit">
           {['pending', 'approved', 'rejected'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 ease-in-out transform
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-300 ease-in-out transform touch-manipulation min-h-[44px]
                 ${filter === status
                   ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white border-transparent shadow-md scale-105'
-                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100 hover:scale-105 hover:shadow-sm'}`}
+                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-100 active:bg-gray-200 hover:scale-105 hover:shadow-sm'}`}
             >
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
@@ -406,10 +410,11 @@ const Submissions = () => {
             id="globalAutoAssign"
             checked={true}
             disabled={true}
-            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-not-allowed opacity-60"
+            className="h-5 w-5 sm:h-4 sm:w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-not-allowed opacity-60"
           />
-          <label htmlFor="globalAutoAssign" className="text-sm font-medium text-gray-700">
-            Auto-Assign Series (Always On)
+          <label htmlFor="globalAutoAssign" className="text-xs sm:text-sm font-medium text-gray-700">
+            <span className="hidden sm:inline">Auto-Assign Series (Always On)</span>
+            <span className="sm:hidden">Auto-Assign On</span>
           </label>
         </div>
       </div>
@@ -436,7 +441,9 @@ const Submissions = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -559,19 +566,158 @@ const Submissions = () => {
               </table>
             </div>
           </div>
+          
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3">
+            {submissions.map((submission) => (
+              <div
+                key={submission.submission_id}
+                className={`bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow ${
+                  selectedSubmissions.has(submission.submission_id) ? 'ring-2 ring-blue-500' : ''
+                }`}
+              >
+                <div className="p-4 space-y-3">
+                  {/* Header with Checkbox */}
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 pt-1" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedSubmissions.has(submission.submission_id)}
+                        onChange={(e) => { e.stopPropagation(); handleSelectSubmission(submission.submission_id, e.target.checked); }}
+                        className="w-5 h-5 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0" onClick={() => handleViewDetails(submission.submission_id)}>
+                      <h3 className="font-semibold text-gray-900 text-base truncate">{submission.submission_data['student_name'] || 'N/A'}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{submission.admission_number || 'N/A'}</p>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${
+                        submission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                        submission.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Key Information Grid */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                    <div>
+                      <p className="text-xs text-gray-500">PIN Number</p>
+                      <p className="text-sm font-medium text-gray-900">{submission.submission_data['pin_no'] || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Mobile</p>
+                      <p className="text-sm font-medium text-gray-900 truncate" title={submission.submission_data['student_mobile'] || ''}>{submission.submission_data['student_mobile'] || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Batch</p>
+                      <p className="text-sm font-medium text-gray-900">{submission.submission_data['batch'] || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Branch</p>
+                      <p className="text-sm font-medium text-gray-900 truncate" title={submission.submission_data['branch'] || ''}>{submission.submission_data['branch'] || 'N/A'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Submitted</p>
+                      <p className="text-sm font-medium text-gray-900">{formatDate(submission.submitted_at)}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                    {submission.status === 'pending' && (
+                      <>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (submission.admission_number) {
+                              api.get(`/submissions/${submission.submission_id}`)
+                                .then(response => {
+                                  const data = response.data.data;
+                                  setSelectedSubmission(data);
+                                  setAdmissionNumber(data.admission_number);
+                                  api.post(`/submissions/${submission.submission_id}/approve`, {
+                                    admissionNumber: data.admission_number,
+                                  })
+                                    .then(() => {
+                                      toast.success('Submission approved successfully');
+                                      fetchSubmissions();
+                                    })
+                                    .catch(error => {
+                                      console.error('Approval error:', error);
+                                      toast.error('Failed to approve submission');
+                                    });
+                                })
+                                .catch(error => {
+                                  toast.error('Failed to fetch submission details');
+                                });
+                            } else {
+                              handleViewDetails(submission.submission_id);
+                            }
+                          }} 
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
+                          title="Approve"
+                        >
+                          <CheckCircle size={16} />
+                          Approve
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDetails(submission.submission_id);
+                          }} 
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
+                          title="Reject"
+                        >
+                          <XCircle size={16} />
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {(submission.status === 'rejected' || submission.status === 'approved') && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(submission.submission_id);
+                        }} 
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    )}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(submission.submission_id);
+                      }} 
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm font-medium"
+                      title="View Details"
+                    >
+                      <Eye size={16} />
+                      Details
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </>)}
 
       {showModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-50 rounded-xl shadow-2xl max-w-6xl w-full h-[95vh] flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-gray-50 rounded-lg sm:rounded-xl shadow-2xl max-w-6xl w-full max-h-[95vh] flex flex-col my-auto">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0 rounded-t-xl">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">Student Submission Details</h3>
-                <p className="text-sm text-gray-500 mt-1">Review and approve student submission</p>
+            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-shrink-0 rounded-t-lg sm:rounded-t-xl">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Student Submission Details</h3>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">Review and approve student submission</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
                   selectedSubmission.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
                   selectedSubmission.status === 'approved' ? 'bg-green-100 text-green-800' : 
@@ -579,7 +725,7 @@ const Submissions = () => {
                 }`}>
                   {selectedSubmission.status.charAt(0).toUpperCase() + selectedSubmission.status.slice(1)}
                 </span>
-                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center">
                   <X size={20} />
                 </button>
               </div>
@@ -587,9 +733,9 @@ const Submissions = () => {
 
             {/* Main Content - Two Column Layout */}
             <div className="flex-1 overflow-hidden">
-              <div className="flex h-full">
+              <div className="flex flex-col lg:flex-row h-full">
                 {/* Left Sidebar - Student Photo & Key Info */}
-                <div className="w-80 bg-white border-r border-gray-200 p-6 flex-shrink-0 flex flex-col overflow-y-auto">
+                <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col overflow-y-auto max-h-[40vh] lg:max-h-none">
                   <div className="space-y-5">
                     {/* Student Photo */}
                     <div className="flex flex-col items-center">

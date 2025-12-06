@@ -681,22 +681,23 @@ const AddStudent = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-text-primary heading-font">Add New Student</h1>
-          <p className="text-text-secondary mt-2 body-font">Create a new student record</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary heading-font">Add New Student</h1>
+          <p className="text-sm sm:text-base text-text-secondary mt-1 sm:mt-2 body-font">Create a new student record</p>
         </div>
         <button
           onClick={() => navigate('/students')}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-indigo-600 to-purple-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-lg text-white font-medium bg-gradient-to-r from-indigo-600 to-purple-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px]"
         >
           <ArrowLeft size={18} />
-          Back to Students
+          <span className="hidden sm:inline">Back to Students</span>
+          <span className="sm:hidden">Back</span>
         </button>
       </div>
 
-      <div className="bg-card-bg rounded-xl shadow-sm border border-border-light p-6">
+      <div className="bg-card-bg rounded-lg sm:rounded-xl shadow-sm border border-border-light p-4 sm:p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Form sections */}
           <div className="border-b border-border-light pb-6">
@@ -704,7 +705,7 @@ const AddStudent = () => {
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
               Basic Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Admission Number <span className="text-red-500">*</span>
@@ -723,7 +724,7 @@ const AddStudent = () => {
                     onChange={handleChange}
                     required
                     disabled={admissionNumberLoading}
-                    className={`w-full px-4 py-3 border border-border-light rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-input-bg text-text-primary transition-all duration-200 hover:border-primary-300 ${admissionNumberLoading ? 'bg-gray-100' : ''}`}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 text-base sm:text-sm border border-border-light rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-input-bg text-text-primary transition-all duration-200 hover:border-primary-300 touch-manipulation min-h-[44px] ${admissionNumberLoading ? 'bg-gray-100' : ''}`}
                     placeholder={admissionNumberLoading ? 'Generating...' : 'Enter admission number or select batch to auto-generate'}
                   />
                   {admissionNumberLoading && (
@@ -747,7 +748,7 @@ const AddStudent = () => {
                   name="pin_no"
                   value={studentData.pin_no}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -760,7 +761,7 @@ const AddStudent = () => {
                   value={studentData.student_name}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -773,7 +774,7 @@ const AddStudent = () => {
                   value={studentData.father_name}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -785,7 +786,7 @@ const AddStudent = () => {
                   value={studentData.gender}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Gender</option>
                   <option value="M">Male</option>
@@ -801,7 +802,7 @@ const AddStudent = () => {
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               Academic Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* 1. College */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -817,7 +818,7 @@ const AddStudent = () => {
                     value={selectedCollegeId || ''}
                     onChange={handleCollegeSelect}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select College</option>
                     {colleges.filter(c => c.isActive !== false).map((college) => (
@@ -845,7 +846,7 @@ const AddStudent = () => {
                     value={studentData.batch}
                     onChange={handleChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Batch</option>
                     {academicYears.map((year) => (
@@ -861,7 +862,7 @@ const AddStudent = () => {
                     value={studentData.batch}
                     onChange={handleChange}
                     placeholder="Enter batch year"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
               </div>
@@ -881,7 +882,7 @@ const AddStudent = () => {
                     value={selectedCourseName}
                     onChange={handleCourseSelect}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Course</option>
                     {availableCourses.map((course) => (
@@ -897,7 +898,7 @@ const AddStudent = () => {
                     value={studentData.course}
                     onChange={handleChange}
                     placeholder="Enter course"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
               </div>
@@ -912,7 +913,7 @@ const AddStudent = () => {
                     value={selectedBranchName}
                     onChange={handleBranchSelect}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Branch</option>
                     {branchOptions.map((branch) => (
@@ -929,7 +930,7 @@ const AddStudent = () => {
                     onChange={handleChange}
                     required
                     placeholder={availableCourses.length > 0 ? 'No branches configured' : 'Enter branch'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
               </div>
@@ -944,7 +945,7 @@ const AddStudent = () => {
                   value={studentData.current_year}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Year</option>
                   {yearOptions.map((year) => (
@@ -965,7 +966,7 @@ const AddStudent = () => {
                   value={studentData.current_semester}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Semester</option>
                   {semesterOptions.map((semester) => (
@@ -986,7 +987,7 @@ const AddStudent = () => {
                   value={studentData.stud_type}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Student Type</option>
                   {STUDENT_TYPE_OPTIONS.map((type) => (
@@ -1007,7 +1008,7 @@ const AddStudent = () => {
                   value={studentData.student_status}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Status</option>
                   {STUDENT_STATUS_OPTIONS.map((status) => (
@@ -1028,7 +1029,7 @@ const AddStudent = () => {
                   value={studentData.scholar_status}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Scholar Status</option>
                   {SCHOLAR_STATUS_OPTIONS.map((status) => (
@@ -1049,7 +1050,7 @@ const AddStudent = () => {
                   name="previous_college"
                   value={studentData.previous_college}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
             </div>
@@ -1060,7 +1061,7 @@ const AddStudent = () => {
               <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
               Contact Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Student Mobile Number <span className="text-red-500">*</span>
@@ -1071,7 +1072,7 @@ const AddStudent = () => {
                   value={studentData.student_mobile}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1084,7 +1085,7 @@ const AddStudent = () => {
                   value={studentData.parent_mobile1}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1096,7 +1097,7 @@ const AddStudent = () => {
                   name="parent_mobile2"
                   value={studentData.parent_mobile2}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
             </div>
@@ -1107,7 +1108,7 @@ const AddStudent = () => {
               <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
               Personal Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Date of Birth <span className="text-red-500">*</span>
@@ -1118,7 +1119,7 @@ const AddStudent = () => {
                   value={studentData.dob}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1130,7 +1131,7 @@ const AddStudent = () => {
                   name="adhar_no"
                   value={studentData.adhar_no}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1142,7 +1143,7 @@ const AddStudent = () => {
                   value={studentData.caste}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 >
                   <option value="">Select Caste</option>
                   {CASTE_OPTIONS.map((caste) => (
@@ -1170,7 +1171,7 @@ const AddStudent = () => {
                   value={studentData.student_address}
                   onChange={handleChange}
                   rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 ></textarea>
               </div>
             </div>
@@ -1184,7 +1185,7 @@ const AddStudent = () => {
                   name="city_village"
                   value={studentData.city_village}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1196,7 +1197,7 @@ const AddStudent = () => {
                   name="mandal_name"
                   value={studentData.mandal_name}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
               <div>
@@ -1208,7 +1209,7 @@ const AddStudent = () => {
                   name="district"
                   value={studentData.district}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 />
               </div>
             </div>
@@ -1219,7 +1220,7 @@ const AddStudent = () => {
               <div className="w-3 h-3 bg-red-500 rounded-full"></div>
               Additional Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Certificates Status <span className="text-red-500">*</span>
@@ -1344,7 +1345,7 @@ const AddStudent = () => {
                   value={studentData.remarks}
                   onChange={handleChange}
                   rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                 ></textarea>
               </div>
             </div>
@@ -1403,7 +1404,7 @@ const AddStudent = () => {
                           <h4 className="text-base font-semibold text-gray-900 mb-3">
                             {req.academic_stage} Documents
                           </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             {req.required_documents.map((docName, docIndex) => (
                               <div key={docIndex}>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">

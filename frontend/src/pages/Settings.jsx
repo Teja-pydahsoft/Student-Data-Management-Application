@@ -1687,17 +1687,17 @@ const Settings = () => {
 
   return (
     <>
-    <div className="space-y-4 bg-white p-4">
+    <div className="space-y-4 bg-white p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-600">
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Settings</h1>
+          <p className="text-xs sm:text-sm text-gray-600">
             Manage colleges, courses, branches, and attendance calendar.
           </p>
         </div>
         <button
           onClick={handleRefresh}
-          className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 sm:py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100 touch-manipulation min-h-[44px]"
         >
           <RefreshCcw size={16} />
           Refresh
@@ -1705,13 +1705,13 @@ const Settings = () => {
       </div>
 
       {/* Navigation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button
           onClick={() => setActiveSection('courses')}
-          className={`rounded-lg border-2 p-3 text-left transition-all ${
+          className={`rounded-lg border-2 p-3 sm:p-4 text-left transition-all touch-manipulation min-h-[80px] ${
             activeSection === 'courses'
               ? 'border-blue-500 bg-blue-50 shadow-md'
-              : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+              : 'border-gray-200 bg-white hover:border-blue-300 active:border-blue-400 hover:shadow-sm'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -1817,7 +1817,7 @@ const Settings = () => {
       {activeSection === 'courses' && (
         <>
           {/* Quick Stats Bar */}
-          <div className="flex flex-wrap items-center gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-3 sm:px-4 py-2 sm:py-3">
             <div className="flex items-center gap-2">
               <Landmark size={16} className="text-blue-600" />
               <span className="text-sm text-gray-600">Colleges:</span>
@@ -1844,7 +1844,7 @@ const Settings = () => {
           </div>
 
           {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
-          <div className="grid gap-4 lg:grid-cols-[320px,1fr] min-w-0">
+          <div className="grid gap-3 sm:gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[320px,1fr] min-w-0">
             {/* Left Column */}
             <div className="space-y-4 min-w-0">
               {/* Colleges Card */}

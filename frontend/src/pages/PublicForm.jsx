@@ -880,7 +880,7 @@ const PublicForm = () => {
   };
 
   const renderField = (field) => {
-    const commonClasses = 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm';
+    const commonClasses = 'w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]';
     const fieldKey = field.key?.toLowerCase() || '';
     const fieldLabel = field.label?.toLowerCase() || '';
 
@@ -1491,30 +1491,30 @@ const PublicForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-4 px-4 sm:py-6 lg:py-8">
-      <Toaster position="top-right" />
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-3 sm:py-4 lg:py-6 px-3 sm:px-4 lg:px-6">
+      <Toaster position="top-center sm:top-right" />
       <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white rounded-lg sm:rounded-2xl shadow-xl overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-6">
-            <div className="flex items-center gap-4">
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-4 sm:p-6">
+            <div className="flex items-center gap-3 sm:gap-4">
               <img
                 src="/logo.png"
                 alt="Pydah DB Logo"
-                className="h-14 w-auto object-contain bg-white/20 rounded-lg p-1"
+                className="h-10 sm:h-14 w-auto object-contain bg-white/20 rounded-lg p-1 flex-shrink-0"
                 loading="lazy"
               />
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold break-words">{form.form_name}</h1>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold break-words">{form.form_name}</h1>
                 {form.form_description && (
-                  <p className="text-purple-100 text-sm mt-1">{form.form_description}</p>
+                  <p className="text-purple-100 text-xs sm:text-sm mt-1">{form.form_description}</p>
                 )}
               </div>
             </div>
           </div>
           
           <div className="p-4 sm:p-6 lg:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             {/* Categorize fields */}
             {(() => {
               // Get all enabled fields from form builder - treat undefined/null as enabled (default behavior)
@@ -1675,7 +1675,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                         Basic Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {basicFields.map((field, index) => (
                           <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1696,7 +1696,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                         Academic Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {academicFields.map((field, index) => (
                           <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1717,7 +1717,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
                         Contact Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {contactFields.map((field, index) => (
                           <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1738,7 +1738,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
                         Address Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {addressFields.map((field, index) => (
                           <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1759,7 +1759,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                         Additional Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {additionalFields.map((field, index) => (
                           <div key={index} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1784,7 +1784,7 @@ const PublicForm = () => {
                         <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
                         Other Information
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {otherFields.map((field, index) => (
                           <div key={index} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1870,7 +1870,7 @@ const PublicForm = () => {
                                     <h4 className="text-base font-semibold text-gray-900 mb-3">
                                       {req.academic_stage} Documents
                                     </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                       {req.required_documents.map((docName, docIndex) => (
                                         <div key={docIndex}>
                                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1925,11 +1925,11 @@ const PublicForm = () => {
                     )}
                   </div>
 
-            <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-3 sm:gap-4 pt-4 border-t border-gray-200">
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 px-6 rounded-xl font-semibold shadow-md hover:from-purple-700 hover:to-indigo-700 hover:shadow-lg focus:ring-4 focus:ring-purple-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full sm:flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3.5 sm:py-3 px-6 rounded-lg sm:rounded-xl font-semibold shadow-md hover:from-purple-700 hover:to-indigo-700 active:from-purple-800 active:to-indigo-800 hover:shadow-lg focus:ring-4 focus:ring-purple-200 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation min-h-[44px] text-base sm:text-sm"
               >
                 {submitting ? (
                   <>

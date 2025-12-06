@@ -506,40 +506,41 @@ const StudentPromotions = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 heading-font flex items-center gap-3">
-            <TrendingUp className="text-indigo-600" size={28} />
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 heading-font flex items-center gap-2 sm:gap-3">
+            <TrendingUp className="text-indigo-600" size={24} />
             Student Promotions
           </h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={fetchQuickFilterOptions}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation min-h-[44px] text-sm"
             disabled={loadingFilters}
           >
             {loadingFilters ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-            Refresh Options
+            <span className="hidden sm:inline">Refresh Options</span>
+            <span className="sm:hidden">Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Filter Card with Inline Promotion Review */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-4">
+      <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 space-y-3 sm:space-y-4">
         <div className="flex items-center gap-2 text-gray-700">
           <Filter size={18} />
-          <h2 className="text-lg font-semibold">Promotion Criteria</h2>
+          <h2 className="text-base sm:text-lg font-semibold">Promotion Criteria</h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="flex flex-col">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Batch</label>
             <select
               value={filters.batch}
               onChange={(e) => handleFilterChange('batch', e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              className="px-3 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Batches</option>
               {(quickFilterOptions.batches || []).map((batch) => (
@@ -638,36 +639,41 @@ const StudentPromotions = () => {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <button
                 onClick={() => toggleSelectAllStudents(true)}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 disabled={totalStudents === 0 || loadingStudents}
                 title="Select all students matching current filters (across all pages)"
               >
-                Select All ({totalStudents.toLocaleString()})
+                <span className="hidden sm:inline">Select All ({totalStudents.toLocaleString()})</span>
+                <span className="sm:hidden">Select All</span>
               </button>
               <button
                 onClick={() => setSelectedAdmissionNumbers(new Set())}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 disabled={selectedCount === 0}
               >
-                Clear Selection
+                Clear
               </button>
               <button
                 onClick={handlePromoteSelected}
-                className="px-5 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700 transition-transform hover:-translate-y-0.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 sm:py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700 active:bg-indigo-800 transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
                 disabled={selectedCount === 0 || submitting || loadingPromotionPlan}
               >
                 {loadingPromotionPlan ? (
                   <>
                     <Loader2 className="animate-spin" size={16} />
-                    Loading Plan...
+                    <span className="hidden sm:inline">Loading Plan...</span>
+                    <span className="sm:hidden">Loading...</span>
                   </>
                 ) : submitting ? (
                   'Promoting...'
                 ) : (
-                  'Promote Selected'
+                  <>
+                    <span className="hidden sm:inline">Promote Selected</span>
+                    <span className="sm:hidden">Promote</span>
+                  </>
                 )}
               </button>
             </div>

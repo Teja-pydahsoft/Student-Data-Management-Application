@@ -1256,34 +1256,41 @@ const Students = () => {
   // Only the table area will show loading state
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 heading-font">Students Database</h1>
-          <p className="text-gray-600 mt-2 body-font">Manage and view all student records</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 heading-font">Students Database</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2 body-font">Manage and view all student records</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 relative min-w-[300px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={20} />
+        {/* Search Bar - Full Width on Mobile */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={18} />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+              className="w-full pl-10 pr-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
               placeholder="Search by admission number or student data..."
             />
           </div>
-          <button onClick={handleLocalSearch} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+          <button 
+            onClick={handleLocalSearch} 
+            className="bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] font-medium"
+          >
             Search
           </button>
-          
+        </div>
+        {/* Action Buttons - Responsive Grid */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3">
           <Link
             to="/students/add"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px]"
           >
             <Plus size={18} />
-            Add Student
+            <span className="hidden sm:inline">Add Student</span>
+            <span className="sm:hidden">Add</span>
           </Link>
 
           <button
@@ -1291,43 +1298,47 @@ const Students = () => {
               await fetchForms();
               setShowBulkStudentUpload(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loadingForms}
           >
             <Upload size={18} />
-            {loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}
+            <span className="hidden sm:inline">{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
+            <span className="sm:hidden">{loadingForms ? 'Loading...' : 'Upload'}</span>
           </button>
 
           <button
             onClick={() => setShowManualRollNumber(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px]"
           >
             <UserCog size={18} />
-            Update PIN Numbers
+            <span className="hidden sm:inline">Update PIN Numbers</span>
+            <span className="sm:hidden">PIN</span>
           </button>
 
           <button
             onClick={handleBulkDelete}
             disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={18} />
-            {bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+            <span className="hidden sm:inline">{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+            <span className="sm:hidden">{bulkDeleteMutation.isPending ? '...' : `Delete${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
           </button>
 
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] col-span-2 sm:col-span-1"
           >
             <Download size={18} />
-            Export CSV
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">Export</span>
           </button>
         </div>
       </div>
 
       {/* Statistics Cards */}
       {students.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -1427,7 +1438,7 @@ const Students = () => {
         </div>
         {filtersExpanded && (
           <div className="px-4 py-4 border-t border-gray-200">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
               <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-600 mb-1">College</label>
                 <select
@@ -1643,7 +1654,8 @@ const Students = () => {
               </div>
             </div>
           )}
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full" style={{ tableLayout: 'auto' }}>
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
@@ -1794,19 +1806,114 @@ const Students = () => {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-4 py-4 border-t border-gray-100">
-            <div className="text-sm text-gray-600">
+          
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3 p-3 sm:p-4">
+            {students.map((student) => {
+              return (
+                <div
+                  key={student.admission_number}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="p-4 space-y-3">
+                    {/* Header with Photo and Checkbox */}
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 text-blue-600 border-gray-300 rounded mt-1"
+                          disabled={bulkDeleteMutation.isPending}
+                          checked={selectedAdmissionNumbers.has(student.admission_number)}
+                          onChange={() => toggleSelectStudent(student.admission_number)}
+                        />
+                      </div>
+                      <div className="flex-shrink-0">
+                        {student.student_photo &&
+                         student.student_photo !== '{}' &&
+                         student.student_photo !== null &&
+                         student.student_photo !== '' &&
+                         student.student_photo !== '{}' ? (
+                          <img
+                            src={getStaticFileUrlDirect(student.student_photo)}
+                            alt="Student Photo"
+                            className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-sm"
+                            onError={(e) => {
+                              if (e.target && e.target.style) {
+                                e.target.style.display = 'none';
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
+                            <span className="text-gray-400 text-xs">No Photo</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0" onClick={() => handleViewDetails(student)}>
+                        <h3 className="font-semibold text-gray-900 text-base truncate">{student.student_name || '-'}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{student.admission_number || '-'}</p>
+                        {student.pin_no && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium mt-1">
+                            PIN: {student.pin_no}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Key Information Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                      <div>
+                        <p className="text-xs text-gray-500">Batch</p>
+                        <p className="text-sm font-medium text-gray-900">{student.batch || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">College</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.college || ''}>{student.college || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Course</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Branch</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Status</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Year/Sem</p>
+                        <p className="text-sm font-medium text-gray-900">{student.current_year || '-'}/{student.current_semester || '-'}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Action Button */}
+                    <button
+                      onClick={() => handleViewDetails(student)}
+                      className="w-full mt-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
+            <div className="text-xs sm:text-sm text-gray-600">
               {totalStudents === 0
                 ? 'No students to display'
                 : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`}
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-600">
-                Rows per page
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                <span className="hidden sm:inline">Rows per page</span>
+                <span className="sm:hidden">Per page</span>
                 <select
                   value={pageSize}
                   onChange={handlePageSizeChange}
-                  className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="px-2 py-1.5 sm:py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
                   disabled={isLoading || isFetching}
                 >
                   {pageSizeOptions.map(option => (
@@ -1814,23 +1921,23 @@ const Students = () => {
                   ))}
                 </select>
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={isFirstPage || isLoading || isFetching || totalStudents === 0}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px]"
                 >
                   Previous
                 </button>
-                <span className="text-sm text-gray-600">
+                <span className="text-xs sm:text-sm text-gray-600 px-2">
                   Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
                 </span>
                 <button
                   type="button"
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={isLastPage || isLoading || isFetching || totalStudents === 0}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px]"
                 >
                   Next
                 </button>
@@ -1842,7 +1949,7 @@ const Students = () => {
 
       {showModal && selectedStudent && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             // Close modal when clicking on backdrop
             if (e.target === e.currentTarget) {
@@ -1855,38 +1962,39 @@ const Students = () => {
           }}
         >
           <div 
-            className="bg-gray-50 rounded-xl shadow-2xl max-w-7xl w-full h-[95vh] flex flex-col"
+            className="bg-gray-50 rounded-lg sm:rounded-xl shadow-2xl max-w-7xl w-full max-h-[95vh] sm:h-[95vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">Student Details</h3>
-                <p className="text-sm text-gray-500 mt-1">View and manage student information</p>
+            <div className="bg-white border-b border-gray-200 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Student Details</h3>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">View and manage student information</p>
               </div>
               <div className="flex items-center gap-2">
                 {!editMode && (
-                  <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                    <Edit size={18} />
-                    Edit
+                  <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base">
+                    <Edit size={16} className="sm:w-[18px] sm:h-[18px]" />
+                    <span className="hidden sm:inline">Edit</span>
+                    <span className="sm:hidden">Edit</span>
                   </button>
                 )}
-                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center">
                   <X size={20} />
                 </button>
               </div>
             </div>
 
             {/* Main Content - Two Column Layout */}
-            <div className="flex-1 overflow-hidden">
-              <div className="flex h-full">
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex flex-col lg:flex-row h-full">
                 {/* Left Sidebar - Student Photo & Key Info */}
-                <div className="w-80 bg-white border-r border-gray-200 p-6 flex-shrink-0 flex flex-col">
+                <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col">
                   <div className="space-y-5">
                     {/* Student Photo */}
                     <div className="flex flex-col items-center">
                       <div className="relative">
-                        <div className={`w-40 h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode ? 'cursor-pointer hover:border-blue-400 transition-colors' : ''}`}>
+                        <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode ? 'cursor-pointer hover:border-blue-400 active:border-blue-500 transition-colors' : ''}`}>
                           {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
                             <img
                               key={editData.student_photo}
@@ -1968,7 +2076,7 @@ const Students = () => {
                             type="text"
                             value={editData.student_name || editData['Student Name'] || ''}
                             onChange={(e) => updateEditField('student_name', e.target.value)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           />
                         ) : (
                           <p className="text-sm font-bold text-gray-900">
@@ -1993,7 +2101,7 @@ const Students = () => {
                                 }
                               }}
                               placeholder="Enter PIN number"
-                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                              className="flex-1 px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               disabled={savingPinNumber}
                             />
                             <button
@@ -2056,7 +2164,7 @@ const Students = () => {
                             type="text"
                             value={editData.course || selectedStudent.course || ''}
                             onChange={(e) => updateEditField('course', e.target.value)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           />
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
@@ -2073,7 +2181,7 @@ const Students = () => {
                             type="text"
                             value={editData.branch || editData.Branch || ''}
                             onChange={(e) => updateEditField('branch', e.target.value)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           />
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
@@ -2103,7 +2211,7 @@ const Students = () => {
                                   )
                                 );
                               }}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                              className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                             >
                               <option value="1">Year 1</option>
                               <option value="2">Year 2</option>
@@ -2126,7 +2234,7 @@ const Students = () => {
                                   )
                                 );
                               }}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                              className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                             >
                               <option value="1">Sem 1</option>
                               <option value="2">Sem 2</option>
@@ -2147,7 +2255,7 @@ const Students = () => {
                             value={editData.college || editData.College || selectedStudent?.college || ''}
                             onChange={(e) => updateEditField('college', e.target.value)}
                             disabled={collegesLoading}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <option value="">Select College</option>
                             {colleges.filter(c => c.isActive !== false).map((college) => (
@@ -2170,7 +2278,7 @@ const Students = () => {
                             value={editData.batch || editData.Batch || ''}
                             onChange={(e) => updateEditField('batch', e.target.value)}
                             placeholder="Enter batch"
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           />
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
@@ -2186,7 +2294,7 @@ const Students = () => {
                           <select
                             value={editData.stud_type || editData.StudType || ''}
                             onChange={(e) => updateEditField('stud_type', e.target.value)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           >
                             <option value="">Select Student Type</option>
                             <option value="MANG">MANG</option>
@@ -2204,8 +2312,8 @@ const Students = () => {
                 </div>
 
                 {/* Right Side - All Student Data */}
-                <div className="flex-1 p-6 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-4 h-full">
+                <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
 
                     {/* Column 1 */}
                     <div className="space-y-4">
@@ -2464,7 +2572,7 @@ const Students = () => {
                                 onChange={(e) => updateEditField('student_mobile', e.target.value)}
                                 placeholder="Enter mobile number"
                                 maxLength={10}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2482,7 +2590,7 @@ const Students = () => {
                                 value={editData.father_name || editData['Father Name'] || ''}
                                 onChange={(e) => updateEditField('father_name', e.target.value)}
                                 placeholder="Enter father name"
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2500,7 +2608,7 @@ const Students = () => {
                                 value={editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)'] ?
                                   (editData.dob || editData['DOB (Date of Birth - DD-MM-YYYY)']).split('T')[0] : ''}
                                 onChange={(e) => updateEditField('dob', e.target.value)}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2518,7 +2626,7 @@ const Students = () => {
                                 value={editData.adhar_no || editData['ADHAR No'] || ''}
                                 onChange={(e) => updateEditField('adhar_no', e.target.value)}
                                 placeholder="Enter Aadhar number"
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2536,7 +2644,7 @@ const Students = () => {
                                 value={editData.admission_date || editData['Admission Date'] ?
                                   (editData.admission_date || editData['Admission Date']).split('T')[0] : ''}
                                 onChange={(e) => updateEditField('admission_date', e.target.value)}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2563,7 +2671,7 @@ const Students = () => {
                               <select
                                 value={editData.student_status || editData['Student Status'] || ''}
                                 onChange={(e) => updateEditField('student_status', e.target.value)}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               >
                                 <option value="">Select Status</option>
                                 {STUDENT_STATUS_OPTIONS.map((status) => (
@@ -2586,7 +2694,7 @@ const Students = () => {
                               <select
                                 value={editData.scholar_status || editData['Scholar Status'] || ''}
                                 onChange={(e) => updateEditField('scholar_status', e.target.value)}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               >
                                 <option value="">Select Scholar Status</option>
                                 <option value="eligible">eligible</option>
@@ -2608,7 +2716,7 @@ const Students = () => {
                                 value={editData.previous_college || ''}
                                 onChange={(e) => updateEditField('previous_college', e.target.value)}
                                 placeholder="Enter previous college"
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2624,7 +2732,7 @@ const Students = () => {
                               <select
                                 value={editData.certificates_status || ''}
                                 onChange={(e) => updateEditField('certificates_status', e.target.value)}
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               >
                                 <option value="">Select Status</option>
                                 <option value="Verified">Verified</option>
@@ -2647,7 +2755,7 @@ const Students = () => {
                                 onChange={(e) => updateEditField('remarks', e.target.value)}
                                 placeholder="Enter remarks"
                                 rows="2"
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               />
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
@@ -2664,15 +2772,15 @@ const Students = () => {
             </div>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex-shrink-0">
-              <div className="flex items-center gap-3">
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                 {editMode ? (
                   <>
                     <button 
                       type="button"
                       onClick={handleSaveEdit} 
                       disabled={savingEdit}
-                      className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="w-full sm:flex-1 bg-green-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
                     >
                       {savingEdit ? (
                         <>
@@ -2690,13 +2798,13 @@ const Students = () => {
                       type="button"
                       onClick={() => setEditMode(false)} 
                       disabled={savingEdit}
-                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                     >
                       Cancel
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setShowModal(false)} className="ml-auto px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                  <button onClick={() => setShowModal(false)} className="w-full sm:w-auto sm:ml-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium touch-manipulation min-h-[44px]">
                     Close
                   </button>
                 )}
