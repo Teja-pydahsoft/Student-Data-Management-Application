@@ -1051,7 +1051,7 @@ const UserManagement = () => {
             </div>
 
             {/* All 3 Sections Side by Side */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3" style={{ height: 'calc(100vh - 280px)', maxHeight: 'calc(100vh - 280px)' }}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3 flex-1 min-h-0">
               {/* Section 1: User Information */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col">
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 flex-shrink-0">
@@ -1330,9 +1330,9 @@ const UserManagement = () => {
                   )}
 
                   {form.collegeIds.length === 0 && (
-                    <div className="text-center py-6">
-                      <Layers size={32} className="text-slate-300 mx-auto mb-2" />
-                      <p className="text-xs text-slate-400">Select a college to configure access</p>
+                    <div className="text-center py-3">
+                      <Layers size={20} className="text-slate-300 mx-auto mb-1.5" />
+                      <p className="text-[10px] text-slate-400">Select a college to configure access</p>
                     </div>
                   )}
                 </div>
@@ -1796,10 +1796,38 @@ const UserManagement = () => {
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
                     />
                   </div>
-                  <div className={`p-4 rounded-xl border-2 ${ROLE_COLORS[editForm.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck size={18} />
-                      <span className="font-bold">{ROLE_LABELS[editForm.role] || editForm.role}</span>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Role</label>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                      {FIXED_ROLES.map(role => {
+                        const isSelected = editForm.role === role.value;
+                        return (
+                          <div 
+                            key={role.value}
+                            onClick={() => setEditForm(prev => ({ ...prev, role: role.value }))}
+                            className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer transition-all border-2 ${
+                              isSelected 
+                                ? `${ROLE_COLORS[role.value]} border-current` 
+                                : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                              <ShieldCheck size={14} className="text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-xs text-slate-800">{role.label}</h4>
+                              <p className="text-[10px] text-slate-500 line-clamp-1">
+                                {ROLE_DESCRIPTIONS[role.value]}
+                              </p>
+                            </div>
+                            {isSelected && (
+                              <div className="w-4 h-4 bg-current rounded-full flex items-center justify-center flex-shrink-0">
+                                <Check size={10} className="text-white" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
