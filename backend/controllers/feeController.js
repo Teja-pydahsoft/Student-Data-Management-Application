@@ -902,11 +902,22 @@ exports.deleteFeeHeader = async (req, res) => {
  * Now supports year and semester for fee records
  */
 exports.updateStudentFees = async (req, res) => {
-  try {
-    const studentId = req.params.studentId || req.body.studentId;
-    const { fees, year, semester } = req.body;
+  const startTime = Date.now();
+  const studentId = req.params.studentId || req.body.studentId;
+  const { fees, year, semester } = req.body;
 
+  console.log(`[FEE UPDATE] Starting fee update for student ID: ${studentId}`);
+  console.log(`[FEE UPDATE] Request details:`, {
+    studentId,
+    feesCount: Array.isArray(fees) ? fees.length : 0,
+    year,
+    semester,
+    userId: req.admin?.id || req.user?.id || null
+  });
+
+  try {
     if (!studentId) {
+      console.error(`[FEE UPDATE] Error: Student ID is required`);
       return res.status(400).json({
         success: false,
         message: 'Student ID is required'
@@ -914,10 +925,15 @@ exports.updateStudentFees = async (req, res) => {
     }
 
     if (!Array.isArray(fees)) {
+      console.error(`[FEE UPDATE] Error: Fees must be an array. Received:`, typeof fees);
       return res.status(400).json({
         success: false,
         message: 'Fees must be an array'
       });
+    }
+
+    if (fees.length === 0) {
+      console.warn(`[FEE UPDATE] Warning: Empty fees array for student ${studentId}`);
     }
 
     const userId = req.admin?.id || req.user?.id || null;
@@ -925,15 +941,17 @@ exports.updateStudentFees = async (req, res) => {
     
     try {
       await connection.beginTransaction();
+      console.log(`[FEE UPDATE] Transaction started for student ${studentId}`);
 
       // Verify student exists and is regular, get current year/semester if not provided
       const [studentRows] = await connection.query(
-        'SELECT id, current_year, current_semester FROM students WHERE id = ? AND student_status = "Regular"',
+        'SELECT id, current_year, current_semester, student_name FROM students WHERE id = ? AND student_status = "Regular"',
         [studentId]
       );
 
       if (studentRows.length === 0) {
         await connection.rollback();
+        console.error(`[FEE UPDATE] Error: Student ${studentId} not found or not a regular student`);
         return res.status(404).json({
           success: false,
           message: 'Student not found or not a regular student'
@@ -941,23 +959,35 @@ exports.updateStudentFees = async (req, res) => {
       }
 
       const student = studentRows[0];
-      // Use the year and semester from the fee object, or fall back to student's current year/semester
-      // But prefer the explicit year/semester from the fee object
+      console.log(`[FEE UPDATE] Student found: ${student.student_name} (ID: ${student.id}, Year: ${student.current_year}, Semester: ${student.current_semester})`);
+
+      let updatedCount = 0;
+      let insertedCount = 0;
+      let skippedCount = 0;
 
       // Process each fee
       for (const fee of fees) {
         const { feeHeaderId, amount, paidAmount, dueDate, paymentDate, paymentStatus, remarks } = fee;
 
-        if (!feeHeaderId) continue;
+        if (!feeHeaderId) {
+          console.warn(`[FEE UPDATE] Skipping fee - missing feeHeaderId for student ${studentId}`);
+          skippedCount++;
+          continue;
+        }
 
         // Verify fee header exists
         const [headerRows] = await connection.query(
-          'SELECT id FROM fee_headers WHERE id = ? AND is_active = TRUE',
+          'SELECT id, header_name FROM fee_headers WHERE id = ? AND is_active = TRUE',
           [feeHeaderId]
         );
 
-        if (headerRows.length === 0) continue;
+        if (headerRows.length === 0) {
+          console.warn(`[FEE UPDATE] Skipping fee - fee header ${feeHeaderId} not found or inactive for student ${studentId}`);
+          skippedCount++;
+          continue;
+        }
 
+        const feeHeader = headerRows[0];
         const amountValue = parseFloat(amount) || 0;
         const paidAmountValue = parseFloat(paidAmount) || 0;
         const status = paymentStatus || (paidAmountValue >= amountValue ? 'paid' : (paidAmountValue > 0 ? 'partial' : 'pending'));
@@ -966,14 +996,29 @@ exports.updateStudentFees = async (req, res) => {
         const feeYear = fee.year || year || student.current_year;
         const feeSemester = fee.semester || semester || student.current_semester;
 
+        console.log(`[FEE UPDATE] Processing fee for student ${studentId}:`, {
+          feeHeaderId,
+          feeHeaderName: feeHeader.header_name,
+          amount: amountValue,
+          paidAmount: paidAmountValue,
+          year: feeYear,
+          semester: feeSemester,
+          status
+        });
+
         // Check if fee record exists for this student, header, year, and semester
         const [existingRows] = await connection.query(
-          'SELECT id FROM student_fees WHERE student_id = ? AND fee_header_id = ? AND year = ? AND semester = ?',
+          'SELECT id, amount, paid_amount FROM student_fees WHERE student_id = ? AND fee_header_id = ? AND year = ? AND semester = ?',
           [studentId, feeHeaderId, feeYear, feeSemester]
         );
 
         if (existingRows.length > 0) {
           // Update existing record
+          const existingFee = existingRows[0];
+          console.log(`[FEE UPDATE] Updating existing fee record (ID: ${existingFee.id}) for student ${studentId}`);
+          console.log(`[FEE UPDATE] Previous values - Amount: ${existingFee.amount}, Paid: ${existingFee.paid_amount}`);
+          console.log(`[FEE UPDATE] New values - Amount: ${amountValue}, Paid: ${paidAmountValue}`);
+          
           await connection.query(
             `UPDATE student_fees 
              SET amount = ?, paid_amount = ?, due_date = ?, payment_date = ?, payment_status = ?, remarks = ?, updated_by = ?
@@ -992,8 +1037,11 @@ exports.updateStudentFees = async (req, res) => {
               feeSemester
             ]
           );
+          updatedCount++;
+          console.log(`[FEE UPDATE] Successfully updated fee for student ${studentId}, header ${feeHeaderId}, year ${feeYear}, semester ${feeSemester}`);
         } else {
           // Insert new record
+          console.log(`[FEE UPDATE] Inserting new fee record for student ${studentId}`);
           await connection.query(
             `INSERT INTO student_fees 
              (student_id, fee_header_id, amount, paid_amount, due_date, payment_date, payment_status, remarks, year, semester, created_by, updated_by)
@@ -1013,10 +1061,22 @@ exports.updateStudentFees = async (req, res) => {
               userId
             ]
           );
+          insertedCount++;
+          console.log(`[FEE UPDATE] Successfully inserted fee for student ${studentId}, header ${feeHeaderId}, year ${feeYear}, semester ${feeSemester}`);
         }
       }
 
       await connection.commit();
+      const duration = Date.now() - startTime;
+      
+      console.log(`[FEE UPDATE] Transaction committed for student ${studentId}`);
+      console.log(`[FEE UPDATE] Summary for student ${studentId}:`, {
+        totalFees: fees.length,
+        updated: updatedCount,
+        inserted: insertedCount,
+        skipped: skippedCount,
+        duration: `${duration}ms`
+      });
 
       res.json({
         success: true,
@@ -1024,12 +1084,19 @@ exports.updateStudentFees = async (req, res) => {
       });
     } catch (error) {
       await connection.rollback();
+      console.error(`[FEE UPDATE] Transaction rolled back for student ${studentId}:`, error);
       throw error;
     } finally {
       connection.release();
+      console.log(`[FEE UPDATE] Database connection released for student ${studentId}`);
     }
   } catch (error) {
-    console.error('Failed to update student fees:', error);
+    const duration = Date.now() - startTime;
+    console.error(`[FEE UPDATE] Failed to update student fees for student ${studentId}:`, {
+      error: error.message,
+      stack: error.stack,
+      duration: `${duration}ms`
+    });
     res.status(500).json({
       success: false,
       message: 'Server error while updating student fees'

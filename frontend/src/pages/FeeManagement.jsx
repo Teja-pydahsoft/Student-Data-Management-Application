@@ -24,6 +24,13 @@ import { SkeletonBox, SkeletonTable } from '../components/SkeletonLoader';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
 
+/**
+ * Fee Management Component
+ * 
+ * Note: This component only displays and manages fees for students with status = 'Regular'.
+ * The backend API endpoint (/fees/students) automatically filters out non-Regular students.
+ * This ensures that only active, regular students are shown in the fee management interface.
+ */
 const FeeManagement = () => {
   const [filters, setFilters] = useState({
     batch: '',
@@ -40,6 +47,12 @@ const FeeManagement = () => {
     branches: [],
     colleges: []
   });
+  const [feeConfigFilterOptions, setFeeConfigFilterOptions] = useState({
+    batches: [],
+    courses: [],
+    branches: [],
+    colleges: []
+  }); // Separate filter options for fee configuration modal
   const [coursesWithBranches, setCoursesWithBranches] = useState([]);
   const [students, setStudents] = useState([]);
   const [feeHeaders, setFeeHeaders] = useState([]);
@@ -64,6 +77,18 @@ const FeeManagement = () => {
   const [feeHeadersForConfig, setFeeHeadersForConfig] = useState([]);
   const [editingHeaderId, setEditingHeaderId] = useState(null);
   const [newHeader, setNewHeader] = useState({ header_name: '', description: '', is_active: true });
+  const [feeConfigModalOpen, setFeeConfigModalOpen] = useState(false);
+  const [feeConfigFilters, setFeeConfigFilters] = useState({
+    college: '',
+    batch: '',
+    course: '',
+    feeHeaderId: ''
+  });
+  const [feeConfigAmounts, setFeeConfigAmounts] = useState({}); // { yearSemKey: amount }
+  const [feeConfigLoading, setFeeConfigLoading] = useState(false);
+  const [feeConfigYearSemColumns, setFeeConfigYearSemColumns] = useState([]); // Separate year-sem columns for fee config modal
+  const [feeConfigMatchingCount, setFeeConfigMatchingCount] = useState(null); // Number of matching students
+  const [feeConfigProgress, setFeeConfigProgress] = useState({ current: 0, total: 0, isProcessing: false }); // Progress tracking
   const searchEffectInitialized = useRef(false);
   
   // Cache for students data
@@ -122,6 +147,92 @@ const FeeManagement = () => {
       }
     } catch (error) {
       console.warn('Unable to load fee filter options', error);
+    }
+  };
+
+  // Load filter options for fee configuration modal (independent of main page filters)
+  const loadFeeConfigFilterOptions = async () => {
+    try {
+      console.log('[FEE CONFIG] Loading filter options for fee configuration modal...');
+      // Don't pass any filter parameters - get all available options
+      const filtersResponse = await api.get('/fees/filters'); // No query params - get all options
+      
+      console.log('[FEE CONFIG] Raw API response:', {
+        status: filtersResponse.status,
+        success: filtersResponse.data?.success,
+        hasData: !!filtersResponse.data?.data,
+        dataKeys: filtersResponse.data?.data ? Object.keys(filtersResponse.data.data) : [],
+        fullResponse: filtersResponse.data
+      });
+
+      if (filtersResponse.data?.success) {
+        const data = filtersResponse.data.data || {};
+        const filterOptions = {
+          batches: Array.isArray(data.batches) ? data.batches : [],
+          courses: Array.isArray(data.courses) ? data.courses : [],
+          branches: Array.isArray(data.branches) ? data.branches : [],
+          colleges: Array.isArray(data.colleges) ? data.colleges : []
+        };
+        
+        console.log('[FEE CONFIG] Parsed filter options:', {
+          colleges: {
+            count: filterOptions.colleges.length,
+            values: filterOptions.colleges.slice(0, 10) // First 10 colleges
+          },
+          batches: {
+            count: filterOptions.batches.length,
+            values: filterOptions.batches.slice(0, 5)
+          },
+          courses: {
+            count: filterOptions.courses.length,
+            values: filterOptions.courses.slice(0, 5)
+          },
+          branches: {
+            count: filterOptions.branches.length,
+            values: filterOptions.branches.slice(0, 5)
+          }
+        });
+        
+        // If colleges array is empty, log detailed warning
+        if (filterOptions.colleges.length === 0) {
+          console.warn('[FEE CONFIG] ⚠️ Colleges array is empty!');
+          console.warn('[FEE CONFIG] Possible reasons:');
+          console.warn('  1. No students have college values set in the database');
+          console.warn('  2. User scope filtering is restricting access to all colleges');
+          console.warn('  3. All students have NULL or empty college values');
+          console.warn('  4. Backend query is not returning college data');
+          console.warn('[FEE CONFIG] Raw data.colleges value:', data.colleges);
+          console.warn('[FEE CONFIG] Will try to use main page filter options as fallback');
+        }
+        
+        setFeeConfigFilterOptions(filterOptions);
+      } else {
+        console.error('[FEE CONFIG] API response indicates failure:', {
+          success: filtersResponse.data?.success,
+          message: filtersResponse.data?.message,
+          data: filtersResponse.data
+        });
+        // Set empty arrays if request failed
+        setFeeConfigFilterOptions({
+          batches: [],
+          courses: [],
+          branches: [],
+          colleges: []
+        });
+      }
+    } catch (error) {
+      console.error('[FEE CONFIG] Error loading fee configuration filter options:', {
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      // Set empty arrays on error
+      setFeeConfigFilterOptions({
+        batches: [],
+        courses: [],
+        branches: [],
+        colleges: []
+      });
     }
   };
 
@@ -201,6 +312,8 @@ const FeeManagement = () => {
         params.append('offset', ((pageToUse - 1) * pageSize).toString());
       }
 
+      // Note: The /fees/students endpoint automatically filters for students with status = 'Regular' only
+      // This is handled by the backend in getStudentsWithFees controller
       const response = await api.get(`/fees/students?${params.toString()}`);
       if (!response.data?.success) {
         throw new Error(response.data?.message || 'Failed to fetch students');
@@ -305,6 +418,38 @@ const FeeManagement = () => {
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.studentName, filters.pinNumber]);
+
+  // Load year-semester columns when fee config filters change
+  useEffect(() => {
+    if (!feeConfigModalOpen) return;
+    
+    if (feeConfigFilters.college && feeConfigFilters.batch && feeConfigFilters.course) {
+      loadFeeConfigYearSemColumns(feeConfigFilters);
+    } else {
+      setFeeConfigYearSemColumns([]);
+      setFeeConfigMatchingCount(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeConfigModalOpen, feeConfigFilters.college, feeConfigFilters.batch, feeConfigFilters.course, feeConfigFilters.feeHeaderId]);
+
+  // Load cascading filter options when fee config filters change
+  useEffect(() => {
+    if (!feeConfigModalOpen) return;
+    
+    // When college is selected, load batches and courses for that college
+    if (feeConfigFilters.college && !feeConfigFilters.batch) {
+      loadFeeConfigCascadingFilters(feeConfigFilters);
+    }
+    // When batch is selected (and college), load courses for that college+batch
+    else if (feeConfigFilters.college && feeConfigFilters.batch && !feeConfigFilters.course) {
+      loadFeeConfigCascadingFilters(feeConfigFilters);
+    }
+    // When course is selected, load branches for that course
+    else if (feeConfigFilters.course) {
+      loadFeeConfigCascadingFilters(feeConfigFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeConfigModalOpen, feeConfigFilters.college, feeConfigFilters.batch, feeConfigFilters.course]);
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => {
@@ -515,7 +660,7 @@ const FeeManagement = () => {
   // Bulk save all fee changes
   const handleBulkSaveFees = async () => {
     if (feeChanges.size === 0) {
-      toast.info('No changes to save');
+      toast('No changes to save');
       return;
     }
 
@@ -569,7 +714,7 @@ const FeeManagement = () => {
     setFeeChanges(new Map());
     setEditingCell(null);
     setCellValue('');
-    toast.info('All pending changes cleared');
+    toast('All pending changes cleared');
   };
 
   // Open student fee details modal
@@ -616,7 +761,7 @@ const FeeManagement = () => {
   // Save cash payments
   const handleSaveCashPayments = async () => {
     if (paymentAmounts.size === 0) {
-      toast.info('No payments to save');
+      toast('No payments to save');
       return;
     }
 
@@ -766,6 +911,490 @@ const FeeManagement = () => {
     }
   };
 
+  // Fee Configuration handlers
+  const handleOpenFeeConfigModal = async () => {
+    setFeeConfigModalOpen(true);
+    // Reset filters and amounts
+    setFeeConfigFilters({
+      college: '',
+      batch: '',
+      course: '',
+      feeHeaderId: ''
+    });
+    setFeeConfigAmounts({});
+    setFeeConfigYearSemColumns([]);
+    setFeeConfigMatchingCount(null);
+    setFeeConfigProgress({ current: 0, total: 0, isProcessing: false });
+    
+    // Load independent filter options for fee configuration (not affected by main page filters)
+    await loadFeeConfigFilterOptions();
+    
+    // Fallback: If filter options are still empty, try using main page filter options
+    // This helps if the API call fails or returns empty
+    setTimeout(() => {
+      setFeeConfigFilterOptions(prev => {
+        const updated = { ...prev };
+        let changed = false;
+        
+        if (prev.colleges.length === 0 && filterOptions.colleges.length > 0) {
+          console.log('[FEE CONFIG] Using main page filter options as fallback for colleges');
+          updated.colleges = filterOptions.colleges;
+          changed = true;
+        }
+        
+        if (prev.batches.length === 0 && filterOptions.batches.length > 0) {
+          console.log('[FEE CONFIG] Using main page filter options as fallback for batches');
+          updated.batches = filterOptions.batches;
+          changed = true;
+        }
+        
+        if (prev.courses.length === 0 && filterOptions.courses.length > 0) {
+          console.log('[FEE CONFIG] Using main page filter options as fallback for courses');
+          updated.courses = filterOptions.courses;
+          changed = true;
+        }
+        
+        return changed ? updated : prev;
+      });
+    }, 500);
+    
+    // Ensure fee headers are loaded
+    if (feeHeaders.length === 0) {
+      await loadFeeHeaders();
+    }
+  };
+
+  const handleCloseFeeConfigModal = () => {
+    setFeeConfigModalOpen(false);
+    setFeeConfigFilters({
+      college: '',
+      batch: '',
+      course: '',
+      feeHeaderId: ''
+    });
+    setFeeConfigAmounts({});
+    setFeeConfigYearSemColumns([]);
+    setFeeConfigMatchingCount(null);
+    setFeeConfigProgress({ current: 0, total: 0, isProcessing: false });
+  };
+
+  // Load cascading filter options for fee configuration based on selected criteria
+  const loadFeeConfigCascadingFilters = async (currentFilters) => {
+    try {
+      const params = new URLSearchParams();
+      // Only include filters that are already selected (for cascading)
+      if (currentFilters.college) params.append('college', currentFilters.college);
+      if (currentFilters.batch) params.append('batch', currentFilters.batch);
+      if (currentFilters.course) params.append('course', currentFilters.course);
+      
+      console.log('[FEE CONFIG] Loading cascading filters with params:', params.toString());
+      
+      const filtersResponse = await api.get(`/fees/filters?${params.toString()}`);
+      
+      if (filtersResponse.data?.success) {
+        const data = filtersResponse.data.data || {};
+        
+        // Update only the relevant filter options based on what's selected
+        setFeeConfigFilterOptions(prev => {
+          const updated = { ...prev };
+          
+          // If college is selected, update batches and courses
+          if (currentFilters.college) {
+            if (Array.isArray(data.batches)) {
+              updated.batches = data.batches;
+            }
+            if (Array.isArray(data.courses)) {
+              updated.courses = data.courses;
+            }
+          }
+          
+          // If batch is selected (and college), update courses
+          if (currentFilters.college && currentFilters.batch) {
+            if (Array.isArray(data.courses)) {
+              updated.courses = data.courses;
+            }
+          }
+          
+          // If course is selected, update branches
+          if (currentFilters.course) {
+            if (Array.isArray(data.branches)) {
+              updated.branches = data.branches;
+            }
+          }
+          
+          console.log('[FEE CONFIG] Updated cascading filter options:', {
+            batches: updated.batches.length,
+            courses: updated.courses.length,
+            branches: updated.branches.length
+          });
+          
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error('[FEE CONFIG] Error loading cascading filters:', error);
+    }
+  };
+
+  const handleFeeConfigFilterChange = async (field, value) => {
+    // Update filters
+    setFeeConfigFilters(prev => {
+      const newFilters = {
+        ...prev,
+        [field]: value
+      };
+      
+      // Reset dependent filters when parent filter changes
+      if (field === 'college') {
+        newFilters.batch = '';
+        newFilters.course = '';
+      } else if (field === 'batch') {
+        newFilters.course = '';
+      } else if (field === 'course') {
+        // Course change doesn't reset anything, but we might want to reload branches
+      }
+      
+      // Load cascading filters based on new selections
+      if (field === 'college' && value) {
+        // College selected - load batches and courses for this college
+        loadFeeConfigCascadingFilters(newFilters);
+      } else if (field === 'batch' && value && newFilters.college) {
+        // Batch selected (and college is selected) - load courses for this college+batch
+        loadFeeConfigCascadingFilters(newFilters);
+      } else if (field === 'course' && value) {
+        // Course selected - load branches for this course
+        loadFeeConfigCascadingFilters(newFilters);
+      }
+      
+      return newFilters;
+    });
+  };
+
+  // Load year-semester columns for fee configuration based on filters
+  // Note: This endpoint automatically filters for students with status = 'Regular' only
+  const loadFeeConfigYearSemColumns = async (filters) => {
+    try {
+      const params = new URLSearchParams();
+      if (filters.college) params.append('college', filters.college);
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.feeHeaderId) params.append('feeHeaderId', filters.feeHeaderId);
+      params.append('limit', '1');
+      params.append('offset', '0');
+      
+      // This endpoint filters for Regular students only (handled by backend)
+      const response = await api.get(`/fees/students?${params.toString()}`);
+      if (response.data?.success) {
+        const data = response.data.data || {};
+        
+        // Update year-semester columns
+        if (data.yearSemColumns && data.yearSemColumns.length > 0) {
+          setFeeConfigYearSemColumns(data.yearSemColumns);
+          
+          // Load existing fee amounts from the first student if available
+          // This allows users to see previously configured amounts when selecting the same criteria
+          if (filters.feeHeaderId && data.students && data.students.length > 0) {
+            const sampleStudent = data.students[0];
+            const existingAmounts = {};
+            
+            data.yearSemColumns.forEach(col => {
+              const yearSemData = sampleStudent.yearSemFees?.[col.key];
+              const existingFee = yearSemData?.fees?.[parseInt(filters.feeHeaderId)];
+              if (existingFee && existingFee.amount > 0) {
+                existingAmounts[col.key] = existingFee.amount;
+              }
+            });
+            
+            // Only update if we found existing amounts and user hasn't manually entered values
+            // Check if all current amounts are empty/zero before loading existing
+            const hasUserInput = Object.values(feeConfigAmounts).some(amt => amt > 0);
+            
+            if (Object.keys(existingAmounts).length > 0 && !hasUserInput) {
+              // User hasn't entered anything yet, so load existing amounts
+              setFeeConfigAmounts(existingAmounts);
+            } else if (Object.keys(existingAmounts).length > 0) {
+              // User has some input, merge but don't overwrite non-zero values
+              setFeeConfigAmounts(prev => {
+                const merged = { ...prev };
+                Object.keys(existingAmounts).forEach(key => {
+                  // Only set if current value is empty/zero
+                  if (!merged[key] || merged[key] === 0 || merged[key] === '') {
+                    merged[key] = existingAmounts[key];
+                  }
+                });
+                return merged;
+              });
+            }
+          }
+        }
+        
+        // Get total count of matching students
+        if (data.totalStudents !== undefined) {
+          setFeeConfigMatchingCount(data.totalStudents);
+        } else {
+          // If totalStudents not in response, fetch count separately
+          const countParams = new URLSearchParams();
+          if (filters.college) countParams.append('college', filters.college);
+          if (filters.batch) countParams.append('batch', filters.batch);
+          if (filters.course) countParams.append('course', filters.course);
+          countParams.append('limit', '1');
+          countParams.append('offset', '0');
+          
+          const countResponse = await api.get(`/fees/students?${countParams.toString()}`);
+          if (countResponse.data?.success && countResponse.data.data?.totalStudents !== undefined) {
+            setFeeConfigMatchingCount(countResponse.data.data.totalStudents);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Could not load year-semester columns for fee configuration:', error);
+      setFeeConfigYearSemColumns([]);
+      setFeeConfigMatchingCount(null);
+    }
+  };
+
+  const handleFeeConfigAmountChange = (yearSemKey, amount) => {
+    setFeeConfigAmounts(prev => ({
+      ...prev,
+      [yearSemKey]: parseFloat(amount) || 0
+    }));
+  };
+
+  // Apply fees to all matching students
+  const handleApplyFeeConfiguration = async () => {
+    // Validate required fields
+    if (!feeConfigFilters.college || !feeConfigFilters.batch || !feeConfigFilters.course || !feeConfigFilters.feeHeaderId) {
+      toast.error('Please select College, Batch, Course, and Fee Header');
+      return;
+    }
+
+    // Check if at least one amount is entered
+    const hasAmounts = Object.values(feeConfigAmounts).some(amt => amt > 0);
+    if (!hasAmounts) {
+      toast.error('Please enter at least one fee amount');
+      return;
+    }
+
+    if (!window.confirm(`This will apply fees to all students matching:\nCollege: ${feeConfigFilters.college}\nBatch: ${feeConfigFilters.batch}\nCourse: ${feeConfigFilters.course}\n\nContinue?`)) {
+      return;
+    }
+
+    setFeeConfigLoading(true);
+    try {
+      // First, fetch all matching students
+      // Note: This endpoint automatically filters for students with status = 'Regular' only
+      // Use the same parameters that were used to get the student count
+      const params = new URLSearchParams();
+      params.append('college', feeConfigFilters.college);
+      params.append('batch', feeConfigFilters.batch);
+      params.append('course', feeConfigFilters.course);
+      // Include feeHeaderId to match the count query (even though it doesn't filter students)
+      if (feeConfigFilters.feeHeaderId) {
+        params.append('feeHeaderId', feeConfigFilters.feeHeaderId);
+      }
+      params.append('limit', '10000'); // Get all matching students
+      params.append('offset', '0');
+
+      // Backend filters for Regular students only
+      const studentsResponse = await api.get(`/fees/students?${params.toString()}`);
+      
+      if (!studentsResponse.data?.success) {
+        const errorMsg = studentsResponse.data?.message || 'Failed to fetch students';
+        console.error('Failed to fetch students:', {
+          error: errorMsg,
+          response: studentsResponse.data,
+          params: params.toString()
+        });
+        toast.error(`Failed to fetch students: ${errorMsg}`);
+        setFeeConfigLoading(false);
+        return;
+      }
+
+      const data = studentsResponse.data.data || {};
+      const matchingStudents = Array.isArray(data.students) ? data.students : [];
+      
+      if (matchingStudents.length === 0) {
+        // Provide more detailed error message
+        const errorDetails = `College: ${feeConfigFilters.college}, Batch: ${feeConfigFilters.batch}, Course: ${feeConfigFilters.course}`;
+        console.error('No students found with filters:', errorDetails, {
+          response: data,
+          totalStudents: data.totalStudents
+        });
+        toast.error(`No students found matching the selected criteria.\n\n${errorDetails}\n\nPlease verify the filters are correct.`);
+        setFeeConfigLoading(false);
+        return;
+      }
+
+      // Get year-semester columns from the response or use fee config columns
+      const yearSemCols = data.yearSemColumns || feeConfigYearSemColumns;
+      if (!yearSemCols || yearSemCols.length === 0) {
+        console.error('No year-semester columns available:', {
+          responseColumns: data.yearSemColumns,
+          feeConfigColumns: feeConfigYearSemColumns,
+          dataKeys: Object.keys(data)
+        });
+        toast.error('No year/semester data available. Please ensure filters are correctly selected and try again.');
+        setFeeConfigLoading(false);
+        return;
+      }
+
+      // Validate that we have students with valid IDs
+      const validStudents = matchingStudents.filter(s => s && s.id);
+      if (validStudents.length === 0) {
+        console.error('No valid students found (missing IDs):', {
+          totalStudents: matchingStudents.length,
+          sampleStudent: matchingStudents[0],
+          allStudents: matchingStudents
+        });
+        toast.error('No valid students found. Student data may be incomplete. Please check the console for details.');
+        setFeeConfigLoading(false);
+        return;
+      }
+
+      // Prepare fees for each student
+      let processedCount = 0;
+      const updatePromises = validStudents.map((student, index) => {
+        const fees = [];
+        
+        // For each year-semester column, create/update fee if amount is specified
+        yearSemCols.forEach(col => {
+          const amount = feeConfigAmounts[col.key] || 0;
+          if (amount > 0) {
+            // Get existing fee data if available
+            const yearSemData = student.yearSemFees?.[col.key];
+            const existingFee = yearSemData?.fees?.[parseInt(feeConfigFilters.feeHeaderId)] || {};
+            
+            fees.push({
+              feeHeaderId: parseInt(feeConfigFilters.feeHeaderId),
+              amount: amount,
+              paidAmount: existingFee.paidAmount || 0,
+              dueDate: existingFee.dueDate || null,
+              paymentDate: existingFee.paymentDate || null,
+              paymentStatus: existingFee.paymentStatus || 'pending',
+              remarks: existingFee.remarks || null,
+              year: col.year,
+              semester: col.semester
+            });
+          }
+        });
+
+        if (fees.length > 0) {
+          const studentIndex = index;
+          console.log(`[FEE CONFIG] Queuing update for student ${student.id} (${student.studentName || student.student_name}) with ${fees.length} fee(s)`);
+          return api.post(`/fees/students/${student.id}`, {
+            studentId: student.id,
+            fees: fees
+          }).then(result => {
+            // Update progress after each successful update
+            processedCount++;
+            console.log(`[FEE CONFIG] Successfully updated student ${student.id} (${processedCount}/${validStudents.length})`);
+            setFeeConfigProgress(prev => ({
+              ...prev,
+              current: processedCount
+            }));
+            return result;
+          }).catch(error => {
+            // Still update progress even on failure
+            processedCount++;
+            console.error(`[FEE CONFIG] Failed to update student ${student.id} (${processedCount}/${validStudents.length}):`, error);
+            setFeeConfigProgress(prev => ({
+              ...prev,
+              current: processedCount
+            }));
+            throw error;
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      // Filter out null promises
+      const validPromises = updatePromises.filter(p => p !== null);
+      
+      if (validPromises.length === 0) {
+        toast.error('No fees to apply. Please ensure at least one fee amount is greater than 0.');
+        setFeeConfigLoading(false);
+        setFeeConfigProgress({ current: 0, total: 0, isProcessing: false });
+        return;
+      }
+      
+      // Initialize progress tracking
+      const totalStudents = validPromises.length;
+      console.log(`[FEE CONFIG] Starting bulk fee update for ${totalStudents} students`);
+      console.log(`[FEE CONFIG] Configuration:`, {
+        college: feeConfigFilters.college,
+        batch: feeConfigFilters.batch,
+        course: feeConfigFilters.course,
+        feeHeaderId: feeConfigFilters.feeHeaderId,
+        amounts: feeConfigAmounts
+      });
+      
+      setFeeConfigProgress({
+        current: 0,
+        total: totalStudents,
+        isProcessing: true
+      });
+      
+      // Execute all fee updates with progress tracking
+      const results = await Promise.allSettled(validPromises);
+      
+      // Check for failures
+      const failures = results.filter(r => r.status === 'rejected');
+      const successCount = results.length - failures.length;
+      
+      console.log(`[FEE CONFIG] Bulk update completed:`, {
+        total: totalStudents,
+        successful: successCount,
+        failed: failures.length,
+        failures: failures.map(f => ({
+          reason: f.reason?.message || f.reason,
+          fullError: f.reason
+        }))
+      });
+      
+      // Reset progress after a short delay to show completion
+      setTimeout(() => {
+        setFeeConfigProgress({ current: 0, total: 0, isProcessing: false });
+      }, 2000);
+      
+      if (failures.length > 0) {
+        console.error('[FEE CONFIG] Some fee updates failed:', failures.map(f => ({
+          reason: f.reason?.message || f.reason,
+          fullError: f.reason
+        })));
+        toast.error(`Failed to apply fees to ${failures.length} student(s). ${successCount} student(s) updated successfully.`);
+      } else {
+        console.log(`[FEE CONFIG] All ${successCount} students updated successfully`);
+        toast.success(`Successfully applied fees to ${validStudents.length} student(s)`);
+      }
+      
+      // Close modal first
+      handleCloseFeeConfigModal();
+      
+      // Clear cache to ensure fresh data is loaded
+      studentsCache.current.clear();
+      
+      // Update main page filters to match fee configuration filters so users can see the updated students
+      // The useEffect hook will automatically reload students when filters change
+      setFilters({
+        college: feeConfigFilters.college || '',
+        batch: feeConfigFilters.batch || '',
+        course: feeConfigFilters.course || '',
+        branch: '', // Reset branch when course changes
+        feeHeaderId: feeConfigFilters.feeHeaderId || '',
+        studentName: '', // Clear search filters to show all matching students
+        pinNumber: ''
+      });
+      
+      // Reset to first page - useEffect will handle the reload
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Failed to apply fee configuration:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to apply fee configuration');
+    } finally {
+      setFeeConfigLoading(false);
+    }
+  };
+
   const renderPhoto = (student) => {
     if (student.studentPhoto) {
       const src = student.studentPhoto.startsWith('data:')
@@ -833,11 +1462,19 @@ const FeeManagement = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setFeeConfigModalOpen(true)}
+            className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          >
+            <Settings size={16} />
+            Fee Configuration
+          </button>
+          <button
+            type="button"
             onClick={handleOpenConfigModal}
             className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
           >
             <Settings size={16} />
-            Configure
+            Fee Header Configuration
           </button>
           <button
             type="button"
@@ -1601,6 +2238,327 @@ const FeeManagement = () => {
         document.body
       )}
 
+      {/* Fee Configuration Progress Pop-up */}
+      {isMounted && feeConfigProgress.isProcessing && feeConfigProgress.total > 0 && typeof document !== 'undefined' && document.body && createPortal(
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            // Don't allow closing while processing
+            e.stopPropagation();
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-white shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Updating Student Fees</h3>
+              {feeConfigProgress.current === feeConfigProgress.total && (
+                <button
+                  onClick={() => setFeeConfigProgress({ current: 0, total: 0, isProcessing: false })}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="relative w-20 h-20 flex-shrink-0">
+                  <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 64 64">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      className="text-blue-200"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      strokeDasharray={`${2 * Math.PI * 28}`}
+                      strokeDashoffset={`${2 * Math.PI * 28 * (1 - feeConfigProgress.current / feeConfigProgress.total)}`}
+                      className="text-blue-600 transition-all duration-300"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">
+                      {feeConfigProgress.current}/{feeConfigProgress.total}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <RefreshCw size={18} className="animate-spin text-blue-600" />
+                    <p className="text-base font-semibold text-gray-900">
+                      Processing student fees...
+                    </p>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-3 mb-2">
+                    <div
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${(feeConfigProgress.current / feeConfigProgress.total) * 100}%`
+                      }}
+                    />
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {feeConfigProgress.current} of {feeConfigProgress.total} students updated
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {Math.round((feeConfigProgress.current / feeConfigProgress.total) * 100)}% complete
+                  </p>
+                </div>
+              </div>
+              
+              {feeConfigProgress.current === feeConfigProgress.total && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <AlertCircle size={16} />
+                    <p className="text-sm font-medium">All students processed successfully!</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Fee Configuration Modal */}
+      {isMounted && feeConfigModalOpen && typeof document !== 'undefined' && document.body && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseFeeConfigModal();
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-4xl rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">Fee Configuration</h3>
+              <button
+                onClick={handleCloseFeeConfigModal}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Filters Section */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 className="font-semibold text-gray-900">Select Criteria</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">College/Campus *</label>
+                    <select
+                      value={feeConfigFilters.college}
+                      onChange={(e) => handleFeeConfigFilterChange('college', e.target.value)}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled={feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length === 0}
+                    >
+                      <option value="">
+                        {feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length === 0
+                          ? 'Loading colleges...' 
+                          : 'Select College/Campus'}
+                      </option>
+                      {/* Use fee config options first, fallback to main page options */}
+                      {(feeConfigFilterOptions.colleges.length > 0 
+                        ? feeConfigFilterOptions.colleges 
+                        : filterOptions.colleges
+                      ).map((college) => (
+                        <option key={college} value={college}>
+                          {college}
+                        </option>
+                      ))}
+                    </select>
+                    {feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        No colleges available. Please check your data or contact administrator.
+                      </p>
+                    )}
+                    {feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length > 0 && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Using main page filter options (fee config options not loaded)
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Batch *</label>
+                    <select
+                      value={feeConfigFilters.batch}
+                      onChange={(e) => handleFeeConfigFilterChange('batch', e.target.value)}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled={!feeConfigFilters.college || (feeConfigFilterOptions.batches.length === 0 && filterOptions.batches.length === 0)}
+                    >
+                      <option value="">
+                        {!feeConfigFilters.college 
+                          ? 'Select College first' 
+                          : (feeConfigFilterOptions.batches.length === 0 && filterOptions.batches.length === 0)
+                            ? 'Loading batches...'
+                            : 'Select Batch'}
+                      </option>
+                      {/* Use fee config options first, fallback to main page options */}
+                      {(feeConfigFilterOptions.batches.length > 0 
+                        ? feeConfigFilterOptions.batches 
+                        : filterOptions.batches
+                      ).map((batch) => (
+                        <option key={batch} value={batch}>
+                          {batch}
+                        </option>
+                      ))}
+                    </select>
+                    {!feeConfigFilters.college && (
+                      <p className="text-xs text-gray-500 mt-1">Please select College first</p>
+                    )}
+                    {feeConfigFilters.college && feeConfigFilterOptions.batches.length === 0 && filterOptions.batches.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">No batches available for selected college</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Course *</label>
+                    <select
+                      value={feeConfigFilters.course}
+                      onChange={(e) => handleFeeConfigFilterChange('course', e.target.value)}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled={!feeConfigFilters.college || !feeConfigFilters.batch || (feeConfigFilterOptions.courses.length === 0 && filterOptions.courses.length === 0)}
+                    >
+                      <option value="">
+                        {!feeConfigFilters.college || !feeConfigFilters.batch
+                          ? 'Select College and Batch first' 
+                          : (feeConfigFilterOptions.courses.length === 0 && filterOptions.courses.length === 0)
+                            ? 'Loading courses...'
+                            : 'Select Course'}
+                      </option>
+                      {/* Use fee config options first, fallback to main page options */}
+                      {(feeConfigFilterOptions.courses.length > 0 
+                        ? feeConfigFilterOptions.courses 
+                        : filterOptions.courses
+                      ).map((course) => (
+                        <option key={course} value={course}>
+                          {course}
+                        </option>
+                      ))}
+                    </select>
+                    {(!feeConfigFilters.college || !feeConfigFilters.batch) && (
+                      <p className="text-xs text-gray-500 mt-1">Please select College and Batch first</p>
+                    )}
+                    {feeConfigFilters.college && feeConfigFilters.batch && feeConfigFilterOptions.courses.length === 0 && filterOptions.courses.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">No courses available for selected criteria</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fee Header *</label>
+                    <select
+                      value={feeConfigFilters.feeHeaderId}
+                      onChange={(e) => handleFeeConfigFilterChange('feeHeaderId', e.target.value)}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Select Fee Header</option>
+                      {feeHeaders
+                        .filter(h => h.is_active !== false && h.is_active !== 0 && h.is_active !== '0')
+                        .map((header) => (
+                          <option key={header.id} value={String(header.id)}>
+                            {header.header_name || header.headerName || `Header ${header.id}`}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Matching Students Count */}
+              {feeConfigMatchingCount !== null && (
+                <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={16} className="text-blue-600" />
+                    <p className="text-sm font-medium text-blue-900">
+                      {feeConfigMatchingCount} student(s) will be affected by this configuration
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Year/Semester Amounts Section */}
+              {feeConfigYearSemColumns.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                  <h4 className="font-semibold text-gray-900">Enter Fee Amounts for All Semesters/Years</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {feeConfigYearSemColumns.map((col) => (
+                      <div key={col.key}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {col.label}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={feeConfigAmounts[col.key] || ''}
+                          onChange={(e) => handleFeeConfigAmountChange(col.key, e.target.value)}
+                          placeholder="0.00"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Enter amounts for the semesters/years you want to configure. Leave empty to skip.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <AlertCircle size={16} />
+                    <p className="text-sm">Please select College, Batch, and Course first to load year/semester structure.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={handleCloseFeeConfigModal}
+                  disabled={feeConfigLoading || feeConfigProgress.isProcessing}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplyFeeConfiguration}
+                  disabled={feeConfigLoading || feeConfigProgress.isProcessing}
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-md hover:shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                >
+                  {feeConfigLoading || feeConfigProgress.isProcessing ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      Apply to All Matching Students
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Fee Headers Configuration Modal */}
       {isMounted && configModalOpen && typeof document !== 'undefined' && document.body && createPortal(
         <div
@@ -1616,7 +2574,7 @@ const FeeManagement = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">Configure Fee Headers</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Fee Header Configuration</h3>
               <button
                 onClick={handleCloseConfigModal}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
