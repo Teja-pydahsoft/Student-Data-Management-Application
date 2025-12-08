@@ -937,19 +937,16 @@ const FeeManagement = () => {
         let changed = false;
         
         if (prev.colleges.length === 0 && filterOptions.colleges.length > 0) {
-          console.log('[FEE CONFIG] Using main page filter options as fallback for colleges');
           updated.colleges = filterOptions.colleges;
           changed = true;
         }
         
         if (prev.batches.length === 0 && filterOptions.batches.length > 0) {
-          console.log('[FEE CONFIG] Using main page filter options as fallback for batches');
           updated.batches = filterOptions.batches;
           changed = true;
         }
         
         if (prev.courses.length === 0 && filterOptions.courses.length > 0) {
-          console.log('[FEE CONFIG] Using main page filter options as fallback for courses');
           updated.courses = filterOptions.courses;
           changed = true;
         }
@@ -2393,11 +2390,6 @@ const FeeManagement = () => {
                     {feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length === 0 && (
                       <p className="text-xs text-gray-500 mt-1">
                         No colleges available. Please check your data or contact administrator.
-                      </p>
-                    )}
-                    {feeConfigFilterOptions.colleges.length === 0 && filterOptions.colleges.length > 0 && (
-                      <p className="text-xs text-blue-600 mt-1">
-                        Using main page filter options (fee config options not loaded)
                       </p>
                     )}
                   </div>
