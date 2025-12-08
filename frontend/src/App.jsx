@@ -14,6 +14,7 @@ import AddStudent from './pages/AddStudent';
 import Settings from './pages/Settings';
 import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
+import FeeManagement from './pages/FeeManagement';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
@@ -79,6 +80,7 @@ function App() {
           <Route path="promotions" element={<StudentPromotions />} />
           <Route path="courses" element={<Settings />} />
           <Route path="attendance" element={<Attendance />} />
+          <Route path="fees" element={<FeeManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />
         </Route>

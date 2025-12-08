@@ -42,6 +42,7 @@ const MODULES = {
   STUDENT_MANAGEMENT: 'student_management',
   PROMOTIONS: 'promotions',
   ATTENDANCE: 'attendance',
+  FEE_MANAGEMENT: 'fee_management',
   SETTINGS: 'settings',
   USER_MANAGEMENT: 'user_management',
   REPORTS: 'reports'
@@ -92,6 +93,13 @@ const MODULE_PERMISSIONS = {
       download: 'Download Reports'
     }
   },
+  [MODULES.FEE_MANAGEMENT]: {
+    permissions: ['view', 'write'],
+    labels: {
+      view: 'View Fees',
+      write: 'Manage Fees'
+    }
+  },
   [MODULES.SETTINGS]: {
     permissions: ['view', 'edit'],
     labels: {
@@ -122,6 +130,7 @@ const MODULE_LABELS = {
   [MODULES.STUDENT_MANAGEMENT]: 'Student Management',
   [MODULES.PROMOTIONS]: 'Promotions',
   [MODULES.ATTENDANCE]: 'Attendance',
+  [MODULES.FEE_MANAGEMENT]: 'Fee Management',
   [MODULES.SETTINGS]: 'Settings',
   [MODULES.USER_MANAGEMENT]: 'User Management',
   [MODULES.REPORTS]: 'Reports'

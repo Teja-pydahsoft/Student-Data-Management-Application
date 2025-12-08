@@ -14,7 +14,8 @@ import {
   BarChart3,
   TrendingUp,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  DollarSign
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { 
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },
+  { path: '/fees', icon: DollarSign, label: 'Fee Management', permission: FRONTEND_MODULES.FEES },
   { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
   { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS }
@@ -228,7 +230,7 @@ const AdminLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const hasSubItems = item.subItems && item.subItems.length > 0;
