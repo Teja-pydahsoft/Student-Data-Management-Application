@@ -12,6 +12,8 @@ async function updateRoleEnum() {
         'college_ao', 
         'college_attender', 
         'branch_hod',
+        'office_assistant',
+        'cashier',
         'campus_principal',
         'campus_ao', 
         'course_principal', 
@@ -22,7 +24,7 @@ async function updateRoleEnum() {
     `);
     
     console.log('✅ Database role column updated successfully!');
-    console.log('New roles available: college_principal, college_ao, college_attender, branch_hod');
+    console.log('New roles available: college_principal, college_ao, college_attender, branch_hod, office_assistant, cashier');
   } catch (error) {
     console.error('❌ Error updating role column:', error.message);
   } finally {

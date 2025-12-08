@@ -9,7 +9,9 @@ const USER_ROLES = {
   COLLEGE_PRINCIPAL: 'college_principal',
   COLLEGE_AO: 'college_ao',
   COLLEGE_ATTENDER: 'college_attender',
-  BRANCH_HOD: 'branch_hod'
+  BRANCH_HOD: 'branch_hod',
+  OFFICE_ASSISTANT: 'office_assistant',
+  CASHIER: 'cashier'
 };
 
 // Role Hierarchy (who can create whom)
@@ -18,21 +20,29 @@ const ROLE_HIERARCHY = {
     USER_ROLES.COLLEGE_PRINCIPAL,
     USER_ROLES.COLLEGE_AO,
     USER_ROLES.COLLEGE_ATTENDER,
-    USER_ROLES.BRANCH_HOD
+    USER_ROLES.BRANCH_HOD,
+    USER_ROLES.OFFICE_ASSISTANT,
+    USER_ROLES.CASHIER
   ],
   [USER_ROLES.COLLEGE_PRINCIPAL]: [
     USER_ROLES.COLLEGE_AO,
     USER_ROLES.COLLEGE_ATTENDER,
-    USER_ROLES.BRANCH_HOD
+    USER_ROLES.BRANCH_HOD,
+    USER_ROLES.OFFICE_ASSISTANT,
+    USER_ROLES.CASHIER
   ],
   [USER_ROLES.COLLEGE_AO]: [
     USER_ROLES.COLLEGE_ATTENDER,
-    USER_ROLES.BRANCH_HOD
+    USER_ROLES.BRANCH_HOD,
+    USER_ROLES.OFFICE_ASSISTANT,
+    USER_ROLES.CASHIER
   ],
   [USER_ROLES.BRANCH_HOD]: [
     USER_ROLES.COLLEGE_ATTENDER
   ],
-  [USER_ROLES.COLLEGE_ATTENDER]: []
+  [USER_ROLES.COLLEGE_ATTENDER]: [],
+  [USER_ROLES.OFFICE_ASSISTANT]: [],
+  [USER_ROLES.CASHIER]: []
 };
 
 // Available Modules
@@ -220,6 +230,26 @@ const ROLE_REQUIREMENTS = {
     supportsMultiBranch: true,
     supportsAllCourses: false,
     supportsAllBranches: false
+  },
+  [USER_ROLES.OFFICE_ASSISTANT]: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  [USER_ROLES.CASHIER]: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
   }
 };
 
@@ -328,7 +358,9 @@ const ROLE_LABELS = {
   [USER_ROLES.COLLEGE_PRINCIPAL]: 'College Principal',
   [USER_ROLES.COLLEGE_AO]: 'College AO',
   [USER_ROLES.COLLEGE_ATTENDER]: 'College Attender',
-  [USER_ROLES.BRANCH_HOD]: 'Branch HOD'
+  [USER_ROLES.BRANCH_HOD]: 'Branch HOD',
+  [USER_ROLES.OFFICE_ASSISTANT]: 'Office Assistant',
+  [USER_ROLES.CASHIER]: 'Cashier'
 };
 
 module.exports = {

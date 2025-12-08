@@ -257,6 +257,8 @@ export const USER_ROLES = {
   COLLEGE_AO: 'college_ao',
   COLLEGE_ATTENDER: 'college_attender',
   BRANCH_HOD: 'branch_hod',
+  OFFICE_ASSISTANT: 'office_assistant',
+  CASHIER: 'cashier',
   STAFF: 'staff' // Legacy staff role
 };
 
@@ -268,6 +270,8 @@ export const ROLE_LABELS = {
   [USER_ROLES.COLLEGE_AO]: 'College AO',
   [USER_ROLES.COLLEGE_ATTENDER]: 'College Attender',
   [USER_ROLES.BRANCH_HOD]: 'Branch HOD',
+  [USER_ROLES.OFFICE_ASSISTANT]: 'Office Assistant',
+  [USER_ROLES.CASHIER]: 'Cashier',
   [USER_ROLES.STAFF]: 'Staff'
 };
 
@@ -279,6 +283,8 @@ export const ROLE_COLORS = {
   [USER_ROLES.COLLEGE_AO]: 'bg-sky-50 text-sky-700 border-sky-200',
   [USER_ROLES.COLLEGE_ATTENDER]: 'bg-slate-100 text-slate-700 border-slate-200',
   [USER_ROLES.BRANCH_HOD]: 'bg-amber-50 text-amber-700 border-amber-200',
+  [USER_ROLES.OFFICE_ASSISTANT]: 'bg-purple-50 text-purple-700 border-purple-200',
+  [USER_ROLES.CASHIER]: 'bg-green-50 text-green-700 border-green-200',
   [USER_ROLES.STAFF]: 'bg-slate-100 text-slate-700 border-slate-200'
 };
 

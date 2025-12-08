@@ -40,6 +40,8 @@ const ROLE_AVATAR_COLORS = {
   college_ao: 'from-sky-400 to-sky-600',
   college_attender: 'from-slate-400 to-slate-600',
   branch_hod: 'from-amber-400 to-amber-600',
+  office_assistant: 'from-purple-400 to-purple-600',
+  cashier: 'from-green-400 to-green-600',
   super_admin: 'from-rose-400 to-rose-600'
 };
 
@@ -47,15 +49,19 @@ const ROLE_DESCRIPTIONS = {
   college_principal: 'Manages overall college operations and has oversight of all courses and branches',
   college_ao: 'Administrative officer responsible for college-level operations and record management',
   college_attender: 'Basic access for attendance tracking and daily record management',
-  branch_hod: 'Head of Department with control over specific branches and their operations'
+  branch_hod: 'Head of Department with control over specific branches and their operations',
+  office_assistant: 'Assists with office operations, document management, and administrative tasks',
+  cashier: 'Handles fee collection, payment processing, and financial transactions'
 };
 
-// Fixed roles list - only these 4 roles
+// Fixed roles list
 const FIXED_ROLES = [
   { value: 'college_principal', label: 'College Principal' },
   { value: 'college_ao', label: 'College AO' },
   { value: 'college_attender', label: 'College Attender' },
-  { value: 'branch_hod', label: 'Branch HOD' }
+  { value: 'branch_hod', label: 'Branch HOD' },
+  { value: 'office_assistant', label: 'Office Assistant' },
+  { value: 'cashier', label: 'Cashier' }
 ];
 
 const initialFormState = {
@@ -1009,112 +1015,112 @@ const UserManagement = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
+      <div className="flex-1 overflow-hidden p-2 sm:p-3 lg:p-4 flex flex-col">
         {/* Create User Form */}
         {activeTab === 'create' && (
-          <form onSubmit={handleCreateUser}>
+          <form onSubmit={handleCreateUser} className="h-full flex flex-col">
             {/* Step Headers */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
-              <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-3 flex-shrink-0">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
                   1
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">User Information</h3>
-                  <p className="text-xs text-slate-500">Basic details & credentials</p>
+                  <h3 className="font-bold text-slate-800 text-sm">User Information</h3>
+                  <p className="text-[10px] text-slate-500">Basic details & credentials</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm">
+                <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
                   2
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">Role Selection</h3>
-                  <p className="text-xs text-slate-500">Choose role</p>
+                  <h3 className="font-bold text-slate-800 text-sm">Role Selection</h3>
+                  <p className="text-[10px] text-slate-500">Choose role</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md">
                   3
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">Access Scope</h3>
-                  <p className="text-xs text-slate-500">Set permissions</p>
+                  <h3 className="font-bold text-slate-800 text-sm">Access Scope</h3>
+                  <p className="text-[10px] text-slate-500">Set permissions</p>
                 </div>
               </div>
             </div>
 
             {/* All 3 Sections Side by Side */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3" style={{ height: 'calc(100vh - 280px)', maxHeight: 'calc(100vh - 280px)' }}>
               {/* Section 1: User Information */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <User size={20} className="text-white" />
-                    <h2 className="text-base font-bold text-white">User Information</h2>
+                    <User size={16} className="text-white" />
+                    <h2 className="text-sm font-bold text-white">User Information</h2>
                   </div>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-3 space-y-2.5 flex-1 overflow-y-auto">
                   <div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
-                      <User size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mb-1">
+                      <User size={12} className="text-blue-500" />
                       Full Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={form.name}
                       onChange={(e) => handleFormChange('name', e.target.value)}
-                      className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl border border-slate-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all touch-manipulation min-h-[44px]"
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all touch-manipulation min-h-[36px]"
                       placeholder="Enter full name"
                       required
                     />
                   </div>
                   <div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
-                      <Mail size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mb-1">
+                      <Mail size={12} className="text-blue-500" />
                       Email Address <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(e) => handleFormChange('email', e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[36px]"
                       placeholder="email@example.com"
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
-                        <AtSign size={14} className="text-blue-500" />
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mb-1">
+                        <AtSign size={12} className="text-blue-500" />
                         Username <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={form.username}
                         onChange={(e) => handleFormChange('username', e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[36px]"
                         placeholder="username"
                         required
                       />
                     </div>
                     <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
-                        <Phone size={14} className="text-blue-500" />
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mb-1">
+                        <Phone size={12} className="text-blue-500" />
                         Phone
                       </label>
                       <input
                         type="tel"
                         value={form.phone}
                         onChange={(e) => handleFormChange('phone', e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[36px]"
                         placeholder="+91..."
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 mb-1.5">
-                      <Lock size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 mb-1">
+                      <Lock size={12} className="text-blue-500" />
                       Password <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
@@ -1122,7 +1128,7 @@ const UserManagement = () => {
                         type={showPassword ? 'text' : 'password'}
                         value={form.password}
                         onChange={(e) => handleFormChange('password', e.target.value)}
-                        className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                        className="w-full px-2.5 py-2 pr-8 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all min-h-[36px]"
                         placeholder="Enter password (min 6 chars)"
                         required
                         minLength={6}
@@ -1130,10 +1136,10 @@ const UserManagement = () => {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 active:text-slate-700 touch-manipulation p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 active:text-slate-700 touch-manipulation p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
                         aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                   </div>
@@ -1141,38 +1147,38 @@ const UserManagement = () => {
               </div>
 
               {/* Section 2: Role Selection */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-4">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col">
+                <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-2 flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck size={20} className="text-white" />
-                    <h2 className="text-base font-bold text-white">Role Selection</h2>
+                    <ShieldCheck size={16} className="text-white" />
+                    <h2 className="text-sm font-bold text-white">Role Selection</h2>
                   </div>
                 </div>
-                <div className="p-5 space-y-3">
+                <div className="p-3 space-y-2 flex-1 overflow-y-auto">
                   {FIXED_ROLES.map(role => {
                     const isSelected = form.role === role.value;
                     return (
                       <div 
                         key={role.value}
                         onClick={() => handleFormChange('role', role.value)}
-                        className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all border-2 ${
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border-2 ${
                           isSelected 
                             ? `${ROLE_COLORS[role.value]} border-current` 
                             : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm`}>
-                          <ShieldCheck size={18} className="text-white" />
+                        <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                          <ShieldCheck size={14} className="text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-sm text-slate-800">{role.label}</h4>
-                          <p className="text-[11px] text-slate-500 line-clamp-1">
+                          <h4 className="font-bold text-xs text-slate-800">{role.label}</h4>
+                          <p className="text-[10px] text-slate-500 line-clamp-1">
                             {ROLE_DESCRIPTIONS[role.value]}
                           </p>
                         </div>
                         {isSelected && (
-                          <div className="w-5 h-5 bg-current rounded-full flex items-center justify-center flex-shrink-0">
-                            <Check size={12} className="text-white" />
+                          <div className="w-4 h-4 bg-current rounded-full flex items-center justify-center flex-shrink-0">
+                            <Check size={10} className="text-white" />
                           </div>
                         )}
                       </div>
@@ -1182,40 +1188,40 @@ const UserManagement = () => {
               </div>
 
               {/* Section 3: Access Scope */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-4">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden flex flex-col">
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-2 flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <Layers size={20} className="text-white" />
-                    <h2 className="text-base font-bold text-white">Access Scope</h2>
+                    <Layers size={16} className="text-white" />
+                    <h2 className="text-sm font-bold text-white">Access Scope</h2>
                   </div>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-3 space-y-2.5 flex-1 overflow-y-auto">
                   {/* Colleges Selection */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                        <Building2 size={14} className="text-blue-500" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                        <Building2 size={12} className="text-blue-500" />
                         Colleges <span className="text-red-500">*</span>
                       </label>
-                      <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="text-[9px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                         {form.collegeIds.length} selected
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowCollegeModal(true)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all group text-left"
+                      className="w-full flex items-center gap-2 p-2 rounded-lg border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all group text-left"
                     >
-                      <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100">
-                        <Building2 size={16} className="text-blue-500" />
+                      <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 flex-shrink-0">
+                        <Building2 size={14} className="text-blue-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         {form.collegeIds.length > 0 ? (
-                          <p className="font-medium text-slate-700 text-sm truncate">
+                          <p className="font-medium text-slate-700 text-xs truncate">
                             {getSelectedNames(colleges, form.collegeIds).join(', ')}
                           </p>
                         ) : (
-                          <p className="text-slate-400 text-sm">Click to select colleges</p>
+                          <p className="text-slate-400 text-xs">Click to select colleges</p>
                         )}
                       </div>
                     </button>
@@ -1224,12 +1230,12 @@ const UserManagement = () => {
                   {/* Courses Selection */}
                   {form.collegeIds.length > 0 && (
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                          <GraduationCap size={14} className="text-emerald-500" />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                          <GraduationCap size={12} className="text-emerald-500" />
                           Courses
                         </label>
-                        <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                        <label className="flex items-center gap-1.5 text-[9px] cursor-pointer">
                           <input
                             type="checkbox"
                             checked={form.allCourses}
@@ -1250,25 +1256,25 @@ const UserManagement = () => {
                         <button
                           type="button"
                           onClick={() => setShowCourseModal(true)}
-                          className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all group text-left"
+                          className="w-full flex items-center gap-2 p-2 rounded-lg border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all group text-left"
                         >
-                          <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center group-hover:bg-emerald-100">
-                            <GraduationCap size={16} className="text-emerald-500" />
+                          <div className="w-6 h-6 bg-emerald-50 rounded-lg flex items-center justify-center group-hover:bg-emerald-100 flex-shrink-0">
+                            <GraduationCap size={14} className="text-emerald-500" />
                           </div>
                           <div className="flex-1 min-w-0">
                             {form.courseIds.length > 0 ? (
-                              <p className="font-medium text-slate-700 text-sm truncate">
+                              <p className="font-medium text-slate-700 text-xs truncate">
                                 {getSelectedNames(courses, form.courseIds).join(', ')}
                               </p>
                             ) : (
-                              <p className="text-slate-400 text-sm">Click to select courses</p>
+                              <p className="text-slate-400 text-xs">Click to select courses</p>
                             )}
                           </div>
                         </button>
                       ) : (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
-                          <CheckCircle2 size={16} className="text-emerald-500" />
-                          <span className="text-sm font-medium text-emerald-700">All courses selected</span>
+                        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                          <CheckCircle2 size={12} className="text-emerald-500" />
+                          <span className="text-xs font-medium text-emerald-700">All courses selected</span>
                         </div>
                       )}
                     </div>
@@ -1277,9 +1283,9 @@ const UserManagement = () => {
                   {/* Branches Selection */}
                   {(form.courseIds.length > 0 && !form.allCourses) && (
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                          <BookOpen size={14} className="text-orange-500" />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                          <BookOpen size={12} className="text-orange-500" />
                           Branches {needsBranchSelection && <span className="text-red-500">*</span>}
                         </label>
                         <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
@@ -1299,25 +1305,25 @@ const UserManagement = () => {
                         <button
                           type="button"
                           onClick={() => setShowBranchModal(true)}
-                          className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-400 hover:bg-orange-50/50 transition-all group text-left"
+                          className="w-full flex items-center gap-2 p-2.5 rounded-lg border-2 border-dashed border-slate-300 hover:border-orange-400 hover:bg-orange-50/50 transition-all group text-left"
                         >
-                          <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center group-hover:bg-orange-100">
-                            <BookOpen size={16} className="text-orange-500" />
+                          <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center group-hover:bg-orange-100 flex-shrink-0">
+                            <BookOpen size={14} className="text-orange-500" />
                           </div>
                           <div className="flex-1 min-w-0">
                             {form.branchIds.length > 0 ? (
-                              <p className="font-medium text-slate-700 text-sm truncate">
+                              <p className="font-medium text-slate-700 text-xs truncate">
                                 {getSelectedNames(branches, form.branchIds, 'displayName').join(', ')}
                               </p>
                             ) : (
-                              <p className="text-slate-400 text-sm">Click to select branches</p>
+                              <p className="text-slate-400 text-xs">Click to select branches</p>
                             )}
                           </div>
                         </button>
                       ) : (
-                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-center gap-2">
-                          <CheckCircle2 size={16} className="text-orange-500" />
-                          <span className="text-sm font-medium text-orange-700">All branches selected</span>
+                        <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-2">
+                          <CheckCircle2 size={14} className="text-orange-500" />
+                          <span className="text-xs font-medium text-orange-700">All branches selected</span>
                         </div>
                       )}
                     </div>
@@ -1334,7 +1340,7 @@ const UserManagement = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 mt-4 sm:mt-6">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 mt-3 sm:mt-4 flex-shrink-0">
               <button
                 type="button"
                 onClick={resetForm}
@@ -1851,9 +1857,9 @@ const UserManagement = () => {
                   {/* Courses Selection */}
                   {editForm.collegeIds.length > 0 && (
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                          <GraduationCap size={14} className="text-emerald-500" />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                          <GraduationCap size={12} className="text-emerald-500" />
                           Courses
                         </label>
                         <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
