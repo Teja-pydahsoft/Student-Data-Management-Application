@@ -599,6 +599,8 @@ exports.getStudentsWithFees = async (req, res) => {
           sf.payment_date,
           sf.payment_status,
           sf.remarks,
+          sf.year,
+          sf.semester,
           fh.header_name,
           s.current_year,
           s.current_semester
@@ -616,7 +618,7 @@ exports.getStudentsWithFees = async (req, res) => {
         feeParams.push(parsedFeeHeaderId);
       }
       
-      feeQuery += ' ORDER BY sf.student_id, s.current_year, s.current_semester';
+      feeQuery += ' ORDER BY sf.student_id, sf.year, sf.semester';
       
       const [feeRows] = await masterPool.query(feeQuery, feeParams);
       feeRecords = feeRows;
@@ -628,7 +630,10 @@ exports.getStudentsWithFees = async (req, res) => {
       if (!feesByStudent[fee.student_id]) {
         feesByStudent[fee.student_id] = {};
       }
-      const yearSemKey = `Y${fee.current_year}_S${fee.current_semester}`;
+      // Use the year and semester from the fee record (stored in DB), not student's current year/semester
+      const feeYear = fee.year || fee.current_year;
+      const feeSemester = fee.semester || fee.current_semester;
+      const yearSemKey = `Y${feeYear}_S${feeSemester}`;
       if (!feesByStudent[fee.student_id][yearSemKey]) {
         feesByStudent[fee.student_id][yearSemKey] = {};
       }
@@ -642,8 +647,8 @@ exports.getStudentsWithFees = async (req, res) => {
         paymentDate: fee.payment_date,
         paymentStatus: fee.payment_status,
         remarks: fee.remarks,
-        year: fee.current_year,
-        semester: fee.current_semester
+        year: feeYear,
+        semester: feeSemester
       };
     });
 
@@ -936,8 +941,8 @@ exports.updateStudentFees = async (req, res) => {
       }
 
       const student = studentRows[0];
-      const feeYear = year || student.current_year;
-      const feeSemester = semester || student.current_semester;
+      // Use the year and semester from the fee object, or fall back to student's current year/semester
+      // But prefer the explicit year/semester from the fee object
 
       // Process each fee
       for (const fee of fees) {
@@ -957,13 +962,14 @@ exports.updateStudentFees = async (req, res) => {
         const paidAmountValue = parseFloat(paidAmount) || 0;
         const status = paymentStatus || (paidAmountValue >= amountValue ? 'paid' : (paidAmountValue > 0 ? 'partial' : 'pending'));
 
+        // Get year and semester from fee object or use student's current year/semester
+        const feeYear = fee.year || year || student.current_year;
+        const feeSemester = fee.semester || semester || student.current_semester;
+
         // Check if fee record exists for this student, header, year, and semester
-        // Note: Since student_fees table doesn't have year/semester columns yet,
-        // we'll use the student's current year/semester for now
-        // For a complete solution, we'd need to add year/semester to student_fees table
         const [existingRows] = await connection.query(
-          'SELECT id FROM student_fees WHERE student_id = ? AND fee_header_id = ?',
-          [studentId, feeHeaderId]
+          'SELECT id FROM student_fees WHERE student_id = ? AND fee_header_id = ? AND year = ? AND semester = ?',
+          [studentId, feeHeaderId, feeYear, feeSemester]
         );
 
         if (existingRows.length > 0) {
@@ -971,7 +977,7 @@ exports.updateStudentFees = async (req, res) => {
           await connection.query(
             `UPDATE student_fees 
              SET amount = ?, paid_amount = ?, due_date = ?, payment_date = ?, payment_status = ?, remarks = ?, updated_by = ?
-             WHERE student_id = ? AND fee_header_id = ?`,
+             WHERE student_id = ? AND fee_header_id = ? AND year = ? AND semester = ?`,
             [
               amountValue,
               paidAmountValue,
@@ -981,15 +987,17 @@ exports.updateStudentFees = async (req, res) => {
               remarks || null,
               userId,
               studentId,
-              feeHeaderId
+              feeHeaderId,
+              feeYear,
+              feeSemester
             ]
           );
         } else {
           // Insert new record
           await connection.query(
             `INSERT INTO student_fees 
-             (student_id, fee_header_id, amount, paid_amount, due_date, payment_date, payment_status, remarks, created_by, updated_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (student_id, fee_header_id, amount, paid_amount, due_date, payment_date, payment_status, remarks, year, semester, created_by, updated_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               studentId,
               feeHeaderId,
@@ -999,6 +1007,8 @@ exports.updateStudentFees = async (req, res) => {
               paymentDate || null,
               status,
               remarks || null,
+              feeYear,
+              feeSemester,
               userId,
               userId
             ]
@@ -1023,6 +1033,200 @@ exports.updateStudentFees = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while updating student fees'
+    });
+  }
+};
+
+/**
+ * Get complete fee details for a student (all headers, all years/semesters)
+ */
+exports.getStudentFeeDetails = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID is required'
+      });
+    }
+
+    // Get student info
+    const [studentRows] = await masterPool.query(
+      'SELECT id, student_name, pin_no, batch, course, branch, college, current_year, current_semester FROM students WHERE id = ? AND student_status = "Regular"',
+      [studentId]
+    );
+
+    if (studentRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found or not a regular student'
+      });
+    }
+
+    const student = studentRows[0];
+
+    // Get all active fee headers
+    const [feeHeaders] = await masterPool.query(
+      'SELECT id, header_name, description FROM fee_headers WHERE is_active = TRUE ORDER BY header_name ASC'
+    );
+
+    // Get course configuration for year/semester structure
+    let yearSemColumns = [];
+    if (student.course) {
+      const [courseRows] = await masterPool.query(
+        `SELECT total_years, semesters_per_year, year_semester_config
+         FROM courses
+         WHERE name = ? AND is_active = 1
+         LIMIT 1`,
+        [student.course]
+      );
+
+      if (courseRows.length > 0) {
+        const courseConfig = courseRows[0];
+        const totalYears = courseConfig.total_years || 4;
+        const defaultSemestersPerYear = courseConfig.semesters_per_year || 2;
+
+        let yearSemesterConfig = null;
+        if (courseConfig.year_semester_config) {
+          try {
+            yearSemesterConfig = typeof courseConfig.year_semester_config === 'string'
+              ? JSON.parse(courseConfig.year_semester_config)
+              : courseConfig.year_semester_config;
+          } catch (e) {
+            console.warn('Failed to parse year_semester_config:', e);
+          }
+        }
+
+        for (let year = 1; year <= totalYears; year++) {
+          let semesterCount = defaultSemestersPerYear;
+          if (Array.isArray(yearSemesterConfig)) {
+            const yearConfig = yearSemesterConfig.find(y => y.year === year);
+            if (yearConfig && yearConfig.semesters) {
+              semesterCount = yearConfig.semesters;
+            }
+          }
+          for (let semester = 1; semester <= semesterCount; semester++) {
+            yearSemColumns.push({
+              year: year,
+              semester: semester,
+              key: `Y${year}_S${semester}`,
+              label: `Year ${year} Sem ${semester}`
+            });
+          }
+        }
+      }
+    }
+
+    // If no course config, use defaults
+    if (yearSemColumns.length === 0) {
+      for (let year = 1; year <= 4; year++) {
+        for (let semester = 1; semester <= 2; semester++) {
+          yearSemColumns.push({
+            year: year,
+            semester: semester,
+            key: `Y${year}_S${semester}`,
+            label: `Year ${year} Sem ${semester}`
+          });
+        }
+      }
+    }
+
+    // Get all fee records for this student with year and semester
+    const [feeRows] = await masterPool.query(
+      `SELECT 
+        sf.id,
+        sf.fee_header_id,
+        sf.amount,
+        sf.paid_amount,
+        sf.due_date,
+        sf.payment_date,
+        sf.payment_status,
+        sf.remarks,
+        sf.year,
+        sf.semester,
+        fh.header_name
+      FROM student_fees sf
+      INNER JOIN fee_headers fh ON sf.fee_header_id = fh.id
+      WHERE sf.student_id = ?
+      ORDER BY sf.fee_header_id, sf.year, sf.semester`,
+      [studentId]
+    );
+
+    // Organize fees by header and year-semester
+    const feesByHeader = {};
+    feeHeaders.forEach(header => {
+      feesByHeader[header.id] = {
+        headerId: header.id,
+        headerName: header.header_name,
+        description: header.description,
+        yearSemFees: {}
+      };
+
+      yearSemColumns.forEach(col => {
+        // Find matching fee record by fee_header_id, year, AND semester
+        const matchingFee = feeRows.find(f => 
+          f.fee_header_id === header.id && 
+          f.year === col.year && 
+          f.semester === col.semester
+        );
+        if (matchingFee) {
+          feesByHeader[header.id].yearSemFees[col.key] = {
+            id: matchingFee.id,
+            feeHeaderId: header.id,
+            year: col.year,
+            semester: col.semester,
+            amount: parseFloat(matchingFee.amount) || 0,
+            paidAmount: parseFloat(matchingFee.paid_amount) || 0,
+            dueDate: matchingFee.due_date,
+            paymentDate: matchingFee.payment_date,
+            paymentStatus: matchingFee.payment_status,
+            remarks: matchingFee.remarks
+          };
+        } else {
+          feesByHeader[header.id].yearSemFees[col.key] = {
+            feeHeaderId: header.id,
+            year: col.year,
+            semester: col.semester,
+            amount: 0,
+            paidAmount: 0,
+            dueDate: null,
+            paymentDate: null,
+            paymentStatus: 'pending',
+            remarks: null
+          };
+        }
+      });
+    });
+
+    res.json({
+      success: true,
+      data: {
+        student: {
+          id: student.id,
+          studentName: student.student_name,
+          pinNumber: student.pin_no,
+          batch: student.batch,
+          course: student.course,
+          branch: student.branch,
+          college: student.college,
+          currentYear: student.current_year,
+          currentSemester: student.current_semester
+        },
+        feeHeaders: feeHeaders.map(h => ({
+          id: h.id,
+          headerName: h.header_name,
+          description: h.description
+        })),
+        yearSemColumns,
+        fees: Object.values(feesByHeader)
+      }
+    });
+  } catch (error) {
+    console.error('Failed to get student fee details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching student fee details'
     });
   }
 };

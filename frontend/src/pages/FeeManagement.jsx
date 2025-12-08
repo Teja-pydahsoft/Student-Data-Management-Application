@@ -13,7 +13,9 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  ArrowUpDown,
+  CreditCard
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -45,12 +47,19 @@ const FeeManagement = () => {
   const [editingCell, setEditingCell] = useState(null); // { studentId, yearSemKey, feeHeaderId }
   const [cellValue, setCellValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  const [feeChanges, setFeeChanges] = useState(new Map()); // Track all fee changes: Map<`${studentId}_${yearSemKey}`, { amount, year, semester }>
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalStudents, setTotalStudents] = useState(0);
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editingFees, setEditingFees] = useState({});
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [studentFeeModalOpen, setStudentFeeModalOpen] = useState(false);
+  const [selectedStudentForFee, setSelectedStudentForFee] = useState(null);
+  const [studentFeeDetails, setStudentFeeDetails] = useState(null);
+  const [paymentAmounts, setPaymentAmounts] = useState(new Map()); // Track payment amounts: Map<`${studentId}_${feeHeaderId}_${year}_${semester}`, amount>
+  const [isMounted, setIsMounted] = useState(false);
   const [feeHeadersForConfig, setFeeHeadersForConfig] = useState([]);
   const [editingHeaderId, setEditingHeaderId] = useState(null);
   const [newHeader, setNewHeader] = useState({ header_name: '', description: '', is_active: true });
@@ -119,8 +128,19 @@ const FeeManagement = () => {
     try {
       const response = await api.get('/fees/headers');
       if (response.data?.success) {
-        setFeeHeaders(response.data.data || []);
-        setFeeHeadersForConfig(response.data.data || []);
+        const headers = response.data.data || [];
+        setFeeHeaders(headers);
+        setFeeHeadersForConfig(headers);
+        
+        // Set "Tuition Fee" as default if not already selected
+        if (!filters.feeHeaderId && headers.length > 0) {
+          const tuitionFee = headers.find(h => 
+            (h.header_name || h.headerName || '').toLowerCase().includes('tuition')
+          );
+          if (tuitionFee) {
+            setFilters(prev => ({ ...prev, feeHeaderId: String(tuitionFee.id) }));
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load fee headers:', error);
@@ -222,9 +242,27 @@ const FeeManagement = () => {
     }
   };
 
-  // Load fee headers on mount
   useEffect(() => {
-    loadFeeHeaders();
+    setIsMounted(true);
+  }, []);
+
+  // Debug: Track modal state changes
+  useEffect(() => {
+    if (studentFeeModalOpen) {
+      console.log('Modal state changed - studentFeeModalOpen:', studentFeeModalOpen);
+      console.log('selectedStudentForFee:', selectedStudentForFee);
+      console.log('isMounted:', isMounted);
+      console.log('document.body exists:', typeof document !== 'undefined' && !!document.body);
+    }
+  }, [studentFeeModalOpen, selectedStudentForFee, isMounted]);
+
+  // Load fee headers on mount and set default
+  useEffect(() => {
+    const initializeFeeHeaders = async () => {
+      await loadFeeHeaders();
+    };
+    initializeFeeHeaders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load filter options when filters change
@@ -282,13 +320,12 @@ const FeeManagement = () => {
       branch: '',
       college: '',
       feeHeaderId: '',
-      currentYear: '',
-      currentSemester: '',
       studentName: '',
       parentMobile: ''
     });
     studentsCache.current.clear();
     setCurrentPage(1);
+    setFeeChanges(new Map()); // Clear pending changes when filters change
   };
 
   const handlePageChange = (newPage) => {
@@ -308,7 +345,97 @@ const FeeManagement = () => {
     setPageSize(newSize);
   };
 
-  // Inline cell editing handlers
+  // Helper function to extract numeric part from PIN (last 4-5 digits)
+  const extractPinNumeric = (pinString) => {
+    if (!pinString) return 0;
+    const pin = String(pinString);
+    const match = pin.match(/(\d{4,5})$/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      return parseInt(allDigits[allDigits.length - 1], 10);
+    }
+    const parsed = parseFloat(pin);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Helper function to extract series prefix from PIN
+  const extractPinSeries = (pinString) => {
+    if (!pinString) return '';
+    const pin = String(pinString);
+    const numericMatch = pin.match(/(\d{4,5})$/);
+    if (numericMatch) {
+      return pin.substring(0, pin.length - numericMatch[1].length);
+    }
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      const lastDigits = allDigits[allDigits.length - 1];
+      const lastIndex = pin.lastIndexOf(lastDigits);
+      return pin.substring(0, lastIndex);
+    }
+    return pin;
+  };
+
+  // Sorting handler
+  const handleSort = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return {
+          field,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc'
+        };
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  // Sort students based on sortConfig
+  const sortedStudents = useMemo(() => {
+    if (!sortConfig.field) return students;
+    
+    return [...students].sort((a, b) => {
+      let aValue, bValue;
+      let isNumeric = false;
+      
+      switch (sortConfig.field) {
+        case 'studentName':
+          aValue = (a.studentName || '').toLowerCase();
+          bValue = (b.studentName || '').toLowerCase();
+          isNumeric = false;
+          break;
+        case 'pinNumber':
+          const aPin = String(a.pinNumber || '');
+          const bPin = String(b.pinNumber || '');
+          const aSeries = extractPinSeries(aPin);
+          const bSeries = extractPinSeries(bPin);
+          
+          if (aSeries !== bSeries) {
+            const seriesComparison = aSeries.localeCompare(bSeries);
+            return sortConfig.direction === 'asc' ? seriesComparison : -seriesComparison;
+          }
+          
+          aValue = extractPinNumeric(aPin);
+          bValue = extractPinNumeric(bPin);
+          isNumeric = true;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (isNumeric) {
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      }
+      
+      const comparison = String(aValue).localeCompare(String(bValue));
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [students, sortConfig]);
+
+  // Inline cell editing handlers - now just tracks changes, doesn't save
   const handleCellClick = (studentId, yearSemKey, feeHeaderId) => {
     if (!filters.feeHeaderId) {
       toast.error('Please select a fee header first');
@@ -325,60 +452,48 @@ const FeeManagement = () => {
     setCellValue(fee.amount || '');
   };
 
-  const handleCellBlur = async () => {
+  const handleCellBlur = () => {
     if (!editingCell) return;
     
     const { studentId, yearSemKey, feeHeaderId, year, semester } = editingCell;
     const newAmount = parseFloat(cellValue) || 0;
     
-    // Don't save if value hasn't changed
+    // Get current fee to check if changed
     const student = students.find(s => s.id === studentId);
     const yearSemData = student?.yearSemFees?.[yearSemKey];
     const currentFee = yearSemData?.fees[feeHeaderId] || {};
+    
+    // If value hasn't changed, just clear editing
     if (currentFee.amount === newAmount) {
       setEditingCell(null);
       setCellValue('');
       return;
     }
     
-    setSaving(true);
-    try {
-      // Prepare fee update with year and semester
-      const feesArray = [{
-        feeHeaderId: feeHeaderId,
-        amount: newAmount,
-        paidAmount: currentFee.paidAmount || 0,
-        dueDate: currentFee.dueDate || null,
-        paymentDate: currentFee.paymentDate || null,
-        paymentStatus: currentFee.paymentStatus || 'pending',
-        remarks: currentFee.remarks || null
-      }];
-
-      const response = await api.post(`/fees/students/${studentId}`, {
-        studentId,
-        fees: feesArray,
-        year,
-        semester
-      });
-
-      if (!response.data?.success) {
-        throw new Error(response.data?.message || 'Failed to save fee');
+    // Track the change in feeChanges Map
+    const changeKey = `${studentId}_${yearSemKey}_${feeHeaderId}`;
+    setFeeChanges(prev => {
+      const newMap = new Map(prev);
+      if (newAmount === 0 && currentFee.amount === 0) {
+        // No change, remove from map if exists
+        newMap.delete(changeKey);
+      } else {
+        // Store the change
+        newMap.set(changeKey, {
+          studentId,
+          yearSemKey,
+          feeHeaderId,
+          year,
+          semester,
+          amount: newAmount,
+          currentFee: currentFee
+        });
       }
-
-      toast.success('Fee updated successfully');
-      setEditingCell(null);
-      setCellValue('');
-      // Clear cache and reload
-      studentsCache.current.clear();
-      await loadStudents(currentPage, false);
-    } catch (error) {
-      console.error('Failed to save fee:', error);
-      toast.error(error.response?.data?.message || error.message || 'Unable to save fee');
-      setEditingCell(null);
-      setCellValue('');
-    } finally {
-      setSaving(false);
-    }
+      return newMap;
+    });
+    
+    setEditingCell(null);
+    setCellValue('');
   };
 
   const handleCellKeyDown = (e) => {
@@ -388,6 +503,175 @@ const FeeManagement = () => {
     } else if (e.key === 'Escape') {
       setEditingCell(null);
       setCellValue('');
+    }
+  };
+
+  // Bulk save all fee changes
+  const handleBulkSaveFees = async () => {
+    if (feeChanges.size === 0) {
+      toast.info('No changes to save');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Group changes by studentId
+      const changesByStudent = {};
+      feeChanges.forEach((change) => {
+        if (!changesByStudent[change.studentId]) {
+          changesByStudent[change.studentId] = [];
+        }
+        changesByStudent[change.studentId].push({
+          feeHeaderId: change.feeHeaderId,
+          amount: change.amount,
+          paidAmount: change.currentFee.paidAmount || 0,
+          dueDate: change.currentFee.dueDate || null,
+          paymentDate: change.currentFee.paymentDate || null,
+          paymentStatus: change.currentFee.paymentStatus || 'pending',
+          remarks: change.currentFee.remarks || null,
+          year: change.year,
+          semester: change.semester
+        });
+      });
+
+      // Save all changes
+      const savePromises = Object.entries(changesByStudent).map(([studentId, fees]) => {
+        return api.post(`/fees/students/${studentId}`, {
+          studentId: parseInt(studentId),
+          fees: fees
+        });
+      });
+
+      await Promise.all(savePromises);
+      
+      toast.success(`Successfully updated fees for ${Object.keys(changesByStudent).length} student(s)`);
+      
+      // Clear changes and reload
+      setFeeChanges(new Map());
+      studentsCache.current.clear();
+      await loadStudents(currentPage, false);
+    } catch (error) {
+      console.error('Failed to save fees:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to save fees');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Clear all pending changes
+  const handleClearChanges = () => {
+    setFeeChanges(new Map());
+    setEditingCell(null);
+    setCellValue('');
+    toast.info('All pending changes cleared');
+  };
+
+  // Open student fee details modal
+  const handleOpenStudentFeeModal = async (student) => {
+    console.log('Opening student fee modal for:', student);
+    setSelectedStudentForFee(student);
+    setStudentFeeModalOpen(true);
+    setPaymentAmounts(new Map());
+    setStudentFeeDetails(null); // Reset to show loading
+    
+    try {
+      // Fetch all fee details for this student
+      const response = await api.get(`/fees/students/${student.id}/details`);
+      if (response.data?.success && response.data.data) {
+        console.log('Student fee details loaded:', response.data.data);
+        setStudentFeeDetails(response.data.data);
+      } else {
+        console.error('Invalid response structure:', response.data);
+        toast.error('Failed to load student fee details - invalid response');
+        setStudentFeeDetails({ fees: [], yearSemColumns: [], feeHeaders: [] }); // Set empty structure
+      }
+    } catch (error) {
+      console.error('Failed to load student fee details:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to load student fee details');
+      setStudentFeeDetails({ fees: [], yearSemColumns: [], feeHeaders: [] }); // Set empty structure on error
+    }
+  };
+
+  // Handle payment amount change
+  const handlePaymentAmountChange = (feeHeaderId, year, semester, amount) => {
+    const key = `${selectedStudentForFee.id}_${feeHeaderId}_${year}_${semester}`;
+    setPaymentAmounts(prev => {
+      const newMap = new Map(prev);
+      const numAmount = parseFloat(amount) || 0;
+      if (numAmount > 0) {
+        newMap.set(key, numAmount);
+      } else {
+        newMap.delete(key);
+      }
+      return newMap;
+    });
+  };
+
+  // Save cash payments
+  const handleSaveCashPayments = async () => {
+    if (paymentAmounts.size === 0) {
+      toast.info('No payments to save');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Group payments by studentId
+      const paymentsByStudent = {};
+      paymentAmounts.forEach((amount, key) => {
+        const [studentId, feeHeaderId, year, semester] = key.split('_');
+        if (!paymentsByStudent[studentId]) {
+          paymentsByStudent[studentId] = [];
+        }
+        
+        // Find the fee detail from the studentFeeDetails structure
+        const headerFee = studentFeeDetails?.fees?.find(f => f.headerId === parseInt(feeHeaderId));
+        if (!headerFee) return;
+        
+        const yearSemKey = `Y${year}_S${semester}`;
+        const feeDetail = headerFee.yearSemFees?.[yearSemKey];
+        
+        const currentPaidAmount = feeDetail?.paidAmount || 0;
+        const newPaidAmount = currentPaidAmount + amount;
+        const feeAmount = feeDetail?.amount || 0;
+        
+        paymentsByStudent[studentId].push({
+          feeHeaderId: parseInt(feeHeaderId),
+          amount: feeAmount,
+          paidAmount: newPaidAmount,
+          dueDate: feeDetail?.dueDate || null,
+          paymentDate: new Date().toISOString().split('T')[0],
+          paymentStatus: newPaidAmount >= feeAmount ? 'paid' : (newPaidAmount > 0 ? 'partial' : 'pending'),
+          remarks: feeDetail?.remarks || 'Cash payment',
+          year: parseInt(year),
+          semester: parseInt(semester)
+        });
+      });
+
+      // Save all payments
+      const savePromises = Object.entries(paymentsByStudent).map(([studentId, fees]) => {
+        return api.post(`/fees/students/${studentId}`, {
+          studentId: parseInt(studentId),
+          fees: fees
+        });
+      });
+
+      await Promise.all(savePromises);
+      
+      toast.success(`Successfully recorded cash payments for ${Object.keys(paymentsByStudent).length} student(s)`);
+      
+      // Close modal and reload data
+      setStudentFeeModalOpen(false);
+      setSelectedStudentForFee(null);
+      setStudentFeeDetails(null);
+      setPaymentAmounts(new Map());
+      studentsCache.current.clear();
+      await loadStudents(currentPage, false);
+    } catch (error) {
+      console.error('Failed to save payments:', error);
+      toast.error(error.response?.data?.message || error.message || 'Unable to save payments');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -689,15 +973,69 @@ const FeeManagement = () => {
           </div>
         ) : (
           <>
+            {/* Bulk Save Button - Moved to Top */}
+            {filters.feeHeaderId && feeChanges.size > 0 && (
+              <div className="px-4 py-3 border-b border-yellow-200 bg-yellow-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={16} className="text-yellow-600" />
+                  <span className="text-sm font-medium text-yellow-800">
+                    {feeChanges.size} fee change(s) pending
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleClearChanges}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Clear Changes
+                  </button>
+                  <button
+                    onClick={handleBulkSaveFees}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                  >
+                    {saving ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        Save All Changes
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Student
+                      <button
+                        onClick={() => handleSort('studentName')}
+                        className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                      >
+                        <span>Student</span>
+                        {sortConfig.field === 'studentName' && (
+                          <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                        )}
+                      </button>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      PIN
+                      <button
+                        onClick={() => handleSort('pinNumber')}
+                        className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                      >
+                        <span>PIN</span>
+                        {sortConfig.field === 'pinNumber' && (
+                          <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                        )}
+                      </button>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Batch
@@ -730,13 +1068,24 @@ const FeeManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {students.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50">
+                  {sortedStudents.map((student) => {
+                    // Check if this student has pending changes
+                    const hasChanges = Array.from(feeChanges.keys()).some(key => 
+                      key.startsWith(`${student.id}_`)
+                    );
+                    
+                    return (
+                    <tr key={student.id} className={`hover:bg-gray-50 ${hasChanges ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                        <div 
+                          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => handleOpenStudentFeeModal(student)}
+                        >
                           {renderPhoto(student)}
                           <div>
-                            <div className="text-sm font-medium text-gray-900">{student.studentName}</div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {student.studentName}
+                            </div>
                             <div className="text-xs text-gray-500">
                               {student.parentMobile1 || student.parentMobile2 || 'No contact'}
                             </div>
@@ -759,10 +1108,15 @@ const FeeManagement = () => {
                                            editingCell?.yearSemKey === col.key && 
                                            editingCell?.feeHeaderId === parseInt(filters.feeHeaderId);
                           
+                          // Check if this cell has pending changes
+                          const changeKey = `${student.id}_${col.key}_${filters.feeHeaderId}`;
+                          const pendingChange = feeChanges.get(changeKey);
+                          const displayAmount = pendingChange ? pendingChange.amount : (fee.amount || 0);
+                          
                           return (
                             <td
                               key={col.key}
-                              className="px-2 py-2 text-center border border-gray-200 hover:bg-blue-50 transition-colors cursor-pointer"
+                              className={`px-2 py-2 text-center border border-gray-200 hover:bg-blue-50 transition-colors cursor-pointer ${pendingChange ? 'bg-yellow-100 border-yellow-300' : ''}`}
                               onClick={() => handleCellClick(student.id, col.key, parseInt(filters.feeHeaderId))}
                             >
                               {isEditing ? (
@@ -779,20 +1133,21 @@ const FeeManagement = () => {
                                 />
                               ) : (
                                 <div className="flex flex-col gap-0.5">
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    {formatCurrency(fee.amount || 0)}
+                                  <div className={`text-sm font-semibold ${pendingChange ? 'text-yellow-800' : 'text-gray-900'}`}>
+                                    {formatCurrency(displayAmount)}
+                                    {pendingChange && <span className="text-[10px] text-yellow-600 ml-1">*</span>}
                                   </div>
                                   {fee.paidAmount > 0 && (
-                                    <div className="text-xs text-green-600">
+                                    <div className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
                                       Paid: {formatCurrency(fee.paidAmount)}
                                     </div>
                                   )}
-                                  {fee.amount > 0 && fee.paidAmount < fee.amount && (
+                                  {displayAmount > 0 && fee.paidAmount < displayAmount && (
                                     <div className="text-xs text-red-600 font-medium">
-                                      Due: {formatCurrency((fee.amount || 0) - (fee.paidAmount || 0))}
+                                      Due: {formatCurrency(displayAmount - (fee.paidAmount || 0))}
                                     </div>
                                   )}
-                                  {fee.amount === 0 && (
+                                  {displayAmount === 0 && !pendingChange && (
                                     <div className="text-xs text-gray-400 italic">Click to add</div>
                                   )}
                                 </div>
@@ -802,7 +1157,8 @@ const FeeManagement = () => {
                         })
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -849,6 +1205,208 @@ const FeeManagement = () => {
           </>
         )}
       </section>
+
+      {/* Student Fee Details Modal */}
+      {isMounted && studentFeeModalOpen && selectedStudentForFee && typeof document !== 'undefined' && document.body && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setStudentFeeModalOpen(false);
+              setSelectedStudentForFee(null);
+              setStudentFeeDetails(null);
+              setPaymentAmounts(new Map());
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-6xl rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Fee Details - {selectedStudentForFee.studentName}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  PIN: {selectedStudentForFee.pinNumber} | {selectedStudentForFee.course} - {selectedStudentForFee.branch}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setStudentFeeModalOpen(false);
+                  setSelectedStudentForFee(null);
+                  setStudentFeeDetails(null);
+                  setPaymentAmounts(new Map());
+                }}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {!studentFeeDetails ? (
+              <div className="p-8 flex items-center justify-center">
+                <LoadingAnimation />
+              </div>
+            ) : (
+              <div className="p-6">
+                {/* Fee Headers and Year/Semester Grid */}
+                {(!studentFeeDetails.fees || !Array.isArray(studentFeeDetails.fees) || studentFeeDetails.fees.length === 0) ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <AlertCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                    <p>No fee data available for this student.</p>
+                    <p className="text-xs mt-2">Fees array: {studentFeeDetails.fees ? `${studentFeeDetails.fees.length} items` : 'null'}</p>
+                  </div>
+                ) : (!studentFeeDetails.yearSemColumns || !Array.isArray(studentFeeDetails.yearSemColumns) || studentFeeDetails.yearSemColumns.length === 0) ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <AlertCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                    <p>No year/semester data available.</p>
+                    <p className="text-xs mt-2">YearSemColumns: {studentFeeDetails.yearSemColumns ? `${studentFeeDetails.yearSemColumns.length} items` : 'null'}</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead className="bg-gray-50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-200">
+                            Fee Header
+                          </th>
+                          {studentFeeDetails.yearSemColumns && studentFeeDetails.yearSemColumns.map((col) => (
+                            <th
+                              key={col.key}
+                              className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-200 bg-blue-50 min-w-[120px]"
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {studentFeeDetails.fees && studentFeeDetails.fees.map((headerFee) => (
+                        <tr key={headerFee.headerId} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 border border-gray-200">
+                            <div>
+                              <div className="font-semibold text-gray-900">{headerFee.headerName}</div>
+                              {headerFee.description && (
+                                <div className="text-xs text-gray-500 mt-1">{headerFee.description}</div>
+                              )}
+                            </div>
+                          </td>
+                          {studentFeeDetails.yearSemColumns && studentFeeDetails.yearSemColumns.map((col) => {
+                            const fee = (headerFee.yearSemFees && headerFee.yearSemFees[col.key]) || {};
+                            const paymentKey = `${selectedStudentForFee.id}_${headerFee.headerId}_${col.year}_${col.semester}`;
+                            const paymentAmount = paymentAmounts.get(paymentKey) || 0;
+                            const currentPaid = fee.paidAmount || 0;
+                            const totalPaid = currentPaid + paymentAmount;
+                            const feeAmount = fee.amount || 0;
+                            const isFullyPaid = totalPaid >= feeAmount && feeAmount > 0;
+                            const isPartiallyPaid = totalPaid > 0 && totalPaid < feeAmount;
+                            
+                            return (
+                              <td
+                                key={col.key}
+                                className={`px-3 py-2 border border-gray-200 text-center ${isFullyPaid ? 'bg-green-50' : isPartiallyPaid ? 'bg-yellow-50' : ''}`}
+                              >
+                                <div className="space-y-2">
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    {formatCurrency(feeAmount)}
+                                  </div>
+                                  {currentPaid > 0 && (
+                                    <div className="text-xs text-green-600 font-medium">
+                                      Paid: {formatCurrency(currentPaid)}
+                                    </div>
+                                  )}
+                                  {paymentAmount > 0 && (
+                                    <div className="text-xs text-blue-600 font-bold">
+                                      +{formatCurrency(paymentAmount)} (Cash)
+                                    </div>
+                                  )}
+                                  {feeAmount > 0 && totalPaid < feeAmount && (
+                                    <div className="text-xs text-red-600 font-medium">
+                                      Due: {formatCurrency(feeAmount - totalPaid)}
+                                    </div>
+                                  )}
+                                  {feeAmount > 0 && (
+                                    <div className="mt-2">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max={feeAmount - totalPaid}
+                                        placeholder="Cash amount"
+                                        value={paymentAmount > 0 ? paymentAmount : ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          handlePaymentAmountChange(headerFee.headerId, col.year, col.semester, val);
+                                        }}
+                                        className="w-full px-2 py-1 text-xs text-center border border-gray-300 rounded focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      />
+                                    </div>
+                                  )}
+                                  {isFullyPaid && (
+                                    <div className="text-xs text-green-700 font-bold mt-1">
+                                      ✓ Paid
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                )}
+
+                {/* Payment Summary and Save Button */}
+                {paymentAmounts.size > 0 && (
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-900">
+                          Total Cash Payment: {formatCurrency(Array.from(paymentAmounts.values()).reduce((sum, amt) => sum + amt, 0))}
+                        </div>
+                        <div className="text-xs text-blue-700 mt-1">
+                          {paymentAmounts.size} fee(s) selected for payment
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPaymentAmounts(new Map())}
+                          disabled={saving}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          onClick={handleSaveCashPayments}
+                          disabled={saving}
+                          className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg hover:shadow-lg hover:shadow-green-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                        >
+                          {saving ? (
+                            <>
+                              <RefreshCw size={16} className="animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard size={16} />
+                              Record Cash Payment
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Edit Student Fees Modal */}
       {editingStudentId && typeof document !== 'undefined' && document.body && createPortal(
@@ -974,7 +1532,7 @@ const FeeManagement = () => {
       )}
 
       {/* Fee Headers Configuration Modal */}
-      {configModalOpen && typeof document !== 'undefined' && document.body && createPortal(
+      {isMounted && configModalOpen && typeof document !== 'undefined' && document.body && createPortal(
         <div
           className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={(e) => {
