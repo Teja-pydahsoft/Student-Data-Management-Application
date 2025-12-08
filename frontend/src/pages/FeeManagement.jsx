@@ -20,6 +20,7 @@ import {
 import toast from 'react-hot-toast';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { SkeletonBox, SkeletonTable } from '../components/SkeletonLoader';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
 
@@ -31,7 +32,7 @@ const FeeManagement = () => {
     college: '',
     feeHeaderId: '', // New: selected fee header filter
     studentName: '',
-    parentMobile: ''
+    pinNumber: ''
   });
   const [filterOptions, setFilterOptions] = useState({
     batches: [],
@@ -162,8 +163,13 @@ const FeeManagement = () => {
       if (filters.feeHeaderId) {
         params.append('feeHeaderId', filters.feeHeaderId);
       }
-      if (filters.studentName) params.append('studentName', filters.studentName.trim());
-      if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
+      // Combined search - if pinNumber has value, use it for both PIN and student name search
+      if (filters.pinNumber) {
+        params.append('pinNumber', filters.pinNumber.trim());
+        params.append('studentName', filters.pinNumber.trim());
+      } else if (filters.studentName) {
+        params.append('studentName', filters.studentName.trim());
+      }
 
       // Build cache key
       const cacheKeyStr = params.toString() + `_page_${pageToUse}_size_${pageSize}`;
@@ -298,7 +304,7 @@ const FeeManagement = () => {
 
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.studentName, filters.parentMobile]);
+  }, [filters.studentName, filters.pinNumber]);
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => {
@@ -321,7 +327,7 @@ const FeeManagement = () => {
       college: '',
       feeHeaderId: '',
       studentName: '',
-      parentMobile: ''
+      pinNumber: ''
     });
     studentsCache.current.clear();
     setCurrentPage(1);
@@ -769,7 +775,7 @@ const FeeManagement = () => {
         <img
           src={src}
           alt={student.studentName || 'Student'}
-          className="w-10 h-10 rounded-full object-cover border border-gray-200"
+          className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full object-cover border border-gray-200 flex-shrink-0"
         />
       );
     }
@@ -782,7 +788,7 @@ const FeeManagement = () => {
       .toUpperCase();
 
     return (
-      <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold text-sm">
+      <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold text-xs sm:text-sm flex-shrink-0">
         {initials || 'NA'}
       </div>
     );
@@ -853,7 +859,7 @@ const FeeManagement = () => {
             <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
             {/* Fee Header - First Position (Required) */}
             <select
               value={filters.feeHeaderId}
@@ -925,26 +931,18 @@ const FeeManagement = () => {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by student name..."
-                value={filters.studentName}
-                onChange={(e) => handleFilterChange('studentName', e.target.value)}
-                className="w-full pl-10 rounded-md border border-gray-300 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
-              />
-            </div>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by parent mobile..."
-                value={filters.parentMobile}
-                onChange={(e) => handleFilterChange('parentMobile', e.target.value)}
+                placeholder="Search by PIN or Student Name..."
+                value={filters.pinNumber || filters.studentName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Update both filters - backend will handle searching both fields
+                  handleFilterChange('pinNumber', value);
+                  handleFilterChange('studentName', value);
+                }}
                 className="w-full pl-10 rounded-md border border-gray-300 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
               />
             </div>
@@ -963,8 +961,48 @@ const FeeManagement = () => {
       {/* Students Table */}
       <section className="bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-8 flex items-center justify-center">
-            <LoadingAnimation />
+          <div className="p-4 sm:p-6">
+            {/* Skeleton Header */}
+            <div className="w-full border-collapse mb-4">
+              <div className="bg-gray-100 border-b-2 border-gray-300 sticky top-0 z-20 shadow-md">
+                <div className="flex gap-2 sm:gap-4 pb-3 border-b border-gray-200">
+                  <SkeletonBox height="h-4" width="w-[18%]" className="rounded" />
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden md:block" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded hidden lg:block" />
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden lg:block" />
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden lg:block" />
+                  <SkeletonBox height="h-4" width="w-[12%]" className="rounded hidden md:block" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded" />
+                </div>
+              </div>
+            </div>
+            {/* Skeleton Rows */}
+            <div className="space-y-3">
+              {Array.from({ length: 8 }).map((_, rowIdx) => (
+                <div 
+                  key={rowIdx} 
+                  className={`flex gap-2 sm:gap-4 py-4 border-b border-gray-200 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                >
+                  <div className="flex items-center gap-2 w-[18%]">
+                    <SkeletonBox height="h-8" width="w-8" className="rounded-full flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <SkeletonBox height="h-3" width="w-3/4" />
+                      <SkeletonBox height="h-2.5" width="w-1/2" />
+                    </div>
+                  </div>
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden md:block self-center" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded hidden lg:block self-center" />
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden lg:block self-center" />
+                  <SkeletonBox height="h-4" width="w-[10%]" className="rounded hidden lg:block self-center" />
+                  <SkeletonBox height="h-4" width="w-[12%]" className="rounded hidden md:block self-center" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded self-center" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded self-center" />
+                  <SkeletonBox height="h-4" width="w-[8%]" className="rounded self-center" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : students.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
@@ -1011,54 +1049,56 @@ const FeeManagement = () => {
               </div>
             )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+            <div className="w-full overflow-hidden">
+              <div className="w-full">
+                <table className="w-full border-collapse table-fixed" style={{ tableLayout: 'fixed' }}>
+                <thead className="bg-gray-100 border-b-2 border-gray-300 sticky top-0 z-20 shadow-md">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('studentName')}
-                        className="flex items-center gap-1 hover:text-gray-900 transition-colors"
-                      >
-                        <span>Student</span>
-                        {sortConfig.field === 'studentName' && (
-                          <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
-                        )}
-                      </button>
+                    <th className="px-1.5 sm:px-2 md:px-3 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-50 border-l border-r border-gray-200 hidden lg:table-cell w-[8%] max-w-[100px]">
+                      Batch
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-1.5 sm:px-2 md:px-3 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-50 border-r border-gray-200 hidden md:table-cell w-[12%]">
                       <button
                         onClick={() => handleSort('pinNumber')}
                         className="flex items-center gap-1 hover:text-gray-900 transition-colors"
                       >
                         <span>PIN</span>
                         {sortConfig.field === 'pinNumber' && (
-                          <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                          <ArrowUpDown size={12} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
                         )}
                       </button>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      Batch
+                    <th className="px-2 sm:px-3 md:px-4 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider w-[20%] sm:w-[18%]">
+                      <button
+                        onClick={() => handleSort('studentName')}
+                        className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                      >
+                        <span>Student</span>
+                        {sortConfig.field === 'studentName' && (
+                          <ArrowUpDown size={12} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                        )}
+                      </button>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-1.5 sm:px-2 md:px-3 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-50 border-r border-gray-200 hidden lg:table-cell w-[10%]">
                       Course
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    <th className="px-1.5 sm:px-2 md:px-3 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-50 border-r border-gray-200 hidden lg:table-cell w-[10%]">
                       Branch
                     </th>
                     {!filters.feeHeaderId ? (
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-red-600 uppercase tracking-wider bg-red-50" colSpan={yearSemColumns.length}>
+                      <th className="px-2 sm:px-3 py-2.5 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-red-600 uppercase tracking-wider bg-red-50 border-l-2 border-blue-400" colSpan={yearSemColumns.length}>
                         Please select a fee header to view fees
                       </th>
                     ) : (
                       yearSemColumns.map((col) => (
                         <th
                           key={col.key}
-                          className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider bg-blue-50 border border-blue-200 min-w-[100px]"
+                          className="px-1 sm:px-2 md:px-3 py-2.5 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase tracking-wider bg-blue-50 border-l-2 border-blue-400 border-r border-gray-200"
+                          style={{ width: `${Math.max(8, 100 / yearSemColumns.length)}%` }}
                         >
                           <div className="flex flex-col">
-                            <span className="font-bold">{col.label}</span>
-                            <span className="text-[10px] font-normal text-gray-600 mt-0.5">
+                            <span className="font-bold text-[10px] sm:text-xs">{col.label}</span>
+                            <span className="text-[9px] sm:text-[10px] font-normal text-gray-600 mt-0.5">
                               {feeHeaders.find(h => h.id === parseInt(filters.feeHeaderId))?.header_name || feeHeaders.find(h => h.id === parseInt(filters.feeHeaderId))?.headerName || 'Fee'}
                             </span>
                           </div>
@@ -1067,37 +1107,61 @@ const FeeManagement = () => {
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {sortedStudents.map((student) => {
+                <tbody className="bg-white">
+                  {sortedStudents.map((student, index) => {
                     // Check if this student has pending changes
                     const hasChanges = Array.from(feeChanges.keys()).some(key => 
                       key.startsWith(`${student.id}_`)
                     );
+                    const isEven = index % 2 === 0;
                     
                     return (
-                    <tr key={student.id} className={`hover:bg-gray-50 ${hasChanges ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                    <tr 
+                      key={student.id} 
+                      className={`
+                        transition-all duration-200 ease-in-out
+                        ${isEven ? 'bg-white' : 'bg-gray-50/50'}
+                        ${hasChanges ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}
+                        hover:bg-blue-50/50 hover:shadow-sm
+                        border-b border-gray-200
+                      `}
+                    >
+                      <td className="px-1.5 sm:px-2 md:px-3 py-3 sm:py-4 align-middle text-xs sm:text-sm text-gray-900 bg-gray-50/30 border-l border-r border-gray-100 hidden lg:table-cell overflow-hidden whitespace-nowrap">
+                        <div className="truncate max-w-full" title={student.batch || 'N/A'}>
+                          {student.batch || 'N/A'}
+                        </div>
+                      </td>
+                      <td className="px-1.5 sm:px-2 md:px-3 py-3 sm:py-4 align-middle text-xs sm:text-sm text-gray-900 bg-gray-50/30 border-r border-gray-100 hidden md:table-cell whitespace-nowrap">
+                        {student.pinNumber || 'N/A'}
+                      </td>
+                      <td className="px-2 sm:px-3 md:px-4 py-3 sm:py-4 align-middle">
                         <div 
-                          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                          className="flex items-center gap-1.5 sm:gap-2 cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => handleOpenStudentFeeModal(student)}
                         >
                           {renderPhoto(student)}
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
                               {student.studentName}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 truncate">
                               {student.parentMobile1 || student.parentMobile2 || 'No contact'}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{student.pinNumber || 'N/A'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{student.batch || 'N/A'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{student.course || 'N/A'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{student.branch || 'N/A'}</td>
+                      <td className="px-1.5 sm:px-2 md:px-3 py-3 sm:py-4 align-middle text-xs sm:text-sm text-gray-900 bg-gray-50/30 border-r border-gray-100 hidden lg:table-cell overflow-hidden whitespace-nowrap">
+                        <div className="truncate max-w-full" title={student.course || 'N/A'}>
+                          {student.course || 'N/A'}
+                        </div>
+                      </td>
+                      <td className="px-1.5 sm:px-2 md:px-3 py-3 sm:py-4 align-middle text-xs sm:text-sm text-gray-900 bg-gray-50/30 border-r border-gray-100 hidden lg:table-cell overflow-hidden whitespace-nowrap">
+                        <div className="truncate max-w-full" title={student.branch || 'N/A'}>
+                          {student.branch || 'N/A'}
+                        </div>
+                      </td>
                       {!filters.feeHeaderId ? (
-                        <td className="px-4 py-3 text-center text-sm text-gray-500" colSpan={yearSemColumns.length}>
+                        <td className="px-2 sm:px-3 py-3 sm:py-4 text-center text-xs sm:text-sm text-gray-500 align-middle border-l-2 border-blue-300" colSpan={yearSemColumns.length}>
                           Select a fee header to view and edit fees
                         </td>
                       ) : (
@@ -1116,7 +1180,12 @@ const FeeManagement = () => {
                           return (
                             <td
                               key={col.key}
-                              className={`px-2 py-2 text-center border border-gray-200 hover:bg-blue-50 transition-colors cursor-pointer ${pendingChange ? 'bg-yellow-100 border-yellow-300' : ''}`}
+                              className={`
+                                px-1 sm:px-2 md:px-3 py-3 sm:py-4 text-center align-middle
+                                border-l-2 border-blue-300 border-r border-gray-200
+                                hover:bg-blue-100/50 transition-all duration-200 cursor-pointer
+                                ${pendingChange ? 'bg-yellow-100 border-yellow-300' : ''}
+                              `}
                               onClick={() => handleCellClick(student.id, col.key, parseInt(filters.feeHeaderId))}
                             >
                               {isEditing ? (
@@ -1127,28 +1196,28 @@ const FeeManagement = () => {
                                   onChange={(e) => setCellValue(e.target.value)}
                                   onBlur={handleCellBlur}
                                   onKeyDown={handleCellKeyDown}
-                                  className="w-full px-2 py-1 text-sm text-center border-2 border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className="w-full px-1.5 sm:px-2 py-1.5 text-xs sm:text-sm text-center border-2 border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                   autoFocus
                                   disabled={saving}
                                 />
                               ) : (
-                                <div className="flex flex-col gap-0.5">
-                                  <div className={`text-sm font-semibold ${pendingChange ? 'text-yellow-800' : 'text-gray-900'}`}>
+                                <div className="flex flex-col gap-0.5 sm:gap-1 items-center justify-center">
+                                  <div className={`text-xs sm:text-sm font-semibold ${pendingChange ? 'text-yellow-800' : 'text-gray-900'}`}>
                                     {formatCurrency(displayAmount)}
-                                    {pendingChange && <span className="text-[10px] text-yellow-600 ml-1">*</span>}
+                                    {pendingChange && <span className="text-[10px] text-yellow-600 ml-0.5">*</span>}
                                   </div>
                                   {fee.paidAmount > 0 && (
-                                    <div className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">
+                                    <div className="text-[10px] sm:text-xs font-semibold text-green-700 bg-green-50 px-1.5 sm:px-2 py-0.5 rounded mt-0.5">
                                       Paid: {formatCurrency(fee.paidAmount)}
                                     </div>
                                   )}
                                   {displayAmount > 0 && fee.paidAmount < displayAmount && (
-                                    <div className="text-xs text-red-600 font-medium">
+                                    <div className="text-[10px] sm:text-xs text-red-600 font-medium mt-0.5">
                                       Due: {formatCurrency(displayAmount - (fee.paidAmount || 0))}
                                     </div>
                                   )}
                                   {displayAmount === 0 && !pendingChange && (
-                                    <div className="text-xs text-gray-400 italic">Click to add</div>
+                                    <div className="text-[10px] sm:text-xs text-gray-400 hover:text-gray-600 hover:underline transition-colors cursor-pointer mt-0.5">Click to add</div>
                                   )}
                                 </div>
                               )}
@@ -1161,6 +1230,7 @@ const FeeManagement = () => {
                   })}
                 </tbody>
               </table>
+            </div>
             </div>
 
             {/* Pagination */}

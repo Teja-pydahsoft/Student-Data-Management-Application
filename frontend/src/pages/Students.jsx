@@ -13,7 +13,8 @@ import {
   CheckCircle,
   TrendingUp,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowUpDown
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -80,6 +81,7 @@ const Students = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const skipFilterFetchRef = useRef(false);
   const filtersRef = useRef(filters);
   const searchTermRef = useRef(searchTerm);
@@ -161,6 +163,92 @@ const Students = () => {
 
   const students = studentsData?.students || [];
   const totalStudents = studentsData?.pagination?.total || 0;
+  
+  // Helper function to extract numeric part from PIN (last 4-5 digits)
+  const extractPinNumeric = (pinString) => {
+    if (!pinString) return 0;
+    const pin = String(pinString);
+    const match = pin.match(/(\d{4,5})$/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      return parseInt(allDigits[allDigits.length - 1], 10);
+    }
+    const parsed = parseFloat(pin);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Helper function to extract series prefix from PIN
+  const extractPinSeries = (pinString) => {
+    if (!pinString) return '';
+    const pin = String(pinString);
+    const numericMatch = pin.match(/(\d{4,5})$/);
+    if (numericMatch) {
+      return pin.substring(0, pin.length - numericMatch[1].length);
+    }
+    const allDigits = pin.match(/\d+/g);
+    if (allDigits && allDigits.length > 0) {
+      const lastDigits = allDigits[allDigits.length - 1];
+      const lastIndex = pin.lastIndexOf(lastDigits);
+      return pin.substring(0, lastIndex);
+    }
+    return pin;
+  };
+
+  // Sorting handler
+  const handleSort = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return {
+          field,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc'
+        };
+      }
+      return { field, direction: 'asc' };
+    });
+  };
+
+  // Sort students based on sortConfig
+  const sortedStudents = useMemo(() => {
+    if (!sortConfig.field) return students;
+    
+    return [...students].sort((a, b) => {
+      let aValue, bValue;
+      let isNumeric = false;
+      
+      switch (sortConfig.field) {
+        case 'pinNumber':
+          const aPin = String(a.pin_no || '');
+          const bPin = String(b.pin_no || '');
+          const aSeries = extractPinSeries(aPin);
+          const bSeries = extractPinSeries(bPin);
+          
+          if (aSeries !== bSeries) {
+            const seriesComparison = aSeries.localeCompare(bSeries);
+            return sortConfig.direction === 'asc' ? seriesComparison : -seriesComparison;
+          }
+          
+          aValue = extractPinNumeric(aPin);
+          bValue = extractPinNumeric(bPin);
+          isNumeric = true;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (isNumeric) {
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      }
+      
+      const comparison = String(aValue).localeCompare(String(bValue));
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [students, sortConfig]);
+  
   const totalPages = studentsData?.pagination?.totalPages || 
     (totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / (pageSize || 1))) : 1);
   // Only show loading for students table, not the entire page
@@ -1282,15 +1370,14 @@ const Students = () => {
             Search
           </button>
         </div>
-        {/* Action Buttons - Responsive Grid */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3">
+        {/* Action Buttons - Single Row */}
+        <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto">
           <Link
             to="/students/add"
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px]"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
           >
             <Plus size={18} />
-            <span className="hidden sm:inline">Add Student</span>
-            <span className="sm:hidden">Add</span>
+            <span>Add Student</span>
           </Link>
 
           <button
@@ -1298,40 +1385,36 @@ const Students = () => {
               await fetchForms();
               setShowBulkStudentUpload(true);
             }}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
             disabled={loadingForms}
           >
             <Upload size={18} />
-            <span className="hidden sm:inline">{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
-            <span className="sm:hidden">{loadingForms ? 'Loading...' : 'Upload'}</span>
+            <span>{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
           </button>
 
           <button
             onClick={() => setShowManualRollNumber(true)}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px]"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
           >
             <UserCog size={18} />
-            <span className="hidden sm:inline">Update PIN Numbers</span>
-            <span className="sm:hidden">PIN</span>
+            <span>Update PIN Numbers</span>
           </button>
 
           <button
             onClick={handleBulkDelete}
             disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
           >
             <Trash2 size={18} />
-            <span className="hidden sm:inline">{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
-            <span className="sm:hidden">{bulkDeleteMutation.isPending ? '...' : `Delete${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+            <span>{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
           </button>
 
           <button
             onClick={handleExportCSV}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm sm:text-base font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] col-span-2 sm:col-span-1"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
           >
             <Download size={18} />
-            <span className="hidden sm:inline">Export CSV</span>
-            <span className="sm:hidden">Export</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
@@ -1675,7 +1758,15 @@ const Students = () => {
                     <div className="font-semibold whitespace-nowrap">Student Name</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold whitespace-nowrap">PIN Number</div>
+                    <button
+                      onClick={() => handleSort('pinNumber')}
+                      className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                    >
+                      <div className="font-semibold whitespace-nowrap">PIN Number</div>
+                      {sortConfig.field === 'pinNumber' && (
+                        <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                      )}
+                    </button>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Admission Number</div>
@@ -1722,7 +1813,7 @@ const Students = () => {
                 </tr>
               </thead>
               <tbody>
-                {students.map((student) => {
+                {sortedStudents.map((student) => {
                   return (
                     <tr 
                       key={student.admission_number} 
@@ -1809,7 +1900,7 @@ const Students = () => {
           
           {/* Mobile Card View */}
           <div className="lg:hidden space-y-3 p-3 sm:p-4">
-            {students.map((student) => {
+                {sortedStudents.map((student) => {
               return (
                 <div
                   key={student.admission_number}
