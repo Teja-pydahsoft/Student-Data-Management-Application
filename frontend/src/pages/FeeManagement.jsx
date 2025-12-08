@@ -1252,8 +1252,7 @@ const FeeManagement = () => {
       }
 
       // Prepare fees for each student
-      let processedCount = 0;
-      const updatePromises = validStudents.map((student, index) => {
+      const studentsWithFees = validStudents.map((student) => {
         const fees = [];
         
         // For each year-semester column, create/update fee if amount is specified
@@ -1278,39 +1277,10 @@ const FeeManagement = () => {
           }
         });
 
-        if (fees.length > 0) {
-          const studentIndex = index;
-          console.log(`[FEE CONFIG] Queuing update for student ${student.id} (${student.studentName || student.student_name}) with ${fees.length} fee(s)`);
-          return api.post(`/fees/students/${student.id}`, {
-            studentId: student.id,
-            fees: fees
-          }).then(result => {
-            // Update progress after each successful update
-            processedCount++;
-            console.log(`[FEE CONFIG] Successfully updated student ${student.id} (${processedCount}/${validStudents.length})`);
-            setFeeConfigProgress(prev => ({
-              ...prev,
-              current: processedCount
-            }));
-            return result;
-          }).catch(error => {
-            // Still update progress even on failure
-            processedCount++;
-            console.error(`[FEE CONFIG] Failed to update student ${student.id} (${processedCount}/${validStudents.length}):`, error);
-            setFeeConfigProgress(prev => ({
-              ...prev,
-              current: processedCount
-            }));
-            throw error;
-          });
-        }
-        return Promise.resolve(null);
-      });
-
-      // Filter out null promises
-      const validPromises = updatePromises.filter(p => p !== null);
+        return { student, fees };
+      }).filter(item => item.fees.length > 0); // Only include students with fees to update
       
-      if (validPromises.length === 0) {
+      if (studentsWithFees.length === 0) {
         toast.error('No fees to apply. Please ensure at least one fee amount is greater than 0.');
         setFeeConfigLoading(false);
         setFeeConfigProgress({ current: 0, total: 0, isProcessing: false });
@@ -1318,8 +1288,9 @@ const FeeManagement = () => {
       }
       
       // Initialize progress tracking
-      const totalStudents = validPromises.length;
-      console.log(`[FEE CONFIG] Starting bulk fee update for ${totalStudents} students`);
+      const totalStudents = studentsWithFees.length;
+      const BATCH_SIZE = 20; // Process 20 students at a time for faster updates
+      console.log(`[FEE CONFIG] Starting bulk fee update for ${totalStudents} students in batches of ${BATCH_SIZE}`);
       console.log(`[FEE CONFIG] Configuration:`, {
         college: feeConfigFilters.college,
         batch: feeConfigFilters.batch,
@@ -1334,20 +1305,55 @@ const FeeManagement = () => {
         isProcessing: true
       });
       
-      // Execute all fee updates with progress tracking
-      const results = await Promise.allSettled(validPromises);
+      // Process students in batches for faster updates
+      const allResults = [];
+      let processedCount = 0;
+      
+      for (let i = 0; i < studentsWithFees.length; i += BATCH_SIZE) {
+        const batch = studentsWithFees.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(studentsWithFees.length / BATCH_SIZE);
+        
+        console.log(`[FEE CONFIG] Processing batch ${batchNumber}/${totalBatches} (${batch.length} students)`);
+        
+        // Process this batch in parallel
+        const batchPromises = batch.map(({ student, fees }) => {
+          return api.post(`/fees/students/${student.id}`, {
+            studentId: student.id,
+            fees: fees
+          }).catch(error => {
+            console.error(`[FEE CONFIG] Failed to update student ${student.id}:`, error);
+            return { error, studentId: student.id };
+          });
+        });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.allSettled(batchPromises);
+        allResults.push(...batchResults);
+        
+        // Update progress after each batch completes (increment by batch size)
+        processedCount += batch.length;
+        console.log(`[FEE CONFIG] Batch ${batchNumber} completed. Progress: ${processedCount}/${totalStudents}`);
+        
+        // Update progress state - this will show progress like 20/692, 40/692, etc.
+        setFeeConfigProgress(prev => ({
+          ...prev,
+          current: processedCount
+        }));
+      }
       
       // Check for failures
-      const failures = results.filter(r => r.status === 'rejected');
-      const successCount = results.length - failures.length;
+      const failures = allResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value?.error));
+      const successCount = allResults.length - failures.length;
       
       console.log(`[FEE CONFIG] Bulk update completed:`, {
         total: totalStudents,
         successful: successCount,
         failed: failures.length,
+        batchesProcessed: Math.ceil(studentsWithFees.length / BATCH_SIZE),
         failures: failures.map(f => ({
-          reason: f.reason?.message || f.reason,
-          fullError: f.reason
+          reason: f.reason?.message || f.value?.error?.message || f.reason,
+          fullError: f.reason || f.value?.error
         }))
       });
       
@@ -1358,8 +1364,8 @@ const FeeManagement = () => {
       
       if (failures.length > 0) {
         console.error('[FEE CONFIG] Some fee updates failed:', failures.map(f => ({
-          reason: f.reason?.message || f.reason,
-          fullError: f.reason
+          reason: f.reason?.message || f.value?.error?.message || f.reason,
+          fullError: f.reason || f.value?.error
         })));
         toast.error(`Failed to apply fees to ${failures.length} student(s). ${successCount} student(s) updated successfully.`);
       } else {
