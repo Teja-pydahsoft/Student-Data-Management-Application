@@ -209,7 +209,7 @@ const FIELD_MAPPING = {
   'Admission Date': 'admission_date',
   'Branch Name': 'branch',
   branch_name: 'branch',
-  'Branch Code': 'branch_code',
+  // 'Branch Code': 'branch_code', // Removed - branch_code is stored in student_data JSON only, not as a column
   'Current Academic Year': 'current_year',
   'Current Year': 'current_year',
   current_year: 'current_year',
@@ -240,7 +240,7 @@ const FIELD_MAPPING = {
   batch: 'batch',
   college: 'college',
   branch: 'branch',
-  branch_code: 'branch_code',
+  // branch_code: 'branch_code', // Removed - branch_code is stored in student_data JSON only, not as a column
   stud_type: 'stud_type',
   parent_mobile1: 'parent_mobile1',
   parent_mobile2: 'parent_mobile2',
@@ -1843,6 +1843,10 @@ exports.commitBulkUploadStudents = async (req, res) => {
         if (!columnName || updatedColumns.has(columnName)) {
           return;
         }
+        // Skip branch_code - it's stored in student_data JSON only, not as a column
+        if (columnName === 'branch_code') {
+          return;
+        }
         insertColumns.push(columnName);
         insertPlaceholders.push('?');
         insertValues.push(value);
@@ -2929,6 +2933,10 @@ exports.createStudent = async (req, res) => {
         value !== '{}' &&
         value !== null
       ) {
+        // Skip branch_code - it's stored in student_data JSON only, not as a column
+        if (columnName === 'branch_code') {
+          return;
+        }
         insertColumns.push(columnName);
         insertPlaceholders.push('?');
         insertValues.push(value);
