@@ -176,7 +176,7 @@ const Settings = () => {
   const [branchBatchFilter, setBranchBatchFilter] = useState(''); // Filter branches by batch
   const [isAddBranchModalOpen, setIsAddBranchModalOpen] = useState(false);
   const [branchModalCourseId, setBranchModalCourseId] = useState(null);
-  const [newBranch, setNewBranch] = useState({ name: '', code: '', academicYearId: '' });
+  const [newBranch, setNewBranch] = useState({ name: '', code: '', academicYearIds: [] });
   
   // Academic Years state
   const [academicYears, setAcademicYears] = useState([]);
@@ -1424,7 +1424,7 @@ const Settings = () => {
   };
 
   const resetNewBranch = () => {
-    setNewBranch({ name: '', code: '', academicYearId: '' });
+    setNewBranch({ name: '', code: '', academicYearIds: [] });
     setIsAddBranchModalOpen(false);
     setBranchModalCourseId(null);
   };
@@ -1444,8 +1444,8 @@ const Settings = () => {
       return;
     }
 
-    if (!payload.academicYearId) {
-      toast.error('Please select a batch year for the branch');
+    if (!payload.academicYearIds || !Array.isArray(payload.academicYearIds) || payload.academicYearIds.length === 0) {
+      toast.error('Please select at least one batch year for the branch');
       return;
     }
 
@@ -1464,10 +1464,10 @@ const Settings = () => {
         code: payload.code.trim(),
         totalYears: Number(payload.totalYears || courseToUse.totalYears),
         semestersPerYear: Number(payload.semestersPerYear || courseToUse.semestersPerYear),
-        academicYearId: Number(payload.academicYearId),
+        academicYearIds: payload.academicYearIds.map(id => Number(id)),
         isActive: true
       });
-      toast.success('Branch added successfully');
+      toast.success(`Branch added successfully for ${payload.academicYearIds.length} batch(es)`);
       resetNewBranch();
       setBranchForms((prev) => {
         const updated = { ...prev };
@@ -1611,19 +1611,59 @@ const Settings = () => {
     }
   };
 
+  // Group branches by code to show unique branches only
   const branchesForSelectedCourse = useMemo(() => {
     if (!selectedCourse) return [];
     const allBranches = courseBranches[selectedCourse.id] || [];
-    if (!branchBatchFilter) return allBranches;
-    return allBranches.filter(branch => branch.academicYearId === parseInt(branchBatchFilter, 10));
+    
+    // Group branches by code (same code = same branch, just different batches)
+    const branchMap = new Map();
+    
+    allBranches.forEach(branch => {
+      const code = branch.code || branch.name;
+      if (!branchMap.has(code)) {
+        // Find all branches with the same code
+        const allBranchesWithSameCode = allBranches.filter(b => (b.code || b.name) === code);
+        const academicYearLabels = allBranchesWithSameCode
+          .map(b => b.academicYearLabel)
+          .filter(Boolean)
+          .sort();
+        
+        // Use the first active branch, or first branch if none are active
+        const representativeBranch = allBranchesWithSameCode.find(b => b.isActive) || allBranchesWithSameCode[0];
+        
+        branchMap.set(code, {
+          ...representativeBranch,
+          // Store all academic year IDs and labels for this branch code
+          allAcademicYearIds: allBranchesWithSameCode.map(b => b.academicYearId).filter(Boolean),
+          allAcademicYearLabels: academicYearLabels,
+          // Count of how many batches this branch exists in
+          batchCount: allBranchesWithSameCode.length
+        });
+      }
+    });
+    
+    // Get unique branches grouped by code
+    let uniqueBranches = Array.from(branchMap.values());
+    
+    // Filter by batch if filter is applied (after grouping)
+    if (branchBatchFilter) {
+      const filterYearId = parseInt(branchBatchFilter, 10);
+      uniqueBranches = uniqueBranches.filter(branch => 
+        branch.allAcademicYearIds.includes(filterYearId)
+      );
+    }
+    
+    return uniqueBranches;
   }, [selectedCourse, courseBranches, branchBatchFilter]);
 
-  // Get unique branch count for display (unique by name)
+  // Get unique branch count for display (unique by code)
   const uniqueBranchCount = useMemo(() => {
     if (!selectedCourse) return 0;
     const allBranches = courseBranches[selectedCourse.id] || [];
-    const uniqueNames = new Set(allBranches.map(branch => branch.name));
-    return uniqueNames.size;
+    // Count unique branch codes
+    const uniqueCodes = new Set(allBranches.map(branch => branch.code || branch.name));
+    return uniqueCodes.size;
   }, [selectedCourse, courseBranches]);
   
   // Reset batch filter when course changes
@@ -2144,16 +2184,14 @@ const Settings = () => {
                               <div className="space-y-2">
                                 {branchesForSelectedCourse.map((branch) => (
                                   <div
-                                    key={branch.id}
+                                    key={branch.code || branch.id}
                                     className="group flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 hover:bg-gray-100 transition-colors"
                                   >
                                     <div className="flex items-center gap-2 min-w-0">
                                       <div className={`h-2 w-2 rounded-full flex-shrink-0 ${branch.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
                                       <span className="text-sm font-medium text-gray-800 truncate">{branch.name}</span>
-                                      {branch.academicYearLabel && (
-                                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
-                                          {branch.academicYearLabel}
-                                        </span>
+                                      {branch.code && branch.code !== branch.name && (
+                                        <span className="text-xs text-gray-500">({branch.code})</span>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3342,25 +3380,53 @@ const Settings = () => {
               }} 
               className="p-6 space-y-4"
             >
-              {/* Batch Selection */}
+              {/* Batch Selection - Multiple */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Batch (Academic Year) <span className="text-red-500">*</span>
+                  Batches (Academic Years) <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={newBranch.academicYearId}
-                  onChange={(e) => setNewBranch((prev) => ({ ...prev, academicYearId: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                  required
-                >
-                  <option value="">Select a batch</option>
-                  {academicYears.filter(y => y.isActive).map((year) => (
-                    <option key={year.id} value={year.id}>{year.yearLabel}</option>
-                  ))}
-                </select>
+                <div className="border border-gray-300 rounded-md bg-white p-3 max-h-48 overflow-y-auto">
+                  {academicYears.filter(y => y.isActive).length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">No active batches available</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {academicYears.filter(y => y.isActive).map((year) => (
+                        <label
+                          key={year.id}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={newBranch.academicYearIds.includes(year.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewBranch((prev) => ({
+                                  ...prev,
+                                  academicYearIds: [...prev.academicYearIds, year.id]
+                                }));
+                              } else {
+                                setNewBranch((prev) => ({
+                                  ...prev,
+                                  academicYearIds: prev.academicYearIds.filter(id => id !== year.id)
+                                }));
+                              }
+                            }}
+                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-900">{year.yearLabel}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  Select the academic year/batch for this branch
+                  Select one or more academic years/batches for this branch. The same branch code will be used for all selected batches.
                 </p>
+                {newBranch.academicYearIds.length > 0 && (
+                  <p className="mt-1 text-xs text-orange-600 font-medium">
+                    {newBranch.academicYearIds.length} batch(es) selected
+                  </p>
+                )}
               </div>
 
               {/* Branch Name */}
@@ -3415,7 +3481,7 @@ const Settings = () => {
                     savingBranchId === `new-${branchModalCourseId}` || 
                     !newBranch.name.trim() || 
                     !newBranch.code.trim() || 
-                    !newBranch.academicYearId
+                    newBranch.academicYearIds.length === 0
                   }
                   className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

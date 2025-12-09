@@ -329,8 +329,13 @@ const validateBranchPayload = (
     defaultSemesters
   );
 
-  // Parse academic year ID
+  // Parse academic year ID(s) - support both single and array
   const academicYearId = branchPayload.academicYearId ?? branchPayload.academic_year_id;
+  const academicYearIds = branchPayload.academicYearIds ?? branchPayload.academic_year_ids;
+  // If array is provided, use it; otherwise fall back to single ID
+  const finalAcademicYearIds = academicYearIds 
+    ? (Array.isArray(academicYearIds) ? academicYearIds : [academicYearIds])
+    : (academicYearId ? [academicYearId] : []);
 
   if (!isUpdate || branchPayload.totalYears !== undefined || branchPayload.total_years !== undefined) {
     if (totalYears <= 0 || totalYears > MAX_YEARS) {
@@ -361,6 +366,7 @@ const validateBranchPayload = (
       totalYears,
       semestersPerYear,
       academicYearId: academicYearId ? parseInt(academicYearId, 10) : null,
+      academicYearIds: finalAcademicYearIds.map(id => parseInt(id, 10)).filter(id => !Number.isNaN(id)),
       metadata: branchPayload.metadata ?? null,
       isActive: parseBoolean(
         branchPayload.isActive ?? branchPayload.is_active,
@@ -969,50 +975,144 @@ exports.createBranch = async (req, res) => {
       });
     }
 
+    // Validate that at least one academic year is provided
+    if (!sanitized.academicYearIds || sanitized.academicYearIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one academic year (batch) must be selected'
+      });
+    }
+
     const branchMetadata =
       sanitized.metadata && typeof sanitized.metadata === 'object'
         ? JSON.stringify(sanitized.metadata)
         : sanitized.metadata;
 
-    const [result] = await masterPool.query(
-      `INSERT INTO course_branches
-        (course_id, name, code, total_years, semesters_per_year, academic_year_id, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        courseId,
-        sanitized.name?.trim(),
-        sanitized.code,
-        sanitized.totalYears,
-        sanitized.semestersPerYear,
-        sanitized.academicYearId || null,
-        branchMetadata || null,
-        sanitized.isActive
-      ]
-    );
+    // Create branch for each selected academic year
+    const createdBranches = [];
+    const connection = await masterPool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
 
-    const branchId = result.insertId;
+      for (const academicYearId of sanitized.academicYearIds) {
+        // Check if branch with same code already exists for this course and academic year
+        // Also check for branches with NULL academic_year_id that might conflict
+        const [existing] = await connection.query(
+          `SELECT id FROM course_branches 
+           WHERE course_id = ? AND code = ? AND (academic_year_id = ? OR academic_year_id IS NULL)`,
+          [courseId, sanitized.code, academicYearId]
+        );
 
-    const [branchRows] = await masterPool.query(
-      `SELECT cb.*, ay.year_label as academic_year_label 
-       FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
-       WHERE cb.id = ? LIMIT 1`,
-      [branchId]
-    );
+        if (existing.length > 0) {
+          // If there's a branch with NULL academic_year_id, update it instead of creating new
+          const [nullYearBranch] = await connection.query(
+            `SELECT id FROM course_branches 
+             WHERE course_id = ? AND code = ? AND academic_year_id IS NULL
+             LIMIT 1`,
+            [courseId, sanitized.code]
+          );
 
-    res.status(201).json({
-      success: true,
-      message: 'Branch created successfully',
-      data: serializeBranchRow(branchRows[0])
-    });
+          if (nullYearBranch.length > 0) {
+            // Update the NULL branch to have the academic year
+            await connection.query(
+              `UPDATE course_branches 
+               SET academic_year_id = ?, name = ?, total_years = ?, semesters_per_year = ?, is_active = ?
+               WHERE id = ?`,
+              [
+                academicYearId,
+                sanitized.name?.trim(),
+                sanitized.totalYears,
+                sanitized.semestersPerYear,
+                sanitized.isActive,
+                nullYearBranch[0].id
+              ]
+            );
+
+            // Fetch the updated branch
+            const [updatedBranchRows] = await connection.query(
+              `SELECT cb.*, ay.year_label as academic_year_label 
+               FROM course_branches cb 
+               LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+               WHERE cb.id = ? LIMIT 1`,
+              [nullYearBranch[0].id]
+            );
+
+            if (updatedBranchRows.length > 0) {
+              createdBranches.push(serializeBranchRow(updatedBranchRows[0]));
+            }
+            continue; // Skip creating new branch, we updated the existing one
+          }
+
+          // Branch already exists for this specific academic year, skip
+          continue;
+        }
+
+        const [result] = await connection.query(
+          `INSERT INTO course_branches
+            (course_id, name, code, total_years, semesters_per_year, academic_year_id, metadata, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            courseId,
+            sanitized.name?.trim(),
+            sanitized.code,
+            sanitized.totalYears,
+            sanitized.semestersPerYear,
+            academicYearId,
+            branchMetadata || null,
+            sanitized.isActive
+          ]
+        );
+
+        const branchId = result.insertId;
+
+        const [branchRows] = await connection.query(
+          `SELECT cb.*, ay.year_label as academic_year_label 
+           FROM course_branches cb 
+           LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
+           WHERE cb.id = ? LIMIT 1`,
+          [branchId]
+        );
+
+        if (branchRows.length > 0) {
+          createdBranches.push(serializeBranchRow(branchRows[0]));
+        }
+      }
+
+      await connection.commit();
+      connection.release();
+
+      if (createdBranches.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Branch with the same code already exists for all selected academic years'
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        message: `Branch created successfully for ${createdBranches.length} batch(es)`,
+        data: createdBranches.length === 1 ? createdBranches[0] : createdBranches,
+        count: createdBranches.length
+      });
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
   } catch (error) {
     console.error('createBranch error:', error);
     let errorMessage = 'Failed to create branch';
     if (error.code === 'ER_DUP_ENTRY') {
-      if (error.message.includes('unique_branch_per_course')) {
+      if (error.message.includes('unique_branch_per_course_year')) {
+        errorMessage = 'Branch with the same name already exists for this course and academic year';
+      } else if (error.message.includes('unique_branch_code_per_course_year')) {
+        errorMessage = 'Branch with the same code already exists for this course and academic year';
+      } else if (error.message.includes('unique_branch_per_course')) {
         errorMessage = 'Branch with the same name already exists for this course';
       } else if (error.message.includes('unique_branch_code_per_course')) {
-        errorMessage = 'Branch with the same code already exists for this course';
+        // This is the old constraint - suggest running migration
+        errorMessage = 'Branch with the same code already exists. Please run the migration script to update the database constraint: node scripts/fix_branch_code_constraint.js';
       } else {
         errorMessage = 'Branch with the same name or code already exists for this course';
       }
