@@ -3,7 +3,7 @@ const { sendAbsenceNotification } = require('../services/smsService');
 const { getNotificationSetting } = require('./settingsController');
 const { sendBrevoEmail } = require('../utils/emailService');
 const { sendAttendanceReportNotifications } = require('../services/attendanceNotificationService');
-const { getAllAttendanceForDate, areAllBatchesMarked } = require('../services/getAllAttendanceForDate');
+const { getAllAttendanceForDate, areAllBatchesMarked, areAllBatchesMarkedForCollege, areAllBatchesMarkedForCollegeCourseBranch } = require('../services/getAllAttendanceForDate');
 const {
   getNonWorkingDayInfo,
   getNonWorkingDaysForRange
@@ -384,7 +384,8 @@ exports.getAttendance = async (req, res) => {
         s.current_semester,
         s.student_data,
         ar.id AS attendance_record_id,
-        ar.status AS attendance_status
+        ar.status AS attendance_status,
+        COALESCE(ar.sms_sent, 0) AS sms_sent
       FROM students s
       LEFT JOIN attendance_records ar
         ON ar.student_id = s.id
@@ -730,7 +731,8 @@ exports.getAttendance = async (req, res) => {
         branch: branchValue,
         currentYear: row.current_year || studentData['Current Academic Year'] || null,
         currentSemester: row.current_semester || studentData['Current Semester'] || null,
-        attendanceStatus: row.attendance_status || null
+        attendanceStatus: row.attendance_status || null,
+        smsSent: row.sms_sent === 1 || row.sms_sent === true
       };
     });
 
@@ -974,6 +976,9 @@ exports.markAttendance = async (req, res) => {
     console.log(`\n========== NOTIFICATION DISPATCH LOG (${normalizedDate}) ==========`);
     console.log(`Total absent students to notify: ${smsQueue.length}`);
     
+    // Get connection again for updating SMS status
+    const updateConnection = await masterPool.getConnection();
+    
     for (const payload of smsQueue) {
       const student = payload.student;
       const studentData = student.student_data || {};
@@ -1018,6 +1023,23 @@ exports.markAttendance = async (req, res) => {
             result.smsError = smsResult?.reason || null;
             result.sentTo = smsResult?.sentTo || studentDetails.parentMobile;
             result.apiResponse = smsResult?.data || null;
+            
+            // Update SMS status in database if SMS was sent successfully
+            if (result.smsSent) {
+              try {
+                await updateConnection.query(
+                  `
+                    UPDATE attendance_records
+                    SET sms_sent = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE student_id = ? AND attendance_date = ?
+                  `,
+                  [student.id, normalizedDate]
+                );
+              } catch (updateError) {
+                // If column doesn't exist, try to add it (graceful fallback)
+                console.warn(`Could not update sms_sent for student ${student.id}:`, updateError.message);
+              }
+            }
           } catch (error) {
             console.error(`SMS notification failed for ${student.admission_number}:`, error);
             result.smsError = error.message || 'unknown_error';
@@ -1034,6 +1056,11 @@ exports.markAttendance = async (req, res) => {
       notificationResults.push(result);
     }
     
+    // Release update connection
+    if (updateConnection) {
+      updateConnection.release();
+    }
+    
     // Summary log
     const smsSuccessCount = notificationResults.filter(r => r.smsSent).length;
     const emailSuccessCount = notificationResults.filter(r => r.emailSent).length;
@@ -1048,129 +1075,116 @@ exports.markAttendance = async (req, res) => {
     // ============================================
     // GENERATE AND SEND ATTENDANCE REPORT PDFs
     // ============================================
-    // Check if all batches are marked for this date
-    const allBatchesMarked = await areAllBatchesMarked(normalizedDate);
+    // Get all attendance data for the date
+    const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
     
+    // Get all active Principals and HODs with their access scopes
+    const { getAllNotificationUsers, filterAttendanceByUserScope, areAllBatchesMarkedForUserScope } = require('../services/getUserScopeAttendance');
+    const { principals, hods } = await getAllNotificationUsers();
+
     console.log(`\n📊 Attendance Report Status for ${normalizedDate}:`);
-    console.log(`   All batches marked: ${allBatchesMarked ? 'YES ✅' : 'NO ⏳'}`);
+    console.log(`   Total attendance groups: ${allAttendanceData.length}`);
+    console.log(`   Total Principals: ${principals.length}`);
+    console.log(`   Total HODs: ${hods.length}`);
 
     const reportResults = [];
+    const processedUsers = new Set(); // Track which users received reports
 
-    // Only send reports if all batches are marked
-    if (allBatchesMarked) {
-      console.log(`\n📧 All batches marked! Generating comprehensive attendance reports...`);
-      
-      // Get all attendance data for the date
-      const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
-      
-      // Group by college for sending reports
-      const collegeGroups = new Map();
-      
-      for (const group of allAttendanceData) {
-        const collegeKey = group.college;
-        
-        if (!collegeGroups.has(collegeKey)) {
-          collegeGroups.set(collegeKey, []);
-        }
-        
-        collegeGroups.get(collegeKey).push(group);
+    // Process each Principal
+    for (const principal of principals) {
+      console.log(`\n👤 Checking Principal: ${principal.name} (${principal.email})`);
+      console.log(`   Scope: Colleges: ${principal.collegeNames.join(', ') || 'All'}, Courses: ${principal.allCourses ? 'All' : principal.courseNames.join(', ') || 'None'}, Branches: ${principal.allBranches ? 'All' : principal.branchNames.join(', ') || 'None'}`);
+
+      // Filter attendance data by principal's scope
+      const filteredGroups = filterAttendanceByUserScope(allAttendanceData, principal);
+
+      if (filteredGroups.length === 0) {
+        console.log(`   ⚠️  No attendance data found in principal's scope`);
+        continue;
       }
 
-      // Send comprehensive reports for each college
-      for (const [collegeName, groups] of collegeGroups) {
-        // Group by course/branch for recipient lookup
-        const courseBranchGroups = new Map();
-        
-        for (const group of groups) {
-          const key = `${group.course}|${group.branch}`;
-          if (!courseBranchGroups.has(key)) {
-            courseBranchGroups.set(key, []);
+      console.log(`   📋 Found ${filteredGroups.length} group(s) in principal's scope`);
+
+      // Check if all batches in principal's scope are marked
+      const allMarked = areAllBatchesMarkedForUserScope(filteredGroups);
+
+      console.log(`   ${allMarked ? '✅ All batches marked' : '⏳ Not all batches marked yet'}`);
+
+      if (allMarked) {
+        // Group filtered groups by college for per-college reports
+        const groupsByCollege = new Map();
+        for (const group of filteredGroups) {
+          const collegeKey = group.college || 'Unknown';
+          if (!groupsByCollege.has(collegeKey)) {
+            groupsByCollege.set(collegeKey, []);
           }
-          courseBranchGroups.get(key).push(group);
+          groupsByCollege.get(collegeKey).push(group);
         }
 
-        // Send report for each course/branch combination
-        for (const [courseBranchKey, courseBranchGroupsList] of courseBranchGroups) {
-          const [courseName, branchName] = courseBranchKey.split('|');
-          
-          // Get IDs for recipient lookup (use first group's data)
-          const firstGroup = courseBranchGroupsList[0];
-          
+        // Send separate report for each college in principal's scope
+        for (const [collegeName, collegeGroups] of groupsByCollege) {
+          // Combine all students and attendance records from all groups for this college
+          const allStudents = [];
+          const allAttendanceRecords = [];
+          const allBatchesData = [];
+
+          for (const group of collegeGroups) {
+            allStudents.push(...group.students);
+            allAttendanceRecords.push(...group.attendanceRecords);
+            allBatchesData.push(group);
+          }
+
+          // Get college ID
           let collegeId = null;
-          let courseId = null;
-          let branchId = null;
-
-          if (firstGroup.college && firstGroup.college !== 'Unknown') {
-            const [collegeRows] = await masterPool.query(
-              'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
-              [firstGroup.college]
-            );
-            if (collegeRows.length > 0) {
-              collegeId = collegeRows[0].id;
-            }
+          if (principal.collegeNames.includes(collegeName)) {
+            const collegeIndex = principal.collegeNames.indexOf(collegeName);
+            collegeId = principal.collegeIds[collegeIndex] || null;
           }
 
-          if (firstGroup.course && firstGroup.course !== 'Unknown' && collegeId) {
-            const [courseRows] = await masterPool.query(
-              'SELECT id FROM courses WHERE name = ? AND college_id = ? AND is_active = 1 LIMIT 1',
-              [firstGroup.course, collegeId]
-            );
-            if (courseRows.length > 0) {
-              courseId = courseRows[0].id;
-            }
-          }
-
-          if (firstGroup.branch && firstGroup.branch !== 'Unknown' && courseId) {
-            const [branchRows] = await masterPool.query(
-              'SELECT id FROM course_branches WHERE name = ? AND course_id = ? AND is_active = 1 LIMIT 1',
-              [firstGroup.branch, courseId]
-            );
-            if (branchRows.length > 0) {
-              branchId = branchRows[0].id;
-            }
-          }
+          // Determine report scope description for this college
+          const scopeDescription = principal.allCourses && principal.allBranches
+            ? 'All Courses & Branches'
+            : principal.allCourses
+              ? `All Courses${principal.branchNames.length > 0 ? ` - ${principal.branchNames.join(', ')}` : ''}`
+              : principal.allBranches
+                ? `${principal.courseNames.join(', ')} - All Branches`
+                : `${principal.courseNames.join(', ')}${principal.branchNames.length > 0 ? ` - ${principal.branchNames.join(', ')}` : ''}`;
 
           try {
-            // Combine all students and attendance records from all groups in this course/branch
-            const allStudents = [];
-            const allAttendanceRecords = [];
-            
-            for (const group of courseBranchGroupsList) {
-              allStudents.push(...group.students);
-              allAttendanceRecords.push(...group.attendanceRecords);
-            }
-
-            // Send comprehensive report with all batches data
             const result = await sendAttendanceReportNotifications({
               collegeId,
-              collegeName: firstGroup.college,
-              courseId,
-              courseName: firstGroup.course,
-              branchId,
-              branchName: firstGroup.branch,
-              batch: 'All Batches', // Indicate this is a comprehensive report
+              collegeName: collegeName,
+              courseId: null, // Scope-based report
+              courseName: scopeDescription,
+              branchId: null, // Scope-based report
+              branchName: principal.allBranches ? 'All Branches' : principal.branchNames.join(', ') || 'All Branches',
+              batch: 'All Batches',
               year: 'All Years',
               semester: 'All Semesters',
               attendanceDate: normalizedDate,
               students: allStudents,
               attendanceRecords: allAttendanceRecords,
-              allBatchesData: courseBranchGroupsList // Pass all batches data for tabular format
+              allBatchesData: allBatchesData,
+              recipientUser: principal // Pass user info for personalized email
             });
 
             reportResults.push({
-              college: firstGroup.college,
-              course: firstGroup.course,
-              branch: firstGroup.branch,
+              user: principal.name,
+              userEmail: principal.email,
+              role: 'Principal',
+              college: collegeName,
               ...result
             });
 
-            console.log(`📊 Comprehensive attendance report for ${firstGroup.college} - ${firstGroup.course} - ${firstGroup.branch}: PDF generated, ${result.emailsSent} emails sent`);
+            processedUsers.add(principal.email);
+            console.log(`   📧 Report sent to Principal: ${principal.name} (${principal.email}) for ${collegeName}`);
           } catch (error) {
-            console.error(`❌ Error sending comprehensive attendance report for ${firstGroup.college} - ${firstGroup.course} - ${firstGroup.branch}:`, error);
+            console.error(`   ❌ Error sending report to Principal ${principal.name} for ${collegeName}:`, error);
             reportResults.push({
-              college: firstGroup.college,
-              course: firstGroup.course,
-              branch: firstGroup.branch,
+              user: principal.name,
+              userEmail: principal.email,
+              role: 'Principal',
+              college: collegeName,
               pdfGenerated: false,
               emailsSent: 0,
               emailsFailed: 0,
@@ -1179,139 +1193,109 @@ exports.markAttendance = async (req, res) => {
           }
         }
       }
-    } else {
-      console.log(`⏳ Not all batches marked yet. Reports will be sent once all batches are marked.`);
-      reportResults.push({
-        message: 'Reports pending - waiting for all batches to be marked',
-        allBatchesMarked: false
-      });
     }
 
-    // Legacy code for individual group reports (kept for backward compatibility, but won't execute if all batches are marked)
-    // Group students by College → Course → Batch → Branch → Year → Semester
-    const studentGroups = new Map();
-    
-    for (const record of normalizedRecords) {
-      const student = studentMap.get(record.studentId);
-      if (!student) continue;
+    // Process each HOD
+    for (const hod of hods) {
+      console.log(`\n👤 Checking HOD: ${hod.name} (${hod.email})`);
+      console.log(`   Scope: Colleges: ${hod.collegeNames.join(', ') || 'All'}, Courses: ${hod.allCourses ? 'All' : hod.courseNames.join(', ') || 'None'}, Branches: ${hod.branchNames.join(', ') || 'None'}`);
 
-      const studentData = student.student_data || {};
-      const college = student.college || studentData['College'] || studentData['college'] || 'Unknown';
-      const course = student.course || studentData['Course'] || studentData['course'] || 'Unknown';
-      const branch = student.branch || studentData['Branch'] || studentData['branch'] || 'Unknown';
-      const batch = student.batch || studentData['Batch'] || studentData['batch'] || 'Unknown';
-      const year = student.current_year || studentData['Current Academic Year'] || 'Unknown';
-      const semester = student.current_semester || studentData['Current Semester'] || 'Unknown';
+      // Filter attendance data by HOD's scope
+      const filteredGroups = filterAttendanceByUserScope(allAttendanceData, hod);
 
-      const groupKey = `${college}|${course}|${batch}|${branch}|${year}|${semester}`;
-      
-      if (!studentGroups.has(groupKey)) {
-        studentGroups.set(groupKey, {
-          college,
-          course,
-          batch,
-          branch,
-          year,
-          semester,
-          students: [],
-          attendanceRecords: []
-        });
+      if (filteredGroups.length === 0) {
+        console.log(`   ⚠️  No attendance data found in HOD's scope`);
+        continue;
       }
 
-      const group = studentGroups.get(groupKey);
-      group.students.push({
-        ...student,
-        student_data: studentData
-      });
-      group.attendanceRecords.push({
-        studentId: student.id,
-        status: record.status
-      });
-    }
+      console.log(`   📋 Found ${filteredGroups.length} group(s) in HOD's scope`);
 
-    // Only send individual group reports if all batches are NOT marked (for backward compatibility)
-    if (!allBatchesMarked) {
-      for (const [groupKey, group] of studentGroups) {
-      try {
-        // Get college, course, branch IDs from database
+      // Check if all batches in HOD's scope are marked
+      const allMarked = areAllBatchesMarkedForUserScope(filteredGroups);
+
+      console.log(`   ${allMarked ? '✅ All batches marked' : '⏳ Not all batches marked yet'}`);
+
+      if (allMarked) {
+        // Combine all students and attendance records from all groups in HOD's scope
+        const allStudents = [];
+        const allAttendanceRecords = [];
+        const allBatchesData = [];
+
+        for (const group of filteredGroups) {
+          allStudents.push(...group.students);
+          allAttendanceRecords.push(...group.attendanceRecords);
+          allBatchesData.push(group);
+        }
+
+        // Get IDs for recipient lookup
         let collegeId = null;
         let courseId = null;
         let branchId = null;
 
-        if (group.college && group.college !== 'Unknown') {
-          const [collegeRows] = await masterPool.query(
-            'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
-            [group.college]
-          );
-          if (collegeRows.length > 0) {
-            collegeId = collegeRows[0].id;
-          }
+        if (hod.collegeIds.length > 0) {
+          collegeId = hod.collegeIds[0];
         }
 
-        if (group.course && group.course !== 'Unknown' && collegeId) {
-          const [courseRows] = await masterPool.query(
-            'SELECT id FROM courses WHERE name = ? AND college_id = ? AND is_active = 1 LIMIT 1',
-            [group.course, collegeId]
-          );
-          if (courseRows.length > 0) {
-            courseId = courseRows[0].id;
-          }
+        if (!hod.allCourses && hod.courseIds.length > 0) {
+          courseId = hod.courseIds[0];
         }
 
-        if (group.branch && group.branch !== 'Unknown' && courseId) {
-          const [branchRows] = await masterPool.query(
-            'SELECT id FROM course_branches WHERE name = ? AND course_id = ? AND is_active = 1 LIMIT 1',
-            [group.branch, courseId]
-          );
-          if (branchRows.length > 0) {
-            branchId = branchRows[0].id;
-          }
+        if (!hod.allBranches && hod.branchIds.length > 0) {
+          branchId = hod.branchIds[0];
         }
 
-        // Log lookup results for debugging
-        console.log(`\n📋 Looking up recipients for:`);
-        console.log(`   College: ${group.college} (ID: ${collegeId || 'NOT FOUND'})`);
-        console.log(`   Course: ${group.course} (ID: ${courseId || 'NOT FOUND'})`);
-        console.log(`   Branch: ${group.branch} (ID: ${branchId || 'NOT FOUND'})`);
-        console.log(`   Batch: ${group.batch}, Year: ${group.year}, Semester: ${group.semester}`);
+        // Get names for display
+        const collegeName = hod.collegeNames[0] || 'Unknown';
+        const courseName = hod.allCourses ? 'All Courses' : (hod.courseNames[0] || 'Unknown');
+        const branchName = hod.allBranches ? 'All Branches' : (hod.branchNames[0] || 'Unknown');
 
-        // Send notifications
-        const result = await sendAttendanceReportNotifications({
-          collegeId,
-          collegeName: group.college,
-          courseId,
-          courseName: group.course,
-          branchId,
-          branchName: group.branch,
-          batch: group.batch,
-          year: group.year,
-          semester: group.semester,
-          attendanceDate: normalizedDate,
-          students: group.students,
-          attendanceRecords: group.attendanceRecords
-        });
+        try {
+          const result = await sendAttendanceReportNotifications({
+            collegeId,
+            collegeName,
+            courseId,
+            courseName,
+            branchId,
+            branchName,
+            batch: 'All Batches',
+            year: 'All Years',
+            semester: 'All Semesters',
+            attendanceDate: normalizedDate,
+            students: allStudents,
+            attendanceRecords: allAttendanceRecords,
+            allBatchesData: allBatchesData,
+            recipientUser: hod // Pass user info for personalized email
+          });
 
-        reportResults.push({
-          group: groupKey,
-          ...result
-        });
+          reportResults.push({
+            user: hod.name,
+            userEmail: hod.email,
+            role: 'HOD',
+            ...result
+          });
 
-        console.log(`📊 Attendance report for ${group.college} - ${group.course} - ${group.branch}: PDF generated, ${result.emailsSent} emails sent`);
-        reportResults.push({
-          group: groupKey,
-          ...result
-        });
-      } catch (error) {
-        console.error(`❌ Error sending attendance report for group ${groupKey}:`, error);
-        reportResults.push({
-          group: groupKey,
-          pdfGenerated: false,
-          emailsSent: 0,
-          emailsFailed: 0,
-          errors: [error.message]
-        });
+          processedUsers.add(hod.email);
+          console.log(`   📧 Report sent to HOD: ${hod.name} (${hod.email})`);
+        } catch (error) {
+          console.error(`   ❌ Error sending report to HOD ${hod.name}:`, error);
+          reportResults.push({
+            user: hod.name,
+            userEmail: hod.email,
+            role: 'HOD',
+            pdfGenerated: false,
+            emailsSent: 0,
+            emailsFailed: 0,
+            errors: [error.message]
+          });
+        }
       }
     }
+
+    // Log summary
+    if (processedUsers.size > 0) {
+      console.log(`\n📋 Summary: Reports sent to ${processedUsers.size} user(s)`);
+    } else {
+      console.log(`\n⏳ No reports sent - waiting for all batches to be marked in user scopes`);
     }
 
     res.json({
@@ -1413,14 +1397,32 @@ exports.retrySms = async (req, res) => {
     }
     
     // Send SMS
+    const normalizedDate = attendanceDate || getDateOnlyString();
     const result = await sendAbsenceNotification({
       student: {
         ...student,
         parent_mobile1: resolvedMobile
       },
-      attendanceDate: attendanceDate || getDateOnlyString(),
+      attendanceDate: normalizedDate,
       notificationSettings
     });
+    
+    // Update SMS status in database if SMS was sent successfully
+    if (result?.success) {
+      try {
+        await masterPool.query(
+          `
+            UPDATE attendance_records
+            SET sms_sent = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE student_id = ? AND attendance_date = ?
+          `,
+          [student.id, normalizedDate]
+        );
+      } catch (updateError) {
+        // If column doesn't exist, try to add it (graceful fallback)
+        console.warn(`Could not update sms_sent for student ${student.id}:`, updateError.message);
+      }
+    }
     
     res.json({
       success: true,

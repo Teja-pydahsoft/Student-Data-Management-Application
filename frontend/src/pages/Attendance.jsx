@@ -664,6 +664,23 @@ const Attendance = () => {
         // If not marked, don't set initial status - this allows saving even when all are present
       });
 
+      // Build SMS status map from API response
+      const newSmsStatusMap = {};
+      fetchedStudents.forEach((student) => {
+        // Only show SMS status for absent students who have SMS sent status
+        if (student.attendanceStatus === 'absent' && student.smsSent) {
+          newSmsStatusMap[student.id] = {
+            success: true,
+            mocked: false,
+            skipped: false,
+            reason: null,
+            sentTo: student.parentMobile1 || student.parentMobile2 || null,
+            studentName: student.studentName,
+            admissionNumber: student.admissionNumber || null
+          };
+        }
+      });
+
       // Get pagination data
       const paginationData = response.data?.pagination || {};
       const total = paginationData.total ?? fetchedStudents.length ?? 0;
@@ -705,7 +722,7 @@ const Attendance = () => {
         setCurrentPage(pageToUse);
       }
       setSmsResults([]);
-      setSmsStatusMap({});
+      setSmsStatusMap(newSmsStatusMap); // Populate SMS status from API response
       setLastUpdatedAt(null); // Clear last updated when loading new data
 
       if (response.data?.data?.holiday) {

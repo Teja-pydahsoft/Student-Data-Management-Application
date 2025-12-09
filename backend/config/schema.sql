@@ -79,11 +79,13 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   status ENUM('present','absent') NOT NULL,
   marked_by INT NULL,
   remarks TEXT,
+  sms_sent TINYINT(1) DEFAULT 0 COMMENT 'Indicates if SMS notification was sent (1 = sent, 0 = not sent)',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_student_date (student_id, attendance_date),
   INDEX idx_attendance_date (attendance_date),
   INDEX idx_status (status),
+  INDEX idx_sms_sent (sms_sent),
   CONSTRAINT fk_attendance_student
     FOREIGN KEY (student_id) REFERENCES students(id)
     ON DELETE CASCADE

@@ -109,10 +109,12 @@ const findNotificationRecipients = async ({
       console.log(`⚠️ Missing required IDs for HOD lookup - College: ${collegeId}, Course: ${courseId}, Branch: ${branchId}`);
     }
 
-    // Find Principals (college_principal) - Must have access to college AND course AND branch
-    // Principals must have access to the specific course and branch, not just the college
-    if (collegeId && courseId && branchId) {
-      console.log(`🔍 Searching for Principals with College: ${collegeId}, Course: ${courseId}, Branch: ${branchId}`);
+    // Find Principals (college_principal)
+    // For campus-wide reports (courseId/branchId null): Only check college access
+    // For specific reports: Check college AND (course OR all_courses) AND (branch OR all_branches)
+    if (collegeId) {
+      const isCampusWideReport = !courseId || !branchId;
+      console.log(`🔍 Searching for Principals with College: ${collegeId}${isCampusWideReport ? ' (Campus-wide report)' : `, Course: ${courseId}, Branch: ${branchId}`}`);
       
       const [principalRows] = await masterPool.query(
         `
@@ -144,28 +146,17 @@ const findNotificationRecipients = async ({
         const principalCourseIds = parseScopeData(principal.course_ids);
         const principalBranchIds = parseScopeData(principal.branch_ids);
         
-        // STRICT CHECK: Must have access to ALL three (college AND course AND branch)
         // Check college access (REQUIRED)
         const hasCollegeAccess = principal.college_id === collegeId || 
                                 principalCollegeIds.includes(collegeId);
         
-        // Check course access (REQUIRED - all_courses flag is acceptable for principals)
-        const hasCourseAccess = principal.all_courses || 
-                                principal.course_id === courseId || 
-                                principalCourseIds.includes(courseId);
-        
-        // Check branch access (REQUIRED - all_branches flag is acceptable for principals)
-        const hasBranchAccess = principal.all_branches || 
-                               principal.branch_id === branchId || 
-                               principalBranchIds.includes(branchId);
+        if (!hasCollegeAccess) {
+          console.log(`   Principal: ${principal.name} (ID: ${principal.id}) - ❌ No college access`);
+          continue;
+        }
 
-        console.log(`   Principal: ${principal.name} (ID: ${principal.id})`);
-        console.log(`     - College: ${hasCollegeAccess ? '✅' : '❌'} (college_id: ${principal.college_id}, college_ids: ${JSON.stringify(principalCollegeIds)})`);
-        console.log(`     - Course: ${hasCourseAccess ? '✅' : '❌'} (course_id: ${principal.course_id}, course_ids: ${JSON.stringify(principalCourseIds)}, all_courses: ${principal.all_courses})`);
-        console.log(`     - Branch: ${hasBranchAccess ? '✅' : '❌'} (branch_id: ${principal.branch_id}, branch_ids: ${JSON.stringify(principalBranchIds)}, all_branches: ${principal.all_branches})`);
-
-        // ALL THREE must be true (college AND course AND branch)
-        if (hasCollegeAccess && hasCourseAccess && hasBranchAccess) {
+        // For campus-wide reports, only check college access
+        if (isCampusWideReport) {
           recipients.principals.push({
             id: principal.id,
             name: principal.name,
@@ -173,13 +164,39 @@ const findNotificationRecipients = async ({
             phone: principal.phone,
             role: principal.role
           });
-          console.log(`     ✅ Added Principal: ${principal.name} (${principal.email})`);
+          console.log(`     ✅ Added Principal (Campus-wide): ${principal.name} (${principal.email})`);
         } else {
-          console.log(`     ❌ Principal ${principal.name} does not have complete access (College: ${hasCollegeAccess}, Course: ${hasCourseAccess}, Branch: ${hasBranchAccess})`);
+          // For specific reports, check course and branch access
+          const hasCourseAccess = principal.all_courses || 
+                                  principal.course_id === courseId || 
+                                  principalCourseIds.includes(courseId);
+          
+          const hasBranchAccess = principal.all_branches || 
+                                 principal.branch_id === branchId || 
+                                 principalBranchIds.includes(branchId);
+
+          console.log(`   Principal: ${principal.name} (ID: ${principal.id})`);
+          console.log(`     - College: ✅ (college_id: ${principal.college_id}, college_ids: ${JSON.stringify(principalCollegeIds)})`);
+          console.log(`     - Course: ${hasCourseAccess ? '✅' : '❌'} (course_id: ${principal.course_id}, course_ids: ${JSON.stringify(principalCourseIds)}, all_courses: ${principal.all_courses})`);
+          console.log(`     - Branch: ${hasBranchAccess ? '✅' : '❌'} (branch_id: ${principal.branch_id}, branch_ids: ${JSON.stringify(principalBranchIds)}, all_branches: ${principal.all_branches})`);
+
+          // Course AND Branch must be accessible (all_courses/all_branches flags are acceptable)
+          if (hasCourseAccess && hasBranchAccess) {
+            recipients.principals.push({
+              id: principal.id,
+              name: principal.name,
+              email: principal.email,
+              phone: principal.phone,
+              role: principal.role
+            });
+            console.log(`     ✅ Added Principal: ${principal.name} (${principal.email})`);
+          } else {
+            console.log(`     ❌ Principal ${principal.name} does not have complete access (Course: ${hasCourseAccess}, Branch: ${hasBranchAccess})`);
+          }
         }
       }
     } else {
-      console.log(`⚠️ Missing required IDs for Principal lookup - College: ${collegeId}, Course: ${courseId}, Branch: ${branchId}`);
+      console.log(`⚠️ Missing college ID for Principal lookup`);
     }
 
     // Log found recipients for debugging
@@ -217,7 +234,8 @@ const sendAttendanceReportNotifications = async ({
   attendanceDate,
   students,
   attendanceRecords,
-  allBatchesData = null // Optional: all batches data for comprehensive report
+  allBatchesData = null, // Optional: all batches data for comprehensive report
+  recipientUser = null // Optional: specific user to send to (bypasses recipient lookup)
 }) => {
   const results = {
     pdfGenerated: false,
@@ -246,21 +264,37 @@ const sendAttendanceReportNotifications = async ({
     // Read PDF file
     const pdfBuffer = fs.readFileSync(pdfPath);
 
-    // Find recipients
-    const recipients = await findNotificationRecipients({
-      collegeId,
-      courseId,
-      branchId,
-      year,
-      semester
-    });
+    // If recipientUser is provided, send directly to that user
+    // Otherwise, use the old lookup method for backward compatibility
+    let allRecipients = [];
 
-    // Combine all recipients - ONLY HODs and Principals
-    // Explicitly filter to ensure no students or other roles receive attendance reports
-    const allRecipients = [
-      ...recipients.hods.filter(r => r.role === USER_ROLES.BRANCH_HOD),
-      ...recipients.principals.filter(r => r.role === USER_ROLES.COLLEGE_PRINCIPAL)
-    ];
+    if (recipientUser) {
+      // Send directly to the specified user
+      allRecipients = [{
+        id: recipientUser.id,
+        name: recipientUser.name,
+        email: recipientUser.email,
+        phone: recipientUser.phone,
+        role: recipientUser.role
+      }];
+      console.log(`📧 Sending report directly to ${recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal'}: ${recipientUser.name} (${recipientUser.email})`);
+    } else {
+      // Find recipients using lookup (backward compatibility)
+      const recipients = await findNotificationRecipients({
+        collegeId,
+        courseId,
+        branchId,
+        year,
+        semester
+      });
+
+      // Combine all recipients - ONLY HODs and Principals
+      // Explicitly filter to ensure no students or other roles receive attendance reports
+      allRecipients = [
+        ...recipients.hods.filter(r => r.role === USER_ROLES.BRANCH_HOD),
+        ...recipients.principals.filter(r => r.role === USER_ROLES.COLLEGE_PRINCIPAL)
+      ];
+    }
 
     // Safety check: Ensure no other roles are included
     const invalidRecipients = allRecipients.filter(r => 
@@ -291,33 +325,74 @@ const sendAttendanceReportNotifications = async ({
     }
 
     // Log recipient details for verification
-    console.log(`📧 Found ${allRecipients.length} valid recipient(s) for attendance report:`);
-    console.log(`   - HODs: ${recipients.hods.length}`);
-    console.log(`   - Principals: ${recipients.principals.length}`);
+    console.log(`📧 Found ${allRecipients.length} valid recipient(s) for attendance report`);
+    if (!recipientUser) {
+      // Only log detailed breakdown if using lookup method
+      const hodCount = allRecipients.filter(r => r.role === USER_ROLES.BRANCH_HOD).length;
+      const principalCount = allRecipients.filter(r => r.role === USER_ROLES.COLLEGE_PRINCIPAL).length;
+      console.log(`   - HODs: ${hodCount}`);
+      console.log(`   - Principals: ${principalCount}`);
+    }
     console.log(`   ✅ All recipients are HODs or Principals only (no students)`);
 
-    // Send email to each recipient
-    const emailSubject = `Attendance Report - ${collegeName || 'College'} - ${new Date(attendanceDate).toLocaleDateString('en-IN')}`;
-    const emailBody = `
-      Dear ${recipients.hods.length > 0 ? 'HOD/Principal' : 'Principal'},
+    // Calculate attendance statistics
+    const totalStudents = students.length;
+    const presentCount = attendanceRecords.filter(r => r.status === 'present').length;
+    const absentCount = attendanceRecords.filter(r => r.status === 'absent').length;
+    const markedCount = attendanceRecords.length;
 
-      Please find attached the attendance report for:
+    // Format date for display
+    const formattedDate = new Date(attendanceDate).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
+    // Determine recipient type for personalized greeting
+    let recipientType = 'Principal';
+    if (recipientUser) {
+      recipientType = recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal';
+    } else {
+      // Backward compatibility: determine from recipients
+      const recipients = { hods: [], principals: [] };
+      allRecipients.forEach(r => {
+        if (r.role === USER_ROLES.BRANCH_HOD) recipients.hods.push(r);
+        if (r.role === USER_ROLES.COLLEGE_PRINCIPAL) recipients.principals.push(r);
+      });
+      recipientType = recipients.hods.length > 0 && recipients.principals.length > 0 
+        ? 'HOD/Principal' 
+        : recipients.hods.length > 0 
+          ? 'HOD' 
+          : 'Principal';
+    }
+    
+    // Build email subject with college, course, branch info
+    let emailSubject = `Attendance Report - ${collegeName || 'College'}`;
+    if (courseName && courseName !== 'All Courses') {
+      emailSubject += ` - ${courseName}`;
+    }
+    if (branchName && branchName !== 'All Branches') {
+      emailSubject += ` - ${branchName}`;
+    }
+    emailSubject += ` - ${formattedDate}`;
+    const recipientName = recipientUser ? recipientUser.name : recipientType;
+    const emailBody = `
+      Dear ${recipientName},
+
+      Please find the attendance summary for today:
 
       College: ${collegeName || 'N/A'}
-      Batch: ${batch || 'N/A'}
       Course: ${courseName || 'N/A'}
       Branch: ${branchName || 'N/A'}
-      Year: ${year || 'N/A'}
-      Semester: ${semester || 'N/A'}
-      Date: ${new Date(attendanceDate).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      })}
+      Date: ${formattedDate}
 
-      The report includes:
-      1. Attendance Summary with statistics
-      2. Detailed Student List with attendance status
+      Attendance Summary:
+      - Total Students Present Today: ${presentCount}
+      - Total Students Absent Today: ${absentCount}
+      - Total Students Marked: ${markedCount}
+
+      To view detailed student information and download the complete report, please visit:
+      https://pydahsdms.vercel.app/attendance
 
       This is an automated notification from the Student Database Management System.
 
@@ -340,6 +415,14 @@ const sendAttendanceReportNotifications = async ({
           .info-row:last-child { border-bottom: none; }
           .info-label { color: #64748b; font-weight: 600; }
           .info-value { color: #1e293b; }
+          .summary-box { background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .summary-title { color: #0369a1; font-weight: 700; font-size: 16px; margin-bottom: 15px; }
+          .summary-row { display: flex; justify-content: space-between; padding: 10px 0; }
+          .summary-label { color: #0c4a6e; font-weight: 600; }
+          .summary-value { color: #075985; font-weight: 700; font-size: 18px; }
+          .link-box { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center; }
+          .link-box a { color: #d97706; font-weight: 600; text-decoration: none; font-size: 16px; }
+          .link-box a:hover { text-decoration: underline; }
           .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
         </style>
       </head>
@@ -349,17 +432,13 @@ const sendAttendanceReportNotifications = async ({
             <h1>📊 Attendance Report</h1>
           </div>
           <div class="content">
-            <p>Dear ${recipients.hods.length > 0 ? 'HOD/Principal' : 'Principal'},</p>
-            <p>Please find attached the attendance report for:</p>
+            <p>Dear ${recipientName},</p>
+            <p>Please find the attendance summary for today:</p>
             
             <div class="info-box">
               <div class="info-row">
                 <span class="info-label">College:</span>
                 <span class="info-value">${collegeName || 'N/A'}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Batch:</span>
-                <span class="info-value">${batch || 'N/A'}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">Course:</span>
@@ -370,30 +449,33 @@ const sendAttendanceReportNotifications = async ({
                 <span class="info-value">${branchName || 'N/A'}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Year:</span>
-                <span class="info-value">${year || 'N/A'}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Semester:</span>
-                <span class="info-value">${semester || 'N/A'}</span>
-              </div>
-              <div class="info-row">
                 <span class="info-label">Date:</span>
-                <span class="info-value">${new Date(attendanceDate).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric'
-                })}</span>
+                <span class="info-value">${formattedDate}</span>
               </div>
             </div>
 
-            <p>The report includes:</p>
-            <ul>
-              <li>Attendance Summary with statistics</li>
-              <li>Detailed Student List with attendance status</li>
-            </ul>
+            <div class="summary-box">
+              <div class="summary-title">📈 Attendance Summary</div>
+              <div class="summary-row">
+                <span class="summary-label">Total Students Present Today:</span>
+                <span class="summary-value">${presentCount}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Total Students Absent Today:</span>
+                <span class="summary-value">${absentCount}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Total Students Marked:</span>
+                <span class="summary-value">${markedCount}</span>
+              </div>
+            </div>
 
-            <p>This is an automated notification from the Student Database Management System.</p>
+            <div class="link-box">
+              <p style="margin: 0 0 10px 0; color: #92400e; font-weight: 600;">To view detailed student information and download the complete report:</p>
+              <a href="https://pydahsdms.vercel.app/attendance" target="_blank">View Attendance Details & Download Report</a>
+            </div>
+
+            <p style="margin-top: 20px; color: #64748b; font-size: 14px;">This is an automated notification from the Student Database Management System.</p>
           </div>
           <div class="footer">
             <p>Best regards,<br>System Administrator</p>
@@ -421,7 +503,7 @@ const sendAttendanceReportNotifications = async ({
           to: recipient.email,
           toName: recipient.name,
           subject: emailSubject,
-          htmlContent: htmlContent.replace('HOD/Principal', recipient.name),
+          htmlContent: htmlContent.replace(/\$\{recipientType\}/g, recipient.name).replace('HOD/Principal', recipient.name),
           attachments: [pdfPath] // Pass file path, email service will read it
         });
 

@@ -140,8 +140,78 @@ const areAllBatchesMarked = async (attendanceDate) => {
   }
 };
 
+/**
+ * Check if all batches for a specific college are marked for a specific date
+ */
+const areAllBatchesMarkedForCollege = async (attendanceDate, collegeName) => {
+  try {
+    const allAttendance = await getAllAttendanceForDate(attendanceDate);
+    
+    if (allAttendance.length === 0) {
+      return false; // No students found
+    }
+
+    // Filter groups by college
+    const collegeGroups = allAttendance.filter(group => 
+      group.college === collegeName || 
+      group.college === 'Unknown' && collegeName === 'Unknown'
+    );
+    
+    if (collegeGroups.length === 0) {
+      return false; // No groups found for this college
+    }
+
+    // Check if all groups for this college are fully marked
+    const allMarked = collegeGroups.every(group => group.isFullyMarked);
+    
+    return allMarked;
+  } catch (error) {
+    console.error(`Error checking if all batches are marked for college ${collegeName}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Check if all batches for a specific college+course+branch combination are marked
+ */
+const areAllBatchesMarkedForCollegeCourseBranch = async (attendanceDate, collegeName, courseName, branchName) => {
+  try {
+    const allAttendance = await getAllAttendanceForDate(attendanceDate);
+    
+    if (allAttendance.length === 0) {
+      return false; // No students found
+    }
+
+    // Filter groups by college, course, and branch
+    const filteredGroups = allAttendance.filter(group => {
+      const collegeMatch = group.college === collegeName || 
+                          (group.college === 'Unknown' && collegeName === 'Unknown');
+      const courseMatch = group.course === courseName || 
+                         (group.course === 'Unknown' && courseName === 'Unknown');
+      const branchMatch = group.branch === branchName || 
+                         (group.branch === 'Unknown' && branchName === 'Unknown');
+      
+      return collegeMatch && courseMatch && branchMatch;
+    });
+    
+    if (filteredGroups.length === 0) {
+      return false; // No groups found for this combination
+    }
+
+    // Check if all groups for this combination are fully marked
+    const allMarked = filteredGroups.every(group => group.isFullyMarked);
+    
+    return allMarked;
+  } catch (error) {
+    console.error(`Error checking if all batches are marked for ${collegeName} - ${courseName} - ${branchName}:`, error);
+    return false;
+  }
+};
+
 module.exports = {
   getAllAttendanceForDate,
-  areAllBatchesMarked
+  areAllBatchesMarked,
+  areAllBatchesMarkedForCollege,
+  areAllBatchesMarkedForCollegeCourseBranch
 };
 
