@@ -70,6 +70,7 @@ const Students = () => {
   const [showManualRollNumber, setShowManualRollNumber] = useState(false);
   const [showBulkStudentUpload, setShowBulkStudentUpload] = useState(false);
   const [editingRollNumber, setEditingRollNumber] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [tempRollNumber, setTempRollNumber] = useState('');
   const [savingPinNumber, setSavingPinNumber] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -2085,7 +2086,7 @@ const Students = () => {
                     {/* Student Photo */}
                     <div className="flex flex-col items-center">
                       <div className="relative">
-                        <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode ? 'cursor-pointer hover:border-blue-400 active:border-blue-500 transition-colors' : ''}`}>
+                        <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode && !photoUploading ? 'cursor-pointer hover:border-blue-400 active:border-blue-500 transition-colors' : ''} ${photoUploading ? 'cursor-wait opacity-75' : ''}`}>
                           {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
                             <img
                               key={editData.student_photo}
@@ -2105,48 +2106,82 @@ const Students = () => {
                               <span className="text-xs text-gray-500">No Photo</span>
                             </div>
                           </div>
-                          {editMode && (
+                          {editMode && !photoUploading && (
                             <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all">
                               <div className="text-white text-xs font-medium opacity-0 hover:opacity-100">
                                 Click to Upload
                               </div>
                             </div>
                           )}
+                          {photoUploading && (
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-lg">
+                              <div className="bg-white rounded-lg p-4 flex flex-col items-center gap-2">
+                                <LoadingAnimation width={32} height={32} showMessage={false} />
+                                <span className="text-sm text-gray-700 font-medium">Uploading photo...</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         {editMode && (
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={async (e) => {
-                              const file = e.target.files[0];
-                              if (file) {
-                                try {
-                                  const formData = new FormData();
-                                  formData.append('photo', file);
-                                  formData.append('admissionNumber', selectedStudent.admission_number);
-
-                                  const uploadResponse = await api.post('/students/upload-photo', formData, {
-                                    headers: {
-                                      'Content-Type': 'multipart/form-data',
-                                    },
-                                  });
-
-                                  if (uploadResponse.data.success) {
-                                    // Use the base64 data URL returned from backend for immediate display
-                                    updateEditField('student_photo', uploadResponse.data.data.photo_url);
-                                    toast.success('Photo uploaded successfully');
-                                  } else {
-                                    toast.error('Failed to upload photo');
+                          <>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={async (e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  // Validate file type
+                                  if (!file.type.startsWith('image/')) {
+                                    toast.error('Please select a valid image file');
+                                    return;
                                   }
-                                } catch (error) {
-                                  console.error('Photo upload error:', error);
-                                  toast.error('Failed to upload photo');
+
+                                  // Validate file size (5MB limit)
+                                  if (file.size > 5 * 1024 * 1024) {
+                                    toast.error('File size should be less than 5MB');
+                                    return;
+                                  }
+
+                                  setPhotoUploading(true);
+                                  try {
+                                    const formData = new FormData();
+                                    formData.append('photo', file);
+                                    formData.append('admissionNumber', selectedStudent.admission_number);
+
+                                    const uploadResponse = await api.post('/students/upload-photo', formData, {
+                                      headers: {
+                                        'Content-Type': 'multipart/form-data',
+                                      },
+                                    });
+
+                                    if (uploadResponse.data.success) {
+                                      // Use the base64 data URL returned from backend for immediate display
+                                      updateEditField('student_photo', uploadResponse.data.data.photo_url);
+                                      toast.success('Photo uploaded successfully');
+                                    } else {
+                                      toast.error('Failed to upload photo');
+                                    }
+                                  } catch (error) {
+                                    console.error('Photo upload error:', error);
+                                    toast.error('Failed to upload photo');
+                                  } finally {
+                                    setPhotoUploading(false);
+                                  }
                                 }
-                              }
-                            }}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            id="student-photo-upload"
-                          />
+                              }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              id="student-photo-upload"
+                              disabled={photoUploading}
+                            />
+                            {photoUploading && (
+                              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-lg">
+                                <div className="bg-white rounded-lg p-4 flex flex-col items-center gap-2">
+                                  <LoadingAnimation width={32} height={32} showMessage={false} />
+                                  <span className="text-sm text-gray-700 font-medium">Uploading photo...</span>
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                       {editMode && (
