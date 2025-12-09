@@ -25,10 +25,6 @@ const clearStudentsCache = () => {
 // Upload student photo to MySQL database
 exports.uploadStudentPhoto = async (req, res) => {
   try {
-    console.log('Photo upload request received');
-    console.log('File:', req.file);
-    console.log('Body:', req.body);
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -44,6 +40,13 @@ exports.uploadStudentPhoto = async (req, res) => {
       });
     }
 
+    // Get student PIN number for logging
+    const [studentRows] = await masterPool.query(
+      'SELECT pin_no FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+    const pinNo = studentRows.length > 0 ? studentRows[0].pin_no : null;
+
     // Read file and convert to base64
     const fs = require('fs');
     const fileBuffer = fs.readFileSync(req.file.path);
@@ -53,15 +56,11 @@ exports.uploadStudentPhoto = async (req, res) => {
     // Create data URL for the image
     const imageDataUrl = `data:${mimeType};base64,${base64Image}`;
 
-    console.log('Image converted to base64, size:', base64Image.length);
-
     // Update student record with base64 image data
     const [result] = await masterPool.query(
       'UPDATE students SET student_photo = ? WHERE admission_number = ?',
       [imageDataUrl, admissionNumber]
     );
-
-    console.log('Database update result:', result);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -70,8 +69,11 @@ exports.uploadStudentPhoto = async (req, res) => {
       });
     }
 
-    // Log the successful upload (minimal logging to reduce clutter)
-    console.log(`✅ Photo uploaded for student ${admissionNumber} (${(base64Image.length / 1024).toFixed(2)} KB)`);
+    // Log the successful upload with PIN number
+    const logMessage = pinNo 
+      ? `✅ Photo updated for student with PIN: ${pinNo} (Admission: ${admissionNumber})`
+      : `✅ Photo updated for student (Admission: ${admissionNumber})`;
+    console.log(logMessage);
 
     // Clean up temporary file
     fs.unlinkSync(req.file.path);
@@ -2298,8 +2300,21 @@ exports.updateStudent = async (req, res) => {
     const { admissionNumber } = req.params;
     const { studentData } = req.body;
 
+    // Sanitize studentData for logging (remove large base64 image data)
+    const sanitizedDataForLog = { ...studentData };
+    if (sanitizedDataForLog.student_photo && typeof sanitizedDataForLog.student_photo === 'string') {
+      if (sanitizedDataForLog.student_photo.startsWith('data:image/')) {
+        sanitizedDataForLog.student_photo = '[Base64 Image Data - Removed from log]';
+      }
+    }
+    if (sanitizedDataForLog['Student Photo'] && typeof sanitizedDataForLog['Student Photo'] === 'string') {
+      if (sanitizedDataForLog['Student Photo'].startsWith('data:image/')) {
+        sanitizedDataForLog['Student Photo'] = '[Base64 Image Data - Removed from log]';
+      }
+    }
+
     console.log('Update request for admission:', admissionNumber);
-    console.log('Received studentData:', JSON.stringify(studentData, null, 2));
+    console.log('Received studentData:', JSON.stringify(sanitizedDataForLog, null, 2));
 
     if (!studentData || typeof studentData !== 'object') {
       return res.status(400).json({
@@ -2322,7 +2337,25 @@ exports.updateStudent = async (req, res) => {
     }
 
     const existingStudent = existingStudents[0];
-    console.log('Existing student data:', JSON.stringify(existingStudent, null, 2));
+    
+    // Sanitize existing student data for logging (remove large base64 image data)
+    const sanitizedExisting = { ...existingStudent };
+    if (sanitizedExisting.student_photo && typeof sanitizedExisting.student_photo === 'string') {
+      if (sanitizedExisting.student_photo.startsWith('data:image/')) {
+        sanitizedExisting.student_photo = '[Base64 Image Data - Removed from log]';
+      }
+    }
+    const existingStudentDataParsed = parseJSON(existingStudent.student_data) || {};
+    if (existingStudentDataParsed.student_photo && typeof existingStudentDataParsed.student_photo === 'string') {
+      if (existingStudentDataParsed.student_photo.startsWith('data:image/')) {
+        existingStudentDataParsed.student_photo = '[Base64 Image Data - Removed from log]';
+      }
+    }
+    if (sanitizedExisting.student_data) {
+      sanitizedExisting.student_data = JSON.stringify(existingStudentDataParsed);
+    }
+    
+    console.log('Existing student data:', JSON.stringify(sanitizedExisting, null, 2));
 
     // Parse existing student_data to merge with incoming data
     const existingStudentData = parseJSON(existingStudent.student_data) || {};
@@ -2421,9 +2454,6 @@ exports.updateStudent = async (req, res) => {
       updateValues
     );
 
-    console.log('Update result:', result);
-    console.log('Affected rows:', result.affectedRows);
-
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
@@ -2431,13 +2461,22 @@ exports.updateStudent = async (req, res) => {
       });
     }
 
-    // Verify the update by fetching the updated data
-    const [updatedStudents] = await masterPool.query(
-      'SELECT * FROM students WHERE admission_number = ?',
-      [admissionNumber]
-    );
-
-    console.log('Updated student data:', JSON.stringify(updatedStudents[0], null, 2));
+    // Get PIN number for logging
+    const pinNo = existingStudent.pin_no || null;
+    const hasPhotoUpdate = mutableStudentData.student_photo || mutableStudentData['Student Photo'];
+    
+    // Log update with PIN number, especially if photo was updated
+    if (hasPhotoUpdate) {
+      const logMessage = pinNo 
+        ? `✅ Student details updated (Photo updated) - PIN: ${pinNo}, Admission: ${admissionNumber}`
+        : `✅ Student details updated (Photo updated) - Admission: ${admissionNumber}`;
+      console.log(logMessage);
+    } else {
+      const logMessage = pinNo 
+        ? `✅ Student details updated - PIN: ${pinNo}, Admission: ${admissionNumber}`
+        : `✅ Student details updated - Admission: ${admissionNumber}`;
+      console.log(logMessage);
+    }
 
     // Log action (non-blocking - don't fail the operation if logging fails)
     try {
@@ -2452,8 +2491,6 @@ exports.updateStudent = async (req, res) => {
     }
 
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
-
-    console.log('Update completed successfully');
 
     clearStudentsCache();
 
@@ -2874,10 +2911,12 @@ exports.createStudent = async (req, res) => {
       if (photoData.startsWith('data:image/')) {
         photoDataUrl = photoData;
         const sizeKB = (photoData.length * 0.75 / 1024).toFixed(2); // Approximate size
+        // Log without the actual image data
         console.log(`📷 Photo stored as base64 data URL (${sizeKB} KB)`);
       } else if (photoData.startsWith('http')) {
         // It's an HTTP URL, keep it as-is
         photoDataUrl = photoData;
+        console.log('📷 Photo stored as HTTP URL');
       } else {
         // It's a filename - for backward compatibility, try to convert to base64 if file exists locally
         try {
@@ -2889,7 +2928,7 @@ exports.createStudent = async (req, res) => {
             const ext = photoData.split('.').pop().toLowerCase();
             const mimeType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
             photoDataUrl = `data:${mimeType};base64,${base64}`;
-            console.log(`📷 Converted file ${photoData} to base64 data URL`);
+            console.log(`📷 Converted file to base64: ${photoData}`);
           } else {
             // File doesn't exist, keep the filename for reference
             photoDataUrl = photoData;
