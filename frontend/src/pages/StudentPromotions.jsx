@@ -62,6 +62,10 @@ const StudentPromotions = () => {
   const [pageSize, setPageSize] = useState(25);
   const pageSizeOptions = [10, 25, 50, 100];
   const invalidateStudents = useInvalidateStudents();
+  const [leftOutStudents, setLeftOutStudents] = useState([]);
+  const [leftOutModalOpen, setLeftOutModalOpen] = useState(false);
+  const [leftOutStudentData, setLeftOutStudentData] = useState({});
+  const [detectedLeftOutStudents, setDetectedLeftOutStudents] = useState([]);
 
   const selectedCount = selectedAdmissionNumbers.size;
 
@@ -153,6 +157,7 @@ const StudentPromotions = () => {
   };
 
   // Use React Query to fetch paginated students with filters
+  // Only show students with status "Regular" on promotions page
   const hasActiveFilters = Object.values(filters).some(value => value) || searchTerm.trim().length > 0;
   const { 
     data: studentsData, 
@@ -168,6 +173,7 @@ const StudentPromotions = () => {
       branch: filters.branch,
       year: filters.year,
       semester: filters.semester,
+      student_status: 'Regular', // Only show Regular students for promotions
     },
     search: searchTerm.trim(),
     enabled: hasActiveFilters // Only fetch when filters or search are applied
@@ -178,23 +184,47 @@ const StudentPromotions = () => {
   const totalPages = studentsData?.pagination?.totalPages || 1;
   const isAllSelected = students.length > 0 && students.every(s => selectedAdmissionNumbers.has(s.admission_number));
 
-  // Auto-select all students on current page when filters are first applied
+  // Auto-select ALL students matching filters when filters are first applied
   useEffect(() => {
-    if (students.length > 0 && hasActiveFilters && currentPage === 1) {
-      const currentPageIds = students.map((s) => s.admission_number);
-      const currentPageIdsString = currentPageIds.sort().join(',');
+    if (hasActiveFilters && currentPage === 1 && totalStudents > 0) {
+      const filterKey = `${filters.batch}-${filters.course}-${filters.branch}-${filters.year}-${filters.semester}-${searchTerm}`;
       
-      if (lastAutoSelectRef.current !== currentPageIdsString) {
-        // Add current page students to selection (don't clear existing selections)
-        setSelectedAdmissionNumbers(prev => {
-          const updated = new Set(prev);
-          currentPageIds.forEach(id => updated.add(id));
-          return updated;
-        });
-        lastAutoSelectRef.current = currentPageIdsString;
+      if (lastAutoSelectRef.current !== filterKey) {
+        // Fetch and select all students matching current filters (only Regular status)
+        const selectAllMatching = async () => {
+          try {
+            const queryParams = new URLSearchParams();
+            if (filters.batch) queryParams.append('filter_batch', filters.batch);
+            if (filters.course) queryParams.append('filter_course', filters.course);
+            if (filters.branch) queryParams.append('filter_branch', filters.branch);
+            if (filters.year) queryParams.append('filter_year', filters.year);
+            if (filters.semester) queryParams.append('filter_semester', filters.semester);
+            if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
+            queryParams.append('filter_student_status', 'Regular'); // Only Regular students
+            queryParams.append('limit', 'all');
+            
+            const response = await api.get(`/students?${queryParams.toString()}`);
+            const allStudents = response.data?.data || [];
+            const allAdmissionNumbers = allStudents.map(s => s.admission_number);
+            setSelectedAdmissionNumbers(new Set(allAdmissionNumbers));
+            lastAutoSelectRef.current = filterKey;
+          } catch (error) {
+            console.warn('Failed to auto-select all students:', error);
+            // Fallback: select current page students
+            const currentPageIds = students.map((s) => s.admission_number);
+            setSelectedAdmissionNumbers(prev => {
+              const updated = new Set(prev);
+              currentPageIds.forEach(id => updated.add(id));
+              return updated;
+            });
+            lastAutoSelectRef.current = filterKey;
+          }
+        };
+        
+        selectAllMatching();
       }
     }
-  }, [students, hasActiveFilters, currentPage]);
+  }, [hasActiveFilters, filters.batch, filters.course, filters.branch, filters.year, filters.semester, searchTerm, totalStudents, currentPage, students]);
 
   const handlePageChange = (newPage) => {
     if (newPage === currentPage || newPage < 1 || newPage > totalPages) {
@@ -215,7 +245,7 @@ const StudentPromotions = () => {
   // Select all students matching current filters (across all pages)
   const toggleSelectAllStudents = async (checked) => {
     if (checked) {
-      // Fetch all students matching current filters to select them all
+      // Fetch all students matching current filters to select them all (only Regular status)
       try {
         const queryParams = new URLSearchParams();
         if (filters.batch) queryParams.append('filter_batch', filters.batch);
@@ -224,6 +254,7 @@ const StudentPromotions = () => {
         if (filters.year) queryParams.append('filter_year', filters.year);
         if (filters.semester) queryParams.append('filter_semester', filters.semester);
         if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
+        queryParams.append('filter_student_status', 'Regular'); // Only Regular students
         queryParams.append('limit', 'all'); // Fetch all matching students
         
         const response = await api.get(`/students?${queryParams.toString()}`);
@@ -457,6 +488,31 @@ const StudentPromotions = () => {
 
       setPromotionPlan(plan);
       setHasStageConflicts(plan.some((item) => item.hasConflict));
+      
+      // Check for left-out students early (students matching filters but not selected)
+      try {
+        const allMatchingStudents = await fetchAllMatchingStudents();
+        const leftOut = allMatchingStudents.filter(
+          (student) => !selectedIds.includes(student.admission_number)
+        );
+        setDetectedLeftOutStudents(leftOut);
+        
+        // Pre-initialize left-out student data if any
+        if (leftOut.length > 0) {
+          const initialData = {};
+          leftOut.forEach((student) => {
+            initialData[student.admission_number] = {
+              remarks: student.remarks || '',
+              student_status: student.student_status || 'Regular'
+            };
+          });
+          setLeftOutStudentData(initialData);
+        }
+      } catch (error) {
+        console.warn('Failed to check for left-out students:', error);
+        setDetectedLeftOutStudents([]);
+      }
+      
       setConfirmationOpen(true);
     } catch (error) {
       toast.error('Failed to load student data for promotion plan');
@@ -476,18 +532,65 @@ const StudentPromotions = () => {
       return;
     }
 
+    // Use the already detected left-out students
+    const leftOut = detectedLeftOutStudents;
+
+    // If there are left-out students, show modal to add remarks/status
+    if (leftOut.length > 0) {
+      setLeftOutStudents(leftOut);
+      setLeftOutModalOpen(true);
+      setConfirmationOpen(false);
+      return;
+    }
+
+    // No left-out students, proceed with promotion
+    await performPromotion(promotableStudents, []);
+  };
+
+  const fetchAllMatchingStudents = async () => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (filters.batch) queryParams.append('filter_batch', filters.batch);
+      if (filters.course) queryParams.append('filter_course', filters.course);
+      if (filters.branch) queryParams.append('filter_branch', filters.branch);
+      if (filters.year) queryParams.append('filter_year', filters.year);
+      if (filters.semester) queryParams.append('filter_semester', filters.semester);
+      if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
+      queryParams.append('filter_student_status', 'Regular'); // Only Regular students
+      queryParams.append('limit', 'all');
+      
+      const response = await api.get(`/students?${queryParams.toString()}`);
+      return response.data?.data || [];
+    } catch (error) {
+      console.error('Failed to fetch all matching students:', error);
+      return [];
+    }
+  };
+
+  const performPromotion = async (promotableStudents, leftOutUpdates = []) => {
     setSubmitting(true);
     try {
       const response = await api.post('/students/promotions/bulk', {
-        students: promotableStudents.map((item) => ({ admissionNumber: item.admissionNumber }))
+        students: promotableStudents.map((item) => ({ admissionNumber: item.admissionNumber })),
+        leftOutStudents: leftOutUpdates
       });
 
       const results = response.data?.results || [];
-      setPromotionResults(results);
+      const leftOutResults = response.data?.leftOutResults || [];
+      setPromotionResults([...results, ...leftOutResults]);
 
       const successCount = results.filter((result) => result.status === 'success').length;
-      if (successCount > 0) {
-        toast.success(`Successfully promoted ${successCount} student${successCount === 1 ? '' : 's'}`);
+      const leftOutSuccessCount = leftOutResults.filter((result) => result.status === 'success').length;
+      
+      if (successCount > 0 || leftOutSuccessCount > 0) {
+        const messages = [];
+        if (successCount > 0) {
+          messages.push(`Successfully promoted ${successCount} student${successCount === 1 ? '' : 's'}`);
+        }
+        if (leftOutSuccessCount > 0) {
+          messages.push(`Updated ${leftOutSuccessCount} left-out student${leftOutSuccessCount === 1 ? '' : 's'}`);
+        }
+        toast.success(messages.join('. '));
         // Invalidate cache to refetch updated student data
         invalidateStudents();
         // Clear selections after successful promotion
@@ -495,14 +598,54 @@ const StudentPromotions = () => {
         // Reset to first page
         setCurrentPage(1);
       } else {
-        toast.error('No students were promoted');
+        toast.error('No students were promoted or updated');
       }
       setConfirmationOpen(false);
+      setLeftOutModalOpen(false);
+      setLeftOutStudents([]);
+      setLeftOutStudentData({});
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to promote students');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleLeftOutSubmit = async () => {
+    // Validate that all left-out students have status and remarks
+    const missingData = [];
+    leftOutStudents.forEach((student) => {
+      const data = leftOutStudentData[student.admission_number];
+      if (!data || !data.student_status || !data.student_status.trim()) {
+        missingData.push(`${student.admission_number} - missing status`);
+      }
+      if (!data || !data.remarks || !data.remarks.trim()) {
+        missingData.push(`${student.admission_number} - missing remarks`);
+      }
+    });
+
+    if (missingData.length > 0) {
+      toast.error(`Please fill in status and remarks for all left-out students. Missing: ${missingData.join(', ')}`);
+      return;
+    }
+
+    // Prepare left-out student updates
+    const leftOutUpdates = leftOutStudents.map((student) => {
+      const data = leftOutStudentData[student.admission_number];
+      return {
+        admissionNumber: student.admission_number,
+        remarks: (data?.remarks || '').trim(),
+        student_status: (data?.student_status || 'Regular').trim()
+      };
+    });
+
+    // Get promotable students from promotion plan
+    const promotableStudents = promotionPlan.filter(
+      (item) => item.nextStage && item.issues.length === 0
+    );
+
+    // Perform promotion with left-out updates
+    await performPromotion(promotableStudents, leftOutUpdates);
   };
 
   return (
@@ -637,6 +780,11 @@ const StudentPromotions = () => {
                     </span>
                   )}
                 </p>
+                {totalStudents > 0 && selectedCount < totalStudents && (
+                  <p className="text-xs text-amber-600 mt-1 font-medium">
+                    ⚠️ {totalStudents - selectedCount} student{totalStudents - selectedCount === 1 ? '' : 's'} will require remarks/status update
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -1105,7 +1253,12 @@ const StudentPromotions = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-900">Promotion Notice</p>
                   <p className="text-xs text-gray-600 mt-0.5">
-                    Only students marked as eligible will be promoted. Others will remain unchanged.
+                    Only students marked as eligible will be promoted.
+                    {detectedLeftOutStudents.length > 0 && (
+                      <span className="block mt-1 text-amber-600 font-medium">
+                        ⚠️ {detectedLeftOutStudents.length} left-out student{detectedLeftOutStudents.length === 1 ? '' : 's'} will require status/remarks update.
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1129,6 +1282,190 @@ const StudentPromotions = () => {
                     </span>
                   ) : (
                     'Confirm Promotion'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left-Out Students Modal */}
+      {leftOutModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm flex items-center justify-center z-50 px-4 py-6">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Handle Left-Out Students</h3>
+                  <p className="text-sm text-amber-100 mt-0.5">
+                    {leftOutStudents.length} student{leftOutStudents.length === 1 ? '' : 's'} not selected for promotion
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setLeftOutModalOpen(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                disabled={submitting}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+              <div className="bg-amber-50 border-l-4 border-amber-400 rounded-lg px-4 py-3 flex items-start gap-3">
+                <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Action Required</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Please add remarks and update the status for students who were not promoted. 
+                    Common statuses include: Regular, Detained, Discontinued, etc.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 px-4 py-3">
+                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                    Left-Out Students ({leftOutStudents.length})
+                  </h4>
+                </div>
+                <div className="overflow-x-auto max-h-96">
+                  <div className="divide-y divide-gray-200">
+                    {leftOutStudents.map((student) => {
+                      const studentData = leftOutStudentData[student.admission_number] || {
+                        remarks: student.remarks || '',
+                        student_status: student.student_status || 'Regular'
+                      };
+                      return (
+                        <div key={student.admission_number} className="p-4 bg-white hover:bg-gray-50 transition-colors border-l-4 border-amber-200">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-1">
+                              <div className="space-y-1">
+                                <p className="font-semibold text-gray-900">{getStudentName(student)}</p>
+                                <p className="text-xs text-gray-600 font-mono">{student.admission_number}</p>
+                                <p className="text-xs text-gray-500">
+                                  {student.course} • {student.branch}
+                                </p>
+                                {student.current_year && student.current_semester && (
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    Year {student.current_year} • Sem {student.current_semester}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="md:col-span-1">
+                              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1.5">
+                                Student Status <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={studentData.student_status}
+                                onChange={(e) => {
+                                  setLeftOutStudentData((prev) => ({
+                                    ...prev,
+                                    [student.admission_number]: {
+                                      ...prev[student.admission_number],
+                                      student_status: e.target.value
+                                    }
+                                  }));
+                                }}
+                                className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm font-medium bg-white"
+                                disabled={submitting}
+                                required
+                              >
+                                <option value="Regular">Regular</option>
+                                <option value="Detained">Detained</option>
+                                <option value="Discontinued">Discontinued</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Transferred">Transferred</option>
+                                <option value="Absent">Absent</option>
+                                <option value="Long Absent">Long Absent</option>
+                                <option value="Admission Cancelled">Admission Cancelled</option>
+                                <option value="Rejoined">Rejoined</option>
+                              </select>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Current: <span className="font-medium">{student.student_status || 'Regular'}</span>
+                              </p>
+                            </div>
+                            <div className="md:col-span-1">
+                              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1.5">
+                                Remarks <span className="text-amber-600">(Required)</span>
+                              </label>
+                              <textarea
+                                value={studentData.remarks}
+                                onChange={(e) => {
+                                  setLeftOutStudentData((prev) => ({
+                                    ...prev,
+                                    [student.admission_number]: {
+                                      ...prev[student.admission_number],
+                                      remarks: e.target.value
+                                    }
+                                  }));
+                                }}
+                                placeholder="Enter remarks (e.g., Detained due to low attendance, Failed in exams, etc.)"
+                                rows="3"
+                                className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm resize-none"
+                                disabled={submitting}
+                                required
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                {studentData.remarks.length} characters
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-2">
+                <div className="p-1.5 bg-amber-100 rounded-lg">
+                  <AlertTriangle className="text-amber-600" size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Important Notice</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    These students will <strong>NOT</strong> be promoted. Please update their status and add remarks explaining why they were not promoted.
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1 font-medium">
+                    ⚠️ Status and remarks are required for all left-out students.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => {
+                    setLeftOutModalOpen(false);
+                    setLeftOutStudents([]);
+                    setLeftOutStudentData({});
+                  }}
+                  className="px-5 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLeftOutSubmit}
+                  className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 text-white font-bold shadow-lg hover:from-amber-700 hover:to-amber-800 transition-all transform hover:scale-105 active:scale-95 text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="animate-spin" size={16} />
+                      Processing...
+                    </span>
+                  ) : (
+                    'Confirm & Promote'
                   )}
                 </button>
               </div>

@@ -3296,7 +3296,7 @@ exports.promoteStudent = async (req, res) => {
 
 // Bulk promotion endpoint
 exports.bulkPromoteStudents = async (req, res) => {
-  const { students } = req.body || {};
+  const { students, leftOutStudents } = req.body || {};
 
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({
@@ -3307,8 +3307,10 @@ exports.bulkPromoteStudents = async (req, res) => {
 
   const connection = await masterPool.getConnection();
   const results = [];
+  const leftOutResults = [];
 
   try {
+    // Process promotions
     for (const entry of students) {
       const admissionNumber = entry?.admissionNumber || entry?.admission_no;
 
@@ -3401,7 +3403,82 @@ exports.bulkPromoteStudents = async (req, res) => {
       }
     }
 
-    const hasSuccess = results.some(result => result.status === 'success');
+    // Process left-out students (update remarks and status)
+    if (Array.isArray(leftOutStudents) && leftOutStudents.length > 0) {
+      for (const leftOutEntry of leftOutStudents) {
+        const admissionNumber = leftOutEntry?.admissionNumber || leftOutEntry?.admission_no;
+
+        if (!admissionNumber) {
+          leftOutResults.push({
+            admissionNumber: leftOutEntry?.admissionNumber || null,
+            status: 'error',
+            message: 'Admission number is required'
+          });
+          continue;
+        }
+
+        try {
+          await connection.beginTransaction();
+
+          // Check if student exists
+          const [studentRows] = await connection.query(
+            'SELECT id FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
+            [admissionNumber, admissionNumber]
+          );
+
+          if (studentRows.length === 0) {
+            await connection.rollback();
+            leftOutResults.push({
+              admissionNumber,
+              status: 'error',
+              message: 'Student not found'
+            });
+            continue;
+          }
+
+          // Update remarks and status
+          const updateFields = [];
+          const updateValues = [];
+
+          if (leftOutEntry.remarks !== undefined) {
+            updateFields.push('remarks = ?');
+            updateValues.push(leftOutEntry.remarks || null);
+          }
+
+          if (leftOutEntry.student_status !== undefined) {
+            updateFields.push('student_status = ?');
+            updateValues.push(leftOutEntry.student_status || null);
+          }
+
+          if (updateFields.length > 0) {
+            updateValues.push(admissionNumber, admissionNumber);
+            await connection.query(
+              `UPDATE students SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE admission_number = ? OR admission_no = ?`,
+              updateValues
+            );
+          }
+
+          await connection.commit();
+
+          leftOutResults.push({
+            admissionNumber,
+            status: 'success',
+            message: 'Remarks and status updated successfully'
+          });
+        } catch (error) {
+          await connection.rollback();
+          console.error('Left-out student update error for', admissionNumber, error);
+          leftOutResults.push({
+            admissionNumber,
+            status: 'error',
+            message: 'Server error during update'
+          });
+        }
+      }
+    }
+
+    const hasSuccess = results.some(result => result.status === 'success') || 
+                       leftOutResults.some(result => result.status === 'success');
 
     if (hasSuccess) {
       clearStudentsCache();
@@ -3409,7 +3486,8 @@ exports.bulkPromoteStudents = async (req, res) => {
 
     return res.status(hasSuccess ? 200 : 400).json({
       success: hasSuccess,
-      results
+      results,
+      leftOutResults: leftOutResults.length > 0 ? leftOutResults : undefined
     });
   } finally {
     connection.release();
