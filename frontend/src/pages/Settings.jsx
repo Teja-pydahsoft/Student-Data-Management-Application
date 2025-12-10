@@ -29,8 +29,89 @@ import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import AcademicCalendar from '../components/AcademicCalendar';
 import NotificationSettings from '../components/NotificationSettings';
-import DocumentRequirements from '../components/DocumentRequirements';
 import { isFullAccessRole } from '../constants/rbac';
+
+// Field categorization function (same as PublicForm.jsx)
+const BASIC_FIELDS = [
+  'student_name', 'student name', 'name', 'studentname',
+  'father_name', 'father name', 'father', 'fathername',
+  'gender', 'm/f', 'sex', 'mf',
+  'dob', 'date of birth', 'birth date', 'birthday', 'date-month-year', 'date month year',
+  'adhar_no', 'adhar number', 'aadhar', 'aadhar no', 'aadhar number', 'adhar', 'aadhar_no', 'aadhar no',
+  'pin_no', 'pin number', 'pin', 'pinno',
+  'apaar', 'apaar id', 'apaar_id', 'apaar number', 'apaar no', 'apaarid',
+  'mother_name', 'mother name', 'mother', 'mothername',
+  'admission_no', 'admission number', 'admission', 'admissionno'
+];
+const ACADEMIC_FIELDS = [
+  'college', 'college name', 'collegename',
+  'batch', 'academic year', 'batch year', 'admission year', 'admission year (ex:', 'admission year ex', 'admission year (ex: 09-sep-2003)',
+  'course', 'course name', 'coursename',
+  'branch', 'branch name', 'specialization', 'branchname',
+  'current_year', 'current academic year', 'current year', 'year', 'currentyear',
+  'current_semester', 'current semester', 'semester', 'currentsemester',
+  'stud_type', 'student type', 'student_type', 'type', 'studtype',
+  'student_status', 'student status', 'status', 'studentstatus',
+  'scholar_status', 'scholar status', 'scholarship status', 'scholarstatus',
+  'previous_college', 'previous college', 'previous college name', 'previous_college_name', 'previouscollege'
+];
+const CONTACT_FIELDS = [
+  'student_mobile', 'student mobile', 'student mobile number', 'student phone', 'mobile', 'studentmobile',
+  'parent_mobile1', 'parent mobile1', 'parent mobile 1', 'parent mobile number 1', 'parent phone 1', 'parentmobile1',
+  'parent_mobile2', 'parent mobile2', 'parent mobile 2', 'parent mobile number 2', 'parent phone 2', 'parentmobile2',
+  'phone', 'contact', 'telephone', 'mobile number', 'mobilenumber'
+];
+const ADDRESS_FIELDS = [
+  'student_address', 'student address', 'address', 'full address', 'permanent address', 'studentaddress',
+  'city_village', 'city village', 'city/village', 'city village name', 'city or village', 'cityvillage', 'city/village name', 'cityvillage name',
+  'mandal_name', 'mandal name', 'mandal', 'mandalname',
+  'district', 'district name', 'districtname',
+  'state', 'state name', 'statename',
+  'pincode', 'pin code', 'postal code', 'zip code', 'pincode'
+];
+const ADDITIONAL_FIELDS = [
+  'caste', 'category',
+  'certificates_status', 'certificate status', 'certificates status', 'cert status', 'certificatesstatus',
+  'remarks', 'remark', 'notes', 'note', 'comments', 'comment',
+  'student_photo', 'student photo', 'photo', 'image', 'picture', 'profile picture', 'studentphoto',
+  'certificate', 'document'
+];
+
+const categorizeField = (field) => {
+  const key = field.key?.toLowerCase() || '';
+  const label = field.label?.toLowerCase() || '';
+  
+  const normalize = (str) => {
+    return str
+      .replace(/[()]/g, ' ')
+      .replace(/\([^)]*\)/g, '')
+      .replace(/[_-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  };
+  
+  const normalizedKey = normalize(key);
+  const normalizedLabel = normalize(label);
+  
+  const matches = (pattern) => {
+    const normalizedPattern = normalize(pattern);
+    return normalizedKey.includes(normalizedPattern) || 
+           normalizedLabel.includes(normalizedPattern) ||
+           normalizedKey.startsWith(normalizedPattern) || 
+           normalizedLabel.startsWith(normalizedPattern) ||
+           normalizedKey === normalizedPattern || 
+           normalizedLabel === normalizedPattern;
+  };
+  
+  if (ACADEMIC_FIELDS.some(matches)) return 'academic';
+  if (ADDRESS_FIELDS.some(matches)) return 'address';
+  if (BASIC_FIELDS.some(matches)) return 'basic';
+  if (CONTACT_FIELDS.some(matches)) return 'contact';
+  if (ADDITIONAL_FIELDS.some(matches)) return 'additional';
+  
+  return 'other';
+};
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -225,6 +306,69 @@ const Settings = () => {
     isLoadingStudents: false
   });
   const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', 'notifications'
+  
+  // Certificate configuration state
+  const [certificateConfig, setCertificateConfig] = useState({
+    diploma: [
+      { id: 'diploma_1', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'diploma_2', name: '10th Study Certificate', required: true }
+    ],
+    ug: [
+      { id: 'ug_1', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'ug_2', name: '10th Study Certificate', required: true },
+      { id: 'ug_3', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'ug_4', name: 'Inter/Diploma Study Certificate', required: true }
+    ],
+    pg: [
+      { id: 'pg_1', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'pg_2', name: '10th Study Certificate', required: true },
+      { id: 'pg_3', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'pg_4', name: 'Inter/Diploma Study Certificate', required: true },
+      { id: 'pg_5', name: 'UG Study Certificate', required: true },
+      { id: 'pg_6', name: 'UG TC (Transfer Certificate)', required: true },
+      { id: 'pg_7', name: 'UG PC (Provisional Certificate)', required: true },
+      { id: 'pg_8', name: 'UG CMM (Consolidated Marks Memo)', required: true },
+      { id: 'pg_9', name: 'UG OD (Original Degree)', required: true }
+    ]
+  });
+
+  // Helper functions for certificate management
+  const updateCertificateRequired = (courseType, certId, required) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [courseType]: prev[courseType].map(cert => 
+        cert.id === certId ? { ...cert, required } : cert
+      )
+    }));
+  };
+
+  const addCertificate = (courseType) => {
+    const newCert = {
+      id: `${courseType}_${Date.now()}`,
+      name: '',
+      required: false
+    };
+    setCertificateConfig(prev => ({
+      ...prev,
+      [courseType]: [...prev[courseType], newCert]
+    }));
+  };
+
+  const removeCertificate = (courseType, certId) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [courseType]: prev[courseType].filter(cert => cert.id !== certId)
+    }));
+  };
+
+  const updateCertificateName = (courseType, certId, name) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [courseType]: prev[courseType].map(cert => 
+        cert.id === certId ? { ...cert, name } : cert
+      )
+    }));
+  };
 
   // Calendar state
   const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(() => {
@@ -2686,160 +2830,375 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Form Fields Editor */}
+                {/* Form Fields Editor - Grouped by Content Headers */}
                 <div className="border-t border-gray-200 pt-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3">Form Fields ({formEditData.formFields.length})</h4>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                    {formEditData.formFields.map((field, index) => {
-                      const isSystemField = field.isSystemField || 
-                        ['batch', 'college', 'course', 'branch', 'current_year', 'current_semester', 'apaar_id'].includes(
-                          (field.key || '').toLowerCase()
-                        );
-                      
-                      return (
-                      <div
-                        key={field.id || index}
-                        className={`rounded-lg border-2 p-3 transition-all ${
-                          field.isEnabled !== false 
-                            ? isSystemField 
-                              ? 'border-blue-200 bg-blue-50' 
-                              : 'border-gray-200 bg-white'
-                            : 'border-gray-100 bg-gray-50'
-                        }`}
-                      >
-                        {isSystemField && (
-                          <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
-                            <Settings2 size={12} />
-                            System Field (Required for document upload)
-                          </div>
-                        )}
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div>
-                              <label className="block text-xs text-gray-500 mb-1">Label *</label>
-                              <input
-                                type="text"
-                                value={field.label}
-                                onChange={(e) => updateFormField(index, 'label', e.target.value)}
-                                placeholder="Field label"
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                                disabled={isSystemField}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-500 mb-1">Type</label>
-                              <select
-                                value={field.type}
-                                onChange={(e) => updateFormField(index, 'type', e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                                disabled={isSystemField}
-                              >
-                                {FIELD_TYPES.map((t) => (
-                                  <option key={t.key} value={t.key}>{t.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
-                              <input
-                                type="text"
-                                value={field.placeholder || ''}
-                                onChange={(e) => updateFormField(index, 'placeholder', e.target.value)}
-                                placeholder="Placeholder text"
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                              />
-                            </div>
-                            <div className="flex items-end gap-2">
-                              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={field.required}
-                                  onChange={(e) => updateFormField(index, 'required', e.target.checked)}
-                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                Required
-                              </label>
-                              <button
-                                onClick={() => toggleFieldEnabled(index)}
-                                className={`p-1.5 rounded transition-colors ${
-                                  field.isEnabled !== false
-                                    ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
-                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                }`}
-                                title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
-                                disabled={isSystemField}
-                              >
-                                {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (isSystemField) {
-                                    toast.error('System fields cannot be removed. They are required for form functionality.');
-                                    return;
-                                  }
-                                  removeFormField(index);
-                                }}
-                                className={`p-1.5 rounded transition-colors ${
-                                  isSystemField
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : 'bg-red-100 text-red-600 hover:bg-red-200'
-                                }`}
-                                title={isSystemField ? 'System field - cannot be removed' : 'Remove field'}
-                                disabled={isSystemField}
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Options for select/radio/checkbox */}
-                        {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
-                          <div className="mt-3 pl-3 border-l-2 border-purple-200">
-                            <label className="block text-xs text-gray-500 mb-1">Options</label>
-                            <div className="flex flex-wrap gap-2">
-                              {(field.options || []).map((option, optIndex) => (
-                                <div key={optIndex} className="flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    value={option}
-                                    onChange={(e) => updateFieldOption(index, optIndex, e.target.value)}
-                                    className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none w-24"
-                                  />
-                                  <button
-                                    onClick={() => removeFieldOption(index, optIndex)}
-                                    className="p-0.5 text-red-500 hover:bg-red-100 rounded"
+                  {(() => {
+                    // Categorize fields
+                  // Personal Information: Date of Birth and Aadhar Number only
+                  const personalFields = formEditData.formFields.filter(f => {
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    return (key.includes('dob') || key.includes('date of birth') ||
+                            label.includes('dob') || label.includes('date of birth') ||
+                            key.includes('adhar') || key.includes('aadhar') ||
+                            label.includes('adhar') || label.includes('aadhar'));
+                  });
+                  
+                  // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
+                  const basicFields = formEditData.formFields.filter(f => {
+                    const cat = categorizeField(f);
+                    if (cat !== 'basic') {
+                      // Include Caste from additional fields in Basic Information
+                      const key = f.key?.toLowerCase() || '';
+                      const label = f.label?.toLowerCase() || '';
+                      if (key.includes('caste') || label.includes('caste')) {
+                        return true;
+                      }
+                      return false;
+                    }
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    // Exclude DOB and Aadhar from basic (they go to Personal Information)
+                    if (key.includes('dob') || key.includes('date of birth') ||
+                        label.includes('dob') || label.includes('date of birth') ||
+                        key.includes('adhar') || key.includes('aadhar') ||
+                        label.includes('adhar') || label.includes('aadhar')) {
+                      return false;
+                    }
+                    return true;
+                  });
+                  
+                  const academicFields = formEditData.formFields.filter(f => categorizeField(f) === 'academic');
+                  const contactFields = formEditData.formFields.filter(f => categorizeField(f) === 'contact');
+                  const addressFields = formEditData.formFields.filter(f => categorizeField(f) === 'address');
+                  // Additional fields exclude Caste (moved to Basic) and Personal Information fields
+                  const additionalFields = formEditData.formFields.filter(f => {
+                    const cat = categorizeField(f);
+                    if (cat !== 'additional') return false;
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    // Exclude Caste, DOB, and Aadhar from additional
+                    if (key.includes('caste') || label.includes('caste') ||
+                        key.includes('dob') || key.includes('date of birth') ||
+                        label.includes('dob') || label.includes('date of birth') ||
+                        key.includes('adhar') || key.includes('aadhar') ||
+                        label.includes('adhar') || label.includes('aadhar')) {
+                      return false;
+                    }
+                    return true;
+                  });
+                  const otherFields = formEditData.formFields.filter(f => categorizeField(f) === 'other');
+
+                    const sections = [
+                      { title: 'Basic Information', fields: basicFields, color: 'blue-500' },
+                      { title: 'Academic Information', fields: academicFields, color: 'green-500' },
+                      { title: 'Contact Information', fields: contactFields, color: 'orange-500' },
+                      { title: 'Personal Information', fields: personalFields, color: 'purple-500' },
+                      { title: 'Address Information', fields: addressFields, color: 'gray-500' },
+                      { title: 'Additional Information', fields: additionalFields, color: 'red-500' },
+                      { title: 'Other Fields', fields: otherFields, color: 'indigo-500' }
+                    ].filter(section => section.fields.length > 0);
+
+                    return (
+                      <div className="space-y-6 max-h-[600px] overflow-y-auto">
+                        {sections.map((section, sectionIndex) => (
+                          <div key={sectionIndex} className="border-b border-gray-200 pb-4 last:border-b-0">
+                            <h5 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                              <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
+                              {section.title}
+                            </h5>
+                            <div className="space-y-3">
+                              {section.fields.map((field, index) => {
+                                const fieldIndex = formEditData.formFields.findIndex(f => f.id === field.id || (f.key === field.key && f.label === field.label));
+                                if (fieldIndex === -1) return null;
+                                
+                                const isSystemField = field.isSystemField || 
+                                  ['batch', 'college', 'course', 'branch', 'current_year', 'current_semester', 'apaar_id'].includes(
+                                    (field.key || '').toLowerCase()
+                                  );
+                                
+                                return (
+                                  <div
+                                    key={field.id || fieldIndex}
+                                    className={`rounded-lg border-2 p-3 transition-all ${
+                                      field.isEnabled !== false 
+                                        ? isSystemField 
+                                          ? 'border-blue-200 bg-blue-50' 
+                                          : 'border-gray-200 bg-white'
+                                        : 'border-gray-100 bg-gray-50'
+                                    }`}
                                   >
-                                    <X size={14} />
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                onClick={() => addFieldOption(index)}
-                                className="px-2 py-1 text-xs border border-dashed border-gray-300 rounded hover:border-purple-400 hover:bg-purple-50 transition-colors"
-                              >
-                                + Add
-                              </button>
+                                    {isSystemField && (
+                                      <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
+                                        <Settings2 size={12} />
+                                        System Field (Required for form functionality)
+                                      </div>
+                                    )}
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                                        <div>
+                                          <label className="block text-xs text-gray-500 mb-1">Label *</label>
+                                          <input
+                                            type="text"
+                                            value={field.label}
+                                            onChange={(e) => updateFormField(fieldIndex, 'label', e.target.value)}
+                                            placeholder="Field label"
+                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                            disabled={isSystemField}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs text-gray-500 mb-1">Type</label>
+                                          <select
+                                            value={field.type}
+                                            onChange={(e) => updateFormField(fieldIndex, 'type', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                            disabled={isSystemField}
+                                          >
+                                            {FIELD_TYPES.map((t) => (
+                                              <option key={t.key} value={t.key}>{t.label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
+                                          <input
+                                            type="text"
+                                            value={field.placeholder || ''}
+                                            onChange={(e) => updateFormField(fieldIndex, 'placeholder', e.target.value)}
+                                            placeholder="Placeholder text"
+                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                          />
+                                        </div>
+                                        <div className="flex items-end gap-2">
+                                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={field.required}
+                                              onChange={(e) => updateFormField(fieldIndex, 'required', e.target.checked)}
+                                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                            />
+                                            Required
+                                          </label>
+                                          <button
+                                            onClick={() => toggleFieldEnabled(fieldIndex)}
+                                            className={`p-1.5 rounded transition-colors ${
+                                              field.isEnabled !== false
+                                                ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                            }`}
+                                            title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
+                                            disabled={isSystemField}
+                                          >
+                                            {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              if (isSystemField) {
+                                                toast.error('System fields cannot be removed. They are required for form functionality.');
+                                                return;
+                                              }
+                                              removeFormField(fieldIndex);
+                                            }}
+                                            className={`p-1.5 rounded transition-colors ${
+                                              isSystemField
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-red-100 text-red-600 hover:bg-red-200'
+                                            }`}
+                                            title={isSystemField ? 'System field - cannot be removed' : 'Remove field'}
+                                            disabled={isSystemField}
+                                          >
+                                            <Trash2 size={16} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Options for select/radio/checkbox */}
+                                    {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
+                                      <div className="mt-3 pl-3 border-l-2 border-purple-200">
+                                        <label className="block text-xs text-gray-500 mb-1">Options</label>
+                                        <div className="flex flex-wrap gap-2">
+                                          {(field.options || []).map((option, optIndex) => (
+                                            <div key={optIndex} className="flex items-center gap-1">
+                                              <input
+                                                type="text"
+                                                value={option}
+                                                onChange={(e) => updateFieldOption(fieldIndex, optIndex, e.target.value)}
+                                                className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none w-24"
+                                              />
+                                              <button
+                                                onClick={() => removeFieldOption(fieldIndex, optIndex)}
+                                                className="p-0.5 text-red-500 hover:bg-red-100 rounded"
+                                              >
+                                                <X size={14} />
+                                              </button>
+                                            </div>
+                                          ))}
+                                          <button
+                                            onClick={() => addFieldOption(fieldIndex)}
+                                            className="px-2 py-1 text-xs border border-dashed border-gray-300 rounded hover:border-purple-400 hover:bg-purple-50 transition-colors"
+                                          >
+                                            + Add
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        )}
+                        ))}
                       </div>
                     );
-                    })}
+                  })()}
+                </div>
+
+                {/* Certificate Information Section - Configurable */}
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                    Certificate Information
+                  </h2>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                      <FileText size={16} className="text-gray-600" />
+                      Default Certification Fields
+                    </h3>
+                    
+                    {/* For Diploma Courses */}
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-gray-700">For Diploma Courses</h4>
+                        <button
+                          onClick={() => addCertificate('diploma')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                        >
+                          <Plus size={14} />
+                          Add Certificate
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {certificateConfig.diploma.map((cert) => (
+                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                            <input
+                              type="text"
+                              value={cert.name}
+                              onChange={(e) => updateCertificateName('diploma', cert.id, e.target.value)}
+                              placeholder="Certificate name"
+                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                            />
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={cert.required}
+                                onChange={(e) => updateCertificateRequired('diploma', cert.id, e.target.checked)}
+                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                              />
+                              <span className="text-xs text-gray-600">Required</span>
+                            </label>
+                            <button
+                              onClick={() => removeCertificate('diploma', cert.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remove certificate"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* For UG Courses */}
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-gray-700">For UG Courses</h4>
+                        <button
+                          onClick={() => addCertificate('ug')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                        >
+                          <Plus size={14} />
+                          Add Certificate
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {certificateConfig.ug.map((cert) => (
+                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                            <input
+                              type="text"
+                              value={cert.name}
+                              onChange={(e) => updateCertificateName('ug', cert.id, e.target.value)}
+                              placeholder="Certificate name"
+                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                            />
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={cert.required}
+                                onChange={(e) => updateCertificateRequired('ug', cert.id, e.target.checked)}
+                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                              />
+                              <span className="text-xs text-gray-600">Required</span>
+                            </label>
+                            <button
+                              onClick={() => removeCertificate('ug', cert.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remove certificate"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* For PG Courses */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-gray-700">For PG Courses</h4>
+                        <button
+                          onClick={() => addCertificate('pg')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                        >
+                          <Plus size={14} />
+                          Add Certificate
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {certificateConfig.pg.map((cert) => (
+                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                            <input
+                              type="text"
+                              value={cert.name}
+                              onChange={(e) => updateCertificateName('pg', cert.id, e.target.value)}
+                              placeholder="Certificate name"
+                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                            />
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={cert.required}
+                                onChange={(e) => updateCertificateRequired('pg', cert.id, e.target.checked)}
+                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                              />
+                              <span className="text-xs text-gray-600">Required</span>
+                            </label>
+                            <button
+                              onClick={() => removeCertificate('pg', cert.id)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remove certificate"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Document Requirements Section - Integrated into Form Editor */}
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FileText size={16} className="text-purple-600" />
-                    Document Requirements Configuration
-                  </h4>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Configure which documents are required for UG and PG courses at different academic stages.
-                  </p>
-                  <DocumentRequirements />
-                </div>
               </div>
             ) : (
               // Form View Mode
@@ -2909,43 +3268,197 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Form Fields */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Layers size={14} className="text-purple-600" />
-                    Form Fields
-                  </h4>
-                  {form.form_fields && form.form_fields.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                      {form.form_fields.map((field, index) => (
-                        <div
-                          key={field.id || index}
-                          className={`rounded-lg border px-3 py-2 text-sm ${
-                            field.isEnabled !== false
-                              ? 'border-gray-200 bg-white'
-                              : 'border-gray-100 bg-gray-50 opacity-60'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`font-medium truncate ${
-                              field.isEnabled !== false ? 'text-gray-900' : 'text-gray-500'
-                            }`}>
-                              {field.label}
-                            </span>
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              {field.required && <span className="text-red-500 text-xs">*</span>}
-                              <span className={`w-1.5 h-1.5 rounded-full ${
-                                field.isEnabled !== false ? 'bg-emerald-500' : 'bg-gray-300'
-                              }`} />
-                            </div>
+                {/* Form Fields - Grouped by Content Headers */}
+                {form.form_fields && form.form_fields.length > 0 ? (() => {
+                  // Personal Information: Date of Birth and Aadhar Number only
+                  const personalFields = form.form_fields.filter(f => {
+                    if (f.isEnabled === false) return false;
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    return (key.includes('dob') || key.includes('date of birth') ||
+                            label.includes('dob') || label.includes('date of birth') ||
+                            key.includes('adhar') || key.includes('aadhar') ||
+                            label.includes('adhar') || label.includes('aadhar'));
+                  });
+                  
+                  // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
+                  const basicFields = form.form_fields.filter(f => {
+                    if (f.isEnabled === false) return false;
+                    const cat = categorizeField(f);
+                    if (cat !== 'basic') {
+                      // Include Caste from additional fields in Basic Information
+                      const key = f.key?.toLowerCase() || '';
+                      const label = f.label?.toLowerCase() || '';
+                      if (key.includes('caste') || label.includes('caste')) {
+                        return true;
+                      }
+                      return false;
+                    }
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    // Exclude DOB and Aadhar from basic (they go to Personal Information)
+                    if (key.includes('dob') || key.includes('date of birth') ||
+                        label.includes('dob') || label.includes('date of birth') ||
+                        key.includes('adhar') || key.includes('aadhar') ||
+                        label.includes('adhar') || label.includes('aadhar')) {
+                      return false;
+                    }
+                    return true;
+                  });
+                  
+                  const academicFields = form.form_fields.filter(f => categorizeField(f) === 'academic' && f.isEnabled !== false);
+                  const contactFields = form.form_fields.filter(f => categorizeField(f) === 'contact' && f.isEnabled !== false);
+                  const addressFields = form.form_fields.filter(f => categorizeField(f) === 'address' && f.isEnabled !== false);
+                  // Additional fields exclude Caste (moved to Basic) and Personal Information fields
+                  const additionalFields = form.form_fields.filter(f => {
+                    if (f.isEnabled === false) return false;
+                    const cat = categorizeField(f);
+                    if (cat !== 'additional') return false;
+                    const key = f.key?.toLowerCase() || '';
+                    const label = f.label?.toLowerCase() || '';
+                    // Exclude Caste, DOB, and Aadhar from additional
+                    if (key.includes('caste') || label.includes('caste') ||
+                        key.includes('dob') || key.includes('date of birth') ||
+                        label.includes('dob') || label.includes('date of birth') ||
+                        key.includes('adhar') || key.includes('aadhar') ||
+                        label.includes('adhar') || label.includes('aadhar')) {
+                      return false;
+                    }
+                    return true;
+                  });
+                  const otherFields = form.form_fields.filter(f => categorizeField(f) === 'other' && f.isEnabled !== false);
+
+                  const sections = [
+                    { title: 'Basic Information', fields: basicFields, color: 'blue-500' },
+                    { title: 'Academic Information', fields: academicFields, color: 'green-500' },
+                    { title: 'Contact Information', fields: contactFields, color: 'orange-500' },
+                    { title: 'Personal Information', fields: personalFields, color: 'purple-500' },
+                    { title: 'Address Information', fields: addressFields, color: 'gray-500' },
+                    { title: 'Additional Information', fields: additionalFields, color: 'red-500' },
+                    { title: 'Other Fields', fields: otherFields, color: 'indigo-500' }
+                  ].filter(section => section.fields.length > 0);
+
+                  return (
+                    <div className="space-y-6">
+                      {sections.map((section, sectionIndex) => (
+                        <div key={sectionIndex} className="border-b border-gray-200 pb-6 last:border-b-0">
+                          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                            <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
+                            {section.title}
+                          </h2>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {section.fields.map((field, index) => (
+                              <div
+                                key={field.id || index}
+                                className="flex items-center gap-2 text-sm"
+                              >
+                                <span className="font-medium text-gray-700">{field.label}</span>
+                                {field.required && <span className="text-red-500 text-xs">*</span>}
+                                <span className="text-xs text-gray-400 capitalize">({field.type})</span>
+                              </div>
+                            ))}
                           </div>
-                          <p className="text-xs text-gray-400 capitalize">{field.type}</p>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-4">No fields configured</p>
-                  )}
+                  );
+                })() : (
+                  <p className="text-sm text-gray-500 text-center py-4">No fields configured</p>
+                )}
+
+                {/* Certificate Information Section */}
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                    Certificate Information
+                  </h2>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                      <FileText size={16} className="text-gray-600" />
+                      Default Certification Fields (Read-only)
+                    </h3>
+                    
+                    {/* For Diploma Courses */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">For Diploma Courses</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* For UG Courses */}
+                    <div className="mb-6">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">For UG Courses</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">Inter/Diploma Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* For PG Courses */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">For PG Courses</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">10th Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">Inter/Diploma Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">UG Study Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">UG TC (Transfer Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">UG PC (Provisional Certificate)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">UG CMM (Consolidated Marks Memo)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">UG OD (Original Degree)</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             );

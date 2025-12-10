@@ -1123,24 +1123,7 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
                 Additional Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Certificates Status
-                  </label>
-                  <select
-                    name="certificates_status"
-                    value={studentData.certificates_status}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
-                  >
-                    <option value="">Select Certificate Status</option>
-                    {CERTIFICATES_STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Certificates Status is auto-calculated - no dropdown needed */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Remarks

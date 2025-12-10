@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, Upload } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, FileText, Upload } from 'lucide-react';
 import api from '../config/api';
 import toast, { Toaster } from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
@@ -131,6 +131,9 @@ const PublicForm = () => {
   const [formData, setFormData] = useState({});
   const [admissionNumber, setAdmissionNumber] = useState('');
   const [fileData, setFileData] = useState({});
+  
+  // Certificate status state - tracks Yes/No for each certificate
+  const [certificateStatus, setCertificateStatus] = useState({});
   const [fetchingForm, setFetchingForm] = useState(false);
   const [formCache, setFormCache] = useState(new Map());
   const [retryCount, setRetryCount] = useState(0);
@@ -145,11 +148,6 @@ const PublicForm = () => {
   const [selectedCollegeId, setSelectedCollegeId] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   
-  // Document upload state
-  const [enableDocumentUpload, setEnableDocumentUpload] = useState(false);
-  const [documentRequirements, setDocumentRequirements] = useState([]);
-  const [documentFiles, setDocumentFiles] = useState({});
-  const [documentRequirementsLoading, setDocumentRequirementsLoading] = useState(false);
 
   // Mobile browser detection - moved to component level
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -412,50 +410,64 @@ const PublicForm = () => {
     );
   }, [availableCourses, selectedCourseName]);
 
-  // Determine course type (UG or PG) based on course name
+  // Determine course type (Diploma, UG, or PG) based on course name
   const courseType = useMemo(() => {
     if (!selectedCourseName) return null;
     const courseNameLower = selectedCourseName.toLowerCase();
+    if (courseNameLower.includes('diploma')) {
+      return 'Diploma';
+    }
     if (courseNameLower.includes('pg') || courseNameLower.includes('post graduate') || courseNameLower.includes('m.tech') || courseNameLower.includes('mtech')) {
       return 'PG';
     }
     return 'UG';
   }, [selectedCourseName]);
 
-  // Fetch document requirements when course type changes and upload is enabled
-  useEffect(() => {
-    if (!courseType || !enableDocumentUpload) {
-      setDocumentRequirements([]);
-      return;
+  // Get certificates based on course type
+  const getCertificatesForCourse = () => {
+    if (courseType === 'Diploma') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' }
+      ];
+    } else if (courseType === 'UG') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' },
+        { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
+        { key: 'inter_diploma_study', label: 'Inter/Diploma Study Certificate' }
+      ];
+    } else if (courseType === 'PG') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' },
+        { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
+        { key: 'inter_diploma_study', label: 'Inter/Diploma Study Certificate' },
+        { key: 'ug_study', label: 'UG Study Certificate' },
+        { key: 'ug_tc', label: 'UG TC (Transfer Certificate)' },
+        { key: 'ug_pc', label: 'UG PC (Provisional Certificate)' },
+        { key: 'ug_cmm', label: 'UG CMM (Consolidated Marks Memo)' },
+        { key: 'ug_od', label: 'UG OD (Original Degree)' }
+      ];
     }
+    return [];
+  };
 
-    const fetchDocumentRequirements = async () => {
-      try {
-        setDocumentRequirementsLoading(true);
-        // Fetch requirements for different academic stages
-        const stages = courseType === 'PG' ? ['10th', 'Inter', 'Diploma', 'UG'] : ['10th', 'Inter', 'Diploma'];
-        const allRequirements = [];
-        
-        for (const stage of stages) {
-          try {
-            const response = await api.get(`/settings/documents/${courseType}/${stage}`);
-            if (response.data.success && response.data.data) {
-              allRequirements.push(response.data.data);
-            }
-          } catch (error) {
-            // Stage might not have requirements configured, continue
-          }
-        }
-        
-        setDocumentRequirements(allRequirements);
-      } catch (error) {
-      } finally {
-        setDocumentRequirementsLoading(false);
-      }
-    };
+  // Update certificates_status based on certificate status
+  useEffect(() => {
+    if (!courseType) return;
+    const certificates = getCertificatesForCourse();
+    if (certificates.length === 0) return;
+    
+    const allYes = certificates.every(cert => certificateStatus[cert.key] === true);
+    if (allYes && certificates.length > 0) {
+      setFormData(prev => ({ ...prev, certificates_status: 'Verified' }));
+    } else {
+      setFormData(prev => ({ ...prev, certificates_status: 'Unverified' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [certificateStatus, courseType]);
 
-    fetchDocumentRequirements();
-  }, [courseType, enableDocumentUpload]);
 
   const selectedBranchName = useMemo(() => {
     for (const label of branchFieldLabels) {
@@ -746,12 +758,6 @@ const PublicForm = () => {
     });
   };
 
-  const handleDocumentFileChange = (documentName, file) => {
-    setDocumentFiles({
-      ...documentFiles,
-      [documentName]: file,
-    });
-  };
 
   const validateForm = () => {
     // Only validate enabled fields
@@ -772,17 +778,6 @@ const PublicForm = () => {
       }
     }
 
-          // Validate document files if document upload is enabled
-          if (enableDocumentUpload) {
-            for (const req of documentRequirements) {
-              if (!req.is_enabled || !req.required_documents) continue;
-              for (const docName of req.required_documents) {
-                if (!documentFiles[docName]) {
-                  return `${docName} is required`;
-                }
-              }
-            }
-          }
 
     return null;
   };
@@ -840,34 +835,6 @@ const PublicForm = () => {
         }
       });
 
-          // Add document files if document upload is enabled
-          if (enableDocumentUpload) {
-            Object.entries(documentFiles).forEach(([docName, file]) => {
-              if (file) {
-                submissionData.append(`document_${docName.replace(/\s+/g, '_')}`, file);
-              }
-            });
-            
-            // Check if all required documents are uploaded
-            let allDocumentsUploaded = true;
-            for (const req of documentRequirements) {
-              if (!req.is_enabled || !req.required_documents) continue;
-              for (const docName of req.required_documents) {
-                if (!documentFiles[docName]) {
-                  allDocumentsUploaded = false;
-                  break;
-                }
-              }
-              if (!allDocumentsUploaded) break;
-            }
-            
-            // Set certificates_status based on document upload status
-            if (!allDocumentsUploaded) {
-              submissionData.append('certificates_status', 'Pending');
-            } else {
-              submissionData.append('certificates_status', 'Submitted');
-            }
-          }
 
       // Don't send admission number - admin will assign it during approval
       await api.post(`/submissions/${formId}`, submissionData);
@@ -990,9 +957,18 @@ const PublicForm = () => {
 
     // Branch dropdown
     if (matchesFieldIdentifier(field, BRANCH_FIELD_IDENTIFIERS)) {
-      const availableBranches = selectedCourseOption 
+      let availableBranches = selectedCourseOption 
         ? (selectedCourseOption.branches || []).filter((branch) => branch.isActive)
         : [];
+
+      // Deduplicate branches by name to avoid showing duplicates
+      const branchMap = new Map();
+      availableBranches.forEach(branch => {
+        if (!branchMap.has(branch.name)) {
+          branchMap.set(branch.name, branch);
+        }
+      });
+      availableBranches = Array.from(branchMap.values());
 
       if (availableBranches.length === 0) {
         return (
@@ -1209,23 +1185,10 @@ const PublicForm = () => {
       );
     }
 
-    // Certificates Status dropdown
-    if (fieldKey.includes('certificate') || fieldLabel.includes('certificate')) {
-      return (
-        <select
-          value={formData[field.label] || ''}
-          onChange={(e) => handleInputChange(field.label, e.target.value, field.type)}
-          className={commonClasses}
-          required={field.required}
-        >
-          <option value="">Select Certificate Status</option>
-          <option value="Submitted">Submitted</option>
-          <option value="Pending">Pending</option>
-          <option value="Partial">Partial</option>
-          <option value="Originals Returned">Originals Returned</option>
-          <option value="Not Required">Not Required</option>
-        </select>
-      );
+    // Certificates Status is auto-calculated - hide this field completely
+    // Certificate Information section is shown separately below
+    if (fieldKey.includes('certificate') && (fieldKey.includes('status') || fieldLabel.includes('status'))) {
+      return null; // Don't render this field - it's auto-calculated
     }
 
     // APAAR ID field - special handling with 12-digit limit
@@ -1538,7 +1501,7 @@ const PublicForm = () => {
               });
               
               // CRITICAL: Ensure Batch, College, Course, Branch, Year, and Semester fields are always present
-              // These are required for document upload functionality
+              // These are required for form functionality
               // Order: Batch → College → Course → Branch → Year → Semester
               // IMPORTANT: Use required: false by default - admin must set required status in Settings
               const requiredSystemFields = [
@@ -1626,21 +1589,90 @@ const PublicForm = () => {
               });
               
               // Categorize all fields - ensure every field gets a category
-              const basicFields = enabledFields.filter(f => categorizeField(f) === 'basic');
+              // First, separate Personal Information fields (Date of Birth, Aadhar Number) from Basic Information
+              const personalFields = enabledFields.filter(f => {
+                const key = f.key?.toLowerCase() || '';
+                const label = f.label?.toLowerCase() || '';
+                return key.includes('dob') || key.includes('date of birth') ||
+                       label.includes('dob') || label.includes('date of birth') ||
+                       key.includes('adhar') || key.includes('aadhar') ||
+                       label.includes('adhar') || label.includes('aadhar');
+              });
+              
+              // Basic fields exclude Personal Information fields
+              const basicFields = enabledFields.filter(f => {
+                const cat = categorizeField(f);
+                if (cat !== 'basic') return false;
+                const key = f.key?.toLowerCase() || '';
+                const label = f.label?.toLowerCase() || '';
+                // Exclude DOB and Aadhar from basic
+                if (key.includes('dob') || key.includes('date of birth') ||
+                    label.includes('dob') || label.includes('date of birth') ||
+                    key.includes('adhar') || key.includes('aadhar') ||
+                    label.includes('adhar') || label.includes('aadhar')) {
+                  return false;
+                }
+                return true;
+              });
+              
+              // Move Caste from Additional to Basic Information
+              const casteFields = enabledFields.filter(f => {
+                const key = f.key?.toLowerCase() || '';
+                const label = f.label?.toLowerCase() || '';
+                return key.includes('caste') || label.includes('caste');
+              });
+              
+              // Add Caste to Basic Information if it exists
+              casteFields.forEach(casteField => {
+                if (!basicFields.some(f => f.key === casteField.key || f.label === casteField.label)) {
+                  basicFields.push(casteField);
+                }
+              });
+              
               let academicFields = enabledFields.filter(f => categorizeField(f) === 'academic');
               const contactFields = enabledFields.filter(f => categorizeField(f) === 'contact');
               const addressFields = enabledFields.filter(f => categorizeField(f) === 'address');
-              const additionalFields = enabledFields.filter(f => categorizeField(f) === 'additional');
-              const otherFields = enabledFields.filter(f => categorizeField(f) === 'other');
+              // Additional fields exclude Caste (moved to Basic) and Certificates Status (auto-calculated)
+              const additionalFields = enabledFields.filter(f => {
+                const cat = categorizeField(f);
+                if (cat !== 'additional') return false;
+                const key = f.key?.toLowerCase() || '';
+                const label = f.label?.toLowerCase() || '';
+                // Exclude Caste from additional (moved to Basic)
+                if (key.includes('caste') || label.includes('caste')) {
+                  return false;
+                }
+                // Exclude Certificates Status (auto-calculated, not user input)
+                if (key.includes('certificate') && (key.includes('status') || label.includes('status'))) {
+                  return false;
+                }
+                return true;
+              });
+              // Other fields exclude Certificates Status (auto-calculated)
+              const otherFields = enabledFields.filter(f => {
+                const cat = categorizeField(f);
+                if (cat !== 'other') return false;
+                const key = f.key?.toLowerCase() || '';
+                const label = f.label?.toLowerCase() || '';
+                // Exclude Certificates Status (auto-calculated, not user input)
+                if (key.includes('certificate') && (key.includes('status') || label.includes('status'))) {
+                  return false;
+                }
+                return true;
+              });
               
-              // Sort academic fields in the correct order: Current Academic Year → Batch → College → Course → Branch → Semester
+              // Sort academic fields in the correct order to match AddStudent page: College → Batch → Course → Branch → Current Academic Year → Current Semester → Student Type → Student Status → Scholar Status → Previous College
               const academicFieldOrder = [
-                { key: 'current_year', label: 'current academic year' },
-                { key: 'batch', label: 'batch' },
                 { key: 'college', label: 'college' },
+                { key: 'batch', label: 'batch' },
                 { key: 'course', label: 'course' },
                 { key: 'branch', label: 'branch' },
-                { key: 'current_semester', label: 'current semester' }
+                { key: 'current_year', label: 'current academic year' },
+                { key: 'current_semester', label: 'current semester' },
+                { key: 'stud_type', label: 'student type' },
+                { key: 'student_status', label: 'student status' },
+                { key: 'scholar_status', label: 'scholar status' },
+                { key: 'previous_college', label: 'previous college' }
               ];
               
               academicFields.sort((a, b) => {
@@ -1714,7 +1746,7 @@ const PublicForm = () => {
                   {contactFields.length > 0 && (
                     <div className="border-b border-gray-200 pb-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                        <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
                         Contact Information
                       </h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -1735,11 +1767,32 @@ const PublicForm = () => {
                   {addressFields.length > 0 && (
                     <div className="border-b border-gray-200 pb-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
                         Address Information
                       </h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                         {addressFields.map((field, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Personal Information */}
+                  {personalFields.length > 0 && (
+                    <div className="border-b border-gray-200 pb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                        Personal Information
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                        {personalFields.map((field, index) => (
                           <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               {field.label}
@@ -1802,128 +1855,46 @@ const PublicForm = () => {
               );
             })(                  )}
 
-                  {/* Document Upload Section - Always visible */}
-                  <div className="border-t border-gray-200 pt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                          <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                          Document Uploads
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {selectedCourseName 
-                            ? `Upload required documents based on your course selection (${selectedCourseName}).`
-                            : 'Upload required documents. Please select a course first to see specific requirements.'}
-                        </p>
-                      </div>
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <span className="text-sm font-medium text-gray-700">Upload Documents?</span>
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            checked={enableDocumentUpload}
-                            onChange={(e) => setEnableDocumentUpload(e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                  {/* Certificate Information Section - Dynamic with Yes/No toggles */}
+                  {courseType && (
+                    <div className="border-t border-gray-200 pt-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                        Certificate Information
+                      </h3>
+                      <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                          <FileText size={16} className="text-gray-600" />
+                          Default Certification Fields
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {getCertificatesForCourse().map((cert) => (
+                            <div key={cert.key} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                              <span className="text-sm text-gray-700">{cert.label}</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={certificateStatus[cert.key] || false}
+                                  onChange={(e) => {
+                                    setCertificateStatus(prev => ({
+                                      ...prev,
+                                      [cert.key]: e.target.checked
+                                    }));
+                                  }}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                <span className="ml-2 text-xs text-gray-500">
+                                  {certificateStatus[cert.key] ? 'Yes' : 'No'}
+                                </span>
+                              </label>
+                            </div>
+                          ))}
                         </div>
-                      </label>
-                    </div>
-
-                    {enableDocumentUpload && (
-                      <div className="space-y-4">
-                        {!selectedCourseName ? (
-                          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center">
-                            <p className="text-sm text-yellow-700">
-                              Please select a course first to see document requirements.
-                            </p>
-                          </div>
-                        ) : !courseType ? (
-                          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-                            <p className="text-sm text-gray-600">
-                              Determining course type...
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            {documentRequirementsLoading ? (
-                              <div className="flex items-center justify-center py-8">
-                                <LoadingAnimation width={24} height={24} message="Loading document requirements..." />
-                              </div>
-                            ) : documentRequirements.length === 0 ? (
-                              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-                                <p className="text-sm text-gray-600">
-                                  No document requirements configured for {courseType} courses.
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Please contact administrator to configure document requirements.
-                                </p>
-                              </div>
-                            ) : (
-                              documentRequirements.map((req, reqIndex) => {
-                                if (!req.is_enabled || !req.required_documents || req.required_documents.length === 0) {
-                                  return null;
-                                }
-                                
-                                return (
-                                  <div key={reqIndex} className="rounded-lg border border-gray-200 bg-white p-4">
-                                    <h4 className="text-base font-semibold text-gray-900 mb-3">
-                                      {req.academic_stage} Documents
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                      {req.required_documents.map((docName, docIndex) => (
-                                        <div key={docIndex}>
-                                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            {docName}
-                                            <span className="text-red-500 ml-1">*</span>
-                                          </label>
-                                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-teal-400 transition-colors bg-gray-50">
-                                            <input
-                                              type="file"
-                                              accept=".pdf,.jpg,.jpeg,.png"
-                                              onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                  if (file.size > 10 * 1024 * 1024) {
-                                                    toast.error(`${docName} file size should be less than 10MB`);
-                                                    return;
-                                                  }
-                                                  handleDocumentFileChange(docName, file);
-                                                }
-                                              }}
-                                              className="hidden"
-                                              id={`doc-${reqIndex}-${docIndex}`}
-                                            />
-                                            <label
-                                              htmlFor={`doc-${reqIndex}-${docIndex}`}
-                                              className="cursor-pointer flex flex-col items-center gap-2"
-                                            >
-                                              <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
-                                                <Upload className="w-5 h-5 text-teal-600" />
-                                              </div>
-                                              <p className="text-xs font-medium text-gray-700">
-                                                {documentFiles[docName] ? 'Change File' : 'Upload File'}
-                                              </p>
-                                              <p className="text-xs text-gray-500">PDF, JPG, PNG up to 10MB</p>
-                                            </label>
-                                            {documentFiles[docName] && (
-                                              <p className="text-xs text-teal-600 mt-2 text-center">
-                                                Selected: {documentFiles[docName].name}
-                                              </p>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })
-                            )}
-                          </>
-                        )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
             <div className="flex items-center gap-3 sm:gap-4 pt-4 border-t border-gray-200">
               <button

@@ -14,7 +14,8 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
-  ArrowUpDown
+  ArrowUpDown,
+  FileText
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -2850,27 +2851,17 @@ const Students = () => {
                               </p>
                             )}
                           </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                              Certificate Status
-                            </label>
-                            {editMode ? (
-                              <select
-                                value={editData.certificates_status || ''}
-                                onChange={(e) => updateEditField('certificates_status', e.target.value)}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                              >
-                                <option value="">Select Status</option>
-                                <option value="Verified">Verified</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Rejected">Rejected</option>
-                              </select>
-                            ) : (
+                          {/* Certificates Status is auto-calculated - no dropdown needed */}
+                          {!editMode && editData.certificates_status && (
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Certificate Status
+                              </label>
                               <p className="text-sm text-gray-900 font-medium">
                                 {editData.certificates_status || selectedStudent?.certificates_status || '-'}
                               </p>
-                            )}
-                          </div>
+                            </div>
+                          )}
                           <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                               Remarks
@@ -2892,6 +2883,121 @@ const Students = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Certificate Information Section */}
+                    {(() => {
+                      // Determine course type from student data
+                      const courseName = (editData.course || selectedStudent?.course || '').toLowerCase();
+                      let courseType = null;
+                      if (courseName.includes('diploma')) {
+                        courseType = 'Diploma';
+                      } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
+                        courseType = 'PG';
+                      } else if (courseName) {
+                        courseType = 'UG';
+                      }
+
+                      if (!courseType) return null;
+
+                      return (
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                            Certificate Information
+                          </h4>
+                          <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                            <h5 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                              <FileText size={14} className="text-gray-600" />
+                              Default Certification Fields
+                            </h5>
+                            
+                            {courseType === 'Diploma' && (
+                              <div>
+                                <h6 className="text-xs font-medium text-gray-700 mb-2">For Diploma Courses</h6>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {courseType === 'UG' && (
+                              <div>
+                                <h6 className="text-xs font-medium text-gray-700 mb-2">For UG Courses</h6>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">Inter/Diploma Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {courseType === 'PG' && (
+                              <div>
+                                <h6 className="text-xs font-medium text-gray-700 mb-2">For PG Courses</h6>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">Inter/Diploma Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">UG Study Certificate</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">UG TC (Transfer Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">UG PC (Provisional Certificate)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">UG CMM (Consolidated Marks Memo)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                                    <span className="text-xs text-gray-700">UG OD (Original Degree)</span>
+                                    <span className="text-xs text-gray-500">Yes</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
