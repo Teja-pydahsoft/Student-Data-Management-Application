@@ -410,7 +410,11 @@ exports.sendAbsenceNotification = async ({
   });
 };
 
+// Generic SMS sending function
+exports.sendSms = dispatchSms;
+
 module.exports = {
-  sendAbsenceNotification: exports.sendAbsenceNotification
+  sendAbsenceNotification: exports.sendAbsenceNotification,
+  sendSms: dispatchSms
 };
 

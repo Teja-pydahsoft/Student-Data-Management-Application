@@ -37,6 +37,17 @@ const STUDENT_STATUS_OPTIONS = [
   'Rejoined'
 ];
 
+// Certificate status options
+const CERTIFICATES_STATUS_OPTIONS = [
+  'Verified',
+  'Unverified',
+  'Submitted',
+  'Pending',
+  'Partial',
+  'Originals Returned',
+  'Not Required'
+];
+
 const Students = () => {
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -1019,7 +1030,8 @@ const Students = () => {
       ...(student.district && { district: student.district }),
       ...(student.pin_no && { pin_no: student.pin_no }),
       ...(student.previous_college && { previous_college: student.previous_college }),
-      ...(student.certificates_status && { certificates_status: student.certificates_status }),
+      // Always include certificates_status even if null, so it can be edited
+      certificates_status: student.certificates_status || null,
       ...(student.student_photo && { student_photo: student.student_photo }),
       ...(student.remarks && { remarks: student.remarks }),
       ...(student.admission_date && { admission_date: student.admission_date })
@@ -1295,6 +1307,86 @@ const Students = () => {
 
   const updateEditField = (key, value) => {
     setEditData({ ...editData, [key]: value });
+  };
+
+  // Helper function to get certificates for course type
+  const getCertificatesForCourse = (courseType) => {
+    if (courseType === 'Diploma') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' }
+      ];
+    } else if (courseType === 'UG') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' },
+        { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
+        { key: 'inter_diploma_study', label: 'Inter/Diploma Study Certificate' }
+      ];
+    } else if (courseType === 'PG') {
+      return [
+        { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
+        { key: '10th_study', label: '10th Study Certificate' },
+        { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
+        { key: 'inter_diploma_study', label: 'Inter/Diploma Study Certificate' },
+        { key: 'ug_study', label: 'UG Study Certificate' },
+        { key: 'ug_tc', label: 'UG TC (Transfer Certificate)' },
+        { key: 'ug_pc', label: 'UG PC (Provisional Certificate)' },
+        { key: 'ug_cmm', label: 'UG CMM (Consolidated Marks Memo)' },
+        { key: 'ug_od', label: 'UG OD (Original Degree)' }
+      ];
+    }
+    return [];
+  };
+
+  // Helper function to check if certificate is present
+  const isCertificatePresent = (certKey) => {
+    // Check in editData first, then selectedStudent.student_data
+    const studentData = editData || selectedStudent?.student_data || {};
+    const parsedData = typeof studentData === 'string' ? JSON.parse(studentData || '{}') : studentData;
+    return parsedData[certKey] === true || parsedData[certKey] === 'Yes' || parsedData[certKey] === 'yes';
+  };
+
+  // Helper function to get certificate status display
+  const getCertificateStatusDisplay = (certKey, overallStatus) => {
+    // If overall status is Verified or Submitted, show Yes
+    if (overallStatus === 'Verified' || overallStatus === 'Submitted') {
+      return 'Yes';
+    }
+    // If overall status is Unverified, Pending, or null, check individual certificate
+    if (overallStatus === 'Unverified' || overallStatus === 'Pending' || !overallStatus) {
+      return isCertificatePresent(certKey) ? 'Yes' : 'No';
+    }
+    // For other statuses, check individual certificate
+    return isCertificatePresent(certKey) ? 'Yes' : 'No';
+  };
+
+  // Update certificate status
+  const updateCertificateStatus = (certKey, value) => {
+    const newEditData = { ...editData };
+    newEditData[certKey] = value;
+    
+    // Auto-update certificates_status based on all certificates
+    const courseName = (editData.course || selectedStudent?.course || '').toLowerCase();
+    let courseType = null;
+    if (courseName.includes('diploma')) {
+      courseType = 'Diploma';
+    } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
+      courseType = 'PG';
+    } else if (courseName) {
+      courseType = 'UG';
+    }
+    
+    if (courseType) {
+      const certificates = getCertificatesForCourse(courseType);
+      const allYes = certificates.every(cert => {
+        const certValue = cert.key === certKey ? value : newEditData[cert.key];
+        return certValue === true || certValue === 'Yes' || certValue === 'yes';
+      });
+      newEditData.certificates_status = allYes && certificates.length > 0 ? 'Verified' : 'Unverified';
+    }
+    
+    setEditData(newEditData);
   };
 
   // Calculate overall statistics
@@ -1650,6 +1742,7 @@ const Students = () => {
                   className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
+                  <option value="__NULL__">Pending (Null)</option>
                   {(dropdownFilterOptions.certificates_status || []).map((status) => (
                     <option key={status} value={status}>{status}</option>
                   ))}
@@ -1885,8 +1978,8 @@ const Students = () => {
                       </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.caste || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.gender || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.certificates_status || ''}>
-                        <span className="block truncate">{student.certificates_status || '-'}</span>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.certificates_status || 'Pending'}>
+                        <span className="block truncate">{student.certificates_status || 'Pending'}</span>
                       </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
@@ -2079,10 +2172,9 @@ const Students = () => {
             </div>
 
             {/* Main Content - Two Column Layout */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="flex flex-col lg:flex-row h-full">
+            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
                 {/* Left Sidebar - Student Photo & Key Info */}
-                <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col">
+                <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col overflow-hidden">
                   <div className="space-y-5">
                     {/* Student Photo */}
                     <div className="flex flex-col items-center">
@@ -2439,8 +2531,9 @@ const Students = () => {
                 </div>
 
                 {/* Right Side - All Student Data */}
-                <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto min-w-0">
+                  <div className="space-y-4 sm:space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
 
                     {/* Column 1 */}
                     <div className="space-y-4">
@@ -2851,17 +2944,27 @@ const Students = () => {
                               </p>
                             )}
                           </div>
-                          {/* Certificates Status is auto-calculated - no dropdown needed */}
-                          {!editMode && editData.certificates_status && (
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Certificate Status
-                              </label>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                              Certificate Status
+                            </label>
+                            {editMode ? (
+                              <select
+                                value={editData.certificates_status || selectedStudent?.certificates_status || ''}
+                                onChange={(e) => updateEditField('certificates_status', e.target.value)}
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                              >
+                                <option value="">Select Certificate Status</option>
+                                {CERTIFICATES_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>{status}</option>
+                                ))}
+                              </select>
+                            ) : (
                               <p className="text-sm text-gray-900 font-medium">
-                                {editData.certificates_status || selectedStudent?.certificates_status || '-'}
+                                {editData.certificates_status || selectedStudent?.certificates_status || 'Pending'}
                               </p>
-                            </div>
-                          )}
+                            )}
+                          </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                               Remarks
@@ -2883,6 +2986,7 @@ const Students = () => {
                         </div>
                       </div>
                     </div>
+                    </div>
 
                     {/* Certificate Information Section */}
                     {(() => {
@@ -2899,8 +3003,11 @@ const Students = () => {
 
                       if (!courseType) return null;
 
+                      const certificates = getCertificatesForCourse(courseType);
+                      const overallStatus = editData.certificates_status || selectedStudent?.certificates_status || null;
+
                       return (
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mt-4">
                           <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                             <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
                             Certificate Information
@@ -2908,99 +3015,55 @@ const Students = () => {
                           <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
                             <h5 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
                               <FileText size={14} className="text-gray-600" />
-                              Default Certification Fields
+                              {editMode ? 'Edit Certificate Status' : 'Certificate Status'}
                             </h5>
                             
-                            {courseType === 'Diploma' && (
-                              <div>
-                                <h6 className="text-xs font-medium text-gray-700 mb-2">For Diploma Courses</h6>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {certificates.map((cert) => {
+                                const isPresent = isCertificatePresent(cert.key);
+                                const displayStatus = getCertificateStatusDisplay(cert.key, overallStatus);
+                                const isYes = displayStatus === 'Yes';
 
-                            {courseType === 'UG' && (
-                              <div>
-                                <h6 className="text-xs font-medium text-gray-700 mb-2">For UG Courses</h6>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
+                                return (
+                                  <div 
+                                    key={cert.key}
+                                    className={`flex items-center justify-between p-2.5 bg-white rounded border ${
+                                      isYes ? 'border-green-200 bg-green-50' : 'border-gray-200'
+                                    } transition-colors`}
+                                  >
+                                    <span className="text-xs text-gray-700 flex-1 pr-2">{cert.label}</span>
+                                    {editMode ? (
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={isPresent}
+                                          onChange={(e) => updateCertificateStatus(cert.key, e.target.checked)}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                        <span className="ml-2 text-xs font-medium text-gray-700 min-w-[30px]">
+                                          {isPresent ? 'Yes' : 'No'}
+                                        </span>
+                                      </label>
+                                    ) : (
+                                      <span className={`text-xs font-medium px-2 py-1 rounded ${
+                                        isYes 
+                                          ? 'text-green-700 bg-green-100' 
+                                          : 'text-red-700 bg-red-100'
+                                      }`}>
+                                        {displayStatus}
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">Inter/Diploma Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {courseType === 'PG' && (
-                              <div>
-                                <h6 className="text-xs font-medium text-gray-700 mb-2">For PG Courses</h6>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">10th Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">Inter/Diploma Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">UG Study Certificate</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">UG TC (Transfer Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">UG PC (Provisional Certificate)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">UG CMM (Consolidated Marks Memo)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                  <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                                    <span className="text-xs text-gray-700">UG OD (Original Degree)</span>
-                                    <span className="text-xs text-gray-500">Yes</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       );
                     })()}
                   </div>
                 </div>
-              </div>
             </div>
 
             {/* Footer */}

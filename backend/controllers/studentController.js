@@ -2076,8 +2076,13 @@ exports.getAllStudents = async (req, res) => {
       const filterKey = `filter_${field}`;
       const filterValue = normalizedOtherFilters[filterKey];
       if (filterValue && typeof filterValue === 'string' && filterValue.trim().length > 0) {
-        query += ` AND ${field} LIKE ?`;
-        params.push(`%${filterValue.trim()}%`);
+        // Special handling for null certificate status
+        if (field === 'certificates_status' && filterValue.trim() === '__NULL__') {
+          query += ` AND ${field} IS NULL`;
+        } else {
+          query += ` AND ${field} LIKE ?`;
+          params.push(`%${filterValue.trim()}%`);
+        }
       }
     });
 
@@ -2176,8 +2181,13 @@ exports.getAllStudents = async (req, res) => {
       const filterKey = `filter_${field}`;
       const filterValue = normalizedOtherFilters[filterKey];
       if (filterValue && typeof filterValue === 'string' && filterValue.trim().length > 0) {
-        countQuery += ` AND ${field} LIKE ?`;
-        countParams.push(`%${filterValue.trim()}%`);
+        // Special handling for null certificate status
+        if (field === 'certificates_status' && filterValue.trim() === '__NULL__') {
+          countQuery += ` AND ${field} IS NULL`;
+        } else {
+          countQuery += ` AND ${field} LIKE ?`;
+          countParams.push(`%${filterValue.trim()}%`);
+        }
       }
     });
 
