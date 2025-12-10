@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 const bcrypt = require('bcryptjs');
+const { sendSms } = require('../services/smsService');
 
 /**
  * Generate and store student login credentials
@@ -70,7 +71,25 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
         updated_at = CURRENT_TIMESTAMP
     `, [studentId, admissionNumber, username, passwordHash]);
 
-    return { success: true, username };
+    // Send SMS notification with login credentials
+    try {
+      const smsMessage = `Your PYDAH Student Portal login credentials - Username: ${username}, Password: ${plainPassword}. Keep this information confidential. - PYDAH Group`;
+      
+      await sendSms({
+        to: studentMobile.replace(/\D/g, ''), // Ensure only digits
+        message: smsMessage,
+        meta: {
+          student: { admissionNumber },
+          type: 'password_credentials'
+        }
+      });
+      console.log(`✅ SMS sent with credentials to ${studentMobile} for student ${admissionNumber}`);
+    } catch (smsError) {
+      console.error('Error sending SMS with credentials (non-fatal):', smsError);
+      // Don't fail credential generation if SMS fails
+    }
+
+    return { success: true, username, password: plainPassword };
   } catch (error) {
     console.error('Error generating student credentials:', error);
     return { success: false, error: error.message };

@@ -15,7 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowUpDown,
-  FileText
+  FileText,
+  Eye,
+  Key,
+  RefreshCw
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
@@ -86,6 +89,10 @@ const Students = () => {
   const [tempRollNumber, setTempRollNumber] = useState('');
   const [savingPinNumber, setSavingPinNumber] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [viewingPassword, setViewingPassword] = useState(false);
+  const [studentPassword, setStudentPassword] = useState(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [loadingPassword, setLoadingPassword] = useState(false);
   const [completionPercentages, setCompletionPercentages] = useState({});
   const [profileCompletion, setProfileCompletion] = useState({ percentage: 0, filledCount: 0, totalCount: 0 });
   const [forms, setForms] = useState([]);
@@ -997,10 +1004,56 @@ const Students = () => {
   const refreshStudents = () => {
     invalidateStudents();
   };
+
+  const handleViewPassword = async () => {
+    if (!selectedStudent) return;
+    
+    setLoadingPassword(true);
+    try {
+      const response = await api.get(`/students/${selectedStudent.admission_number}/password`);
+      if (response.data.success) {
+        setStudentPassword(response.data.data);
+        setViewingPassword(true);
+      } else {
+        toast.error(response.data.message || 'Failed to retrieve password');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to retrieve password');
+    } finally {
+      setLoadingPassword(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedStudent) return;
+    
+    if (!window.confirm('Are you sure you want to reset this student\'s password? A new password will be generated and sent via SMS.')) {
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const response = await api.post(`/students/${selectedStudent.admission_number}/reset-password`);
+      if (response.data.success) {
+        setStudentPassword(response.data.data);
+        setViewingPassword(true);
+        toast.success('Password reset successfully! SMS sent to student.');
+      } else {
+        toast.error(response.data.message || 'Failed to reset password');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to reset password');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const handleViewDetails = (student) => {
     setEditMode(false);
     setEditingRollNumber(false);
     setTempRollNumber(student.pin_no || '');
+    setViewingPassword(false);
+    setStudentPassword(null);
 
     // Prepare all possible fields including hidden ones
     const allFields = {
@@ -2159,17 +2212,94 @@ const Students = () => {
               </div>
               <div className="flex items-center gap-2">
                 {!editMode && (
-                  <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base">
-                    <Edit size={16} className="sm:w-[18px] sm:h-[18px]" />
-                    <span className="hidden sm:inline">Edit</span>
-                    <span className="sm:hidden">Edit</span>
-                  </button>
+                  <>
+                    <button 
+                      onClick={handleViewPassword} 
+                      disabled={loadingPassword}
+                      className="flex items-center gap-2 bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="View Password"
+                    >
+                      <Eye size={16} className="sm:w-[18px] sm:h-[18px]" />
+                      <span className="hidden sm:inline">View Password</span>
+                      <span className="sm:hidden">View</span>
+                    </button>
+                    <button 
+                      onClick={handleResetPassword} 
+                      disabled={resettingPassword}
+                      className="flex items-center gap-2 bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 active:bg-orange-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Reset Password"
+                    >
+                      <RefreshCw size={16} className={`sm:w-[18px] sm:h-[18px] ${resettingPassword ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">Reset Password</span>
+                      <span className="sm:hidden">Reset</span>
+                    </button>
+                    <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base">
+                      <Edit size={16} className="sm:w-[18px] sm:h-[18px]" />
+                      <span className="hidden sm:inline">Edit</span>
+                      <span className="sm:hidden">Edit</span>
+                    </button>
+                  </>
                 )}
-                <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <button onClick={() => {
+                  setShowModal(false);
+                  setViewingPassword(false);
+                  setStudentPassword(null);
+                }} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center">
                   <X size={20} />
                 </button>
               </div>
             </div>
+
+            {/* Password Display Modal */}
+            {viewingPassword && studentPassword && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <Key size={24} className="text-green-600" />
+                      Student Login Credentials
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setViewingPassword(false);
+                        setStudentPassword(null);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Username</label>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 font-mono text-lg">
+                        {studentPassword.username}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 font-mono text-lg">
+                        {studentPassword.password}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Password format: First 4 letters of name + last 4 digits of mobile number
+                    </p>
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={() => {
+                        setViewingPassword(false);
+                        setStudentPassword(null);
+                      }}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Main Content - Two Column Layout */}
             <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">

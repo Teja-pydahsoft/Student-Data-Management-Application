@@ -43,6 +43,8 @@ router.post('/:admissionNumber/promote', authMiddleware, attachUserScope, studen
 router.get('/:admissionNumber', authMiddleware, attachUserScope, studentController.getStudentByAdmission);
 router.put('/:admissionNumber', authMiddleware, attachUserScope, studentController.updateStudent);
 router.put('/:admissionNumber/pin-number', authMiddleware, attachUserScope, studentController.updatePinNumber);
+router.get('/:admissionNumber/password', authMiddleware, attachUserScope, studentController.viewStudentPassword);
+router.post('/:admissionNumber/reset-password', authMiddleware, attachUserScope, studentController.resetStudentPassword);
 router.delete('/:admissionNumber', authMiddleware, attachUserScope, studentController.deleteStudent);
 
 module.exports = router;

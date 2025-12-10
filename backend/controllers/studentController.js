@@ -2642,6 +2642,145 @@ exports.updatePinNumber = async (req, res) => {
   }
 };
 
+// View student password (returns plain password for display)
+exports.viewStudentPassword = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+
+    // Get student credentials
+    const [credentials] = await masterPool.query(
+      `SELECT sc.username, s.student_name, s.student_mobile, s.pin_no
+       FROM student_credentials sc
+       INNER JOIN students s ON sc.student_id = s.id
+       WHERE sc.admission_number = ? OR s.admission_number = ?
+       LIMIT 1`,
+      [admissionNumber, admissionNumber]
+    );
+
+    if (credentials.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student credentials not found'
+      });
+    }
+
+    const cred = credentials[0];
+
+    // Generate password from student data (same logic as generation)
+    const studentName = cred.student_name || '';
+    const studentMobile = cred.student_mobile || '';
+    const mobileNumber = studentMobile.replace(/\D/g, '');
+
+    if (mobileNumber.length < 4 || studentName.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot generate password: insufficient student data'
+      });
+    }
+
+    // Get first 4 letters (uppercase, remove spaces and special chars)
+    const firstFourLetters = studentName
+      .replace(/[^a-zA-Z]/g, '')
+      .substring(0, 4)
+      .toUpperCase();
+
+    if (firstFourLetters.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot generate password: student name has insufficient letters'
+      });
+    }
+
+    // Get last 4 digits of mobile number
+    const lastFourDigits = mobileNumber.substring(mobileNumber.length - 4);
+
+    // Combine to create password
+    const plainPassword = firstFourLetters + lastFourDigits;
+
+    res.json({
+      success: true,
+      data: {
+        username: cred.username,
+        password: plainPassword
+      }
+    });
+  } catch (error) {
+    console.error('View student password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while retrieving password'
+    });
+  }
+};
+
+// Reset student password (regenerates and sends SMS)
+exports.resetStudentPassword = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+
+    // Get student data
+    const [students] = await masterPool.query(
+      `SELECT id, admission_number, pin_no, student_name, student_mobile
+       FROM students
+       WHERE admission_number = ? OR admission_no = ?
+       LIMIT 1`,
+      [admissionNumber, admissionNumber]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const student = students[0];
+
+    // Regenerate credentials
+    const { generateStudentCredentials } = require('../utils/studentCredentials');
+    const credResult = await generateStudentCredentials(
+      student.id,
+      student.admission_number,
+      student.pin_no,
+      student.student_name,
+      student.student_mobile
+    );
+
+    if (!credResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: credResult.error || 'Failed to reset password'
+      });
+    }
+
+    // Log action
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['RESET_PASSWORD', 'STUDENT', admissionNumber, req.admin?.id || null, JSON.stringify({ username: credResult.username })]
+      );
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully. SMS sent to student.',
+      data: {
+        username: credResult.username,
+        password: credResult.password // Return password for display
+      }
+    });
+  } catch (error) {
+    console.error('Reset student password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while resetting password'
+    });
+  }
+};
+
 // Bulk delete students
 exports.bulkDeleteStudents = async (req, res) => {
   try {
