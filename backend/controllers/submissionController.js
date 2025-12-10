@@ -1707,6 +1707,20 @@ exports.approveSubmission = async (req, res) => {
 
         await masterConn.query(query, insertValues);
         console.log('✅ Student data inserted successfully');
+        
+        // Generate student login credentials automatically
+        try {
+          const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+          const credResult = await generateCredentialsByAdmissionNumber(finalAdmissionNumber);
+          if (credResult.success) {
+            console.log(`✅ Generated login credentials for student ${finalAdmissionNumber} (username: ${credResult.username})`);
+          } else {
+            console.warn(`⚠️  Could not generate credentials for student ${finalAdmissionNumber}: ${credResult.error}`);
+          }
+        } catch (credError) {
+          console.error('Error generating student credentials (non-fatal):', credError);
+          // Don't fail approval if credential generation fails
+        }
       } catch (insertError) {
         console.error('❌ Insert error:', insertError.message);
         console.error('❌ SQL query was:', `INSERT INTO students (${insertFields.join(', ')}) VALUES (${insertFields.map(() => '?').join(', ')})`);
@@ -3807,6 +3821,18 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
       `UPDATE students SET ${updateFields.join(', ')} WHERE admission_number = ? OR admission_no = ?`,
       [...updateValues, finalAdmissionNumber, finalAdmissionNumber]
     );
+    
+    // Generate credentials if they don't exist (for updated students)
+    try {
+      const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+      const credResult = await generateCredentialsByAdmissionNumber(finalAdmissionNumber);
+      if (credResult.success) {
+        console.log(`✅ Generated/updated login credentials for student ${finalAdmissionNumber} (username: ${credResult.username})`);
+      }
+    } catch (credError) {
+      // Non-fatal error
+      console.error('Error generating credentials for updated student (non-fatal):', credError);
+    }
   } else {
     // Create new student
     const studentData = {};
@@ -3851,6 +3877,20 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
     const query = `INSERT INTO students (${insertFields.join(', ')}) VALUES (${placeholders})`;
 
     await masterConn.query(query, insertValues);
+    
+    // Generate student login credentials automatically
+    try {
+      const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+      const credResult = await generateCredentialsByAdmissionNumber(finalAdmissionNumber);
+      if (credResult.success) {
+        console.log(`✅ Generated login credentials for student ${finalAdmissionNumber} (username: ${credResult.username})`);
+      } else {
+        console.warn(`⚠️  Could not generate credentials for student ${finalAdmissionNumber}: ${credResult.error}`);
+      }
+    } catch (credError) {
+      console.error('Error generating student credentials (non-fatal):', credError);
+      // Don't fail approval if credential generation fails
+    }
   }
 
   // Update submission status

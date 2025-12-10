@@ -1859,8 +1859,17 @@ exports.commitBulkUploadStudents = async (req, res) => {
         ', '
       )}) VALUES (${insertPlaceholders.join(', ')})`;
 
+      let studentId = null;
       try {
         await connection.query(insertQuery, insertValues);
+        // Get the inserted student ID
+        const [insertedStudent] = await connection.query(
+          'SELECT id FROM students WHERE admission_number = ?',
+          [sanitized.admission_number]
+        );
+        if (insertedStudent.length > 0) {
+          studentId = insertedStudent[0].id;
+        }
       } catch (dbError) {
         if (dbError.code === 'ER_DUP_ENTRY') {
           failedCount++;
@@ -1873,6 +1882,29 @@ exports.commitBulkUploadStudents = async (req, res) => {
           continue;
         }
         throw dbError;
+      }
+
+      // Generate student login credentials automatically
+      if (studentId && sanitized.student_name && sanitized.student_mobile) {
+        try {
+          const { generateStudentCredentials } = require('../utils/studentCredentials');
+          const credResult = await generateStudentCredentials(
+            studentId,
+            sanitized.admission_number,
+            sanitized.pin_no,
+            sanitized.student_name,
+            sanitized.student_mobile
+          );
+          if (credResult.success) {
+            // Log silently for bulk operations to avoid spam
+            if (successCount % 50 === 0) {
+              console.log(`✅ Generated credentials for ${successCount + 1} students...`);
+            }
+          }
+        } catch (credError) {
+          // Non-fatal error - don't fail the bulk upload
+          console.error(`Error generating credentials for ${sanitized.admission_number}:`, credError.message);
+        }
       }
 
       await connection.query(
@@ -3179,6 +3211,26 @@ exports.createStudent = async (req, res) => {
       ...createdStudents[0],
       student_data: parseJSON(createdStudents[0].student_data)
     };
+
+    // Generate student login credentials automatically
+    try {
+      const { generateStudentCredentials } = require('../utils/studentCredentials');
+      const credResult = await generateStudentCredentials(
+        createdStudent.id,
+        createdStudent.admission_number,
+        createdStudent.pin_no,
+        createdStudent.student_name,
+        createdStudent.student_mobile
+      );
+      if (credResult.success) {
+        console.log(`✅ Generated login credentials for student ${admissionNumber} (username: ${credResult.username})`);
+      } else {
+        console.warn(`⚠️  Could not generate credentials for student ${admissionNumber}: ${credResult.error}`);
+      }
+    } catch (credError) {
+      console.error('Error generating student credentials (non-fatal):', credError);
+      // Don't fail student creation if credential generation fails
+    }
 
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
 
