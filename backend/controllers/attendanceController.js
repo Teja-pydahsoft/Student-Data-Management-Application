@@ -1805,14 +1805,6 @@ exports.getStudentAttendanceHistory = async (req, res) => {
     const referenceDate = safeDate(req.query.date) || new Date();
     const todayKey = formatDateKey(referenceDate);
 
-    const weekStart = new Date(referenceDate);
-    weekStart.setDate(referenceDate.getDate() - 6);
-    weekStart.setHours(0, 0, 0, 0);
-
-    const monthStart = new Date(referenceDate);
-    monthStart.setDate(referenceDate.getDate() - 29);
-    monthStart.setHours(0, 0, 0, 0);
-
     const [studentRows] = await masterPool.query(
       `
         SELECT id, student_name, pin_no, batch, course, branch, current_year, current_semester
@@ -1829,6 +1821,112 @@ exports.getStudentAttendanceHistory = async (req, res) => {
       });
     }
 
+    const student = studentRows[0];
+    let semesterStartDate = null;
+    let semesterEndDate = null;
+    let semesterInfo = null;
+
+    // Try to get semester dates from academic calendar
+    if (student.course && student.current_year && student.current_semester) {
+      try {
+        // First, get the course ID from course name
+        const [courseRows] = await masterPool.query(
+          `SELECT id FROM courses WHERE name = ? AND is_active = 1 LIMIT 1`,
+          [student.course]
+        );
+
+        if (courseRows.length > 0) {
+          const courseId = courseRows[0].id;
+          
+          // Get the current academic year (try to find active semester)
+          const [semesterRows] = await masterPool.query(
+            `
+              SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
+              FROM semesters
+              WHERE course_id = ?
+                AND year_of_study = ?
+                AND semester_number = ?
+                AND start_date <= ?
+                AND end_date >= ?
+              ORDER BY start_date DESC
+              LIMIT 1
+            `,
+            [courseId, student.current_year, student.current_semester, todayKey, todayKey]
+          );
+
+          // If no active semester found, get the most recent one
+          if (semesterRows.length === 0) {
+            const [recentSemesterRows] = await masterPool.query(
+              `
+                SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
+                FROM semesters
+                WHERE course_id = ?
+                  AND year_of_study = ?
+                  AND semester_number = ?
+                ORDER BY start_date DESC
+                LIMIT 1
+              `,
+              [courseId, student.current_year, student.current_semester]
+            );
+
+            if (recentSemesterRows.length > 0) {
+              semesterInfo = recentSemesterRows[0];
+              semesterStartDate = new Date(semesterInfo.start_date);
+              semesterEndDate = new Date(semesterInfo.end_date);
+            }
+          } else {
+            semesterInfo = semesterRows[0];
+            semesterStartDate = new Date(semesterInfo.start_date);
+            semesterEndDate = new Date(semesterInfo.end_date);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch semester dates:', error.message || error);
+      }
+    }
+
+    // Fallback to fixed windows if semester dates not found
+    let weekStart, monthStart;
+    if (semesterStartDate && semesterEndDate) {
+      // Use semester dates, but limit to current date if semester hasn't ended
+      const effectiveEndDate = semesterEndDate > referenceDate ? referenceDate : semesterEndDate;
+      const effectiveStartDate = semesterStartDate < referenceDate ? semesterStartDate : referenceDate;
+      
+      // For weekly: last 7 days from reference date, but within semester
+      weekStart = new Date(referenceDate);
+      weekStart.setDate(referenceDate.getDate() - 6);
+      weekStart.setHours(0, 0, 0, 0);
+      if (weekStart < semesterStartDate) {
+        weekStart = new Date(semesterStartDate);
+        weekStart.setHours(0, 0, 0, 0);
+      }
+
+      // For monthly: use semester start date or last 30 days, whichever is more recent
+      monthStart = new Date(referenceDate);
+      monthStart.setDate(referenceDate.getDate() - 29);
+      monthStart.setHours(0, 0, 0, 0);
+      if (monthStart < semesterStartDate) {
+        monthStart = new Date(semesterStartDate);
+        monthStart.setHours(0, 0, 0, 0);
+      }
+    } else {
+      // Fallback to original logic
+      weekStart = new Date(referenceDate);
+      weekStart.setDate(referenceDate.getDate() - 6);
+      weekStart.setHours(0, 0, 0, 0);
+
+      monthStart = new Date(referenceDate);
+      monthStart.setDate(referenceDate.getDate() - 29);
+      monthStart.setHours(0, 0, 0, 0);
+    }
+
+    // Determine the date range for fetching attendance
+    let queryStartDate = monthStart < weekStart ? monthStart : weekStart;
+    if (semesterStartDate && queryStartDate < semesterStartDate) {
+      queryStartDate = new Date(semesterStartDate);
+      queryStartDate.setHours(0, 0, 0, 0);
+    }
+
     const [historyRows] = await masterPool.query(
       `
         SELECT attendance_date, status
@@ -1837,35 +1935,82 @@ exports.getStudentAttendanceHistory = async (req, res) => {
           AND attendance_date BETWEEN ? AND ?
         ORDER BY attendance_date ASC
       `,
-      [studentId, formatDateKey(monthStart), todayKey]
+      [studentId, formatDateKey(queryStartDate), todayKey]
     );
 
     const weeklyRows = historyRows.filter(
-      (row) => new Date(row.attendance_date) >= weekStart
+      (row) => {
+        const rowDate = new Date(row.attendance_date);
+        return rowDate >= weekStart && rowDate <= referenceDate;
+      }
     );
 
+    const monthlyRows = historyRows.filter(
+      (row) => {
+        const rowDate = new Date(row.attendance_date);
+        return rowDate >= monthStart && rowDate <= referenceDate;
+      }
+    );
+
+    // Determine holiday range
+    const holidayStartDate = monthStart < weekStart ? monthStart : weekStart;
     let holidayRangeInfo = { dates: new Set(), details: new Map() };
     try {
-      holidayRangeInfo = await getNonWorkingDaysForRange(formatDateKey(monthStart), todayKey);
+      holidayRangeInfo = await getNonWorkingDaysForRange(formatDateKey(holidayStartDate), todayKey);
     } catch (error) {
       console.warn('Failed to fetch holiday range for student history:', error.message || error);
     }
 
     const weekly = buildStudentSeries(weeklyRows, weekStart, referenceDate, holidayRangeInfo);
-    const monthly = buildStudentSeries(historyRows, monthStart, referenceDate, holidayRangeInfo);
+    const monthly = buildStudentSeries(monthlyRows, monthStart, referenceDate, holidayRangeInfo);
+
+    // Calculate attendance percentage based on semester dates
+    let semesterAttendance = null;
+    if (semesterStartDate && semesterEndDate) {
+      const semesterRows = historyRows.filter(
+        (row) => {
+          const rowDate = new Date(row.attendance_date);
+          return rowDate >= semesterStartDate && rowDate <= (semesterEndDate > referenceDate ? referenceDate : semesterEndDate);
+        }
+      );
+
+      // Get holidays for semester range
+      let semesterHolidayInfo = { dates: new Set(), details: new Map() };
+      try {
+        const semesterEndKey = semesterEndDate > referenceDate ? todayKey : formatDateKey(semesterEndDate);
+        semesterHolidayInfo = await getNonWorkingDaysForRange(formatDateKey(semesterStartDate), semesterEndKey);
+      } catch (error) {
+        console.warn('Failed to fetch semester holiday range:', error.message || error);
+      }
+
+      const semesterSeries = buildStudentSeries(
+        semesterRows,
+        semesterStartDate,
+        semesterEndDate > referenceDate ? referenceDate : semesterEndDate,
+        semesterHolidayInfo
+      );
+
+      semesterAttendance = {
+        startDate: formatDateKey(semesterStartDate),
+        endDate: semesterEndDate > referenceDate ? todayKey : formatDateKey(semesterEndDate),
+        totals: semesterSeries.totals,
+        series: semesterSeries.series,
+        holidays: semesterSeries.series.filter((entry) => entry.isHoliday)
+      };
+    }
 
     res.json({
       success: true,
       data: {
         student: {
-          id: studentRows[0].id,
-          name: studentRows[0].student_name,
-          pin: studentRows[0].pin_no,
-          batch: studentRows[0].batch,
-          course: studentRows[0].course,
-          branch: studentRows[0].branch,
-          currentYear: studentRows[0].current_year,
-          currentSemester: studentRows[0].current_semester
+          id: student.id,
+          name: student.student_name,
+          pin: student.pin_no,
+          batch: student.batch,
+          course: student.course,
+          branch: student.branch,
+          currentYear: student.current_year,
+          currentSemester: student.current_semester
         },
         weekly: {
           startDate: formatDateKey(weekStart),
@@ -1880,7 +2025,8 @@ exports.getStudentAttendanceHistory = async (req, res) => {
           totals: monthly.totals,
           series: monthly.series,
           holidays: monthly.series.filter((entry) => entry.isHoliday)
-        }
+        },
+        semester: semesterAttendance
       }
     });
   } catch (error) {

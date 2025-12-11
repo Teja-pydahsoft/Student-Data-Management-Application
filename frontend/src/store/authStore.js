@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import api from '../config/api';
+import { queryClient } from '../config/queryClient';
 import { 
   MODULE_ROUTE_MAP, 
   getModuleKeyForPath, 
@@ -72,9 +73,15 @@ const useAuthStore = create((set) => ({
   },
   
   logout: () => {
+    // Clear all React Query cache
+    queryClient.clear();
+    
+    // Clear localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('admin');
+    
+    // Clear state
     set({ user: null, token: null, isAuthenticated: false });
   },
   

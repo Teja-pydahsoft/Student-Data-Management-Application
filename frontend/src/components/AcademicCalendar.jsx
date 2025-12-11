@@ -494,6 +494,28 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
               </button>
             </div>
             
+            {/* Show current dates when editing */}
+            {editingSemester && editingSemester.startDate && editingSemester.endDate && (
+              <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={16} className="text-blue-600" />
+                    <span className="font-medium text-gray-700">Current Dates:</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <span className="text-gray-600">Start:</span>
+                      <span className="ml-2 font-semibold text-blue-700">{formatDate(editingSemester.startDate)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">End:</span>
+                      <span className="ml-2 font-semibold text-blue-700">{formatDate(editingSemester.endDate)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {/* College */}
               <div>

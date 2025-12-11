@@ -310,25 +310,28 @@ const Settings = () => {
   // Certificate configuration state
   const [certificateConfig, setCertificateConfig] = useState({
     diploma: [
-      { id: 'diploma_1', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'diploma_2', name: '10th Study Certificate', required: true }
+      { id: 'diploma_1', name: 'SSC Certificate', required: true },
+      { id: 'diploma_2', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'diploma_3', name: '10th Study Certificate', required: true }
     ],
     ug: [
-      { id: 'ug_1', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'ug_2', name: '10th Study Certificate', required: true },
-      { id: 'ug_3', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
-      { id: 'ug_4', name: 'Inter/Diploma Study Certificate', required: true }
+      { id: 'ug_1', name: 'SSC Certificate', required: true },
+      { id: 'ug_2', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'ug_3', name: '10th Study Certificate', required: true },
+      { id: 'ug_4', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'ug_5', name: 'Inter/Diploma Study Certificate', required: true }
     ],
     pg: [
-      { id: 'pg_1', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'pg_2', name: '10th Study Certificate', required: true },
-      { id: 'pg_3', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
-      { id: 'pg_4', name: 'Inter/Diploma Study Certificate', required: true },
-      { id: 'pg_5', name: 'UG Study Certificate', required: true },
-      { id: 'pg_6', name: 'UG TC (Transfer Certificate)', required: true },
-      { id: 'pg_7', name: 'UG PC (Provisional Certificate)', required: true },
-      { id: 'pg_8', name: 'UG CMM (Consolidated Marks Memo)', required: true },
-      { id: 'pg_9', name: 'UG OD (Original Degree)', required: true }
+      { id: 'pg_1', name: 'SSC Certificate', required: true },
+      { id: 'pg_2', name: '10th TC (Transfer Certificate)', required: true },
+      { id: 'pg_3', name: '10th Study Certificate', required: true },
+      { id: 'pg_4', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'pg_5', name: 'Inter/Diploma Study Certificate', required: true },
+      { id: 'pg_6', name: 'UG Study Certificate', required: true },
+      { id: 'pg_7', name: 'UG TC (Transfer Certificate)', required: true },
+      { id: 'pg_8', name: 'UG PC (Provisional Certificate)', required: true },
+      { id: 'pg_9', name: 'UG CMM (Consolidated Marks Memo)', required: true },
+      { id: 'pg_10', name: 'UG OD (Original Degree)', required: true }
     ]
   });
 
@@ -3383,6 +3386,10 @@ const Settings = () => {
                       <h4 className="text-sm font-medium text-gray-700 mb-3">For Diploma Courses</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">SSC Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
                           <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
                           <span className="text-xs text-gray-500">Yes</span>
                         </div>
@@ -3397,6 +3404,10 @@ const Settings = () => {
                     <div className="mb-6">
                       <h4 className="text-sm font-medium text-gray-700 mb-3">For UG Courses</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">SSC Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
                         <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
                           <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
                           <span className="text-xs text-gray-500">Yes</span>
@@ -3420,6 +3431,10 @@ const Settings = () => {
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-3">For PG Courses</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                          <span className="text-sm text-gray-700">SSC Certificate</span>
+                          <span className="text-xs text-gray-500">Yes</span>
+                        </div>
                         <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
                           <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
                           <span className="text-xs text-gray-500">Yes</span>

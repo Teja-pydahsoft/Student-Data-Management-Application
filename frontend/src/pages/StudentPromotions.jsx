@@ -54,6 +54,7 @@ const StudentPromotions = () => {
   const [submitting, setSubmitting] = useState(false);
   const [loadingPromotionPlan, setLoadingPromotionPlan] = useState(false);
   const [promotionResults, setPromotionResults] = useState(null);
+  const [promotionSummaryData, setPromotionSummaryData] = useState(null);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [promotionPlan, setPromotionPlan] = useState([]);
   const [hasStageConflicts, setHasStageConflicts] = useState(false);
@@ -304,6 +305,9 @@ const StudentPromotions = () => {
   };
 
   const promotionSummary = useMemo(() => {
+    if (promotionSummaryData) {
+      return promotionSummaryData;
+    }
     if (!promotionResults || !Array.isArray(promotionResults)) {
       return null;
     }
@@ -316,7 +320,30 @@ const StudentPromotions = () => {
       },
       { success: 0, skipped: 0, errors: 0 }
     );
-  }, [promotionResults]);
+  }, [promotionResults, promotionSummaryData]);
+
+  const promotionProgress = useMemo(() => {
+    const totalFromSummary = promotionSummaryData?.total;
+    const processedFromSummary = promotionSummaryData?.processed;
+    const latestResultProgress = Array.isArray(promotionResults) && promotionResults.length > 0
+      ? promotionResults[promotionResults.length - 1]?.progress
+      : null;
+
+    const total =
+      totalFromSummary ??
+      (promotionPlan?.filter((item) => item.nextStage && item.issues.length === 0).length ||
+        selectedAdmissionNumbers.size ||
+        null);
+    const processed =
+      processedFromSummary ??
+      (latestResultProgress?.current ?? (promotionResults ? promotionResults.length : 0));
+
+    return {
+      processed: processed || 0,
+      total: total || 0,
+      label: total ? `${processed || 0}/${total}` : null
+    };
+  }, [promotionSummaryData, promotionResults, promotionPlan, selectedAdmissionNumbers]);
 
   const getCurrentStageFromStudent = (student) => {
     if (!student) {
@@ -577,6 +604,7 @@ const StudentPromotions = () => {
 
       const results = response.data?.results || [];
       const leftOutResults = response.data?.leftOutResults || [];
+      setPromotionSummaryData(response.data?.summary || null);
       setPromotionResults([...results, ...leftOutResults]);
 
       const successCount = results.filter((result) => result.status === 'success').length;
@@ -816,7 +844,12 @@ const StudentPromotions = () => {
                     <span className="sm:hidden">Loading...</span>
                   </>
                 ) : submitting ? (
-                  'Promoting...'
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>
+                      Promoting{promotionProgress?.label ? ` (${promotionProgress.label})` : '...'}
+                    </span>
+                  </>
                 ) : (
                   <>
                     <span className="hidden sm:inline">Promote Selected</span>
@@ -828,7 +861,13 @@ const StudentPromotions = () => {
           </div>
 
           {promotionSummary && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
+              <div className="flex items-center gap-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                <RefreshCw size={16} className="text-indigo-600" />
+                <span>
+                  Progress: {promotionSummary.processed ?? promotionSummary.success + promotionSummary.skipped + promotionSummary.errors}/{promotionSummary.total ?? '-'}
+                </span>
+              </div>
               <div className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-100 rounded-lg px-3 py-2 text-sm">
                 <CheckCircle size={16} />
                 <span>Promoted: {promotionSummary.success}</span>
@@ -839,7 +878,7 @@ const StudentPromotions = () => {
               </div>
               <div className="flex items-center gap-2 bg-red-50 text-red-700 border border-red-100 rounded-lg px-3 py-2 text-sm">
                 <AlertTriangle size={16} />
-                <span>Errors: {promotionSummary.errors}</span>
+                <span>Errors: {promotionSummary.errors + (promotionSummary.leftOutErrors || 0)}</span>
               </div>
             </div>
           )}
@@ -1050,8 +1089,13 @@ const StudentPromotions = () => {
 
             {promotionResults && promotionResults.length > 0 && (
               <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 bg-gray-100">
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-100 flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold text-gray-700">Latest Promotion Results</h3>
+                  {promotionProgress?.label && (
+                    <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
+                      Progress: {promotionProgress.label}
+                    </span>
+                  )}
                 </div>
                 <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
                   {promotionResults.map((result, index) => {
@@ -1067,6 +1111,7 @@ const StudentPromotions = () => {
                       : isSkipped
                         ? 'bg-amber-50 border-amber-100'
                         : 'bg-red-50 border-red-100';
+                    const progressLabel = result?.progress?.label;
                     return (
                       <li
                         key={`${result.admissionNumber || index}-${result.status}`}
@@ -1092,7 +1137,14 @@ const StudentPromotions = () => {
                           </div>
                         </div>
                         <div className={`text-xs font-semibold uppercase ${statusColor}`}>
-                          {result.status}
+                          <div className="flex items-center gap-2">
+                            <span>{result.status}</span>
+                            {progressLabel && (
+                              <span className="px-2 py-0.5 rounded-full bg-white text-gray-700 border border-gray-300 lowercase">
+                                {progressLabel}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </li>
                     );

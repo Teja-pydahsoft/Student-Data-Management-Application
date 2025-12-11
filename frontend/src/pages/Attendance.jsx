@@ -1511,6 +1511,7 @@ const Attendance = () => {
     const rows = [];
     const weeklyTotals = history?.weekly?.totals || { present: 0, absent: 0, unmarked: 0 };
     const monthlyTotals = history?.monthly?.totals || { present: 0, absent: 0, unmarked: 0 };
+    const semesterTotals = history?.semester?.totals || { present: 0, absent: 0, unmarked: 0 };
 
     rows.push(csvValue('Student Name') + ',' + csvValue(student.studentName || 'Unknown'));
     rows.push(csvValue('PIN Number') + ',' + csvValue(student.pinNumber || 'N/A'));
@@ -1520,6 +1521,27 @@ const Attendance = () => {
     rows.push(csvValue('Current Year') + ',' + csvValue(student.currentYear || 'N/A'));
     rows.push(csvValue('Current Semester') + ',' + csvValue(student.currentSemester || 'N/A'));
     rows.push('');
+
+    if (history?.semester) {
+      rows.push(csvValue('Semester Summary'));
+      rows.push(csvValue('Period') + ',' + csvValue(`${history.semester.startDate} → ${history.semester.endDate}`));
+      rows.push(
+        [csvValue('Present'), csvValue('Absent'), csvValue('Unmarked'), csvValue('Holidays')].join(',')
+      );
+      rows.push(
+        [
+          csvValue(semesterTotals.present || 0),
+          csvValue(semesterTotals.absent || 0),
+          csvValue(semesterTotals.unmarked || 0),
+          csvValue(semesterTotals.holidays || 0)
+        ].join(',')
+      );
+      const totalWorkingDays = (semesterTotals.present || 0) + (semesterTotals.absent || 0) + (semesterTotals.unmarked || 0);
+      const presentDays = semesterTotals.present || 0;
+      const percentage = totalWorkingDays > 0 ? ((presentDays / totalWorkingDays) * 100).toFixed(2) : '0.00';
+      rows.push(csvValue('Attendance Percentage') + ',' + csvValue(`${percentage}%`));
+      rows.push('');
+    }
 
     rows.push(csvValue('Weekly Summary'));
     rows.push(
@@ -1550,11 +1572,11 @@ const Attendance = () => {
     rows.push('');
 
     rows.push([csvValue('Date'), csvValue('Status')].join(','));
-    const monthlySeries = history?.monthly?.series || [];
-    monthlySeries.forEach((entry) => {
+    const seriesToUse = history?.semester?.series || history?.monthly?.series || [];
+    seriesToUse.forEach((entry) => {
       const status = entry.status
         ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
-        : 'Unmarked';
+        : entry.isHoliday ? 'Holiday' : 'Unmarked';
       rows.push([csvValue(entry.date), csvValue(status)].join(','));
     });
 
@@ -1608,6 +1630,7 @@ const Attendance = () => {
 
   const weeklyChartSeries = historyData ? buildChartSeries(historyData.weekly?.series) : [];
   const monthlyChartSeries = historyData ? buildChartSeries(historyData.monthly?.series) : [];
+  const semesterChartSeries = historyData ? buildChartSeries(historyData.semester?.series) : [];
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
@@ -2909,6 +2932,62 @@ const Attendance = () => {
               </div>
             ) : (
               <div className="px-6 py-6 space-y-6">
+                {/* Semester Summary - Show prominently if available */}
+                {historyData.semester && (
+                  <section>
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-bold text-indigo-900 uppercase">Semester Attendance</h3>
+                        <div className="text-right">
+                          {(() => {
+                            const semesterTotals = historyData.semester?.totals || {};
+                            const totalDays = (semesterTotals.present || 0) + (semesterTotals.absent || 0) + (semesterTotals.unmarked || 0);
+                            const presentDays = semesterTotals.present || 0;
+                            const percentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(2) : '0.00';
+                            return (
+                              <div>
+                                <p className="text-xs text-gray-600">Attendance Percentage</p>
+                                <p className="text-2xl font-bold text-indigo-700">{percentage}%</p>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-center mb-3">
+                        <div>
+                          <p className="text-xs text-gray-600">Present</p>
+                          <p className="text-xl font-semibold text-green-600">
+                            {historyData.semester?.totals?.present ?? 0}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600">Absent</p>
+                          <p className="text-xl font-semibold text-red-500">
+                            {historyData.semester?.totals?.absent ?? 0}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600">Unmarked</p>
+                          <p className="text-xl font-semibold text-gray-600">
+                            {historyData.semester?.totals?.unmarked ?? 0}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600">Holidays</p>
+                          <p className="text-xl font-semibold text-amber-600">
+                            {historyData.semester?.totals?.holidays ?? 0}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pt-3 border-t border-indigo-200">
+                        <p className="text-xs font-medium text-indigo-800">
+                          Semester Period: {historyData.semester?.startDate} → {historyData.semester?.endDate}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
                 <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-blue-700 uppercase">Weekly Summary</h3>
@@ -2977,7 +3056,7 @@ const Attendance = () => {
                   </div>
                 </section>
 
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <section className={`grid gap-6 ${historyData.semester ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-gray-800">Weekly Status Timeline</h3>
                     <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
@@ -3014,7 +3093,123 @@ const Attendance = () => {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  {historyData.semester && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-gray-800">Semester Status Timeline</h3>
+                      <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={semesterChartSeries}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={80} />
+                            <YAxis allowDecimals={false} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
+                            <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
+                            <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
+                            <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
                 </section>
+
+                {/* Monthly Breakdown - Show all months in semester */}
+                {historyData.semester && historyData.semester.series && (() => {
+                  // Group attendance by month
+                  const monthlyData = {};
+                  historyData.semester.series.forEach((entry) => {
+                    const date = new Date(entry.date);
+                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    
+                    if (!monthlyData[monthKey]) {
+                      monthlyData[monthKey] = {
+                        monthName,
+                        present: 0,
+                        absent: 0,
+                        unmarked: 0,
+                        holidays: 0,
+                        total: 0
+                      };
+                    }
+                    
+                    if (entry.isHoliday) {
+                      monthlyData[monthKey].holidays++;
+                    } else if (entry.status === 'present') {
+                      monthlyData[monthKey].present++;
+                    } else if (entry.status === 'absent') {
+                      monthlyData[monthKey].absent++;
+                    } else {
+                      monthlyData[monthKey].unmarked++;
+                    }
+                    monthlyData[monthKey].total++;
+                  });
+
+                  const months = Object.keys(monthlyData).sort().map(key => ({
+                    key,
+                    ...monthlyData[key]
+                  }));
+
+                  return (
+                    <section>
+                      <h3 className="text-sm font-semibold text-gray-800 mb-3">
+                        Monthly Breakdown (Semester: {historyData.semester.startDate} → {historyData.semester.endDate})
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {months.map((month) => {
+                          const totalWorkingDays = month.total - month.holidays;
+                          const percentage = totalWorkingDays > 0 
+                            ? ((month.present / totalWorkingDays) * 100).toFixed(1) 
+                            : '0.0';
+                          
+                          return (
+                            <div
+                              key={month.key}
+                              className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow"
+                            >
+                              <h4 className="text-sm font-semibold text-gray-800 mb-3">{month.monthName}</h4>
+                              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                <div>
+                                  <p className="text-xs text-gray-500">Present</p>
+                                  <p className="text-base font-semibold text-green-600">{month.present}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500">Absent</p>
+                                  <p className="text-base font-semibold text-red-500">{month.absent}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500">Unmarked</p>
+                                  <p className="text-base font-semibold text-gray-600">{month.unmarked}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500">Holidays</p>
+                                  <p className="text-base font-semibold text-amber-600">{month.holidays}</p>
+                                </div>
+                              </div>
+                              <div className="pt-3 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-gray-600">Attendance:</span>
+                                  <span className={`text-sm font-bold ${
+                                    parseFloat(percentage) >= 75 ? 'text-green-600' :
+                                    parseFloat(percentage) >= 50 ? 'text-yellow-600' :
+                                    'text-red-600'
+                                  }`}>
+                                    {percentage}%
+                                  </span>
+                                </div>
+                                <div className="mt-1 text-xs text-gray-500">
+                                  Total Days: {month.total} (Working: {totalWorkingDays})
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })()}
 
                 <section>
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Breakdown (Last 7 days)</h3>

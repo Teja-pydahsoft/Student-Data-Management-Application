@@ -1366,11 +1366,13 @@ const Students = () => {
   const getCertificatesForCourse = (courseType) => {
     if (courseType === 'Diploma') {
       return [
+        { key: 'ssc_certificate', label: 'SSC Certificate' },
         { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
         { key: '10th_study', label: '10th Study Certificate' }
       ];
     } else if (courseType === 'UG') {
       return [
+        { key: 'ssc_certificate', label: 'SSC Certificate' },
         { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
         { key: '10th_study', label: '10th Study Certificate' },
         { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
@@ -1378,6 +1380,7 @@ const Students = () => {
       ];
     } else if (courseType === 'PG') {
       return [
+        { key: 'ssc_certificate', label: 'SSC Certificate' },
         { key: '10th_tc', label: '10th TC (Transfer Certificate)' },
         { key: '10th_study', label: '10th Study Certificate' },
         { key: 'inter_diploma_tc', label: 'Inter/Diploma TC (Transfer Certificate)' },
@@ -3078,22 +3081,12 @@ const Students = () => {
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                               Certificate Status
                             </label>
-                            {editMode ? (
-                              <select
-                                value={editData.certificates_status || selectedStudent?.certificates_status || ''}
-                                onChange={(e) => updateEditField('certificates_status', e.target.value)}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                              >
-                                <option value="">Select Certificate Status</option>
-                                {CERTIFICATES_STATUS_OPTIONS.map((status) => (
-                                  <option key={status} value={status}>{status}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <p className="text-sm text-gray-900 font-medium">
-                                {editData.certificates_status || selectedStudent?.certificates_status || 'Pending'}
-                              </p>
-                            )}
+                            <p className="text-sm text-gray-900 font-medium">
+                              {editData.certificates_status || selectedStudent?.certificates_status || 'Pending'}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1 italic">
+                              (Auto-updated based on certificate information)
+                            </p>
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
