@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarCheck,
   CalendarDays,
+  Calendar,
+  Clock,
+  Loader2,
   Search,
   Filter,
   RefreshCw,
@@ -31,6 +34,8 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
+
+const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS']);
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -100,6 +105,23 @@ const getMonthKeyFromDate = (dateString) => {
 };
 
 const Attendance = () => {
+const StatPill = ({ label, value, color }) => {
+  const colorMap = {
+    gray: 'bg-gray-50 border-gray-200 text-gray-900',
+    green: 'bg-green-50 border-green-100 text-green-800',
+    blue: 'bg-blue-50 border-blue-100 text-blue-800',
+    red: 'bg-red-50 border-red-100 text-red-800',
+    amber: 'bg-amber-50 border-amber-100 text-amber-800'
+  };
+  const safeValue = Number.isFinite(value) ? value : Number(value) || 0;
+  return (
+    <div className={`border rounded-lg p-3 ${colorMap[color] || colorMap.gray}`}>
+      <p className="text-xs text-gray-600">{label}</p>
+      <p className="text-lg font-bold">{safeValue}</p>
+    </div>
+  );
+};
+
   const [attendanceDate, setAttendanceDate] = useState(() => formatDateInput(new Date()));
   const [filters, setFilters] = useState({
     batch: '',
@@ -145,6 +167,36 @@ const Attendance = () => {
   const [smsPageSize] = useState(10);
   const [retryingSmsFor, setRetryingSmsFor] = useState(null); // Track which student SMS is being retried
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const attendanceCache = useRef(new Map());
+  const CACHE_TTL_MS = 90 * 1000; // 90 seconds cache for faster re-renders
+  const pendingRequestRef = useRef(null);
+const filterOptionsCacheRef = useRef(new Map());
+const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
+  const [dayEndReportOpen, setDayEndReportOpen] = useState(false);
+  const [dayEndReportLoading, setDayEndReportLoading] = useState(false);
+  const [dayEndReportData, setDayEndReportData] = useState(null);
+  const [dayEndGrouped, setDayEndGrouped] = useState([]);
+  const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
+  const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
+  const [markHolidayLoading, setMarkHolidayLoading] = useState(false);
+  const dayEndGroupedDisplay = useMemo(() => {
+    let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
+    rows = rows.filter((row) => {
+      if (dayEndPreviewFilter === 'marked') return (row.markedToday || 0) > 0;
+      if (dayEndPreviewFilter === 'unmarked') return (row.pendingToday || 0) > 0;
+      return true;
+    });
+
+    const compareNumber = (a, b) => (a || 0) - (b || 0);
+    if (dayEndSortBy === 'branch') {
+      rows.sort((a, b) => (a.branch || '').localeCompare(b.branch || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
+    } else if (dayEndSortBy === 'yearSem') {
+      rows.sort((a, b) => compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester) || (a.branch || '').localeCompare(b.branch || ''));
+    } else if (dayEndSortBy === 'course') {
+      rows.sort((a, b) => (a.course || '').localeCompare(b.course || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
+    }
+    return rows;
+  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -577,6 +629,18 @@ const Attendance = () => {
 
   const loadFilterOptions = async () => {
     try {
+      const cacheKey = JSON.stringify({
+        batch: filters.batch,
+        course: filters.course,
+        branch: filters.branch
+      });
+      const cached = filterOptionsCacheRef.current.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < FILTER_CACHE_TTL_MS) {
+        setFilterOptions(cached.filterOptions);
+        setCoursesWithBranches(cached.coursesWithBranches || []);
+        return;
+      }
+
       // Build query params based on current filters for cascading
       const params = new URLSearchParams();
       if (filters.batch) params.append('batch', filters.batch);
@@ -591,20 +655,174 @@ const Attendance = () => {
       
       if (filtersResponse.data?.success) {
         const data = filtersResponse.data.data || {};
-        setFilterOptions({
+        const nextOptions = {
           batches: data.batches || [],
           courses: data.courses || [],
           branches: data.branches || [],
           years: data.years || [],
           semesters: data.semesters || []
+        };
+        setFilterOptions(nextOptions);
+
+        filterOptionsCacheRef.current.set(cacheKey, {
+          filterOptions: nextOptions,
+          coursesWithBranches: coursesResponse.data?.success ? (coursesResponse.data.data || []) : [],
+          timestamp: Date.now()
         });
       }
 
       if (coursesResponse.data?.success) {
         setCoursesWithBranches(coursesResponse.data.data || []);
       }
+      
+      // Keep cache bounded
+      if (filterOptionsCacheRef.current.size > 30) {
+        const firstKey = filterOptionsCacheRef.current.keys().next().value;
+        filterOptionsCacheRef.current.delete(firstKey);
+      }
     } catch (error) {
       console.warn('Unable to load attendance filter options', error);
+    }
+  };
+
+  const buildCacheKey = (pageToUse) => {
+    const keyObj = {
+      attendanceDate,
+      page: pageToUse,
+      pageSize,
+      filters
+    };
+    return JSON.stringify(keyObj);
+  };
+
+  const hydrateFromCache = (cacheEntry) => {
+    setStudents(cacheEntry.students || []);
+    setStatusMap(cacheEntry.statusMap || {});
+    setInitialStatusMap(cacheEntry.initialStatusMap || {});
+    setTotalStudents(cacheEntry.totalStudents || 0);
+    setAttendanceStatistics(cacheEntry.attendanceStatistics || null);
+    setSmsResults([]); // keep workflow same
+    setSmsStatusMap(cacheEntry.smsStatusMap || {});
+    setLastUpdatedAt(null);
+    setSelectedDateHolidayInfo(cacheEntry.holidayInfo || null);
+  };
+
+  const handleDayEndReport = async () => {
+    setDayEndReportLoading(true);
+    try {
+      const params = {
+        date: attendanceDate,
+        student_status: 'Regular'
+      };
+      if (filters.batch) params.batch = filters.batch;
+      if (filters.course) params.course = filters.course;
+      if (filters.branch) params.branch = filters.branch;
+      if (filters.currentYear) params.year = filters.currentYear;
+      if (filters.currentSemester) params.semester = filters.currentSemester;
+
+      const response = await api.get('/attendance/summary', { params });
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Unable to fetch day-end report');
+      }
+
+      const summary = response.data?.data || {};
+      const totalStudents = summary.totalStudents || 0;
+      const dailyArray = Array.isArray(summary.daily) ? summary.daily : Object.values(summary.daily || {});
+      const safeDaily = (dailyArray || []).filter((d) => d && typeof d === 'object');
+      const presentToday = Number(
+        safeDaily.find((d) => d.status === 'present')?.count ?? summary.daily?.present ?? 0
+      ) || 0;
+      const absentToday = Number(
+        safeDaily.find((d) => d.status === 'absent')?.count ?? summary.daily?.absent ?? 0
+      ) || 0;
+      const holidayToday = Number(
+        safeDaily.find((d) => d.status === 'holiday')?.count ?? summary.daily?.holiday ?? 0
+      ) || 0;
+      const markedToday = presentToday + absentToday + holidayToday;
+      const unmarkedToday = Math.max(0, totalStudents - markedToday);
+
+      setDayEndReportData({
+        totalStudents,
+        presentToday,
+        absentToday,
+        holidayToday,
+        markedToday,
+        unmarkedToday,
+        filtersSnapshot: { ...filters },
+        date: attendanceDate
+      });
+      setDayEndGrouped(summary.groupedSummary || []);
+      setDayEndReportOpen(true);
+    } catch (error) {
+      console.error('Day-end report error:', error);
+      toast.error(error.response?.data?.message || 'Unable to fetch day-end report');
+    } finally {
+      setDayEndReportLoading(false);
+    }
+  };
+
+  const handleDayEndDownload = async (format = 'xlsx') => {
+    try {
+      const params = new URLSearchParams();
+      params.append('fromDate', attendanceDate);
+      params.append('toDate', attendanceDate);
+      params.append('format', format);
+      params.append('student_status', 'Regular');
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      if (filters.currentYear) params.append('year', filters.currentYear);
+      if (filters.currentSemester) params.append('semester', filters.currentSemester);
+
+      const response = await api.get(`/attendance/download?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], {
+        type: format === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attendance_report_${attendanceDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download report error:', error);
+      toast.error('Unable to download report');
+    }
+  };
+
+  const handleMarkHolidayForFiltered = async () => {
+    if (!filters.currentYear || !filters.currentSemester) {
+      toast.error('Select year and semester to mark holiday');
+      return;
+    }
+    const records = students
+      .filter((s) => Number.isInteger(s.id))
+      .map((s) => ({ studentId: s.id, status: 'holiday' }));
+    if (records.length === 0) {
+      toast.error('No students found to mark as holiday');
+      return;
+    }
+    if (!window.confirm(`Mark ${records.length} students as Holiday for ${attendanceDate}?`)) {
+      return;
+    }
+    setMarkHolidayLoading(true);
+    try {
+      await api.post('/attendance', {
+        attendanceDate,
+        records
+      });
+      toast.success('Marked as holiday for selected filters');
+      await loadAttendance();
+    } catch (error) {
+      console.error('Mark holiday failed:', error);
+      toast.error(error.response?.data?.message || 'Unable to mark as holiday');
+    } finally {
+      setMarkHolidayLoading(false);
     }
   };
 
@@ -612,7 +830,30 @@ const Attendance = () => {
     setLoading(true);
     setSelectedDateHolidayInfo(null);
     try {
+      // Cancel any in-flight attendance request to avoid queueing when filters change rapidly
+      if (pendingRequestRef.current) {
+        pendingRequestRef.current.abort();
+        pendingRequestRef.current = null;
+      }
+
+      const controller = new AbortController();
+      pendingRequestRef.current = controller;
+
       const pageToUse = pageOverride !== null ? pageOverride : currentPage;
+      const cacheKey = buildCacheKey(pageToUse);
+
+      // Serve instantly from cache (stale-while-revalidate): show cached data immediately, still fetch if stale
+      const cached = attendanceCache.current.get(cacheKey);
+      if (cached) {
+        hydrateFromCache(cached);
+        setCurrentPage(pageToUse);
+        // If cache is fresh, skip network call
+        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+          setLoading(false);
+          return;
+        }
+      }
+
       const params = new URLSearchParams();
       params.append('date', attendanceDate);
 
@@ -638,7 +879,7 @@ const Attendance = () => {
         params.append('offset', ((pageToUse - 1) * pageSize).toString());
       }
 
-      const response = await api.get(`/attendance?${params.toString()}`);
+      const response = await api.get(`/attendance?${params.toString()}`, { signal: controller.signal });
       if (!response.data?.success) {
         throw new Error(response.data?.message || 'Failed to fetch attendance');
       }
@@ -728,7 +969,28 @@ const Attendance = () => {
       if (response.data?.data?.holiday) {
         setSelectedDateHolidayInfo(response.data.data.holiday);
       }
+
+      // Cache the result for fast subsequent renders with same filters/date/page
+      attendanceCache.current.set(cacheKey, {
+        students: fetchedStudents,
+        statusMap: statusSnapshot,
+        initialStatusMap: { ...statusSnapshot },
+        totalStudents: total,
+        attendanceStatistics: finalStatistics,
+        smsStatusMap: newSmsStatusMap,
+        holidayInfo: response.data?.data?.holiday || null,
+        timestamp: Date.now()
+      });
+      // Keep cache size bounded
+      if (attendanceCache.current.size > 50) {
+        const firstKey = attendanceCache.current.keys().next().value;
+        attendanceCache.current.delete(firstKey);
+      }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.name === 'AbortError') {
+        // Request was aborted; let the next request handle UI updates
+        return;
+      }
       console.error('Attendance fetch failed:', error);
       toast.error(error.response?.data?.message || 'Unable to load attendance');
       setStudents([]);
@@ -737,6 +999,8 @@ const Attendance = () => {
       setTotalStudents(0);
       setSelectedDateHolidayInfo(null);
     } finally {
+      // Only clear loading if this is the latest request
+      pendingRequestRef.current = null;
       setLoading(false);
     }
   };
@@ -1692,11 +1956,13 @@ const Attendance = () => {
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Courses</option>
-              {filterOptions.courses.map((courseOption) => (
-                <option key={courseOption} value={courseOption}>
-                  {courseOption}
-                </option>
-              ))}
+               {filterOptions.courses
+                 .filter((courseOption) => !EXCLUDED_COURSES.has(courseOption))
+                 .map((courseOption) => (
+                   <option key={courseOption} value={courseOption}>
+                     {courseOption}
+                   </option>
+                 ))}
             </select>
             <select
               value={filters.branch}
@@ -1723,18 +1989,29 @@ const Attendance = () => {
                 </option>
               ))}
             </select>
-            <select
-              value={filters.currentSemester}
-              onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
-              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
-            >
-              <option value="">All Semesters</option>
-              {filterOptions.semesters.map((semesterOption) => (
-                <option key={semesterOption} value={semesterOption}>
-                  Sem {semesterOption}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <select
+                value={filters.currentSemester}
+                onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
+                className="w-full sm:w-auto flex-1 rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              >
+                <option value="">All Semesters</option>
+                {filterOptions.semesters.map((semesterOption) => (
+                  <option key={semesterOption} value={semesterOption}>
+                    Sem {semesterOption}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleDayEndReport}
+                disabled={dayEndReportLoading}
+                className="inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-2 rounded-md bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] sm:min-w-[132px] whitespace-nowrap"
+              >
+                <Download size={14} />
+                {dayEndReportLoading ? 'Loading...' : 'Day End Report'}
+              </button>
+            </div>
           </div>
           
           {/* Search Inputs - Full Width on Mobile */}
@@ -1771,12 +2048,205 @@ const Attendance = () => {
               <RefreshCw size={14} />
               Clear Filters
             </button>
-            <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
-              <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 justify-end">
+              {filters.currentYear && filters.currentSemester && (
+                <button
+                  type="button"
+                  onClick={handleMarkHolidayForFiltered}
+                  disabled={markHolidayLoading}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-sm font-semibold text-white bg-amber-600 rounded-md hover:bg-amber-700 active:bg-amber-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+                >
+                  {markHolidayLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
+                  Mark Holiday (Year {filters.currentYear}, Sem {filters.currentSemester})
+                </button>
+              )}
+              <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
+                <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
+              </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Day End Report Modal */}
+      {dayEndReportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Day End Report</h3>
+                <p className="text-xs text-gray-500">{dayEndReportData?.date || attendanceDate}</p>
+              </div>
+              <button
+                onClick={() => setDayEndReportOpen(false)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3">
+                <StatPill label="Total Students" value={dayEndReportData?.totalStudents ?? 0} color="gray" />
+                <StatPill label="Marked Today" value={dayEndReportData?.markedToday ?? 0} color="green" />
+                <StatPill label="Absent Today" value={dayEndReportData?.absentToday ?? 0} color="red" />
+                <StatPill label="Present Today" value={dayEndReportData?.presentToday ?? 0} color="blue" />
+                <StatPill label="Holiday Today" value={dayEndReportData?.holidayToday ?? 0} color="green" />
+                <StatPill label="Unmarked Today" value={dayEndReportData?.unmarkedToday ?? 0} color="amber" />
+              </div>
+              <div className="text-xs text-gray-600 space-y-1">
+                <p className="font-semibold text-gray-800">Filters</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {dayEndReportData?.filtersSnapshot?.batch && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      Batch: {dayEndReportData.filtersSnapshot.batch}
+                    </span>
+                  )}
+                  {dayEndReportData?.filtersSnapshot?.course && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      Course: {dayEndReportData.filtersSnapshot.course}
+                    </span>
+                  )}
+                  {dayEndReportData?.filtersSnapshot?.branch && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      Branch: {dayEndReportData.filtersSnapshot.branch}
+                    </span>
+                  )}
+                  {dayEndReportData?.filtersSnapshot?.currentYear && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      Year: {dayEndReportData.filtersSnapshot.currentYear}
+                    </span>
+                  )}
+                  {dayEndReportData?.filtersSnapshot?.currentSemester && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+                      Sem: {dayEndReportData.filtersSnapshot.currentSemester}
+                    </span>
+                  )}
+                  {!dayEndReportData?.filtersSnapshot?.batch &&
+                    !dayEndReportData?.filtersSnapshot?.course &&
+                    !dayEndReportData?.filtersSnapshot?.branch &&
+                    !dayEndReportData?.filtersSnapshot?.currentYear &&
+                    !dayEndReportData?.filtersSnapshot?.currentSemester && (
+                      <span className="text-gray-500">No filters applied (all students)</span>
+                    )}
+                </div>
+              </div>
+              {dayEndGrouped.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
+                    <span>Preview</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setDayEndPreviewFilter('all')}
+                        className={`px-2 py-0.5 rounded border text-[11px] ${
+                          dayEndPreviewFilter === 'all'
+                            ? 'bg-indigo-100 border-indigo-200 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setDayEndPreviewFilter('marked')}
+                        className={`px-2 py-0.5 rounded border text-[11px] ${
+                          dayEndPreviewFilter === 'marked'
+                            ? 'bg-green-100 border-green-200 text-green-700'
+                            : 'bg-white border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Marked
+                      </button>
+                      <button
+                        onClick={() => setDayEndPreviewFilter('unmarked')}
+                        className={`px-2 py-0.5 rounded border text-[11px] ${
+                          dayEndPreviewFilter === 'unmarked'
+                            ? 'bg-amber-100 border-amber-200 text-amber-700'
+                            : 'bg-white border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Unmarked
+                      </button>
+                    </div>
+                    <div className="ml-auto flex items-center gap-1 text-[11px] font-normal">
+                      <span className="text-gray-600">Sort</span>
+                      <select
+                        value={dayEndSortBy}
+                        onChange={(e) => setDayEndSortBy(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white"
+                      >
+                        <option value="none">None</option>
+                        <option value="yearSem">Year / Sem</option>
+                        <option value="branch">Branch</option>
+                        <option value="course">Course</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto max-h-[50vh]">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-100 text-gray-700 uppercase">
+                        <tr>
+                          <th className="px-3 py-2 text-left">College</th>
+                          <th className="px-3 py-2 text-left">Batch</th>
+                          <th className="px-3 py-2 text-left">Course</th>
+                          <th className="px-3 py-2 text-left">Branch</th>
+                          <th className="px-3 py-2 text-center">Year</th>
+                          <th className="px-3 py-2 text-center">Sem</th>
+                          <th className="px-3 py-2 text-right">Students</th>
+                          <th className="px-3 py-2 text-right">Marked</th>
+                          <th className="px-3 py-2 text-right">Pending</th>
+                          <th className="px-3 py-2 text-right">Absent</th>
+                          <th className="px-3 py-2 text-right">Holiday</th>
+                          <th className="px-3 py-2 text-right">Present</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {dayEndGroupedDisplay
+                          .filter((row) => {
+                            if (dayEndPreviewFilter === 'marked') return (row.markedToday || 0) > 0;
+                            if (dayEndPreviewFilter === 'unmarked') return (row.pendingToday || 0) > 0;
+                            return true;
+                          })
+                          .map((row, idx) => (
+                          <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white">
+                            <td className="px-3 py-2 text-gray-800">{row.college || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800">{row.batch || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800">{row.course || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800">{row.branch || '—'}</td>
+                            <td className="px-3 py-2 text-center text-gray-800">{row.year || '—'}</td>
+                            <td className="px-3 py-2 text-center text-gray-800">{row.semester || '—'}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-900">{row.totalStudents ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.markedToday ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-amber-700 font-semibold">{row.pendingToday ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-red-700 font-semibold">{row.absentToday ?? 0}</td>
+                            <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.holidayToday ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-blue-700 font-semibold">{row.presentToday ?? 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <div className="flex items-center gap-2 mr-auto">
+                  <button
+                    onClick={() => handleDayEndDownload('xlsx')}
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                  >
+                    <Download size={12} />
+                    Excel
+                  </button>
+                </div>
+                <button
+                  onClick={() => setDayEndReportOpen(false)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Attendance Statistics */}
       <section className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -2050,20 +2520,79 @@ const Attendance = () => {
                           const justSaved = lastUpdatedAt !== null;
                           
                           // Show marked state if saved or has existing record that wasn't changed
+                          const isHoliday = status === 'holiday';
                           const showMarked = justSaved || (hasDbRecord && !statusChanged);
                           
                           if (showMarked && !statusChanged) {
                             return (
                               <div className="flex items-center gap-3">
                                 <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                                  status === 'present' 
+                                  isHoliday
+                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                    : status === 'present' 
                                     ? 'bg-green-100 text-green-700 border border-green-200' 
                                     : 'bg-red-100 text-red-700 border border-red-200'
                                 }`}>
-                                  <Check size={16} />
-                                  {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                                  {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
+                                  {isHoliday
+                                    ? 'Holiday (Marked)'
+                                    : status === 'present'
+                                    ? 'Present (Marked)'
+                                    : 'Absent (Marked)'}
                                 </div>
                                 {/* Still allow changing even if marked */}
+                                {!isHoliday && (
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={status === 'absent'}
+                                      onChange={(e) => {
+                                        if (editingLocked) {
+                                          toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                          return;
+                                        }
+                                        handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                      }}
+                                      disabled={editingLocked}
+                                      className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    />
+                                    <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                      Change
+                                    </span>
+                                  </label>
+                                )}
+                              </div>
+                            );
+                          }
+                          
+                          // Not marked yet - show toggle controls
+                          return (
+                            <div className="flex items-center gap-3">
+                              <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
+                                status === 'holiday'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                  : status === 'present' 
+                                  ? 'bg-green-50 text-green-600 border border-green-100' 
+                                  : 'bg-red-50 text-red-600 border border-red-100'
+                              }`}>
+                                {status === 'holiday' ? (
+                                  <>
+                                    <AlertTriangle size={16} />
+                                    Holiday
+                                  </>
+                                ) : status === 'present' ? (
+                                  <>
+                                    <Check size={16} />
+                                    Present
+                                  </>
+                                ) : (
+                                  <>
+                                    <X size={16} />
+                                    Absent
+                                  </>
+                                )}
+                              </div>
+                              {status !== 'holiday' && (
                                 <label className="flex items-center gap-2 cursor-pointer">
                                   <input
                                     type="checkbox"
@@ -2079,51 +2608,10 @@ const Attendance = () => {
                                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
                                   <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                    Change
+                                    Mark as Absent
                                   </span>
                                 </label>
-                              </div>
-                            );
-                          }
-                          
-                          // Not marked yet - show toggle controls
-                          return (
-                            <div className="flex items-center gap-3">
-                              <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                                status === 'present' 
-                                  ? 'bg-green-50 text-green-600 border border-green-100' 
-                                  : 'bg-red-50 text-red-600 border border-red-100'
-                              }`}>
-                                {status === 'present' ? (
-                                  <>
-                                    <Check size={16} />
-                                    Present
-                                  </>
-                                ) : (
-                                  <>
-                                    <X size={16} />
-                                    Absent
-                                  </>
-                                )}
-                              </div>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={status === 'absent'}
-                                  onChange={(e) => {
-                                    if (editingLocked) {
-                                      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                      return;
-                                    }
-                                    handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                  }}
-                                  disabled={editingLocked}
-                                  className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-                                <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                  Mark as Absent
-                                </span>
-                              </label>
+                              )}
                             </div>
                           );
                         })()}
@@ -2879,8 +3367,8 @@ const Attendance = () => {
         onRetryCalendarFetch={handleRetryCalendarFetch}
       />
       {historyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-40 px-4 py-6 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-100 text-blue-600 rounded-full p-2">
@@ -2931,58 +3419,83 @@ const Attendance = () => {
                 <p>Unable to load attendance history.</p>
               </div>
             ) : (
-              <div className="px-6 py-6 space-y-6">
+              <div className="px-6 py-6 space-y-6 overflow-y-auto">
                 {/* Semester Summary - Show prominently if available */}
                 {historyData.semester && (
                   <section>
-                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-base font-bold text-indigo-900 uppercase">Semester Attendance</h3>
+                    <div className="bg-white border border-indigo-100 rounded-2xl shadow-sm p-5">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-indigo-600 uppercase">Semester Attendance</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            {historyData.semester?.startDate} → {historyData.semester?.endDate}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              <Calendar size={12} /> {historyData.semester?.workingDays ?? 0} working days
+                            </span>
+                            {historyData.semester?.lastUpdated && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
+                                <Clock size={12} /> Updated {historyData.semester?.lastUpdated}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                         <div className="text-right">
                           {(() => {
                             const semesterTotals = historyData.semester?.totals || {};
-                            const totalDays = (semesterTotals.present || 0) + (semesterTotals.absent || 0) + (semesterTotals.unmarked || 0);
+                            const totalDays =
+                              (semesterTotals.present || 0) +
+                              (semesterTotals.absent || 0) +
+                              (semesterTotals.unmarked || 0) +
+                              (semesterTotals.holidays || 0);
                             const presentDays = semesterTotals.present || 0;
-                            const percentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(2) : '0.00';
+                            const percentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : '0.0';
                             return (
-                              <div>
-                                <p className="text-xs text-gray-600">Attendance Percentage</p>
-                                <p className="text-2xl font-bold text-indigo-700">{percentage}%</p>
+                              <div className="inline-flex items-center gap-3 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-100">
+                                <div className="text-left">
+                                  <p className="text-xs text-gray-600">Attendance %</p>
+                                  <p className="text-2xl font-bold text-indigo-700">{percentage}%</p>
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  <p>
+                                    <span className="font-semibold text-green-600">{semesterTotals.present ?? 0}</span> present
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-red-500">{semesterTotals.absent ?? 0}</span> absent
+                                  </p>
+                                </div>
                               </div>
                             );
                           })()}
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-3 text-center mb-3">
-                        <div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-3">
+                        <div className="bg-green-50 border border-green-100 rounded-lg p-3">
                           <p className="text-xs text-gray-600">Present</p>
-                          <p className="text-xl font-semibold text-green-600">
+                          <p className="text-xl font-bold text-green-700">
                             {historyData.semester?.totals?.present ?? 0}
                           </p>
                         </div>
-                        <div>
+                        <div className="bg-red-50 border border-red-100 rounded-lg p-3">
                           <p className="text-xs text-gray-600">Absent</p>
-                          <p className="text-xl font-semibold text-red-500">
+                          <p className="text-xl font-bold text-red-600">
                             {historyData.semester?.totals?.absent ?? 0}
                           </p>
                         </div>
-                        <div>
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                           <p className="text-xs text-gray-600">Unmarked</p>
-                          <p className="text-xl font-semibold text-gray-600">
+                          <p className="text-xl font-bold text-gray-700">
                             {historyData.semester?.totals?.unmarked ?? 0}
                           </p>
                         </div>
-                        <div>
+                        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
                           <p className="text-xs text-gray-600">Holidays</p>
-                          <p className="text-xl font-semibold text-amber-600">
+                          <p className="text-xl font-bold text-amber-700">
                             {historyData.semester?.totals?.holidays ?? 0}
                           </p>
                         </div>
-                      </div>
-                      <div className="pt-3 border-t border-indigo-200">
-                        <p className="text-xs font-medium text-indigo-800">
-                          Semester Period: {historyData.semester?.startDate} → {historyData.semester?.endDate}
-                        </p>
                       </div>
                     </div>
                   </section>

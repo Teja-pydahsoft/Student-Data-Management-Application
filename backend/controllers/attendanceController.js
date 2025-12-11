@@ -48,7 +48,8 @@ const resolveParentEmail = (student) => {
   );
 };
 
-const VALID_STATUSES = new Set(['present', 'absent']);
+const VALID_STATUSES = new Set(['present', 'absent', 'holiday']);
+const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS'];
 
 const parseStudentData = (data) => {
   if (!data) return {};
@@ -89,8 +90,12 @@ exports.getFilterOptions = async (req, res) => {
     const { course, branch, batch, year, semester, college } = req.query;
     
     // Build WHERE clause based on applied filters - only regular students
-    let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
     const params = [];
+    let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
+    if (EXCLUDED_COURSES.length > 0) {
+      whereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      params.push(...EXCLUDED_COURSES);
+    }
     
     // Apply user scope filtering first
     if (req.userScope) {
@@ -134,8 +139,12 @@ exports.getFilterOptions = async (req, res) => {
     
     // For years and semesters, build separate WHERE clauses that exclude year/semester filters
     // so they cascade properly based on batch/course/branch
-    let yearWhereClause = `WHERE 1=1 AND student_status = 'Regular'`;
     const yearParams = [];
+    let yearWhereClause = `WHERE 1=1 AND student_status = 'Regular'`;
+    if (EXCLUDED_COURSES.length > 0) {
+      yearWhereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      yearParams.push(...EXCLUDED_COURSES);
+    }
     
     // Apply user scope filtering
     if (req.userScope) {
@@ -397,6 +406,11 @@ exports.getAttendance = async (req, res) => {
 
     // Filter for regular students only
     query += ` AND s.student_status = 'Regular'`;
+    // Exclude certain courses
+    if (EXCLUDED_COURSES.length > 0) {
+      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      params.push(...EXCLUDED_COURSES);
+    }
 
     // Apply user scope filtering
     if (req.userScope) {
@@ -557,9 +571,6 @@ exports.getAttendance = async (req, res) => {
     // Get total count with all filters applied
     const [countRows] = await masterPool.query(countQuery, countParams);
     const total = countRows?.[0]?.total || 0;
-    
-    console.log(`[Attendance Pagination] Total students matching filters: ${total} (Batch: ${batch || 'All'}, Course: ${course || 'All'}, Branch: ${branch || 'All'}, Year: ${currentYear || 'All'}, Semester: ${currentSemester || 'All'})`);
-
     // Get statistics for all students (not just current page) - use same query structure
     // Build WHERE clause for statistics (same filters as main query)
     let statsWhereClause = 'WHERE 1=1 AND s.student_status = \'Regular\'';
@@ -811,24 +822,26 @@ exports.markAttendance = async (req, res) => {
     });
   }
 
-  try {
-    const holidayInfo = await getNonWorkingDayInfo(normalizedDate);
-    if (holidayInfo?.isNonWorkingDay) {
-      return res.status(400).json({
-        success: false,
-        message: 'Attendance cannot be recorded on holidays'
-      });
-    }
-  } catch (error) {
-    console.warn('Holiday check failed during attendance mark:', error.message || error);
-  }
-
   const normalizedRecords = records
     .map((record) => ({
       studentId: Number(record.studentId),
       status: record.status ? String(record.status).toLowerCase() : null
     }))
     .filter((record) => Number.isInteger(record.studentId) && VALID_STATUSES.has(record.status));
+
+  let isHolidayDate = false;
+  try {
+    const holidayInfo = await getNonWorkingDayInfo(normalizedDate);
+    isHolidayDate = Boolean(holidayInfo?.isNonWorkingDay);
+    if (isHolidayDate && normalizedRecords.some((r) => r.status !== 'holiday')) {
+      return res.status(400).json({
+        success: false,
+        message: 'On holidays, only holiday status can be recorded'
+      });
+    }
+  } catch (error) {
+    console.warn('Holiday check failed during attendance mark:', error.message || error);
+  }
 
   if (normalizedRecords.length === 0) {
     return res.status(400).json({
@@ -1459,6 +1472,7 @@ const buildDailySummary = (rows, totalStudents, options = {}) => {
   const summary = {
     present: 0,
     absent: 0,
+    holiday: 0,
     marked: 0,
     pending: 0,
     totalStudents: totalStudents || 0,
@@ -1468,16 +1482,13 @@ const buildDailySummary = (rows, totalStudents, options = {}) => {
     holiday: options.holiday || null
   };
 
-  if (summary.isHoliday) {
-    return summary;
-  }
-
   rows.forEach((row) => {
     if (row.status === 'present') summary.present = row.count;
     if (row.status === 'absent') summary.absent = row.count;
+    if (row.status === 'holiday') summary.holiday = row.count;
   });
 
-  summary.marked = summary.present + summary.absent;
+  summary.marked = (summary.present || 0) + (summary.absent || 0) + (summary.holiday || 0);
   summary.pending = Math.max((summary.totalStudents || 0) - summary.marked, 0);
 
   const denominator = summary.totalStudents || summary.marked || 1;
@@ -1490,9 +1501,10 @@ const aggregateRowsByDate = (rows) => {
   const grouped = new Map();
   rows.forEach((row) => {
     const dateKey = formatDateKey(new Date(row.attendance_date));
-    const entry = grouped.get(dateKey) || { date: dateKey, present: 0, absent: 0 };
+    const entry = grouped.get(dateKey) || { date: dateKey, present: 0, absent: 0, holiday: 0 };
     if (row.status === 'present') entry.present += row.count;
     if (row.status === 'absent') entry.absent += row.count;
+    if (row.status === 'holiday') entry.holiday += row.count;
     grouped.set(dateKey, entry);
   });
   return Array.from(grouped.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -1540,6 +1552,12 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
   const conditions = [];
   const params = [];
 
+  const status = filters.studentStatus || filters.student_status;
+  if (status) {
+    conditions.push(`${prefix}student_status = ?`);
+    params.push(status);
+  }
+
   if (filters.batch) {
     conditions.push(`${prefix}batch = ?`);
     params.push(filters.batch);
@@ -1548,6 +1566,12 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
   if (filters.course) {
     conditions.push(`${prefix}course = ?`);
     params.push(filters.course);
+  }
+
+  // Exclude certain courses globally (e.g., M.Tech, MBA, MCS)
+  if (EXCLUDED_COURSES.length > 0) {
+    conditions.push(`${prefix}course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`);
+    params.push(...EXCLUDED_COURSES);
   }
 
   if (filters.branch) {
@@ -1591,7 +1615,8 @@ exports.getAttendanceSummary = async (req, res) => {
       course: normalizeTextFilter(req.query.course),
       branch: normalizeTextFilter(req.query.branch),
       year: parseOptionalInteger(req.query.year),
-      semester: parseOptionalInteger(req.query.semester)
+    semester: parseOptionalInteger(req.query.semester),
+    studentStatus: 'Regular' // Day-end summary should only consider regular students
     };
 
     const countFilter = buildWhereClause(filters, 's');
@@ -1638,6 +1663,30 @@ exports.getAttendanceSummary = async (req, res) => {
         ORDER BY attendance_date ASC
       `,
       [formatDateKey(monthStart), todayKey, ...monthFilter.params]
+    );
+
+    const [groupedRows] = await masterPool.query(
+      `
+        SELECT 
+          s.college AS college,
+          s.batch AS batch,
+          s.course AS course,
+          s.branch AS branch,
+          s.current_year AS year,
+          s.current_semester AS semester,
+          COUNT(*) AS total_students,
+          SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+        SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+        SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+        FROM students s
+        LEFT JOIN attendance_records ar 
+          ON ar.student_id = s.id 
+          AND ar.attendance_date = ?
+        WHERE 1=1${countFilter.clause}
+        GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+        ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+      `,
+      [todayKey, ...countFilter.params]
     );
 
     let todayHolidayInfo = null;
@@ -1741,7 +1790,28 @@ exports.getAttendanceSummary = async (req, res) => {
           totals: monthlyTotals,
           series: monthlySeries,
           holidays: monthlySeries.filter((entry) => entry.isHoliday)
-        }
+        },
+        groupedSummary: groupedRows.map((row) => {
+          const present = Number(row.present) || 0;
+          const absent = Number(row.absent) || 0;
+          const holiday = Number(row.holiday) || 0;
+          const total = Number(row.total_students) || 0;
+          const marked = present + absent + holiday;
+          return {
+            college: row.college || null,
+            batch: row.batch || null,
+            course: row.course || null,
+            branch: row.branch || null,
+            year: row.year || null,
+            semester: row.semester || null,
+            totalStudents: total,
+            presentToday: present,
+            absentToday: absent,
+            holidayToday: holiday,
+            markedToday: marked,
+            pendingToday: Math.max(0, total - marked)
+          };
+        })
       }
     });
   } catch (error) {
@@ -2351,7 +2421,27 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
 
 exports.downloadAttendanceReport = async (req, res) => {
   try {
-    const { fromDate, toDate, format, batch, course, branch, year, semester } = req.query;
+    const {
+      fromDate,
+      toDate,
+      format,
+      batch,
+      course,
+      branch,
+      year,
+      semester,
+      student_status,
+      studentStatus
+    } = req.query;
+    const statusFilter = student_status || studentStatus || null;
+    const normalizedFormat = (format || 'xlsx').toLowerCase();
+
+    if (normalizedFormat !== 'xlsx') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only Excel (xlsx) export is supported for day-end reports currently.'
+      });
+    }
 
     if (!fromDate || !toDate) {
       return res.status(400).json({
@@ -2377,7 +2467,8 @@ exports.downloadAttendanceReport = async (req, res) => {
       });
     }
 
-    // Check if all filters are empty (all students selected)
+    // Check if all core filters are empty (all students selected)
+    // We intentionally do NOT include statusFilter here so Regular-only can still use aggregated flow.
     const isAllStudents = !batch && !course && !branch && !year && !semester;
 
     // Get holiday info for the date range
@@ -2446,6 +2537,11 @@ exports.downloadAttendanceReport = async (req, res) => {
       WHERE 1=1
     `;
     const studentParams = [];
+
+    if (statusFilter) {
+      studentQuery += ' AND s.student_status = ?';
+      studentParams.push(statusFilter);
+    }
 
     if (batch) {
       studentQuery += ' AND s.batch = ?';
