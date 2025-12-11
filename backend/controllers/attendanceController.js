@@ -49,7 +49,7 @@ const resolveParentEmail = (student) => {
 };
 
 const VALID_STATUSES = new Set(['present', 'absent', 'holiday']);
-const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS'];
+const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS', 'M Sc Aqua', 'MCA'];
 
 const parseStudentData = (data) => {
   if (!data) return {};
@@ -496,6 +496,12 @@ exports.getAttendance = async (req, res) => {
     // Apply same filters to count query
     countQuery += ` AND s.student_status = 'Regular'`;
     
+    // Exclude certain courses
+    if (EXCLUDED_COURSES.length > 0) {
+      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      countParams.push(...EXCLUDED_COURSES);
+    }
+    
     // Apply user scope filtering
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
@@ -575,6 +581,12 @@ exports.getAttendance = async (req, res) => {
     // Build WHERE clause for statistics (same filters as main query)
     let statsWhereClause = 'WHERE 1=1 AND s.student_status = \'Regular\'';
     const statsParams = [];
+    
+    // Exclude certain courses
+    if (EXCLUDED_COURSES.length > 0) {
+      statsWhereClause += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      statsParams.push(...EXCLUDED_COURSES);
+    }
     
     // Apply same filters to stats query
     if (req.userScope) {
