@@ -35,7 +35,7 @@ import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal'
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
 
-const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS']);
+const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
 
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -179,6 +179,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
   const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
   const [markHolidayLoading, setMarkHolidayLoading] = useState(false);
+  const [holidayReasonModalOpen, setHolidayReasonModalOpen] = useState(false);
+  const [holidayReason, setHolidayReason] = useState('');
+  const [pendingHolidayRecords, setPendingHolidayRecords] = useState([]);
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
     rows = rows.filter((row) => {
@@ -807,17 +810,32 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       toast.error('No students found to mark as holiday');
       return;
     }
-    if (!window.confirm(`Mark ${records.length} students as Holiday for ${attendanceDate}?`)) {
+    // Show modal to enter holiday reason
+    setPendingHolidayRecords(records);
+    setHolidayReason('');
+    setHolidayReasonModalOpen(true);
+  };
+
+  const handleConfirmHolidayMarking = async () => {
+    if (!holidayReason.trim()) {
+      toast.error('Please enter a reason for the holiday');
       return;
     }
+    setHolidayReasonModalOpen(false);
     setMarkHolidayLoading(true);
     try {
+      const records = pendingHolidayRecords.map((r) => ({
+        ...r,
+        holidayReason: holidayReason.trim()
+      }));
       await api.post('/attendance', {
         attendanceDate,
         records
       });
       toast.success('Marked as holiday for selected filters');
       await loadAttendance();
+      setHolidayReason('');
+      setPendingHolidayRecords([]);
     } catch (error) {
       console.error('Mark holiday failed:', error);
       toast.error(error.response?.data?.message || 'Unable to mark as holiday');
@@ -2217,7 +2235,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                           <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.markedToday ?? 0}</td>
                           <td className="px-3 py-2 text-right text-amber-700 font-semibold">{row.pendingToday ?? 0}</td>
                           <td className="px-3 py-2 text-right text-red-700 font-semibold">{row.absentToday ?? 0}</td>
-                            <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.holidayToday ?? 0}</td>
+                            <td className="px-3 py-2 text-right text-green-700 font-semibold">
+                              {row.holidayToday ?? 0}
+                              {row.holidayReasons && (
+                                <div className="text-[10px] text-gray-600 mt-1 font-normal italic">
+                                  {row.holidayReasons}
+                                </div>
+                              )}
+                            </td>
                           <td className="px-3 py-2 text-right text-blue-700 font-semibold">{row.presentToday ?? 0}</td>
                           </tr>
                         ))}
@@ -2241,6 +2266,64 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday Reason Modal */}
+      {holidayReasonModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Mark as Holiday</h3>
+                <p className="text-xs text-gray-500">Enter reason for marking {pendingHolidayRecords.length} students as holiday</p>
+              </div>
+              <button
+                onClick={() => {
+                  setHolidayReasonModalOpen(false);
+                  setHolidayReason('');
+                  setPendingHolidayRecords([]);
+                }}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Holiday Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={holidayReason}
+                  onChange={(e) => setHolidayReason(e.target.value)}
+                  placeholder="e.g., Festival holiday, College function, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  rows={4}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setHolidayReasonModalOpen(false);
+                    setHolidayReason('');
+                    setPendingHolidayRecords([]);
+                  }}
+                  className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmHolidayMarking}
+                  disabled={markHolidayLoading || !holidayReason.trim()}
+                  className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {markHolidayLoading ? 'Marking...' : 'Mark as Holiday'}
                 </button>
               </div>
             </div>

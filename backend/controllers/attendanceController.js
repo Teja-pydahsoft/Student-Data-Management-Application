@@ -49,7 +49,7 @@ const resolveParentEmail = (student) => {
 };
 
 const VALID_STATUSES = new Set(['present', 'absent', 'holiday']);
-const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS', 'M Sc Aqua', 'MCA'];
+const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS', 'M Sc Aqua', 'MCA', 'M.Pharma', 'M Pharma'];
 
 const parseStudentData = (data) => {
   if (!data) return {};
@@ -837,7 +837,8 @@ exports.markAttendance = async (req, res) => {
   const normalizedRecords = records
     .map((record) => ({
       studentId: Number(record.studentId),
-      status: record.status ? String(record.status).toLowerCase() : null
+      status: record.status ? String(record.status).toLowerCase() : null,
+      holidayReason: record.holidayReason ? String(record.holidayReason).trim() : null
     }))
     .filter((record) => Number.isInteger(record.studentId) && VALID_STATUSES.has(record.status));
 
@@ -952,10 +953,10 @@ exports.markAttendance = async (req, res) => {
         await connection.query(
           `
             UPDATE attendance_records
-            SET status = ?, marked_by = ?, updated_at = CURRENT_TIMESTAMP
+            SET status = ?, holiday_reason = ?, marked_by = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `,
-          [record.status, adminId, existing.id]
+          [record.status, record.status === 'holiday' ? record.holidayReason : null, adminId, existing.id]
         );
 
         updatedCount += 1;
@@ -967,14 +968,15 @@ exports.markAttendance = async (req, res) => {
         await connection.query(
           `
             INSERT INTO attendance_records
-              (student_id, admission_number, attendance_date, status, marked_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              (student_id, admission_number, attendance_date, status, holiday_reason, marked_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
             record.studentId,
             student.admission_number || null,
             normalizedDate,
             record.status,
+            record.status === 'holiday' ? record.holidayReason : null,
             adminId
           ]
         );
@@ -1631,11 +1633,23 @@ exports.getAttendanceSummary = async (req, res) => {
     studentStatus: 'Regular' // Day-end summary should only consider regular students
     };
 
+    // Build filter conditions
     const countFilter = buildWhereClause(filters, 's');
+    
+    // Apply user scope filtering
+    let scopeCondition = '';
+    let scopeParams = [];
+    if (req.userScope) {
+      const { scopeCondition: scopeCond, params: scopeP } = getScopeConditionString(req.userScope, 's');
+      if (scopeCond) {
+        scopeCondition = ` AND ${scopeCond}`;
+        scopeParams = scopeP;
+      }
+    }
 
     const [studentCountRows] = await masterPool.query(
-      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}`,
-      countFilter.params
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${scopeCondition}`,
+      [...countFilter.params, ...scopeParams]
     );
     const totalStudents = studentCountRows[0]?.totalStudents || 0;
 
@@ -1645,10 +1659,10 @@ exports.getAttendanceSummary = async (req, res) => {
         SELECT ar.status, COUNT(*) AS count
         FROM attendance_records ar
         INNER JOIN students s ON s.id = ar.student_id
-        WHERE ar.attendance_date = ?${dailyFilter.clause}
+        WHERE ar.attendance_date = ?${dailyFilter.clause}${scopeCondition}
         GROUP BY ar.status
       `,
-      [todayKey, ...dailyFilter.params]
+      [todayKey, ...dailyFilter.params, ...scopeParams]
     );
 
     const windowFilter = buildWhereClause(filters, 's');
@@ -1657,11 +1671,11 @@ exports.getAttendanceSummary = async (req, res) => {
         SELECT ar.attendance_date, ar.status, COUNT(*) AS count
         FROM attendance_records ar
         INNER JOIN students s ON s.id = ar.student_id
-        WHERE ar.attendance_date BETWEEN ? AND ?${windowFilter.clause}
+        WHERE ar.attendance_date BETWEEN ? AND ?${windowFilter.clause}${scopeCondition}
         GROUP BY attendance_date, status
         ORDER BY attendance_date ASC
       `,
-      [formatDateKey(weekStart), todayKey, ...windowFilter.params]
+      [formatDateKey(weekStart), todayKey, ...windowFilter.params, ...scopeParams]
     );
 
     const monthFilter = buildWhereClause(filters, 's');
@@ -1670,11 +1684,11 @@ exports.getAttendanceSummary = async (req, res) => {
         SELECT ar.attendance_date, ar.status, COUNT(*) AS count
         FROM attendance_records ar
         INNER JOIN students s ON s.id = ar.student_id
-        WHERE ar.attendance_date BETWEEN ? AND ?${monthFilter.clause}
+        WHERE ar.attendance_date BETWEEN ? AND ?${monthFilter.clause}${scopeCondition}
         GROUP BY attendance_date, status
         ORDER BY attendance_date ASC
       `,
-      [formatDateKey(monthStart), todayKey, ...monthFilter.params]
+      [formatDateKey(monthStart), todayKey, ...monthFilter.params, ...scopeParams]
     );
 
     const [groupedRows] = await masterPool.query(
@@ -1688,17 +1702,18 @@ exports.getAttendanceSummary = async (req, res) => {
           s.current_semester AS semester,
           COUNT(*) AS total_students,
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
-        SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
-        SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+          SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
+          GROUP_CONCAT(DISTINCT ar.holiday_reason SEPARATOR ' | ') AS holiday_reasons
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
           AND ar.attendance_date = ?
-        WHERE 1=1${countFilter.clause}
+        WHERE 1=1${countFilter.clause}${scopeCondition}
         GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
         ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
       `,
-      [todayKey, ...countFilter.params]
+      [todayKey, ...countFilter.params, ...scopeParams]
     );
 
     let todayHolidayInfo = null;
@@ -1820,6 +1835,7 @@ exports.getAttendanceSummary = async (req, res) => {
             presentToday: present,
             absentToday: absent,
             holidayToday: holiday,
+            holidayReasons: row.holiday_reasons || null,
             markedToday: marked,
             pendingToday: Math.max(0, total - marked)
           };

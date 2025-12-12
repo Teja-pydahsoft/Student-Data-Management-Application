@@ -24,6 +24,8 @@ import {
 } from 'recharts';
 import api from '../config/api';
 
+const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
+
 const formatPercentage = (value) => {
   if (Number.isNaN(value) || value === null || value === undefined) {
     return '0%';
@@ -252,11 +254,13 @@ const Reports = () => {
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Courses</option>
-              {(filterOptions.courses || []).map((course) => (
-                <option key={course} value={course}>
-                  {course}
-                </option>
-              ))}
+              {(filterOptions.courses || [])
+                .filter((courseOption) => !EXCLUDED_COURSES.has(courseOption))
+                .map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
             </select>
           </div>
 

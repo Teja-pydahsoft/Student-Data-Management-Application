@@ -60,7 +60,8 @@ const generateAttendanceReportPDF = async ({
   attendanceDate,
   students,
   attendanceRecords,
-  allBatchesData = null // Optional: all batches data for comprehensive report
+  allBatchesData = null, // Optional: all batches data for comprehensive report
+  excludeCourse = false // Optional: exclude course column from tables (for email reports)
 }) => {
   // Filter out cancelled/discontinued students (already filtered in query, but double-check)
   const validStudents = students.filter(s => {
@@ -301,18 +302,22 @@ const generateAttendanceReportPDF = async ({
   // Left column labels (bold)
   doc.font('Helvetica-Bold');
   doc.text('College:', leftCol, yPos);
-  doc.text('Course:', leftCol, yPos + lineHeight);
-  doc.text('Branch:', leftCol, yPos + (lineHeight * 2));
-  doc.text('Year:', leftCol, yPos + (lineHeight * 3));
-  doc.text('Batch:', leftCol, yPos + (lineHeight * 4));
+  if (!excludeCourse) {
+    doc.text('Course:', leftCol, yPos + lineHeight);
+  }
+  doc.text('Branch:', leftCol, yPos + (lineHeight * (excludeCourse ? 1 : 2)));
+  doc.text('Year:', leftCol, yPos + (lineHeight * (excludeCourse ? 2 : 3)));
+  doc.text('Batch:', leftCol, yPos + (lineHeight * (excludeCourse ? 3 : 4)));
 
   // Left column values
   doc.font('Helvetica');
   doc.text(collegeName || 'N/A', leftCol + 60, yPos);
-  doc.text(courseName || 'N/A', leftCol + 60, yPos + lineHeight);
-  doc.text(branchName || 'N/A', leftCol + 60, yPos + (lineHeight * 2));
-  doc.text(year || 'N/A', leftCol + 60, yPos + (lineHeight * 3));
-  doc.text(batch || 'N/A', leftCol + 60, yPos + (lineHeight * 4));
+  if (!excludeCourse) {
+    doc.text(courseName || 'N/A', leftCol + 60, yPos + lineHeight);
+  }
+  doc.text(branchName || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 1 : 2)));
+  doc.text(year || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 2 : 3)));
+  doc.text(batch || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 3 : 4)));
 
   // Right column labels (bold)
   doc.font('Helvetica-Bold');
@@ -379,7 +384,10 @@ const generateAttendanceReportPDF = async ({
     const summaryTableTop = doc.y;
     const summaryTableLeft = leftMargin;
     const summaryTableWidth = contentWidth;
-    const summaryColWidths = [60, 80, 60, 50, 50, 50, 50, 50, 60]; // Batch, Course, Branch, Year, Sem, Total, Present, Absent, %
+    // Adjust column widths based on whether course is excluded
+    const summaryColWidths = excludeCourse 
+      ? [70, 70, 55, 55, 60, 60, 60, 70] // Batch, Branch, Year, Sem, Total, Present, Absent, Att %
+      : [60, 80, 60, 50, 50, 50, 50, 50, 60]; // Batch, Course, Branch, Year, Sem, Total, Present, Absent, %
     const summaryHeaderHeight = 25;
     const summaryRowHeight = 20;
 
@@ -391,7 +399,9 @@ const generateAttendanceReportPDF = async ({
 
     // Header text
     doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
-    const summaryHeaders = ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+    const summaryHeaders = excludeCourse
+      ? ['Batch', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %']
+      : ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
     let summaryXPos = summaryTableLeft + 3;
     summaryHeaders.forEach((header, idx) => {
       doc.text(header, summaryXPos, summaryTableTop + 7);
@@ -454,41 +464,54 @@ const generateAttendanceReportPDF = async ({
       doc.text(String(group.batch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[0] - 3, ellipsis: true });
       summaryXPos += summaryColWidths[0];
 
-      // Course
-      doc.text(String(group.course || 'N/A').substring(0, 10), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[1] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[1];
+      // Course (only if not excluded)
+      if (!excludeCourse) {
+        doc.text(String(group.course || 'N/A').substring(0, 10), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[1] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[1];
+      }
 
       // Branch
-      doc.text(String(group.branch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[2] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[2];
+      const branchColIdx = excludeCourse ? 1 : 2;
+      doc.text(String(group.branch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[branchColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[branchColIdx];
 
       // Year
-      doc.text(String(group.year || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[3] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[3];
+      const yearColIdx = excludeCourse ? 2 : 3;
+      doc.text(String(group.year || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[yearColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[yearColIdx];
 
       // Semester
-      doc.text(String(group.semester || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[4] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[4];
+      const semColIdx = excludeCourse ? 3 : 4;
+      doc.text(String(group.semester || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[semColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[semColIdx];
 
       // Total
-      doc.text(String(group.statistics?.totalStudents || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[5] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[5];
+      const totalColIdx = excludeCourse ? 4 : 5;
+      doc.text(String(group.total || group.statistics?.totalStudents || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[totalColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[totalColIdx];
 
       // Present
+      const presentColIdx = excludeCourse ? 5 : 6;
       doc.fillColor('#10B981'); // Green
-      doc.text(String(group.statistics?.presentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[6] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[6];
+      doc.text(String(group.present || group.statistics?.presentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[presentColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[presentColIdx];
 
       // Absent
+      const absentColIdx = excludeCourse ? 6 : 7;
       doc.fillColor('#EF4444'); // Red
-      doc.text(String(group.statistics?.absentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[7] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[7];
+      doc.text(String(group.absent || group.statistics?.absentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[absentColIdx] - 3, ellipsis: true });
+      summaryXPos += summaryColWidths[absentColIdx];
 
       // Attendance %
+      const attPercentColIdx = excludeCourse ? 7 : 8;
+      const totalForPercent = group.total || group.statistics?.totalStudents || 0;
+      const presentForPercent = group.present || group.statistics?.presentCount || 0;
+      const attPercent = totalForPercent > 0 ? ((presentForPercent / totalForPercent) * 100).toFixed(1) : '0.0';
       doc.fillColor('#1E40AF'); // Blue
       doc.font('Helvetica-Bold');
-      doc.text(`${group.statistics?.attendancePercentage?.toFixed(2) || '0.00'}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[8] - 3, ellipsis: true });
+      doc.text(`${attPercent}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[attPercentColIdx] - 3, ellipsis: true });
       doc.font('Helvetica');
+      doc.fillColor('#000000'); // Reset to black
       doc.fillColor('#000000');
 
       summaryCurrentY += summaryRowHeight;

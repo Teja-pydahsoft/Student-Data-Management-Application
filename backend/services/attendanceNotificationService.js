@@ -245,7 +245,7 @@ const sendAttendanceReportNotifications = async ({
   };
 
   try {
-    // Generate PDF
+    // Generate PDF (exclude course column for email reports)
     const pdfPath = await generateAttendanceReportPDF({
       collegeName,
       batch,
@@ -256,7 +256,8 @@ const sendAttendanceReportNotifications = async ({
       attendanceDate,
       students,
       attendanceRecords,
-      allBatchesData // Pass all batches data for tabular format
+      allBatchesData, // Pass all batches data for tabular format
+      excludeCourse: true // Exclude course column from email reports
     });
 
     results.pdfGenerated = true;
