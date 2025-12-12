@@ -632,21 +632,8 @@ exports.createUser = async (req, res) => {
         const notificationSettings = await getNotificationSetting('user_creation');
         
         if (notificationSettings && notificationSettings.enabled) {
-          // Get app URL - use production URL if FRONTEND_URL contains multiple URLs
-          let appUrl = process.env.FRONTEND_URL || 'https://pydahsdms.vercel.app';
-          // If multiple URLs (comma-separated), extract only the production URL
-          if (appUrl.includes(',')) {
-            const urls = appUrl.split(',').map(url => url.trim());
-            // Prefer vercel.app URL (production)
-            const productionUrl = urls.find(url => url.includes('vercel.app'));
-            appUrl = productionUrl || urls.find(url => url.startsWith('https://')) || 'https://pydahsdms.vercel.app';
-          }
-          // Clean up URL - remove /login if present and ensure it's just the base URL
-          appUrl = appUrl.replace(/\/login\/?$/, '').replace(/\/$/, '');
-          // Ensure we only use the production URL
-          if (!appUrl.includes('pydahsdms.vercel.app') && !appUrl.includes('pydahsdbms.vercel.app')) {
-            appUrl = 'https://pydahsdms.vercel.app';
-          }
+          // Use production URL directly
+          const appUrl = 'https://pydahsdms.vercel.app';
           const variables = {
             name: name.trim(),
             username: username.trim(),
@@ -1414,21 +1401,8 @@ exports.resetPassword = async (req, res) => {
       const notificationSettings = await getNotificationSetting('password_update');
       
       if (notificationSettings && notificationSettings.enabled) {
-        // Get app URL - use production URL if FRONTEND_URL contains multiple URLs
-        let appUrl = process.env.FRONTEND_URL || 'https://pydahsdms.vercel.app';
-        // If multiple URLs (comma-separated), extract only the production URL
-        if (appUrl.includes(',')) {
-          const urls = appUrl.split(',').map(url => url.trim());
-          // Prefer vercel.app URL (production)
-          const productionUrl = urls.find(url => url.includes('vercel.app'));
-          appUrl = productionUrl || urls.find(url => url.startsWith('https://')) || 'https://pydahsdms.vercel.app';
-        }
-        // Clean up URL - remove /login if present and ensure it's just the base URL
-        appUrl = appUrl.replace(/\/login\/?$/, '').replace(/\/$/, '');
-        // Ensure we only use the production URL
-        if (!appUrl.includes('pydahsdms.vercel.app') && !appUrl.includes('pydahsdbms.vercel.app')) {
-          appUrl = 'https://pydahsdms.vercel.app';
-        }
+        // Use production URL directly
+        const appUrl = 'https://pydahsdms.vercel.app';
         const variables = {
           name: user.name,
           username: user.username,

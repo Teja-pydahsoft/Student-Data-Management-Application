@@ -6,21 +6,8 @@
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
 
-// Get app URL - use production URL if FRONTEND_URL contains multiple URLs
-let appUrl = process.env.FRONTEND_URL || 'https://pydahsdms.vercel.app';
-// If multiple URLs (comma-separated), extract only the production URL
-if (appUrl.includes(',')) {
-  const urls = appUrl.split(',').map(url => url.trim());
-  // Prefer vercel.app URL (production)
-  const productionUrl = urls.find(url => url.includes('vercel.app'));
-  appUrl = productionUrl || urls.find(url => url.startsWith('https://')) || 'https://pydahsdms.vercel.app';
-}
-// Clean up URL - remove /login if present and ensure it's just the base URL
-appUrl = appUrl.replace(/\/login\/?$/, '').replace(/\/$/, '');
-// Ensure we only use the production URL
-if (!appUrl.includes('pydahsdms.vercel.app') && !appUrl.includes('pydahsdbms.vercel.app')) {
-  appUrl = 'https://pydahsdms.vercel.app';
-}
+// Use production URL directly
+const appUrl = 'https://pydahsdms.vercel.app';
 
 const logoUrl = 'https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png';
 
