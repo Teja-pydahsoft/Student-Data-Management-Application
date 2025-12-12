@@ -169,12 +169,40 @@ function filterCoursesByScope(courses, userScope) {
 
 /**
  * Filter branches list based on user scope
+ * Matches branches by both ID and name to handle branches created for different academic years
+ * If a user has access to a branch by name, they should see all instances of that branch
+ * across different academic years (e.g., DFS branch for 2024, 2025, 2026)
  */
 function filterBranchesByScope(branches, userScope) {
   if (userScope.unrestricted) return branches;
   if (userScope.allBranches) return branches;
-  if (!userScope.branchIds || userScope.branchIds.length === 0) return [];
-  return branches.filter(b => userScope.branchIds.includes(b.id));
+  
+  // If no branch restrictions, return empty array
+  if ((!userScope.branchIds || userScope.branchIds.length === 0) && 
+      (!userScope.branchNames || userScope.branchNames.length === 0)) {
+    return [];
+  }
+  
+  // Filter branches by ID or by name
+  // This ensures that if a user has access to a branch name (e.g., "DFS"),
+  // they will see all branches with that name across different academic years
+  return branches.filter(b => {
+    // Match by ID if available
+    if (userScope.branchIds && userScope.branchIds.length > 0) {
+      if (userScope.branchIds.includes(b.id)) {
+        return true;
+      }
+    }
+    
+    // Match by name if available (handles branches with same name but different academic years)
+    if (userScope.branchNames && userScope.branchNames.length > 0 && b.name) {
+      if (userScope.branchNames.includes(b.name)) {
+        return true;
+      }
+    }
+    
+    return false;
+  });
 }
 
 module.exports = {
