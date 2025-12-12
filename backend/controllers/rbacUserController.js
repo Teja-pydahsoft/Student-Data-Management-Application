@@ -854,19 +854,19 @@ exports.createUser = async (req, res) => {
             }
           }
 
-          // Send SMS if enabled and phone number is available
-          if (notificationSettings.smsEnabled && phone) {
+          // Send SMS (default on) if phone is available
+          if (notificationSettings.smsEnabled !== false && phone) {
             try {
-              if (notificationSettings.smsTemplate) {
-                const smsMessage = replaceTemplateVariables(notificationSettings.smsTemplate, variables);
-                const smsResult = await sendSms({
-                  to: phone.trim(),
-                  message: smsMessage
-                });
-                smsSent = smsResult.success;
-                if (!smsResult.success) {
-                  smsError = smsResult.reason || 'Failed to send SMS';
-                }
+              const smsMessage = notificationSettings.smsTemplate
+                ? replaceTemplateVariables(notificationSettings.smsTemplate, variables)
+                : `Hello ${variables.name} your account has been created. Username: ${variables.username} Password: ${variables.password}. Login: ${variables.loginUrl} - Pydah College`;
+              const smsResult = await sendSms({
+                to: phone.trim(),
+                message: smsMessage
+              });
+              smsSent = smsResult.success;
+              if (!smsResult.success) {
+                smsError = smsResult.reason || 'Failed to send SMS';
               }
             } catch (smsErr) {
               smsError = smsErr.message || 'Unexpected error while sending SMS';
@@ -1437,19 +1437,19 @@ exports.resetPassword = async (req, res) => {
           }
         }
 
-        // Send SMS if enabled and phone number is available
-        if (notificationSettings.smsEnabled && user.phone) {
+        // Send SMS (default on) if phone is available
+        if (notificationSettings.smsEnabled !== false && user.phone) {
           try {
-            if (notificationSettings.smsTemplate) {
-              const smsMessage = replaceTemplateVariables(notificationSettings.smsTemplate, variables);
-              const smsResult = await sendSms({
-                to: user.phone.trim(),
-                message: smsMessage
-              });
-              smsSent = smsResult.success;
-              if (!smsResult.success) {
-                smsError = smsResult.reason || 'Failed to send SMS';
-              }
+            const smsMessage = notificationSettings.smsTemplate
+              ? replaceTemplateVariables(notificationSettings.smsTemplate, variables)
+              : `Hello ${variables.name} your password has been updated. Username: ${variables.username} New Password: ${variables.password} Login: ${variables.loginUrl} - Pydah College`;
+            const smsResult = await sendSms({
+              to: user.phone.trim(),
+              message: smsMessage
+            });
+            smsSent = smsResult.success;
+            if (!smsResult.success) {
+              smsError = smsResult.reason || 'Failed to send SMS';
             }
           } catch (smsErr) {
             smsError = smsErr.message || 'Unexpected error while sending SMS';

@@ -73,7 +73,9 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
 
     // Send SMS notification with login credentials
     try {
-      const smsMessage = `Your PYDAH Student Portal login credentials - Username: ${username}, Password: ${plainPassword}. Keep this information confidential. - PYDAH Group`;
+      // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
+      const loginUrl = process.env.STUDENT_PORTAL_URL || 'https://pydahsdms.vercel.app/';
+      const smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl} - Pydah College`;
       
       await sendSms({
         to: studentMobile.replace(/\D/g, ''), // Ensure only digits

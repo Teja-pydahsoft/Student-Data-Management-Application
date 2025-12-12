@@ -800,7 +800,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
   const handleMarkHolidayForFiltered = async () => {
     if (!filters.currentYear || !filters.currentSemester) {
-      toast.error('Select year and semester to mark holiday');
+      toast.error('Select year and semester to mark no class work');
       return;
     }
     const records = students
@@ -818,7 +818,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
   const handleConfirmHolidayMarking = async () => {
     if (!holidayReason.trim()) {
-      toast.error('Please enter a reason for the holiday');
+      toast.error('Please enter a reason for no class work');
       return;
     }
     setHolidayReasonModalOpen(false);
@@ -832,13 +832,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         attendanceDate,
         records
       });
-      toast.success('Marked as holiday for selected filters');
+      toast.success('Marked as no class work for selected filters');
       await loadAttendance();
       setHolidayReason('');
       setPendingHolidayRecords([]);
     } catch (error) {
       console.error('Mark holiday failed:', error);
-      toast.error(error.response?.data?.message || 'Unable to mark as holiday');
+      toast.error(error.response?.data?.message || 'Unable to mark as no class work');
     } finally {
       setMarkHolidayLoading(false);
     }
@@ -2279,8 +2279,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Mark as Holiday</h3>
-                <p className="text-xs text-gray-500">Enter reason for marking {pendingHolidayRecords.length} students as holiday</p>
+                <h3 className="text-lg font-semibold text-gray-900">Mark as No Class Work</h3>
+                <p className="text-xs text-gray-500">Enter reason for marking {pendingHolidayRecords.length} students as no class work</p>
               </div>
               <button
                 onClick={() => {
@@ -2296,7 +2296,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Holiday Reason <span className="text-red-500">*</span>
+                  No Class Work Reason <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={holidayReason}
@@ -2323,7 +2323,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   disabled={markHolidayLoading || !holidayReason.trim()}
                   className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {markHolidayLoading ? 'Marking...' : 'Mark as Holiday'}
+                  {markHolidayLoading ? 'Marking...' : 'Mark as No Class Work'}
                 </button>
               </div>
             </div>
@@ -2618,7 +2618,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                 }`}>
                                   {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
                                   {isHoliday
-                                    ? 'Holiday (Marked)'
+                                    ? 'No Class Work (Marked)'
                                     : status === 'present'
                                     ? 'Present (Marked)'
                                     : 'Absent (Marked)'}

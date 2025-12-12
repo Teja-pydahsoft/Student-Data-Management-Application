@@ -15,7 +15,8 @@ Role: {{role}}
 Please change your password after your first login.
 
 Login URL: {{loginUrl}}`,
-    defaultSmsTemplate: `Hello {{name}}, your account has been created. Username: {{username}}, Password: {{password}}. Login: {{loginUrl}}`
+    // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
+    defaultSmsTemplate: `Hello {{name}} your account has been created. Username: {{username}} Password: {{password}}. Login: {{loginUrl}} - Pydah College`
   },
   password_update: {
     key: 'password_update',
@@ -30,7 +31,8 @@ New Password: {{password}}
 Please change your password after your first login.
 
 Login URL: {{loginUrl}}`,
-    defaultSmsTemplate: `Hello {{name}}, your password has been updated. Username: {{username}}, New Password: {{password}}. Login: {{loginUrl}}`
+    // DLT Template 2: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#}- Pydah College"
+    defaultSmsTemplate: `Hello {{name}} your password has been updated. Username: {{username}} New Password: {{password}} Login: {{loginUrl}} - Pydah College`
   },
   attendance_absent: {
     key: 'attendance_absent',

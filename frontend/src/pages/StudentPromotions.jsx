@@ -382,6 +382,10 @@ const StudentPromotions = () => {
 
     // Get semester count for current year from course configuration
     let semestersForCurrentYear = DEFAULT_SEMESTERS_PER_YEAR;
+    const configuredTotalYears =
+      courseConfig && Number.isInteger(Number(courseConfig.totalYears)) && Number(courseConfig.totalYears) > 0
+        ? Number(courseConfig.totalYears)
+        : null;
     
     if (courseConfig) {
       // Check for per-year semester configuration (prioritize this)
@@ -408,7 +412,8 @@ const StudentPromotions = () => {
     }
 
     // If we've completed all semesters for this year, move to next year
-    if (normalizedYear >= DEFAULT_MAX_YEAR) {
+    const maxYears = configuredTotalYears || DEFAULT_MAX_YEAR;
+    if (normalizedYear >= maxYears) {
       return null;
     }
 
@@ -465,8 +470,9 @@ const StudentPromotions = () => {
             const course = allCourses.find(c => c.name === courseName);
             if (course) {
               courseConfigMap.set(courseName, {
-                semestersPerYear: course.semestersPerYear,
-                yearSemesterConfig: course.yearSemesterConfig
+                totalYears: course.totalYears || course.total_years || course.defaultYears,
+                semestersPerYear: course.semestersPerYear || course.semesters_per_year,
+                yearSemesterConfig: course.yearSemesterConfig || course.year_semester_config
               });
             }
           });
@@ -480,17 +486,23 @@ const StudentPromotions = () => {
         const student = studentMap.get(admissionNumber) || students.find((s) => s.admission_number === admissionNumber);
         const currentStage = student ? getCurrentStageFromStudent(student) : null;
         const courseConfig = student && student.course ? courseConfigMap.get(student.course) : null;
-        const nextStage = currentStage ? getNextStage(currentStage.year, currentStage.semester, courseConfig) : null;
+        const nextStage = currentStage ? getNextStage(currentStage.year, currentStage.semester, {
+          totalYears: courseConfig?.totalYears,
+          semestersPerYear: courseConfig?.semestersPerYear,
+          yearSemesterConfig: courseConfig?.yearSemesterConfig
+        }) : null;
 
         const issues = [];
+        const infoNotes = [];
 
         if (!student) {
           issues.push('Student record not found');
         } else if (!currentStage) {
           issues.push('Missing current academic stage');
-        } else if (!nextStage) {
-          issues.push('Student is already at the final configured stage');
         }
+
+        // Note: Course completion check is done after issues array is built
+        // to properly set isCourseCompleted flag
 
         // Check conflicts with all fetched students
         let hasConflict = false;
@@ -503,13 +515,39 @@ const StudentPromotions = () => {
           );
         }
 
+        // Determine if student has completed the course
+        let isCourseCompleted = false;
+        if (!nextStage && courseConfig && currentStage && issues.length === 0) {
+          const totalYears = courseConfig.totalYears || 4;
+          const DEFAULT_SEMESTERS_PER_YEAR = 2;
+          let semestersForFinalYear = DEFAULT_SEMESTERS_PER_YEAR;
+          
+          if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig)) {
+            const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === totalYears);
+            if (yearConfig && yearConfig.semesters) {
+              semestersForFinalYear = Number(yearConfig.semesters);
+            } else {
+              semestersForFinalYear = courseConfig.semestersPerYear || DEFAULT_SEMESTERS_PER_YEAR;
+            }
+          } else if (courseConfig.semestersPerYear) {
+            semestersForFinalYear = Number(courseConfig.semestersPerYear) || DEFAULT_SEMESTERS_PER_YEAR;
+          }
+          
+          if (currentStage.year === totalYears && currentStage.semester === semestersForFinalYear) {
+            isCourseCompleted = true;
+            infoNotes.push('Student has completed all years and semesters. Will be marked as "Course Completed".');
+          }
+        }
+
         return {
           admissionNumber,
           studentName: student ? getStudentName(student) : 'Unknown',
           currentStage,
           nextStage,
           issues,
-          hasConflict
+          hasConflict,
+          isCourseCompleted,
+          infoNotes
         };
       });
 
@@ -550,8 +588,10 @@ const StudentPromotions = () => {
   };
 
   const executePromotion = async () => {
+    // Include students who can be promoted OR students who have completed the course
     const promotableStudents = promotionPlan.filter(
-      (item) => item.nextStage && item.issues.length === 0
+      (item) => (item.nextStage && item.issues.length === 0) || 
+                 (item.isCourseCompleted && item.issues.length === 0)
     );
 
     if (promotableStudents.length === 0) {
@@ -608,12 +648,16 @@ const StudentPromotions = () => {
       setPromotionResults([...results, ...leftOutResults]);
 
       const successCount = results.filter((result) => result.status === 'success').length;
+      const completedCount = results.filter((result) => result.status === 'completed').length;
       const leftOutSuccessCount = leftOutResults.filter((result) => result.status === 'success').length;
       
-      if (successCount > 0 || leftOutSuccessCount > 0) {
+      if (successCount > 0 || completedCount > 0 || leftOutSuccessCount > 0) {
         const messages = [];
         if (successCount > 0) {
           messages.push(`Successfully promoted ${successCount} student${successCount === 1 ? '' : 's'}`);
+        }
+        if (completedCount > 0) {
+          messages.push(`${completedCount} student${completedCount === 1 ? ' has' : 's have'} completed the course`);
         }
         if (leftOutSuccessCount > 0) {
           messages.push(`Updated ${leftOutSuccessCount} left-out student${leftOutSuccessCount === 1 ? '' : 's'}`);
@@ -1100,17 +1144,22 @@ const StudentPromotions = () => {
                 <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
                   {promotionResults.map((result, index) => {
                     const isSuccess = result.status === 'success';
+                    const isCompleted = result.status === 'completed';
                     const isSkipped = result.status === 'skipped';
                     const statusColor = isSuccess
                       ? 'text-green-700'
-                      : isSkipped
-                        ? 'text-amber-700'
-                        : 'text-red-700';
+                      : isCompleted
+                        ? 'text-blue-700'
+                        : isSkipped
+                          ? 'text-amber-700'
+                          : 'text-red-700';
                     const statusBg = isSuccess
                       ? 'bg-green-50 border-green-100'
-                      : isSkipped
-                        ? 'bg-amber-50 border-amber-100'
-                        : 'bg-red-50 border-red-100';
+                      : isCompleted
+                        ? 'bg-blue-50 border-blue-100'
+                        : isSkipped
+                          ? 'bg-amber-50 border-amber-100'
+                          : 'bg-red-50 border-red-100';
                     const progressLabel = result?.progress?.label;
                     return (
                       <li
@@ -1120,6 +1169,8 @@ const StudentPromotions = () => {
                         <div className="flex items-center gap-3">
                           {isSuccess ? (
                             <CheckCircle size={18} className="text-green-600" />
+                          ) : isCompleted ? (
+                            <CheckCircle size={18} className="text-blue-600" />
                           ) : isSkipped ? (
                             <RefreshCw size={18} className="text-amber-600" />
                           ) : (
@@ -1132,13 +1183,15 @@ const StudentPromotions = () => {
                             <p className="text-xs text-gray-600">
                               {isSuccess
                                 ? `Updated to Year ${result.currentYear}, Semester ${result.currentSemester}`
-                                : result.message || 'No additional details provided.'}
+                                : isCompleted
+                                  ? result.message || 'Course completed. Status updated to "Course Completed".'
+                                  : result.message || 'No additional details provided.'}
                             </p>
                           </div>
                         </div>
                         <div className={`text-xs font-semibold uppercase ${statusColor}`}>
                           <div className="flex items-center gap-2">
-                            <span>{result.status}</span>
+                            <span>{isCompleted ? 'Course Completed' : result.status}</span>
                             {progressLabel && (
                               <span className="px-2 py-0.5 rounded-full bg-white text-gray-700 border border-gray-300 lowercase">
                                 {progressLabel}
@@ -1202,7 +1255,7 @@ const StudentPromotions = () => {
                       Promotion Summary
                     </h4>
                     <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
-                      {promotionPlan.filter(item => item.nextStage && item.issues.length === 0).length} Eligible
+                      {promotionPlan.filter(item => (item.nextStage && item.issues.length === 0) || (item.isCourseCompleted && item.issues.length === 0)).length} Eligible
                     </span>
                   </div>
                 </div>
@@ -1229,12 +1282,14 @@ const StudentPromotions = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
                       {promotionPlan.map((item) => {
-                        const isEligible = item.nextStage && item.issues.length === 0;
+                        const isEligible = (item.nextStage && item.issues.length === 0) || 
+                                          (item.isCourseCompleted && item.issues.length === 0);
                         const issueText = item.issues.filter(Boolean).join(', ');
+                        const infoText = Array.isArray(item.infoNotes) ? item.infoNotes.filter(Boolean).join('. ') : '';
                         const conflictText = item.hasConflict
                           ? 'Target stage already contains students'
                           : '';
-                        const noteText = [issueText, conflictText].filter(Boolean).join('. ');
+                        const noteText = [issueText, conflictText, infoText].filter(Boolean).join('. ');
                         return (
                           <tr 
                             key={item.admissionNumber} 
@@ -1264,6 +1319,11 @@ const StudentPromotions = () => {
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold">
                                   <ArrowRight size={14} className="text-indigo-600" />
                                   Year {item.nextStage.year} • Sem {item.nextStage.semester}
+                                </span>
+                              ) : item.isCourseCompleted ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold">
+                                  <CheckCircle size={14} className="text-blue-600" />
+                                  Course Completed
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-700 border border-red-200 text-xs font-semibold">

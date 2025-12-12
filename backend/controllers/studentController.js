@@ -1044,6 +1044,39 @@ const updateStagingStudentStage = async (admissionNumber, stage, studentData) =>
   }
 };
 
+// Helper function to check if a student has completed all years and semesters
+const checkCourseCompletion = (currentStage, courseConfig) => {
+  if (!courseConfig || !currentStage) {
+    return false;
+  }
+
+  const { year: currentYear, semester: currentSemester } = currentStage;
+  const totalYears = courseConfig.totalYears || 4;
+  const DEFAULT_SEMESTERS_PER_YEAR = 2;
+
+  // Check if student is at the final year
+  if (currentYear < totalYears) {
+    return false;
+  }
+
+  // Get the number of semesters for the final year
+  let semestersForFinalYear = DEFAULT_SEMESTERS_PER_YEAR;
+  
+  if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig)) {
+    const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === totalYears);
+    if (yearConfig && yearConfig.semesters) {
+      semestersForFinalYear = Number(yearConfig.semesters);
+    } else {
+      semestersForFinalYear = courseConfig.semestersPerYear || DEFAULT_SEMESTERS_PER_YEAR;
+    }
+  } else if (courseConfig.semestersPerYear) {
+    semestersForFinalYear = Number(courseConfig.semestersPerYear) || DEFAULT_SEMESTERS_PER_YEAR;
+  }
+
+  // Check if student is at the final semester of the final year
+  return currentYear === totalYears && currentSemester === semestersForFinalYear;
+};
+
 const performPromotion = async ({ connection, admissionNumber, targetStage, adminId, courseConfigCache = null }) => {
   const [students] = await connection.query(
     `SELECT id, admission_number, admission_no, current_year, current_semester, course, student_data
@@ -1108,6 +1141,57 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     nextStage = getNextStage(currentStage.year, currentStage.semester, courseConfig);
 
     if (!nextStage) {
+      // Check if student has completed all years and semesters based on course configuration
+      const hasCompletedCourse = checkCourseCompletion(currentStage, courseConfig);
+      
+      if (hasCompletedCourse) {
+        // Mark student as course completed
+        await connection.query(
+          `UPDATE students
+           SET student_status = 'Course Completed', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [student.id]
+        );
+
+        // Validate admin_id exists before inserting audit log
+        let validAdminId = null;
+        if (adminId) {
+          try {
+            const [adminRows] = await connection.query(
+              'SELECT id FROM admins WHERE id = ? LIMIT 1',
+              [adminId]
+            );
+            if (adminRows.length > 0) {
+              validAdminId = adminId;
+            }
+          } catch (adminCheckError) {
+            console.warn('Failed to validate admin_id for audit log:', adminCheckError.message);
+          }
+        }
+
+        await connection.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            'COURSE_COMPLETED',
+            'STUDENT',
+            student.admission_number || admissionNumber,
+            validAdminId,
+            JSON.stringify({
+              stage: currentStage,
+              message: 'Student has completed all years and semesters of the course'
+            })
+          ]
+        );
+
+        return { 
+          status: 'COURSE_COMPLETED', 
+          student, 
+          currentStage,
+          message: 'Student has completed all years and semesters. Status updated to "Course Completed".'
+        };
+      }
+      
       return { status: 'MAX_STAGE', student, currentStage };
     }
   }
@@ -1122,6 +1206,22 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     [nextStage.year, nextStage.semester, serializedStudentData, student.id]
   );
 
+  // Validate admin_id exists before inserting audit log
+  let validAdminId = null;
+  if (adminId) {
+    try {
+      const [adminRows] = await connection.query(
+        'SELECT id FROM admins WHERE id = ? LIMIT 1',
+        [adminId]
+      );
+      if (adminRows.length > 0) {
+        validAdminId = adminId;
+      }
+    } catch (adminCheckError) {
+      console.warn('Failed to validate admin_id for audit log:', adminCheckError.message);
+    }
+  }
+
   await connection.query(
     `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
      VALUES (?, ?, ?, ?, ?)`,
@@ -1129,7 +1229,7 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
       'PROMOTE',
       'STUDENT',
       student.admission_number || admissionNumber,
-      adminId,
+      validAdminId,
       JSON.stringify({
         from: currentStage,
         to: nextStage
@@ -2058,6 +2158,15 @@ exports.getAllStudents = async (req, res) => {
         query += ` AND ${scopeCondition}`;
         params.push(...scopeParams);
       }
+    }
+
+    // Exclude "Course Completed" students by default unless explicitly filtered
+    // Check if student_status filter is present (will be applied later in studentFieldFilters)
+    const hasStudentStatusFilter = normalizedOtherFilters.filter_student_status !== undefined;
+    
+    if (!hasStudentStatusFilter) {
+      query += ' AND (student_status IS NULL OR student_status != ?)';
+      params.push('Course Completed');
     }
 
     if (search) {
@@ -3464,6 +3573,21 @@ exports.promoteStudent = async (req, res) => {
       });
     }
 
+    if (promotionResult.status === 'COURSE_COMPLETED') {
+      await connection.commit();
+      clearStudentsCache();
+      return res.json({
+        success: true,
+        message: promotionResult.message || 'Student has completed all years and semesters. Status updated to "Course Completed".',
+        data: {
+          admissionNumber: promotionResult.student.admission_number || admissionNumber,
+          status: 'Course Completed',
+          currentYear: promotionResult.currentStage.year,
+          currentSemester: promotionResult.currentStage.semester
+        }
+      });
+    }
+
     await connection.commit();
 
     await updateStagingStudentStage(
@@ -3497,296 +3621,324 @@ exports.promoteStudent = async (req, res) => {
 
 // Bulk promotion endpoint
 exports.bulkPromoteStudents = async (req, res) => {
-  const { students, leftOutStudents } = req.body || {};
+  try {
+    const { students, leftOutStudents } = req.body || {};
 
-  if (!Array.isArray(students) || students.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'students array is required'
-    });
-  }
-
-  const results = [];
-  const leftOutResults = [];
-  const courseConfigCache = new Map();
-  const totalToProcess = Array.isArray(students) ? students.length : 0;
-  let processedCount = 0;
-  let successCount = 0;
-  let skippedCount = 0;
-  let errorCount = 0;
-
-  const MAX_PARALLEL = 5;
-
-  const processWithLimit = async (items, limit, worker) => {
-    const output = [];
-    let index = 0;
-
-    const runners = Array(Math.min(limit, items.length))
-      .fill(null)
-      .map(async () => {
-        while (true) {
-          const currentIndex = index;
-          index += 1;
-          if (currentIndex >= items.length) break;
-          output[currentIndex] = await worker(items[currentIndex], currentIndex);
-        }
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'students array is required'
       });
-
-    await Promise.all(runners);
-    return output;
-  };
-
-  const promotionWorker = async (entry) => {
-    const admissionNumber = entry?.admissionNumber || entry?.admission_no;
-
-    const progress = () => {
-      processedCount += 1;
-      return {
-        current: processedCount,
-        total: totalToProcess,
-        label: `${processedCount}/${totalToProcess}`
-      };
-    };
-
-    if (!admissionNumber) {
-      errorCount += 1;
-      const progressData = progress();
-      results.push({
-        admissionNumber: entry?.admissionNumber || null,
-        status: 'error',
-        message: 'Admission number is required',
-        progress: progressData,
-        statusSymbol: 'error'
-      });
-      return;
     }
 
-    let targetStage = null;
-    if (entry.targetYear !== undefined || entry.targetSemester !== undefined) {
-      if (entry.targetYear === undefined || entry.targetSemester === undefined) {
+    const results = [];
+    const leftOutResults = [];
+    const courseConfigCache = new Map();
+    const totalToProcess = Array.isArray(students) ? students.length : 0;
+    let processedCount = 0;
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+
+    const MAX_PARALLEL = 5;
+
+    const processWithLimit = async (items, limit, worker) => {
+      const output = [];
+      let index = 0;
+
+      const runners = Array(Math.min(limit, items.length))
+        .fill(null)
+        .map(async () => {
+          while (true) {
+            const currentIndex = index;
+            index += 1;
+            if (currentIndex >= items.length) break;
+            output[currentIndex] = await worker(items[currentIndex], currentIndex);
+          }
+        });
+
+      await Promise.all(runners);
+      return output;
+    };
+
+    const promotionWorker = async (entry) => {
+      const admissionNumber = entry?.admissionNumber || entry?.admission_no;
+
+      const progress = () => {
+        processedCount += 1;
+        return {
+          current: processedCount,
+          total: totalToProcess,
+          label: `${processedCount}/${totalToProcess}`
+        };
+      };
+
+      if (!admissionNumber) {
         errorCount += 1;
         const progressData = progress();
         results.push({
-          admissionNumber,
+          admissionNumber: entry?.admissionNumber || null,
           status: 'error',
-          message: 'Both targetYear and targetSemester are required for manual stage assignment',
+          message: 'Admission number is required',
           progress: progressData,
           statusSymbol: 'error'
         });
         return;
       }
 
-      try {
-        targetStage = normalizeStage(entry.targetYear, entry.targetSemester);
-      } catch (error) {
-        if (error.message === 'INVALID_STAGE') {
+      let targetStage = null;
+      if (entry.targetYear !== undefined || entry.targetSemester !== undefined) {
+        if (entry.targetYear === undefined || entry.targetSemester === undefined) {
           errorCount += 1;
           const progressData = progress();
           results.push({
             admissionNumber,
             status: 'error',
-            message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.',
+            message: 'Both targetYear and targetSemester are required for manual stage assignment',
             progress: progressData,
             statusSymbol: 'error'
           });
           return;
         }
-        throw error;
+
+        try {
+          targetStage = normalizeStage(entry.targetYear, entry.targetSemester);
+        } catch (error) {
+          if (error.message === 'INVALID_STAGE') {
+            errorCount += 1;
+            const progressData = progress();
+            results.push({
+              admissionNumber,
+              status: 'error',
+              message: 'Invalid academic stage provided. Year must be 1-4 and semester must be 1-2.',
+              progress: progressData,
+              statusSymbol: 'error'
+            });
+            return;
+          }
+          throw error;
+        }
       }
-    }
 
-    let connection = null;
-    try {
-      connection = await masterPool.getConnection();
-      await connection.beginTransaction();
+      let connection = null;
+      try {
+        connection = await masterPool.getConnection();
+        await connection.beginTransaction();
 
-      const promotionResult = await performPromotion({
-        connection,
-        admissionNumber,
-        targetStage,
-        adminId: req.admin?.id || null,
-        courseConfigCache
-      });
+        const promotionResult = await performPromotion({
+          connection,
+          admissionNumber,
+          targetStage,
+          adminId: req.admin?.id || null,
+          courseConfigCache
+        });
 
-      if (promotionResult.status === 'NOT_FOUND') {
-        await connection.rollback();
+        if (promotionResult.status === 'NOT_FOUND') {
+          await connection.rollback();
+          errorCount += 1;
+          const progressData = progress();
+          results.push({
+            admissionNumber,
+            status: 'error',
+            message: 'Student not found',
+            progress: progressData,
+            statusSymbol: 'error'
+          });
+          return;
+        }
+
+        if (promotionResult.status === 'MAX_STAGE') {
+          await connection.rollback();
+          skippedCount += 1;
+          const progressData = progress();
+          results.push({
+            admissionNumber,
+            status: 'skipped',
+            message: 'Student already at final academic stage',
+            progress: progressData,
+            statusSymbol: 'skip'
+          });
+          return;
+        }
+
+        if (promotionResult.status === 'COURSE_COMPLETED') {
+          await connection.commit();
+          successCount += 1;
+          const progressData = progress();
+          results.push({
+            admissionNumber: promotionResult.student.admission_number || admissionNumber,
+            status: 'completed',
+            message: promotionResult.message || 'Student has completed all years and semesters. Status updated to "Course Completed".',
+            progress: progressData,
+            statusSymbol: 'completed',
+            currentYear: promotionResult.currentStage.year,
+            currentSemester: promotionResult.currentStage.semester
+          });
+          return;
+        }
+
+        await connection.commit();
+
+        if (promotionResult.nextStage) {
+          await updateStagingStudentStage(
+            admissionNumber,
+            promotionResult.nextStage,
+            promotionResult.serializedStudentData
+          );
+        }
+
+        successCount += 1;
+        const progressData = progress();
+        results.push({
+          admissionNumber: promotionResult.student.admission_number || admissionNumber,
+          status: 'success',
+          currentYear: promotionResult.nextStage.year,
+          currentSemester: promotionResult.nextStage.semester,
+          progress: progressData,
+          statusSymbol: 'ok'
+        });
+      } catch (error) {
+        if (connection) {
+          try {
+            await connection.rollback();
+          } catch (_) {
+            // ignore
+          }
+        }
+        console.error('Bulk promotion error for student', admissionNumber, error);
         errorCount += 1;
         const progressData = progress();
         results.push({
           admissionNumber,
           status: 'error',
-          message: 'Student not found',
+          message: 'Server error during promotion',
           progress: progressData,
           statusSymbol: 'error'
         });
-        return;
+      } finally {
+        if (connection) connection.release();
       }
-
-      if (promotionResult.status === 'MAX_STAGE') {
-        await connection.rollback();
-        skippedCount += 1;
-        const progressData = progress();
-        results.push({
-          admissionNumber,
-          status: 'skipped',
-          message: 'Student already at final academic stage',
-          progress: progressData,
-          statusSymbol: 'skip'
-        });
-        return;
-      }
-
-      await connection.commit();
-
-      await updateStagingStudentStage(
-        admissionNumber,
-        promotionResult.nextStage,
-        promotionResult.serializedStudentData
-      );
-
-      successCount += 1;
-      const progressData = progress();
-      results.push({
-        admissionNumber: promotionResult.student.admission_number || admissionNumber,
-        status: 'success',
-        currentYear: promotionResult.nextStage.year,
-        currentSemester: promotionResult.nextStage.semester,
-        progress: progressData,
-        statusSymbol: 'ok'
-      });
-    } catch (error) {
-      if (connection) {
-        try {
-          await connection.rollback();
-        } catch (_) {
-          // ignore
-        }
-      }
-      console.error('Bulk promotion error for student', admissionNumber, error);
-      errorCount += 1;
-      const progressData = progress();
-      results.push({
-        admissionNumber,
-        status: 'error',
-        message: 'Server error during promotion',
-        progress: progressData,
-        statusSymbol: 'error'
-      });
-    } finally {
-      if (connection) connection.release();
-    }
-  };
+    };
 
   try {
     // Process promotions with limited parallelism
-    await processWithLimit(students, MAX_PARALLEL, promotionWorker);
+      await processWithLimit(students, MAX_PARALLEL, promotionWorker);
 
-    // Process left-out students (update remarks and status) sequentially
-    if (Array.isArray(leftOutStudents) && leftOutStudents.length > 0) {
-      const connection = await masterPool.getConnection();
-      try {
-        for (const leftOutEntry of leftOutStudents) {
-          const admissionNumber = leftOutEntry?.admissionNumber || leftOutEntry?.admission_no;
+      // Process left-out students (update remarks and status) sequentially
+      if (Array.isArray(leftOutStudents) && leftOutStudents.length > 0) {
+        const connection = await masterPool.getConnection();
+        try {
+          for (const leftOutEntry of leftOutStudents) {
+            const admissionNumber = leftOutEntry?.admissionNumber || leftOutEntry?.admission_no;
 
-          if (!admissionNumber) {
-            leftOutResults.push({
-              admissionNumber: leftOutEntry?.admissionNumber || null,
-              status: 'error',
-              message: 'Admission number is required'
-            });
-            continue;
-          }
-
-          try {
-            await connection.beginTransaction();
-
-            // Check if student exists
-            const [studentRows] = await connection.query(
-              'SELECT id FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
-              [admissionNumber, admissionNumber]
-            );
-
-            if (studentRows.length === 0) {
-              await connection.rollback();
+            if (!admissionNumber) {
               leftOutResults.push({
-                admissionNumber,
+                admissionNumber: leftOutEntry?.admissionNumber || null,
                 status: 'error',
-                message: 'Student not found'
+                message: 'Admission number is required'
               });
               continue;
             }
 
-            // Update remarks and status
-            const updateFields = [];
-            const updateValues = [];
+            try {
+              await connection.beginTransaction();
 
-            if (leftOutEntry.remarks !== undefined) {
-              updateFields.push('remarks = ?');
-              updateValues.push(leftOutEntry.remarks || null);
-            }
-
-            if (leftOutEntry.student_status !== undefined) {
-              updateFields.push('student_status = ?');
-              updateValues.push(leftOutEntry.student_status || null);
-            }
-
-            if (updateFields.length > 0) {
-              updateValues.push(admissionNumber, admissionNumber);
-              await connection.query(
-                `UPDATE students SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE admission_number = ? OR admission_no = ?`,
-                updateValues
+              // Check if student exists
+              const [studentRows] = await connection.query(
+                'SELECT id FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
+                [admissionNumber, admissionNumber]
               );
+
+              if (studentRows.length === 0) {
+                await connection.rollback();
+                leftOutResults.push({
+                  admissionNumber,
+                  status: 'error',
+                  message: 'Student not found'
+                });
+                continue;
+              }
+
+              // Update remarks and status
+              const updateFields = [];
+              const updateValues = [];
+
+              if (leftOutEntry.remarks !== undefined) {
+                updateFields.push('remarks = ?');
+                updateValues.push(leftOutEntry.remarks || null);
+              }
+
+              if (leftOutEntry.student_status !== undefined) {
+                updateFields.push('student_status = ?');
+                updateValues.push(leftOutEntry.student_status || null);
+              }
+
+              if (updateFields.length > 0) {
+                updateValues.push(admissionNumber, admissionNumber);
+                await connection.query(
+                  `UPDATE students SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE admission_number = ? OR admission_no = ?`,
+                  updateValues
+                );
+              }
+
+              await connection.commit();
+
+              leftOutResults.push({
+                admissionNumber,
+                status: 'success',
+                message: 'Remarks and status updated successfully'
+              });
+            } catch (error) {
+              await connection.rollback();
+              console.error('Left-out student update error for', admissionNumber, error);
+              leftOutResults.push({
+                admissionNumber,
+                status: 'error',
+                message: 'Server error during update'
+              });
             }
-
-            await connection.commit();
-
-            leftOutResults.push({
-              admissionNumber,
-              status: 'success',
-              message: 'Remarks and status updated successfully'
-            });
-          } catch (error) {
-            await connection.rollback();
-            console.error('Left-out student update error for', admissionNumber, error);
-            leftOutResults.push({
-              admissionNumber,
-              status: 'error',
-              message: 'Server error during update'
-            });
           }
+        } finally {
+          connection.release();
         }
-      } finally {
-        connection.release();
       }
-    }
 
-    const leftOutSuccessCount = leftOutResults.filter(result => result.status === 'success').length;
-    const leftOutErrorCount = leftOutResults.filter(result => result.status === 'error').length;
-    const hasSuccess = results.some(result => result.status === 'success') || leftOutSuccessCount > 0;
+      const leftOutSuccessCount = leftOutResults.filter(result => result.status === 'success').length;
+      const leftOutErrorCount = leftOutResults.filter(result => result.status === 'error').length;
+      const hasSuccess = results.some(result => result.status === 'success' || result.status === 'completed') || leftOutSuccessCount > 0;
 
-    if (hasSuccess) {
-      clearStudentsCache();
-    }
-
-    return res.status(hasSuccess ? 200 : 400).json({
-      success: hasSuccess,
-      results,
-      leftOutResults: leftOutResults.length > 0 ? leftOutResults : undefined,
-      summary: {
-        total: totalToProcess,
-        processed: processedCount,
-        success: successCount,
-        skipped: skippedCount,
-        errors: errorCount,
-        leftOutSuccess: leftOutSuccessCount,
-        leftOutErrors: leftOutErrorCount
+      if (hasSuccess) {
+        clearStudentsCache();
       }
-    });
+
+      return res.status(hasSuccess ? 200 : 400).json({
+        success: hasSuccess,
+        results,
+        leftOutResults: leftOutResults.length > 0 ? leftOutResults : undefined,
+        summary: {
+          total: totalToProcess,
+          processed: processedCount,
+          success: successCount,
+          skipped: skippedCount,
+          errors: errorCount,
+          leftOutSuccess: leftOutSuccessCount,
+          leftOutErrors: leftOutErrorCount
+        }
+      });
+    } catch (innerErr) {
+      console.error('Error processing promotions:', innerErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Server error during bulk promotion processing',
+        error: innerErr.message
+      });
+    }
   } catch (err) {
     console.error('Bulk promotion unexpected error:', err);
     return res.status(500).json({
       success: false,
-      message: 'Server error during bulk promotion'
+      message: 'Server error during bulk promotion',
+      error: err.message
     });
   }
 };

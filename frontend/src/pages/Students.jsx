@@ -37,7 +37,8 @@ const STUDENT_STATUS_OPTIONS = [
   'Detained',
   'Discontinued',
   'Long Absent',
-  'Rejoined'
+  'Rejoined',
+  'Course Completed'
 ];
 
 // Certificate status options

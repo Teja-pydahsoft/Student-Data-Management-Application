@@ -49,6 +49,11 @@ const getNextStage = (year, semester, courseConfig = null) => {
 
   // Get semester count for current year from course configuration
   let semestersForCurrentYear = DEFAULT_SEMESTERS_PER_YEAR;
+  const configuredTotalYears =
+    courseConfig && Number.isInteger(Number(courseConfig.totalYears)) && Number(courseConfig.totalYears) > 0
+      ? Number(courseConfig.totalYears)
+      : null;
+  const totalYears = configuredTotalYears || 4; // fallback to 4-year courses when config missing
   
   if (courseConfig) {
     // Check for per-year semester configuration (prioritize this)
@@ -75,7 +80,8 @@ const getNextStage = (year, semester, courseConfig = null) => {
   }
 
   // If we've completed all semesters for this year, move to next year
-  if (normalizedYear >= MAX_YEARS) {
+  const maxYears = configuredTotalYears || MAX_YEARS;
+  if (normalizedYear >= maxYears) {
     return null;
   }
 

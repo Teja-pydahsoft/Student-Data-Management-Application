@@ -54,8 +54,9 @@ const PromoteStudentModal = ({ isOpen, student, onClose, onPromoted }) => {
         const course = courses.find(c => c.name === student.course);
         if (course) {
           setCourseConfig({
-            semestersPerYear: course.semestersPerYear,
-            yearSemesterConfig: course.yearSemesterConfig
+            totalYears: course.totalYears || course.total_years || course.defaultYears,
+            semestersPerYear: course.semestersPerYear || course.semesters_per_year,
+            yearSemesterConfig: course.yearSemesterConfig || course.year_semester_config
           });
         }
       } catch (error) {
@@ -77,12 +78,18 @@ const PromoteStudentModal = ({ isOpen, student, onClose, onPromoted }) => {
 
     // Get semester count for current year from course configuration
     let semestersForCurrentYear = 2; // Default
+    const configuredTotalYears =
+      config && Number.isInteger(Number(config.totalYears)) && Number(config.totalYears) > 0
+        ? Number(config.totalYears)
+        : null;
     
     if (config) {
       if (config.yearSemesterConfig && Array.isArray(config.yearSemesterConfig)) {
         const yearConfig = config.yearSemesterConfig.find(y => y.year === normalizedYear);
         if (yearConfig && yearConfig.semesters) {
           semestersForCurrentYear = yearConfig.semesters;
+        } else if (config.semestersPerYear) {
+          semestersForCurrentYear = config.semestersPerYear;
         }
       } else if (config.semestersPerYear) {
         semestersForCurrentYear = config.semestersPerYear;
@@ -98,7 +105,8 @@ const PromoteStudentModal = ({ isOpen, student, onClose, onPromoted }) => {
     }
 
     // If we've completed all semesters for this year, move to next year
-    if (normalizedYear >= 10) {
+    const maxYears = configuredTotalYears || 10;
+    if (normalizedYear >= maxYears) {
       return null;
     }
 

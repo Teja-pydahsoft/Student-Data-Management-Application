@@ -14,7 +14,8 @@ const STUDENT_STATUS_OPTIONS = [
   'Discontinued from the fourth year',
   'Admission Cancelled',
   'Long Absent',
-  'Detained'
+  'Detained',
+  'Course Completed'
 ];
 const SCHOLAR_STATUS_OPTIONS = ['Eligible', 'Not Eligible'];
 const CASTE_OPTIONS = ['OC', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST', 'EWS', 'Other'];
