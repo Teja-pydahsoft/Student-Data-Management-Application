@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { SkeletonTable } from '../components/SkeletonLoader';
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useInvalidateStudents } from '../hooks/useStudents';
 
@@ -79,13 +80,15 @@ const StudentPromotions = () => {
     fetchQuickFilterOptions(filters);
   }, [filters.batch, filters.course]);
 
-  const fetchQuickFilterOptions = async (currentFilters = {}) => {
+  const fetchQuickFilterOptions = async (currentFilters = {}, excludeField = null) => {
     setLoadingFilters(true);
     try {
       // Build query params from current filters for cascading
+      // When excludeField is set, exclude that field to show all options for that dropdown
       const params = new URLSearchParams();
-      if (currentFilters.batch) params.append('batch', currentFilters.batch);
-      if (currentFilters.course) params.append('course', currentFilters.course);
+      if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
+      // Include course only if course is not being changed and branch is not being changed
+      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
       // Don't pass branch, year, semester to get all available options
       
       const queryString = params.toString();
@@ -112,18 +115,39 @@ const StudentPromotions = () => {
     setFilters((prev) => {
       const newFilters = {
         ...prev,
-        [key]: value
+        [key]: value || '' // Clear filter if empty value
       };
+      
+      // Remove empty filters
+      if (!newFilters[key] || newFilters[key] === '') {
+        delete newFilters[key];
+      }
       
       // Clear dependent filters when parent filter changes
       if (key === 'batch') {
-        // When batch changes, clear course and branch
-        newFilters.course = '';
-        newFilters.branch = '';
+        // When batch changes, clear course, branch, year, and semester
+        delete newFilters.course;
+        delete newFilters.branch;
+        delete newFilters.year;
+        delete newFilters.semester;
       } else if (key === 'course') {
-        // When course changes, clear branch
-        newFilters.branch = '';
+        // When course changes, clear branch, year, and semester
+        delete newFilters.branch;
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (key === 'branch') {
+        // When branch changes, clear year and semester
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (key === 'year') {
+        // When year changes, clear semester
+        delete newFilters.semester;
       }
+      
+      // Refresh filter options for cascading
+      fetchQuickFilterOptions(newFilters).catch(err => {
+        console.warn('Failed to refresh filter options:', err);
+      });
       
       // Reset to first page when filters change
       setCurrentPage(1);
@@ -769,8 +793,19 @@ const StudentPromotions = () => {
           <div className="flex flex-col">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Course</label>
             <select
-              value={filters.course}
+              value={filters.course || ''}
               onChange={(e) => handleFilterChange('course', e.target.value)}
+              onFocus={() => {
+                // When user focuses on course dropdown, refresh options excluding current course
+                // This shows all courses for the selected batch, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.course) {
+                  delete filtersForFetch.course;
+                }
+                fetchQuickFilterOptions(filtersForFetch, 'course').catch(err => {
+                  console.warn('Failed to refresh course options:', err);
+                });
+              }}
               disabled={!filters.batch}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
@@ -786,8 +821,19 @@ const StudentPromotions = () => {
           <div className="flex flex-col">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Branch</label>
             <select
-              value={filters.branch}
+              value={filters.branch || ''}
               onChange={(e) => handleFilterChange('branch', e.target.value)}
+              onFocus={() => {
+                // When user focuses on branch dropdown, refresh options excluding current branch
+                // This shows all branches for the selected course, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.branch) {
+                  delete filtersForFetch.branch;
+                }
+                fetchQuickFilterOptions(filtersForFetch, 'branch').catch(err => {
+                  console.warn('Failed to refresh branch options:', err);
+                });
+              }}
               disabled={!filters.course}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
@@ -982,9 +1028,8 @@ const StudentPromotions = () => {
         </div>
 
         {(loadingStudents || isFetchingStudents) ? (
-          <div className="py-12 flex flex-col items-center justify-center text-sm text-gray-600 gap-3">
-            <LoadingAnimation width={32} height={32} showMessage={false} />
-            {loadingStudents ? 'Loading student list...' : 'Refreshing...'}
+          <div className="p-6">
+            <SkeletonTable rows={pageSize || 10} cols={6} />
           </div>
         ) : students.length === 0 ? (
           <div className="py-12 text-center text-gray-500 border border-dashed border-gray-200 rounded-lg">

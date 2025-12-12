@@ -119,13 +119,17 @@ const FeeManagement = () => {
   const isFirstPage = currentPage <= 1;
   const isLastPage = currentPage >= totalPages;
 
-  const loadFilterOptions = async () => {
+  const loadFilterOptions = async (filtersOverride = null, excludeField = null) => {
     try {
+      // Use override filters if provided, otherwise use current filters
+      const filtersToUse = filtersOverride || filters;
+      
       const params = new URLSearchParams();
-      if (filters.batch) params.append('batch', filters.batch);
-      if (filters.course) params.append('course', filters.course);
-      if (filters.branch) params.append('branch', filters.branch);
-      if (filters.college) params.append('college', filters.college);
+      if (filtersToUse.batch && excludeField !== 'batch') params.append('batch', filtersToUse.batch);
+      // Include course only if course is not being changed and branch is not being changed
+      if (filtersToUse.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', filtersToUse.course);
+      if (filtersToUse.branch && excludeField !== 'branch') params.append('branch', filtersToUse.branch);
+      if (filtersToUse.college && excludeField !== 'college') params.append('college', filtersToUse.college);
 
       const [filtersResponse, coursesResponse] = await Promise.all([
         api.get(`/fees/filters?${params.toString()}`),
@@ -455,11 +459,24 @@ const FeeManagement = () => {
     setFilters((prev) => {
       const newFilters = {
         ...prev,
-        [field]: value
+        [field]: value || '' // Clear filter if empty value
       };
-      if (field === 'course') {
-        newFilters.branch = '';
+      
+      // Remove empty filters
+      if (!newFilters[field] || newFilters[field] === '') {
+        delete newFilters[field];
       }
+      
+      // Clear dependent filters when parent filter changes
+      if (field === 'college') {
+        // When college changes, clear course and branch
+        delete newFilters.course;
+        delete newFilters.branch;
+      } else if (field === 'course') {
+        // When course changes, clear branch
+        delete newFilters.branch;
+      }
+      
       return newFilters;
     });
   };
@@ -1522,8 +1539,17 @@ const FeeManagement = () => {
             </select>
             {filterOptions.colleges.length > 0 && (
               <select
-                value={filters.college}
+                value={filters.college || ''}
                 onChange={(e) => handleFilterChange('college', e.target.value)}
+                onFocus={() => {
+                  // When user focuses on college dropdown, refresh options excluding current college
+                  // This shows all colleges, allowing direct selection
+                  const filtersForFetch = { ...filters };
+                  if (filtersForFetch.college) {
+                    delete filtersForFetch.college;
+                  }
+                  loadFilterOptions(filtersForFetch, 'college');
+                }}
                 className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
               >
                 <option value="">All Colleges</option>
@@ -1535,8 +1561,17 @@ const FeeManagement = () => {
               </select>
             )}
             <select
-              value={filters.batch}
+              value={filters.batch || ''}
               onChange={(e) => handleFilterChange('batch', e.target.value)}
+              onFocus={() => {
+                // When user focuses on batch dropdown, refresh options excluding current batch
+                // This shows all batches, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.batch) {
+                  delete filtersForFetch.batch;
+                }
+                loadFilterOptions(filtersForFetch, 'batch');
+              }}
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Batches</option>
@@ -1547,8 +1582,17 @@ const FeeManagement = () => {
               ))}
             </select>
             <select
-              value={filters.course}
+              value={filters.course || ''}
               onChange={(e) => handleFilterChange('course', e.target.value)}
+              onFocus={() => {
+                // When user focuses on course dropdown, refresh options excluding current course
+                // This shows all courses for the selected college, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.course) {
+                  delete filtersForFetch.course;
+                }
+                loadFilterOptions(filtersForFetch, 'course');
+              }}
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Courses</option>
@@ -1559,8 +1603,17 @@ const FeeManagement = () => {
               ))}
             </select>
             <select
-              value={filters.branch}
+              value={filters.branch || ''}
               onChange={(e) => handleFilterChange('branch', e.target.value)}
+              onFocus={() => {
+                // When user focuses on branch dropdown, refresh options excluding current branch
+                // This shows all branches for the selected course, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.branch) {
+                  delete filtersForFetch.branch;
+                }
+                loadFilterOptions(filtersForFetch, 'branch');
+              }}
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px] disabled:opacity-50"
               disabled={filters.course && availableBranches.length === 0}
             >

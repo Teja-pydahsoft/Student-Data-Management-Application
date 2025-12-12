@@ -2,7 +2,7 @@ const mysql = require('mysql2');
 require('dotenv').config();
 
 
-// Master DB connection pool with enhanced configuration
+// Master DB connection pool with enhanced configuration for performance
 const masterPoolRaw = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -10,8 +10,12 @@ const masterPoolRaw = mysql.createPool({
   database: process.env.DB_NAME || 'student_database',
   port: process.env.DB_PORT || 3306,
   waitForConnections: true,
-  connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
+  connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 20, // Increased for better concurrency
   queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  // Performance optimizations
+  multipleStatements: false, // Security: prevent SQL injection via multiple statements
   // Valid MySQL2 options for connection pooling
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: false,
@@ -32,7 +36,9 @@ const stagingPoolRaw = mysql.createPool({
   port: process.env.STAGING_DB_PORT || process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 });
 
 // Promise-based pools

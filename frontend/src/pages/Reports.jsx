@@ -82,37 +82,80 @@ const Reports = () => {
     [filters]
   );
 
-  useEffect(() => {
-    const fetchFilterOptions = async () => {
-      try {
-        const response = await api.get('/students/quick-filters');
-        if (response.data?.success) {
-          const data = response.data.data || {};
-          setFilterOptions({
-            batches: data.batches || [],
-            courses: data.courses || [],
-            branches: data.branches || [],
-            years: data.years || [],
-            semesters: data.semesters || []
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to fetch filter options:', error);
+  const fetchFilterOptions = async (currentFilters = {}, excludeField = null) => {
+    try {
+      const params = new URLSearchParams();
+      // Exclude the field being changed to show all available options
+      if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
+      // Include course only if course is not being changed and branch is not being changed
+      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
+      if (currentFilters.branch && excludeField !== 'branch') params.append('branch', currentFilters.branch);
+      
+      const queryString = params.toString();
+      const response = await api.get(`/students/quick-filters${queryString ? `?${queryString}` : ''}`);
+      if (response.data?.success) {
+        const data = response.data.data || {};
+        setFilterOptions({
+          batches: data.batches || [],
+          courses: data.courses || [],
+          branches: data.branches || [],
+          years: data.years || [],
+          semesters: data.semesters || []
+        });
       }
-    };
+    } catch (error) {
+      console.warn('Failed to fetch filter options:', error);
+    }
+  };
 
+  useEffect(() => {
     fetchFilterOptions();
   }, []);
+
+  // Refresh filter options when parent filters change (for cascading)
+  useEffect(() => {
+    fetchFilterOptions(filters);
+  }, [filters.batch, filters.course, filters.branch]);
 
   useEffect(() => {
     loadSummary(filters);
   }, [filters, loadSummary]);
 
   const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [field]: value
-    }));
+    setFilters((prev) => {
+      const newFilters = {
+        ...prev,
+        [field]: value || '' // Clear filter if empty value
+      };
+      
+      // Remove empty filters
+      if (!newFilters[field] || newFilters[field] === '') {
+        delete newFilters[field];
+      }
+      
+      // Clear dependent filters when parent filter changes
+      if (field === 'batch') {
+        // When batch changes, clear course, branch, year, and semester
+        delete newFilters.course;
+        delete newFilters.branch;
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (field === 'course') {
+        // When course changes, clear branch, year, and semester
+        delete newFilters.branch;
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (field === 'branch') {
+        // When branch changes, clear year and semester
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (field === 'year') {
+        // When year changes, clear semester
+        delete newFilters.semester;
+      }
+      
+      return newFilters;
+    });
   };
 
   const clearFilters = () => {
@@ -249,8 +292,17 @@ const Reports = () => {
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Course</label>
             <select
-              value={filters.course}
+              value={filters.course || ''}
               onChange={(event) => handleFilterChange('course', event.target.value)}
+              onFocus={() => {
+                // When user focuses on course dropdown, refresh options excluding current course
+                // This shows all courses for the selected batch, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.course) {
+                  delete filtersForFetch.course;
+                }
+                fetchFilterOptions(filtersForFetch, 'course');
+              }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Courses</option>
@@ -267,8 +319,17 @@ const Reports = () => {
           <div className="flex flex-col gap-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Branch</label>
             <select
-              value={filters.branch}
+              value={filters.branch || ''}
               onChange={(event) => handleFilterChange('branch', event.target.value)}
+              onFocus={() => {
+                // When user focuses on branch dropdown, refresh options excluding current branch
+                // This shows all branches for the selected course, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.branch) {
+                  delete filtersForFetch.branch;
+                }
+                fetchFilterOptions(filtersForFetch, 'branch');
+              }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Branches</option>

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const compression = require('compression');
 require('dotenv').config();
 
 const { testConnection } = require('./config/database');
@@ -32,6 +33,18 @@ const PORT = process.env.PORT || 5000;
 const rawFrontendUrls = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:3000';
 const allowedOrigins = rawFrontendUrls.split(',').map(u => u.trim()).filter(Boolean);
 
+
+// Compression middleware for faster responses
+app.use(compression({
+  level: 6, // Compression level (1-9, 6 is a good balance)
+  filter: (req, res) => {
+    // Compress all responses except if explicitly disabled
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
 
 app.use(cors({
   origin: true, // Allow all origins in development

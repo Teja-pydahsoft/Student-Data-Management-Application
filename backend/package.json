@@ -11,7 +11,8 @@
     "init-settings": "node scripts/init_settings_table.js",
     "migrate-academic-stage": "node scripts/addAcademicStageColumns.js",
     "migrate-document-requirements": "node scripts/create_document_requirements_table.js",
-    "migrate-supabase-to-mysql": "node scripts/migrate_supabase_to_mysql.js"
+    "migrate-supabase-to-mysql": "node scripts/migrate_supabase_to_mysql.js",
+    "add-performance-indexes": "node scripts/runPerformanceIndexes.js"
   },
   "keywords": [
     "student",
@@ -27,6 +28,7 @@
     "@aws-sdk/s3-request-presigner": "^3.940.0",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.3.1",

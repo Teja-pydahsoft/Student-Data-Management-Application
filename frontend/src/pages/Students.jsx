@@ -27,6 +27,7 @@ import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { SkeletonTable, SkeletonStudentsTable } from '../components/SkeletonLoader';
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
 
@@ -522,18 +523,24 @@ const Students = () => {
     }
   }, [editData, showModal, selectedStudent, calculateProfileCompletion]);
 
-  // Calculate stats when students are loaded - use stable comparison to prevent infinite loops
+  // Calculate stats when students or filters change - update immediately
   const studentsLengthRef = useRef(0);
   const studentsIdsRef = useRef('');
+  const filtersRefForStats = useRef(JSON.stringify(filters));
   
   useEffect(() => {
     const currentIds = students.map(s => s.admission_number).sort().join(',');
     const currentLength = students.length;
+    const currentFiltersStr = JSON.stringify(filters);
     
-    // Only recalculate if students actually changed (different IDs or length)
-    if (currentLength !== studentsLengthRef.current || currentIds !== studentsIdsRef.current) {
+    // Recalculate if students changed OR filters changed
+    const studentsChanged = currentLength !== studentsLengthRef.current || currentIds !== studentsIdsRef.current;
+    const filtersChanged = currentFiltersStr !== filtersRefForStats.current;
+    
+    if (studentsChanged || filtersChanged) {
       studentsLengthRef.current = currentLength;
       studentsIdsRef.current = currentIds;
+      filtersRefForStats.current = currentFiltersStr;
       
       // Call calculateOverallStats directly without including it in dependencies
       (async () => {
@@ -565,7 +572,7 @@ const Students = () => {
         results.forEach(result => {
           totalCompletion += result.percentage;
           if (result.percentage >= 80) {
-            completedStudents++;
+completedStudents++;
           }
         });
 
@@ -579,7 +586,7 @@ const Students = () => {
       })();
      }
      // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [students]);
+   }, [students, filters]);
 
   // Fetch colleges on component mount
   const fetchColleges = async () => {
@@ -601,18 +608,18 @@ const Students = () => {
 
   // Load all filters in sequence: colleges → quick filters → dropdown filters
   // This ensures filters are ready before students query runs
-  const loadAllFilters = async (currentFilters = {}) => {
+  const loadAllFilters = async () => {
     try {
       setFiltersLoading(true);
       
       // Step 1: Load colleges first (independent)
       await fetchColleges();
       
-      // Step 2: Load quick filter options (depends on current filters for cascading)
-      await fetchQuickFilterOptions(currentFilters);
+      // Step 2: Load quick filter options (with current filters for cascading)
+      await fetchQuickFilterOptions(filters);
       
-      // Step 3: Load dropdown filter options (depends on current filters for cascading)
-      await fetchDropdownFilterOptions(currentFilters);
+      // Step 3: Load dropdown filter options (with current filters for cascading)
+      await fetchDropdownFilterOptions(filters);
       
     } catch (error) {
       console.error('Failed to load filters:', error);
@@ -624,8 +631,8 @@ const Students = () => {
 
   // Fetch filter fields when component mounts - load in sequence
   useEffect(() => {
-    loadAllFilters(filters);
-  }, []); // Only run on mount
+    loadAllFilters();
+}, []); // Only run on mount
 
   // Refetch filter options when filters change (for cascading filters)
   // Use individual filter values to prevent unnecessary refetches
@@ -660,15 +667,16 @@ const Students = () => {
     
     if (filtersChanged) {
       prevFiltersRef.current = currentFilters;
-      // Only reload filter options (not colleges, they're independent)
-      // Don't set filtersLoading to true here - we want students table to keep showing
-      // while filter options update in the background
-      fetchQuickFilterOptions(filters).catch(err => {
+      // Update filter options based on new filters (cascading)
+      // Don't exclude any field here - this is for background refresh when filters change via other means
+      fetchQuickFilterOptions(currentFilters).catch(err => {
         console.warn('Failed to refresh quick filter options:', err);
       });
-      fetchDropdownFilterOptions(filters).catch(err => {
+      fetchDropdownFilterOptions(currentFilters).catch(err => {
         console.warn('Failed to refresh dropdown filter options:', err);
       });
+      // Invalidate students query to refetch with new filters immediately
+      invalidateStudents();
     }
   }, [filters.college, filters.course, filters.branch, filters.batch, filters.year, filters.semester]);
 
@@ -689,17 +697,32 @@ const Students = () => {
     }
   }, [searchTerm, filters]);
 
-  const fetchQuickFilterOptions = async (currentFilters = {}) => {
+  const fetchQuickFilterOptions = async (currentFilters = {}, excludeField = null) => {
     try {
-      // Build query params from current filters
-      // IMPORTANT: Add college first to ensure proper filtering hierarchy
+      // Build query params for cascading filters
+      // When excludeField is set, exclude that field to show all options for that dropdown
+      // Otherwise, include all parent filters for proper cascading
       const params = new URLSearchParams();
-      if (currentFilters.college) params.append('college', currentFilters.college);
-      if (currentFilters.course) params.append('course', currentFilters.course);
-      if (currentFilters.branch) params.append('branch', currentFilters.branch);
-      if (currentFilters.batch) params.append('batch', currentFilters.batch);
-      if (currentFilters.year) params.append('year', currentFilters.year);
-      if (currentFilters.semester) params.append('semester', currentFilters.semester);
+      
+      // Always include college if selected (unless college is being changed)
+      if (currentFilters.college && excludeField !== 'college') {
+        params.append('college', currentFilters.college);
+      }
+      
+      // Include course only if:
+      // 1. Course is selected AND
+      // 2. Course is not being changed AND
+      // 3. Branch is not being changed (because we want all branches for the selected course)
+      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') {
+        params.append('course', currentFilters.course);
+      }
+      
+      // Include batch only if:
+      // 1. Batch is selected AND
+      // 2. Batch/year/semester are not being changed
+      if (currentFilters.batch && excludeField !== 'batch' && excludeField !== 'year' && excludeField !== 'semester') {
+        params.append('batch', currentFilters.batch);
+      }
       
       const queryString = params.toString();
       const url = `/students/quick-filters${queryString ? `?${queryString}` : ''}`;
@@ -726,16 +749,17 @@ const Students = () => {
     }
   };
 
-  const fetchDropdownFilterOptions = async (currentFilters = {}) => {
+  const fetchDropdownFilterOptions = async (currentFilters = {}, excludeField = null) => {
     try {
-      // Build query params from current filters
+      // Build query params for cascading filters
+      // Exclude the field being changed so dropdown shows all available options
       const params = new URLSearchParams();
-      if (currentFilters.college) params.append('college', currentFilters.college);
-      if (currentFilters.course) params.append('course', currentFilters.course);
-      if (currentFilters.branch) params.append('branch', currentFilters.branch);
-      if (currentFilters.batch) params.append('batch', currentFilters.batch);
-      if (currentFilters.year) params.append('year', currentFilters.year);
-      if (currentFilters.semester) params.append('semester', currentFilters.semester);
+      if (currentFilters.college && excludeField !== 'college') params.append('college', currentFilters.college);
+      if (currentFilters.course && excludeField !== 'course') params.append('course', currentFilters.course);
+      if (currentFilters.branch && excludeField !== 'branch') params.append('branch', currentFilters.branch);
+      if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
+      if (currentFilters.year && excludeField !== 'year') params.append('year', currentFilters.year);
+      if (currentFilters.semester && excludeField !== 'semester') params.append('semester', currentFilters.semester);
       
       const queryString = params.toString();
       const url = `/students/filter-options${queryString ? `?${queryString}` : ''}`;
@@ -961,6 +985,16 @@ const Students = () => {
       
       // Update ref immediately
       filtersRef.current = newFilters;
+      
+      // Always update filter options with cascading when a filter changes
+      // This ensures child filters show only relevant options based on parent selections
+      fetchQuickFilterOptions(newFilters).catch(err => {
+        console.warn('Failed to update filter options:', err);
+      });
+      fetchDropdownFilterOptions(newFilters).catch(err => {
+        console.warn('Failed to update dropdown filter options:', err);
+      });
+      
       // Automatically apply filter when changed - React Query will refetch automatically
       setCurrentPage(1);
       return newFilters;
@@ -1497,12 +1531,8 @@ const Students = () => {
   return (
     <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 heading-font">Students Database</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2 body-font">Manage and view all student records</p>
-        </div>
-        {/* Search Bar - Full Width on Mobile */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        {/* Search Bar with Action Buttons Inline */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-600" size={18} />
             <input
@@ -1511,18 +1541,17 @@ const Students = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
               className="w-full pl-10 pr-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-              placeholder="Search by admission number or student data..."
+              placeholder="Search by student name, PIN number, or admission number..."
             />
           </div>
           <button 
             onClick={handleLocalSearch} 
-            className="bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] font-medium"
+            className="bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] font-medium whitespace-nowrap"
           >
             Search
           </button>
-        </div>
-        {/* Action Buttons - Single Row */}
-        <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto">
+          {/* Action Buttons Inline */}
+          <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto">
           <Link
             to="/students/add"
             className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
@@ -1567,6 +1596,7 @@ const Students = () => {
             <Download size={18} />
             <span>Export CSV</span>
           </button>
+          </div>
         </div>
       </div>
 
@@ -1705,6 +1735,19 @@ const Students = () => {
                 <select
                   value={filters.course || ''}
                   onChange={(e) => handleFilterChange('course', e.target.value)}
+                  onFocus={(e) => {
+                    // When user focuses on course dropdown, fetch all courses for selected college
+                    // Pass excludeField='course' so it excludes course filter but keeps college filter
+                    // This ensures all courses are available when changing from one course to another
+                    const filtersForFetch = { ...filters };
+                    // Temporarily remove course to get all courses for the college
+                    if (filtersForFetch.course) {
+                      delete filtersForFetch.course;
+                    }
+                    fetchQuickFilterOptions(filtersForFetch, 'course').catch(err => {
+                      console.warn('Failed to refresh course options:', err);
+                    });
+                  }}
                   className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
@@ -1718,6 +1761,19 @@ const Students = () => {
                 <select
                   value={filters.branch || ''}
                   onChange={(e) => handleFilterChange('branch', e.target.value)}
+                  onFocus={(e) => {
+                    // When user focuses on branch dropdown, fetch all branches for selected course
+                    // Pass excludeField='branch' so it excludes branch filter but keeps course/college filters
+                    // This ensures all branches are available when changing from one branch to another
+                    const filtersForFetch = { ...filters };
+                    // Temporarily remove branch to get all branches for the course
+                    if (filtersForFetch.branch) {
+                      delete filtersForFetch.branch;
+                    }
+                    fetchQuickFilterOptions(filtersForFetch, 'branch').catch(err => {
+                      console.warn('Failed to refresh branch options:', err);
+                    });
+                  }}
                   className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
@@ -1850,14 +1906,8 @@ const Students = () => {
       </div>
 
       {tableLoading ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <LoadingAnimation
-              width={32}
-              height={32}
-              message="Loading students..."
-            />
-          </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <SkeletonStudentsTable rows={pageSize || 10} />
         </div>
       ) : students.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">

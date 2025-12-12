@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import { SkeletonTable, SkeletonAttendanceTable } from '../components/SkeletonLoader';
 import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
@@ -182,6 +183,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [holidayReasonModalOpen, setHolidayReasonModalOpen] = useState(false);
   const [holidayReason, setHolidayReason] = useState('');
   const [pendingHolidayRecords, setPendingHolidayRecords] = useState([]);
+  const [pendingFilter, setPendingFilter] = useState('all'); // all | pending | marked
+  const [showPendingStudents, setShowPendingStudents] = useState(false);
+  const [allBatchesMarkedModalOpen, setAllBatchesMarkedModalOpen] = useState(false);
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
     rows = rows.filter((row) => {
@@ -630,12 +634,16 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     }
   };
 
-  const loadFilterOptions = async () => {
+  const loadFilterOptions = async (filtersOverride = null, excludeField = null) => {
     try {
+      // Use override filters if provided, otherwise use current filters
+      const filtersToUse = filtersOverride || filters;
+      
       const cacheKey = JSON.stringify({
-        batch: filters.batch,
-        course: filters.course,
-        branch: filters.branch
+        batch: filtersToUse.batch,
+        course: filtersToUse.course,
+        branch: filtersToUse.branch,
+        excludeField: excludeField
       });
       const cached = filterOptionsCacheRef.current.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < FILTER_CACHE_TTL_MS) {
@@ -644,11 +652,12 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         return;
       }
 
-      // Build query params based on current filters for cascading
+      // Build query params based on filters for cascading
+      // Exclude the field being changed to show all available options
       const params = new URLSearchParams();
-      if (filters.batch) params.append('batch', filters.batch);
-      if (filters.course) params.append('course', filters.course);
-      if (filters.branch) params.append('branch', filters.branch);
+      if (filtersToUse.batch && excludeField !== 'batch') params.append('batch', filtersToUse.batch);
+      if (filtersToUse.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', filtersToUse.course);
+      if (filtersToUse.branch && excludeField !== 'branch') params.append('branch', filtersToUse.branch);
       // Note: year and semester are not included so they cascade properly
       
       const [filtersResponse, coursesResponse] = await Promise.all([
@@ -703,7 +712,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     setStatusMap(cacheEntry.statusMap || {});
     setInitialStatusMap(cacheEntry.initialStatusMap || {});
     setTotalStudents(cacheEntry.totalStudents || 0);
-    setAttendanceStatistics(cacheEntry.attendanceStatistics || null);
+    setAttendanceStatistics(cacheEntry.attendanceStatistics || {
+      total: 0,
+      present: 0,
+      absent: 0,
+      marked: 0,
+      unmarked: 0
+    });
     setSmsResults([]); // keep workflow same
     setSmsStatusMap(cacheEntry.smsStatusMap || {});
     setLastUpdatedAt(null);
@@ -711,6 +726,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   };
 
   const handleDayEndReport = async () => {
+    // If modal is already open, just return (prevent multiple opens)
+    if (dayEndReportOpen) return;
+    
     setDayEndReportLoading(true);
     try {
       const params = {
@@ -847,6 +865,15 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const loadAttendance = async (pageOverride = null) => {
     setLoading(true);
     setSelectedDateHolidayInfo(null);
+    // Clear statistics and total students when loading starts to show loading state
+    setAttendanceStatistics({
+      total: 0,
+      present: 0,
+      absent: 0,
+      marked: 0,
+      unmarked: 0
+    });
+    setTotalStudents(0); // Clear total students count to show loading state
     try {
       // Cancel any in-flight attendance request to avoid queueing when filters change rapidly
       if (pendingRequestRef.current) {
@@ -860,16 +887,19 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const pageToUse = pageOverride !== null ? pageOverride : currentPage;
       const cacheKey = buildCacheKey(pageToUse);
 
-      // Serve instantly from cache (stale-while-revalidate): show cached data immediately, still fetch if stale
+      // Check cache and use it immediately if fresh, otherwise continue with fetch
       const cached = attendanceCache.current.get(cacheKey);
-      if (cached) {
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
         hydrateFromCache(cached);
         setCurrentPage(pageToUse);
-        // If cache is fresh, skip network call
-        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
-          setLoading(false);
-          return;
-        }
+        setLoading(false);
+        return cached.attendanceStatistics || {
+          total: 0,
+          present: 0,
+          absent: 0,
+          marked: 0,
+          unmarked: 0
+        };
       }
 
       const params = new URLSearchParams();
@@ -1004,6 +1034,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         const firstKey = attendanceCache.current.keys().next().value;
         attendanceCache.current.delete(firstKey);
       }
+      
+      // Reset pending filter when loading new data if no pending students
+      if (pendingFilter !== 'all' && finalStatistics.unmarked === 0) {
+        setPendingFilter('all');
+      }
+      
+      // Return statistics so we can check if all batches are marked after save
+      return finalStatistics;
     } catch (error) {
       if (error?.name === 'CanceledError' || error?.name === 'AbortError') {
         // Request was aborted; let the next request handle UI updates
@@ -1016,11 +1054,28 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       setInitialStatusMap({});
       setTotalStudents(0);
       setSelectedDateHolidayInfo(null);
+      // Keep statistics cleared on error to show loading state
+      setAttendanceStatistics({
+        total: 0,
+        present: 0,
+        absent: 0,
+        marked: 0,
+        unmarked: 0
+      });
     } finally {
       // Only clear loading if this is the latest request
       pendingRequestRef.current = null;
       setLoading(false);
     }
+    
+    // Return default statistics if function completes without returning
+    return {
+      total: 0,
+      present: 0,
+      absent: 0,
+      marked: 0,
+      unmarked: 0
+    };
   };
 
   useEffect(() => {
@@ -1038,19 +1093,34 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     });
   }, [calendarModalOpen, calendarViewMonthKey]);
 
+  const filtersLoadedRef = useRef(false);
+
   useEffect(() => {
-    loadFilterOptions();
+    const initializeAttendance = async () => {
+      await loadFilterOptions();
+      filtersLoadedRef.current = true;
+      // Load attendance immediately after filters are loaded
+      setCurrentPage(1);
+      loadAttendance(1);
+    };
+    initializeAttendance();
   }, []);
 
-  // Reload filter options when batch, course, or branch changes (for cascading years/semesters)
+  // Reload filter options when batch, course, or branch changes (for cascading)
+  // This ensures child filters show correct options when parent filters change
   useEffect(() => {
-    loadFilterOptions();
+    if (filtersLoadedRef.current) {
+      loadFilterOptions();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.batch, filters.course, filters.branch]);
 
+  // Load attendance immediately when filters change (only after initial load)
   useEffect(() => {
-    setCurrentPage(1);
-    loadAttendance(1);
+    if (filtersLoadedRef.current) {
+      setCurrentPage(1);
+      loadAttendance(1);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     attendanceDate,
@@ -1081,12 +1151,27 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     setFilters((prev) => {
       const newFilters = {
         ...prev,
-        [field]: value
+        [field]: value || '' // Clear filter if empty value
       };
-      // Reset branch when course changes
-      if (field === 'course') {
-        newFilters.branch = '';
+      
+      // Remove empty filters
+      if (!newFilters[field] || newFilters[field] === '') {
+        delete newFilters[field];
       }
+      
+      // Clear dependent filters when parent filter changes
+      if (field === 'course') {
+        // When course changes, clear branch
+        delete newFilters.branch;
+      } else if (field === 'batch') {
+        // When batch changes, clear year and semester
+        delete newFilters.currentYear;
+        delete newFilters.currentSemester;
+      } else if (field === 'currentYear') {
+        // When year changes, clear semester
+        delete newFilters.currentSemester;
+      }
+      
       return newFilters;
     });
   };
@@ -1160,9 +1245,29 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     return pin;
   };
 
+  // Filter students based on pending filter
+  const filteredStudents = useMemo(() => {
+    if (pendingFilter === 'all') {
+      return students;
+    }
+    if (pendingFilter === 'pending') {
+      return students.filter(student => {
+        const status = initialStatusMap[student.id];
+        return status === undefined; // Not yet marked
+      });
+    }
+    if (pendingFilter === 'marked') {
+      return students.filter(student => {
+        const status = initialStatusMap[student.id];
+        return status !== undefined; // Already marked
+      });
+    }
+    return students;
+  }, [students, pendingFilter, initialStatusMap]);
+
   // Sort students based on sortConfig
   const sortedStudents = useMemo(() => {
-    if (!sortConfig.field) return students;
+    if (!sortConfig.field) return filteredStudents;
     
     return [...students].sort((a, b) => {
       let aValue, bValue;
@@ -1261,7 +1366,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const comparison = String(aValue).localeCompare(String(bValue));
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
-  }, [students, sortConfig, statusMap]);
+  }, [filteredStudents, sortConfig, statusMap]);
 
   // Handle student row click to show report
   const handleStudentClick = async (student) => {
@@ -1625,7 +1730,16 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       );
 
       // Reload attendance to get updated statistics
-      await loadAttendance(currentPage);
+      const updatedStats = await loadAttendance(currentPage);
+      
+      // Check if all batches are marked - if unmarked count is 0, show day-end report popup
+      if (updatedStats && updatedStats.unmarked === 0 && updatedStats.total > 0 && !allBatchesMarkedModalOpen) {
+        // Show day-end report popup after a short delay to let the user see the success message
+        setTimeout(() => {
+          handleDayEndReport();
+          setAllBatchesMarkedModalOpen(true);
+        }, 1000);
+      }
 
       const results = response.data.data?.smsResults || [];
       setSmsResults(results);
@@ -1969,8 +2083,17 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               ))}
             </select>
             <select
-              value={filters.course}
+              value={filters.course || ''}
               onChange={(event) => handleFilterChange('course', event.target.value)}
+              onFocus={() => {
+                // When user focuses on course dropdown, refresh options excluding current course
+                // This shows all courses for the selected batch, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.course) {
+                  delete filtersForFetch.course;
+                }
+                loadFilterOptions(filtersForFetch, 'course');
+              }}
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Courses</option>
@@ -1983,8 +2106,17 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                  ))}
             </select>
             <select
-              value={filters.branch}
+              value={filters.branch || ''}
               onChange={(event) => handleFilterChange('branch', event.target.value)}
+              onFocus={() => {
+                // When user focuses on branch dropdown, refresh options excluding current branch
+                // This shows all branches for the selected course, allowing direct selection
+                const filtersForFetch = { ...filters };
+                if (filtersForFetch.branch) {
+                  delete filtersForFetch.branch;
+                }
+                loadFilterOptions(filtersForFetch, 'branch');
+              }}
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px] disabled:opacity-50 col-span-2 sm:col-span-1"
               disabled={filters.course && availableBranches.length === 0}
             >
@@ -2079,7 +2211,16 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                 </button>
               )}
               <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
-                <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
+                {loading && totalStudents === 0 ? (
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="animate-pulse bg-gray-200 rounded h-4 w-12" />
+                    <span>students found</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2338,9 +2479,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             <div className="rounded-full bg-green-100 p-2">
               <Check size={20} className="text-green-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Total Present</p>
-              <p className="text-2xl font-bold text-green-700">{presentCount}</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-green-700">{presentCount}</p>
+              )}
             </div>
           </div>
         </div>
@@ -2349,20 +2494,37 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             <div className="rounded-full bg-blue-100 p-2">
               <CalendarCheck size={20} className="text-blue-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Total Marked</p>
-              <p className="text-2xl font-bold text-blue-700">{markedCount}</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-blue-700">{markedCount}</p>
+              )}
             </div>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+        <div 
+          className={`bg-white border ${pendingCount > 0 && !loading ? 'border-amber-300' : 'border-gray-200'} rounded-xl shadow-sm p-4 ${pendingCount > 0 && !loading ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
+          onClick={() => {
+            if (pendingCount > 0 && !loading) {
+              setPendingFilter(pendingFilter === 'pending' ? 'all' : 'pending');
+              setShowPendingStudents(true);
+            }
+          }}
+          title={pendingCount > 0 && !loading ? "Click to view pending students" : ""}
+        >
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-amber-100 p-2">
               <AlertTriangle size={20} className="text-amber-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Pending Marked</p>
-              <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
+              )}
             </div>
           </div>
         </div>
@@ -2371,9 +2533,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             <div className="rounded-full bg-red-100 p-2">
               <X size={20} className="text-red-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-gray-600">Total Absent</p>
-              <p className="text-2xl font-bold text-red-700">{absentCount}</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+              ) : (
+                <p className="text-2xl font-bold text-red-700">{absentCount}</p>
+              )}
             </div>
           </div>
         </div>
@@ -2438,14 +2604,28 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           </div>
         )}
 
-        {loading ? (
-          <div className="py-12 flex justify-center">
-            <LoadingAnimation message="Fetching students..." />
+        {loading || saving ? (
+          <div className="p-4">
+            <SkeletonAttendanceTable rows={pageSize || 10} />
           </div>
-        ) : students.length === 0 ? (
+        ) : sortedStudents.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-3 text-gray-500">
             <AlertTriangle size={32} />
-            <p>No students found for the selected filters.</p>
+            <p>
+              {pendingFilter === 'pending' 
+                ? 'No pending students found. All students are marked.' 
+                : pendingFilter === 'marked'
+                ? 'No marked students found.'
+                : 'No students found for the selected filters.'}
+            </p>
+            {pendingFilter !== 'all' && (
+              <button
+                onClick={() => setPendingFilter('all')}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Show All Students
+              </button>
+            )}
           </div>
         ) : (
           <>

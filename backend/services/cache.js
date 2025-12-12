@@ -46,11 +46,16 @@ class SimpleCache {
 
 const createCache = (defaultTtlMs) => new SimpleCache(defaultTtlMs);
 
-const studentsCache = createCache(60 * 1000); // 1 minute default TTL
+// Optimized cache TTLs for better performance
+const studentsCache = createCache(5 * 60 * 1000); // 5 minutes default TTL (increased from 1 minute)
+const filterOptionsCache = createCache(10 * 60 * 1000); // 10 minutes for filter options (rarely change)
+const statsCache = createCache(2 * 60 * 1000); // 2 minutes for dashboard stats
 
 module.exports = {
   SimpleCache,
   createCache,
-  studentsCache
+  studentsCache,
+  filterOptionsCache,
+  statsCache
 };
 

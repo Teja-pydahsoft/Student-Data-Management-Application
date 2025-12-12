@@ -1,0 +1,106 @@
+name: Deploy to AWS Lightsail
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-lightsail.yml'
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  deploy:
+    name: Deploy Backend to Lightsail
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Run tests (if you have tests)
+        working-directory: ./backend
+        run: |
+          echo "Skipping tests - add your test command here if needed"
+          # npm test
+
+      - name: Deploy to Lightsail
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -e
+            
+            echo "🚀 Starting deployment..."
+            
+            # Navigate to application directory
+            cd ${{ secrets.LIGHTSAIL_APP_PATH }}
+            
+            # Pull latest changes
+            echo "📥 Pulling latest changes from GitHub..."
+            git fetch origin
+            git reset --hard origin/main || git reset --hard origin/master
+            
+            # Navigate to backend directory
+            cd backend
+            
+            # Install/update dependencies
+            echo "📦 Installing dependencies..."
+            npm ci --production
+            
+            # Run database migrations if needed (uncomment if you have migrations)
+            # echo "🗄️ Running database migrations..."
+            # npm run migrate || echo "No migrations to run"
+            
+            # Restart the application with PM2
+            echo "🔄 Restarting application..."
+            pm2 restart student-db-backend || pm2 start server.js --name student-db-backend
+            
+            # Save PM2 process list
+            pm2 save
+            
+            # Show status
+            echo "✅ Deployment complete!"
+            pm2 list
+            pm2 logs student-db-backend --lines 20 --nostream
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            # Wait a moment for the app to start
+            sleep 5
+            
+            # Check if the application is running
+            if pm2 list | grep -q "student-db-backend.*online"; then
+              echo "✅ Application is running successfully!"
+              
+              # Test health endpoint
+              if curl -f http://localhost:5000/health > /dev/null 2>&1; then
+                echo "✅ Health check passed!"
+              else
+                echo "⚠️ Health check failed, but application is running"
+              fi
+            else
+              echo "❌ Application failed to start!"
+              pm2 logs student-db-backend --lines 50 --nostream
+              exit 1
+            fi
+
