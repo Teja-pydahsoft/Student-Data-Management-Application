@@ -83,7 +83,7 @@ const Reports = () => {
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const response = await api.get('/attendance/filters');
+        const response = await api.get('/students/quick-filters');
         if (response.data?.success) {
           const data = response.data.data || {};
           setFilterOptions({
@@ -95,7 +95,7 @@ const Reports = () => {
           });
         }
       } catch (error) {
-        console.warn('Failed to fetch attendance filter options:', error);
+        console.warn('Failed to fetch filter options:', error);
       }
     };
 

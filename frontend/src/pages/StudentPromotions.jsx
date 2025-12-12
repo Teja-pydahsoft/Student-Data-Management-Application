@@ -89,7 +89,7 @@ const StudentPromotions = () => {
       // Don't pass branch, year, semester to get all available options
       
       const queryString = params.toString();
-      const url = `/attendance/filters${queryString ? `?${queryString}` : ''}`;
+      const url = `/students/quick-filters${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
       if (response.data?.success) {
         const data = response.data.data || {};

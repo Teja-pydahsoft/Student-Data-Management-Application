@@ -18,6 +18,7 @@ const documentUpload = multer({
 router.get('/', authMiddleware, attachUserScope, studentController.getAllStudents);
 router.get('/filter-fields', authMiddleware, attachUserScope, studentController.getFilterFields);
 router.get('/filter-options', authMiddleware, attachUserScope, studentController.getFilterOptions);
+router.get('/quick-filters', authMiddleware, attachUserScope, studentController.getQuickFilterOptions);
 router.put('/filter-fields/:fieldName', authMiddleware, studentController.updateFilterField);
 router.get('/stats', authMiddleware, attachUserScope, studentController.getDashboardStats);
 router.get('/dashboard-stats', authMiddleware, attachUserScope, studentController.getDashboardStats);

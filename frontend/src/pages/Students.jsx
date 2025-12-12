@@ -701,7 +701,7 @@ const Students = () => {
       if (currentFilters.semester) params.append('semester', currentFilters.semester);
       
       const queryString = params.toString();
-      const url = `/attendance/filters${queryString ? `?${queryString}` : ''}`;
+      const url = `/students/quick-filters${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
       if (response.data?.success) {
         const data = response.data.data || {};

@@ -3905,6 +3905,256 @@ exports.getFilterOptions = async (req, res) => {
   }
 };
 
+// Get quick filter options (batches, courses, branches, years, semesters) - WITHOUT course exclusions
+// This is used by pages other than attendance that need all courses to be available
+exports.getQuickFilterOptions = async (req, res) => {
+  try {
+    // Get filter parameters from query string
+    const { course, branch, batch, year, semester, college } = req.query;
+    
+    // Build WHERE clause based on applied filters - NO course exclusions here
+    const params = [];
+    let whereClause = `WHERE 1=1`;
+    
+    // Apply user scope filtering first
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        whereClause += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
+    
+    if (college) {
+      whereClause += ' AND college = ?';
+      params.push(college);
+    }
+    if (course) {
+      whereClause += ' AND course = ?';
+      params.push(course);
+    }
+    if (branch) {
+      whereClause += ' AND branch = ?';
+      params.push(branch);
+    }
+    if (batch) {
+      whereClause += ' AND batch = ?';
+      params.push(batch);
+    }
+    if (year) {
+      whereClause += ' AND current_year = ?';
+      params.push(parseInt(year, 10));
+    }
+    if (semester) {
+      whereClause += ' AND current_semester = ?';
+      params.push(parseInt(semester, 10));
+    }
+    
+    // Fetch distinct values for each filter, applying cascading filters
+    const [batchRows] = await masterPool.query(
+      `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+      params
+    );
+    
+    // For years and semesters, build separate WHERE clauses that exclude year/semester filters
+    // so they cascade properly based on batch/course/branch
+    const yearParams = [];
+    let yearWhereClause = `WHERE 1=1`;
+    
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        yearWhereClause += ` AND ${scopeCondition}`;
+        yearParams.push(...scopeParams);
+      }
+    }
+    
+    if (college) {
+      yearWhereClause += ' AND college = ?';
+      yearParams.push(college);
+    }
+    if (course) {
+      yearWhereClause += ' AND course = ?';
+      yearParams.push(course);
+    }
+    if (branch) {
+      yearWhereClause += ' AND branch = ?';
+      yearParams.push(branch);
+    }
+    if (batch) {
+      yearWhereClause += ' AND batch = ?';
+      yearParams.push(batch);
+    }
+    // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
+    
+    const [yearRows] = await masterPool.query(
+      `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
+      yearParams
+    );
+    
+    // For semesters, use the same WHERE clause as years
+    const [semesterRows] = await masterPool.query(
+      `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
+      yearParams
+    );
+    
+    // For courses, if college is selected, filter courses by college
+    let courseRows;
+    if (college) {
+      // Get college ID from college name
+      const [collegeRows] = await masterPool.query(
+        'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
+        [college]
+      );
+      
+      if (collegeRows.length > 0) {
+        const collegeId = collegeRows[0].id;
+        // Get courses for this college from courses table (these are the valid courses for this college)
+        const [collegeCourses] = await masterPool.query(
+          'SELECT name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
+          [collegeId]
+        );
+        const validCourseNames = collegeCourses.map(c => c.name);
+        
+        if (validCourseNames.length > 0) {
+          // Get distinct courses from students that match:
+          // 1. The current filters (college, batch, year, semester, etc.)
+          // 2. AND are in the list of valid courses for this college
+          const placeholders = validCourseNames.map(() => '?').join(',');
+          const courseWhereClause = `${whereClause} AND course IN (${placeholders})`;
+          const courseParams = [...params, ...validCourseNames];
+          [courseRows] = await masterPool.query(
+            `SELECT DISTINCT course FROM students ${courseWhereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+            courseParams
+          );
+        } else {
+          // No courses configured for this college
+          courseRows = [];
+        }
+      } else {
+        // College not found, return empty courses
+        courseRows = [];
+      }
+    } else {
+      // No college filter, get all courses from students (NO exclusions)
+      [courseRows] = await masterPool.query(
+        `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+        params
+      );
+    }
+    
+    // For branches, if college is selected, filter branches by college and valid courses
+    let branchRows;
+    if (college) {
+      // Get college ID from college name
+      const [collegeRows] = await masterPool.query(
+        'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
+        [college]
+      );
+      
+      if (collegeRows.length > 0) {
+        const collegeId = collegeRows[0].id;
+        // Get courses for this college from courses table
+        const [collegeCourses] = await masterPool.query(
+          'SELECT id, name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
+          [collegeId]
+        );
+        const validCourseNames = collegeCourses.map(c => c.name);
+        const validCourseIds = collegeCourses.map(c => c.id);
+        
+        if (validCourseNames.length > 0) {
+          // If course is also selected, filter branches for that specific course
+          if (course) {
+            // Get course ID for the selected course
+            const selectedCourse = collegeCourses.find(c => c.name === course);
+            if (selectedCourse) {
+              // Get branches for this specific course from course_branches table
+              const [courseBranches] = await masterPool.query(
+                'SELECT name FROM course_branches WHERE course_id = ? AND is_active = 1 ORDER BY name ASC',
+                [selectedCourse.id]
+              );
+              const validBranchNames = courseBranches.map(b => b.name);
+              
+              if (validBranchNames.length > 0) {
+                // Get distinct branches from students that match:
+                // 1. The current filters (college, course, batch, year, semester, etc.)
+                // 2. AND are in the list of valid branches for this course
+                const placeholders = validBranchNames.map(() => '?').join(',');
+                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
+                const branchParams = [...params, ...validBranchNames];
+                [branchRows] = await masterPool.query(
+                  `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+                  branchParams
+                );
+              } else {
+                branchRows = [];
+              }
+            } else {
+              // Selected course doesn't belong to this college
+              branchRows = [];
+            }
+          } else {
+            // No course selected, get all branches for all courses in this college
+            // Get all branches for all courses in this college
+            if (validCourseIds.length > 0) {
+              const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
+              const [allBranches] = await masterPool.query(
+                `SELECT name FROM course_branches WHERE course_id IN (${courseIdPlaceholders}) AND is_active = 1 ORDER BY name ASC`,
+                validCourseIds
+              );
+              const validBranchNames = allBranches.map(b => b.name);
+              
+              if (validBranchNames.length > 0) {
+                const placeholders = validBranchNames.map(() => '?').join(',');
+                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
+                const branchParams = [...params, ...validBranchNames];
+                [branchRows] = await masterPool.query(
+                  `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+                  branchParams
+                );
+              } else {
+                branchRows = [];
+              }
+            } else {
+              branchRows = [];
+            }
+          }
+        } else {
+          // No courses configured for this college
+          branchRows = [];
+        }
+      } else {
+        // College not found, return empty branches
+        branchRows = [];
+      }
+    } else {
+      // No college filter, get all branches from students (NO exclusions)
+      [branchRows] = await masterPool.query(
+        `SELECT DISTINCT branch FROM students ${whereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+        params
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        batches: batchRows.map((row) => row.batch),
+        years: yearRows.map((row) => row.currentYear),
+        semesters: semesterRows.map((row) => row.currentSemester),
+        courses: courseRows.map((row) => row.course),
+        branches: branchRows.map((row) => row.branch)
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch quick filter options:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching quick filter options'
+    });
+  }
+};
+
 // Add or update filter field configuration
 exports.updateFilterField = async (req, res) => {
   try {
