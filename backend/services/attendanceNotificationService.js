@@ -235,7 +235,8 @@ const sendAttendanceReportNotifications = async ({
   students,
   attendanceRecords,
   allBatchesData = null, // Optional: all batches data for comprehensive report
-  recipientUser = null // Optional: specific user to send to (bypasses recipient lookup)
+  recipientUser = null, // Optional: specific user to send to (bypasses recipient lookup)
+  senderName = null // Optional: name of the person who sent the report
 }) => {
   const results = {
     pdfGenerated: false,
@@ -245,7 +246,7 @@ const sendAttendanceReportNotifications = async ({
   };
 
   try {
-    // Generate PDF (exclude course column for email reports)
+    // Generate PDF (stats only - no student details, exclude course column for email reports)
     const pdfPath = await generateAttendanceReportPDF({
       collegeName,
       batch,
@@ -257,7 +258,8 @@ const sendAttendanceReportNotifications = async ({
       students,
       attendanceRecords,
       allBatchesData, // Pass all batches data for tabular format
-      excludeCourse: true // Exclude course column from email reports
+      excludeCourse: true, // Exclude course column from email reports
+      statsOnly: true // Only include stats, exclude detailed student list
     });
 
     results.pdfGenerated = true;
@@ -341,6 +343,7 @@ const sendAttendanceReportNotifications = async ({
     const presentCount = attendanceRecords.filter(r => r.status === 'present').length;
     const absentCount = attendanceRecords.filter(r => r.status === 'absent').length;
     const markedCount = attendanceRecords.length;
+    const unmarkedCount = totalStudents - markedCount;
 
     // Format date for display
     const formattedDate = new Date(attendanceDate).toLocaleDateString('en-IN', {
@@ -388,17 +391,18 @@ const sendAttendanceReportNotifications = async ({
       Date: ${formattedDate}
 
       Attendance Summary:
+      - Total Students: ${totalStudents}
+      - Students Marked: ${markedCount}
+      - Students Unmarked (Pending): ${unmarkedCount}
       - Total Students Present Today: ${presentCount}
       - Total Students Absent Today: ${absentCount}
-      - Total Students Marked: ${markedCount}
 
-      To view detailed student information and download the complete report, please visit:
-      https://pydahsdms.vercel.app/attendance
+      Please find the detailed attendance statistics in the attached PDF report.
 
-      This is an automated notification from the Student Database Management System.
+      ${senderName ? `This report was sent by: ${senderName}` : 'This is an automated notification from the Student Database Management System.'}
 
       Best regards,
-      System Administrator
+      ${senderName || 'System Administrator'}
     `;
 
     const htmlContent = `
@@ -458,6 +462,18 @@ const sendAttendanceReportNotifications = async ({
             <div class="summary-box">
               <div class="summary-title">📈 Attendance Summary</div>
               <div class="summary-row">
+                <span class="summary-label">Total Students:</span>
+                <span class="summary-value">${totalStudents}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Students Marked:</span>
+                <span class="summary-value">${markedCount}</span>
+              </div>
+              <div class="summary-row">
+                <span class="summary-label">Students Unmarked (Pending):</span>
+                <span class="summary-value">${unmarkedCount}</span>
+              </div>
+              <div class="summary-row">
                 <span class="summary-label">Total Students Present Today:</span>
                 <span class="summary-value">${presentCount}</span>
               </div>
@@ -465,21 +481,16 @@ const sendAttendanceReportNotifications = async ({
                 <span class="summary-label">Total Students Absent Today:</span>
                 <span class="summary-value">${absentCount}</span>
               </div>
-              <div class="summary-row">
-                <span class="summary-label">Total Students Marked:</span>
-                <span class="summary-value">${markedCount}</span>
-              </div>
             </div>
 
             <div class="link-box">
-              <p style="margin: 0 0 10px 0; color: #92400e; font-weight: 600;">To view detailed student information and download the complete report:</p>
-              <a href="https://pydahsdms.vercel.app/attendance" target="_blank">View Attendance Details & Download Report</a>
+              <p style="margin: 0 0 10px 0; color: #92400e; font-weight: 600;">Please find the detailed attendance statistics in the attached PDF report.</p>
             </div>
 
-            <p style="margin-top: 20px; color: #64748b; font-size: 14px;">This is an automated notification from the Student Database Management System.</p>
+            ${senderName ? `<p style="margin-top: 20px; color: #64748b; font-size: 14px;">This report was sent by: <strong>${senderName}</strong></p>` : '<p style="margin-top: 20px; color: #64748b; font-size: 14px;">This is an automated notification from the Student Database Management System.</p>'}
           </div>
           <div class="footer">
-            <p>Best regards,<br>System Administrator</p>
+            <p>Best regards,<br>${senderName || 'System Administrator'}</p>
           </div>
         </div>
       </body>

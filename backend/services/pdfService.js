@@ -48,7 +48,7 @@ const downloadLogo = async () => {
  * Generate Attendance Report PDF with comprehensive sections:
  * 1. Overall Summary Report
  * 2. Tabular format by Batch/Course/Semester/Year
- * 3. Detailed Student List
+ * 3. Detailed Student List (optional, excluded when statsOnly is true)
  */
 const generateAttendanceReportPDF = async ({
   collegeName,
@@ -61,12 +61,24 @@ const generateAttendanceReportPDF = async ({
   students,
   attendanceRecords,
   allBatchesData = null, // Optional: all batches data for comprehensive report
-  excludeCourse = false // Optional: exclude course column from tables (for email reports)
+  excludeCourse = false, // Optional: exclude course column from tables (for email reports)
+  statsOnly = false // Optional: if true, only include stats (exclude detailed student list)
 }) => {
-  // Filter out cancelled/discontinued students (already filtered in query, but double-check)
+  // Filter out cancelled/discontinued/course completed students (already filtered in query, but double-check)
   const validStudents = students.filter(s => {
     const status = s.student_status || (s.student_data && s.student_data['Student Status']);
-    return status === 'Regular' || !status;
+    // Exclude Course Completed, Discontinued, Admission Cancelled, etc.
+    // Only include Regular students
+    return status === 'Regular';
+  });
+  
+  // Separate marked and unmarked students
+  const markedStudents = validStudents.filter(s => {
+    return attendanceRecords.some(r => r.studentId === s.id);
+  });
+  
+  const unmarkedStudents = validStudents.filter(s => {
+    return !attendanceRecords.some(r => r.studentId === s.id);
   });
 
   // Create a temporary file path
@@ -276,7 +288,7 @@ const generateAttendanceReportPDF = async ({
 
   // Summary Information Box with better styling
   const summaryBoxTop = doc.y;
-  const summaryBoxHeight = 140;
+  const summaryBoxHeight = 176; // Increased height to accommodate marked/unmarked stats
   
   // Box background (light gray)
   doc.rect(leftMargin, summaryBoxTop, contentWidth, summaryBoxHeight)
@@ -311,24 +323,39 @@ const generateAttendanceReportPDF = async ({
 
   // Left column values
   doc.font('Helvetica');
-  doc.text(collegeName || 'N/A', leftCol + 60, yPos);
+  doc.text(collegeName || 'N/A', leftCol + 60, yPos, { width: 200, ellipsis: true });
   if (!excludeCourse) {
-    doc.text(courseName || 'N/A', leftCol + 60, yPos + lineHeight);
+    doc.text(courseName || 'N/A', leftCol + 60, yPos + lineHeight, { width: 200, ellipsis: true });
   }
-  doc.text(branchName || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 1 : 2)));
-  doc.text(year || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 2 : 3)));
-  doc.text(batch || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 3 : 4)));
+  // Branch name with proper truncation for long text to prevent alignment issues
+  const branchText = branchName || 'N/A';
+  const branchY = yPos + (lineHeight * (excludeCourse ? 1 : 2));
+  // Truncate branch name if too long to prevent overflow
+  const maxBranchLength = 50; // Characters before truncation
+  const truncatedBranchText = branchText.length > maxBranchLength 
+    ? branchText.substring(0, maxBranchLength) + '...' 
+    : branchText;
+  doc.text(truncatedBranchText, leftCol + 60, branchY, { 
+    width: 200, 
+    ellipsis: false // Already truncated manually
+  });
+  doc.text(year || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 2 : 3)), { width: 200, ellipsis: true });
+  doc.text(batch || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 3 : 4)), { width: 200, ellipsis: true });
 
   // Right column labels (bold)
   doc.font('Helvetica-Bold');
   doc.text('Semester:', rightCol, yPos);
   doc.text('Total Students:', rightCol, yPos + lineHeight);
-  doc.text('Present:', rightCol, yPos + (lineHeight * 2));
-  doc.text('Absent:', rightCol, yPos + (lineHeight * 3));
-  doc.text('Attendance %:', rightCol, yPos + (lineHeight * 4));
+  doc.text('Marked:', rightCol, yPos + (lineHeight * 2));
+  doc.text('Unmarked:', rightCol, yPos + (lineHeight * 3));
+  doc.text('Present:', rightCol, yPos + (lineHeight * 4));
+  doc.text('Absent:', rightCol, yPos + (lineHeight * 5));
+  doc.text('Attendance %:', rightCol, yPos + (lineHeight * 6));
 
-  // Calculate statistics (only for valid students)
+  // Calculate statistics (only for valid students, excluding course completed)
   const totalStudents = validStudents.length;
+  const markedCount = markedStudents.length;
+  const unmarkedCount = unmarkedStudents.length;
   const presentCount = attendanceRecords.filter(r => {
     const student = validStudents.find(s => s.id === r.studentId);
     return student && r.status === 'present';
@@ -345,13 +372,17 @@ const generateAttendanceReportPDF = async ({
   doc.font('Helvetica');
   doc.text(semester || 'N/A', rightCol + 70, yPos);
   doc.text(totalStudents.toString(), rightCol + 70, yPos + lineHeight);
+  doc.fillColor('#3B82F6'); // Blue for marked
+  doc.text(markedCount.toString(), rightCol + 70, yPos + (lineHeight * 2));
+  doc.fillColor('#F59E0B'); // Orange for unmarked
+  doc.text(unmarkedCount.toString(), rightCol + 70, yPos + (lineHeight * 3));
   doc.fillColor('#10B981'); // Green for present
-  doc.text(presentCount.toString(), rightCol + 70, yPos + (lineHeight * 2));
+  doc.text(presentCount.toString(), rightCol + 70, yPos + (lineHeight * 4));
   doc.fillColor('#EF4444'); // Red for absent
-  doc.text(absentCount.toString(), rightCol + 70, yPos + (lineHeight * 3));
+  doc.text(absentCount.toString(), rightCol + 70, yPos + (lineHeight * 5));
   doc.fillColor('#1E40AF'); // Blue for percentage
   doc.font('Helvetica-Bold');
-  doc.text(`${attendancePercentage}%`, rightCol + 70, yPos + (lineHeight * 4));
+  doc.text(`${attendancePercentage}%`, rightCol + 70, yPos + (lineHeight * 6));
   doc.fillColor('#000000'); // Reset to black
   doc.font('Helvetica');
 
@@ -523,57 +554,62 @@ const generateAttendanceReportPDF = async ({
   }
 
   // ============================================
-  // SECTION 3: DETAILED STUDENT LIST
+  // SECTION 3: DETAILED STUDENT LIST (only if statsOnly is false)
   // ============================================
-  checkPageBreak(40);
-  
-  // Section title with background
-  const sectionTitleTop = doc.y;
-  doc.rect(leftMargin, sectionTitleTop, contentWidth, 30)
-    .fillColor('#1E40AF') // Blue-800
-    .fill();
-  
-  doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF');
-  doc.text('Detailed Student List', leftMargin, sectionTitleTop + 8, {
-    width: contentWidth,
-    align: 'center'
-  });
-  doc.fillColor('#000000');
-  
-  doc.y = sectionTitleTop + 35;
-  doc.moveDown(0.3);
+  if (!statsOnly) {
+    // Helper function to render student table
+    const renderStudentTable = (studentList, sectionTitle, tableTop) => {
+      if (studentList.length === 0) return tableTop;
+      
+      checkPageBreak(40);
+      
+      // Section title with background
+      const sectionTitleTop = tableTop;
+      doc.rect(leftMargin, sectionTitleTop, contentWidth, 30)
+        .fillColor('#1E40AF') // Blue-800
+        .fill();
+      
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF');
+      doc.text(sectionTitle, leftMargin, sectionTitleTop + 8, {
+        width: contentWidth,
+        align: 'center'
+      });
+      doc.fillColor('#000000');
+      
+      doc.y = sectionTitleTop + 35;
+      doc.moveDown(0.3);
 
-  // Table Header - Adjusted column widths to prevent mobile number merging
-  const tableTop = doc.y;
-  const tableLeft = leftMargin;
-  const tableWidth = contentWidth; // Use full content width (515 points)
-  // Column widths: PIN, Name, Branch, Year+Sem, Student Mobile, Parent Mobile, Status
-  // Increased mobile number columns to prevent merging (Total: 45+125+65+50+90+90+50 = 515)
-  const colWidths = [45, 125, 65, 50, 90, 90, 50];
-  const tableHeaderHeight = 28;
-  const rowHeight = 22;
+      // Table Header - Adjusted column widths to prevent mobile number merging
+      const tableHeaderTop = doc.y;
+      const tableLeft = leftMargin;
+      const tableWidth = contentWidth; // Use full content width (515 points)
+      // Column widths: PIN, Name, Branch, Year+Sem, Student Mobile, Parent Mobile, Status
+      // Increased mobile number columns to prevent merging (Total: 45+125+65+50+90+90+50 = 515)
+      const colWidths = [45, 125, 65, 50, 90, 90, 50];
+      const tableHeaderHeight = 28;
+      const rowHeight = 22;
 
-  // Header background with blue color
-  doc.rect(tableLeft, tableTop, tableWidth, tableHeaderHeight)
-    .fillColor('#1E40AF') // Blue-800
-    .fill()
-    .stroke('#1E3A8A'); // Blue-900 border
+      // Header background with blue color
+      doc.rect(tableLeft, tableHeaderTop, tableWidth, tableHeaderHeight)
+        .fillColor('#1E40AF') // Blue-800
+        .fill()
+        .stroke('#1E3A8A'); // Blue-900 border
 
-  // Header text (white on blue background)
-  doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF');
-  const headers = ['PIN', 'Student Name', 'Branch', 'Year+Sem', 'Student Mobile', 'Parent Mobile', 'Status'];
-  let xPos = tableLeft + 5;
-  headers.forEach((header, index) => {
-    doc.text(header, xPos, tableTop + 8);
-    xPos += colWidths[index];
-  });
-  doc.fillColor('#000000'); // Reset to black
+      // Header text (white on blue background)
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF');
+      const headers = ['PIN', 'Student Name', 'Branch', 'Year+Sem', 'Student Mobile', 'Parent Mobile', 'Status'];
+      let xPos = tableLeft + 5;
+      headers.forEach((header, index) => {
+        doc.text(header, xPos, tableHeaderTop + 8);
+        xPos += colWidths[index];
+      });
+      doc.fillColor('#000000'); // Reset to black
 
-  // Table rows
-  let currentY = tableTop + tableHeaderHeight;
-  let rowIndex = 0;
+      // Table rows
+      let currentY = tableHeaderTop + tableHeaderHeight;
+      let rowIndex = 0;
 
-  validStudents.forEach((student, index) => {
+      studentList.forEach((student, index) => {
     // Check if we need a new page
     if (currentY + rowHeight > doc.page.height - 40) {
       doc.addPage();
@@ -607,6 +643,8 @@ const generateAttendanceReportPDF = async ({
       .stroke();
 
     // Get attendance record for this student
+    // For unmarked students table, status is always 'unmarked'
+    // For marked students table, get the actual status
     const attendanceRecord = attendanceRecords.find(r => r.studentId === student.id);
     const status = attendanceRecord?.status || 'unmarked';
     const statusText = status.charAt(0).toUpperCase() + status.slice(1);
@@ -685,9 +723,27 @@ const generateAttendanceReportPDF = async ({
     doc.font('Helvetica'); // Reset font
     doc.fillColor('#000000'); // Reset to black
 
-    currentY += rowHeight;
-    rowIndex++;
-  });
+        currentY += rowHeight;
+        rowIndex++;
+      });
+      
+      return currentY + 20; // Return Y position after table with spacing
+    };
+    
+    // Render marked students table first
+    let currentY = doc.y;
+    currentY = renderStudentTable(markedStudents, 'Marked Students', currentY);
+    doc.y = currentY;
+    doc.moveDown(0.5);
+    
+    // Render unmarked students table separately
+    if (unmarkedStudents.length > 0) {
+      checkPageBreak(40);
+      currentY = doc.y;
+      currentY = renderStudentTable(unmarkedStudents, 'Unmarked Students (Pending)', currentY);
+      doc.y = currentY;
+    }
+  } // End of statsOnly check
 
   // Footer with better styling
   const footerY = doc.page.height - 30;

@@ -1427,7 +1427,8 @@ exports.markAttendance = async (req, res) => {
             students: allStudents,
             attendanceRecords: allAttendanceRecords,
             allBatchesData: allBatchesData,
-            recipientUser: hod // Pass user info for personalized email
+            recipientUser: hod, // Pass user info for personalized email
+            senderName: senderName // Pass sender name
           });
 
           reportResults.push({
@@ -1461,6 +1462,234 @@ exports.markAttendance = async (req, res) => {
       console.log(`\n⏳ No reports sent - waiting for all batches to be marked in user scopes`);
     }
 
+    // ============================================
+    // AUTOMATIC DAY-END REPORT FOR COLLEGE/COURSE COMBINATIONS
+    // ============================================
+    // Check if all batches are marked for each college/course combination
+    // If all batches are marked (pending = 0), automatically send day-end report
+    console.log(`\n📊 Checking college/course combinations for automatic day-end reports...`);
+    
+    // Group attendance data by college/course
+    const groupsByCollegeCourse = new Map();
+    for (const group of allAttendanceData) {
+      const college = group.college || 'Unknown';
+      const course = group.course || 'Unknown';
+      const key = `${college}|${course}`;
+      
+      if (!groupsByCollegeCourse.has(key)) {
+        groupsByCollegeCourse.set(key, {
+          college,
+          course,
+          groups: []
+        });
+      }
+      
+      groupsByCollegeCourse.get(key).groups.push(group);
+    }
+
+    const dayEndReportResults = [];
+    const dayEndProcessedUsers = new Set();
+
+    // Check each college/course combination
+    for (const [key, collegeCourseData] of groupsByCollegeCourse) {
+      const { college, course, groups } = collegeCourseData;
+      
+      // Check if all batches for this college/course are marked (pending = 0)
+      const allBatchesMarked = groups.every(group => group.isFullyMarked);
+      const totalGroups = groups.length;
+      const markedGroups = groups.filter(g => g.isFullyMarked).length;
+      
+      console.log(`\n   📋 ${college} - ${course}: ${markedGroups}/${totalGroups} batches marked`);
+      
+      if (allBatchesMarked && totalGroups > 0) {
+        console.log(`   ✅ All batches marked for ${college} - ${course}. Sending day-end report...`);
+        
+        // Combine all students and attendance records for this college/course
+        const allStudents = [];
+        const allAttendanceRecords = [];
+        const allBatchesData = [];
+
+        for (const group of groups) {
+          allStudents.push(...group.students);
+          allAttendanceRecords.push(...group.attendanceRecords);
+          allBatchesData.push(group);
+        }
+
+        // Find relevant principals and HODs for this college/course
+        const relevantPrincipals = principals.filter(principal => {
+          // Check if principal has access to this college
+          const hasCollegeAccess = principal.collegeNames.length === 0 || 
+                                   principal.collegeNames.includes(college);
+          
+          // Check if principal has access to this course
+          const hasCourseAccess = principal.allCourses || 
+                                  principal.courseNames.includes(course);
+          
+          return hasCollegeAccess && hasCourseAccess;
+        });
+
+        const relevantHODs = hods.filter(hod => {
+          // Check if HOD has access to this college
+          const hasCollegeAccess = hod.collegeNames.length === 0 || 
+                                   hod.collegeNames.includes(college);
+          
+          // Check if HOD has access to this course
+          const hasCourseAccess = hod.allCourses || 
+                                  hod.courseNames.includes(course);
+          
+          return hasCollegeAccess && hasCourseAccess;
+        });
+
+        // Send reports to relevant principals
+        for (const principal of relevantPrincipals) {
+          // Skip if already sent a report for this specific college/course combination
+          const reportKey = `${principal.email}|${college}|${course}`;
+          if (dayEndProcessedUsers.has(reportKey)) {
+            continue;
+          }
+
+          // Get college ID
+          let collegeId = null;
+          if (principal.collegeNames.includes(college)) {
+            const collegeIndex = principal.collegeNames.indexOf(college);
+            collegeId = principal.collegeIds[collegeIndex] || null;
+          }
+
+          try {
+            const result = await sendAttendanceReportNotifications({
+              collegeId,
+              collegeName: college,
+              courseId: null,
+              courseName: course,
+              branchId: null,
+              branchName: 'All Branches',
+              batch: 'All Batches',
+              year: 'All Years',
+              semester: 'All Semesters',
+              attendanceDate: normalizedDate,
+              students: allStudents,
+              attendanceRecords: allAttendanceRecords,
+              allBatchesData: allBatchesData,
+              recipientUser: principal
+            });
+
+            dayEndReportResults.push({
+              user: principal.name,
+              userEmail: principal.email,
+              role: 'Principal',
+              college,
+              course,
+              ...result
+            });
+
+            dayEndProcessedUsers.add(reportKey);
+            console.log(`   📧 Day-end report sent to Principal: ${principal.name} (${principal.email}) for ${college} - ${course}`);
+          } catch (error) {
+            console.error(`   ❌ Error sending day-end report to Principal ${principal.name} for ${college} - ${course}:`, error);
+            dayEndReportResults.push({
+              user: principal.name,
+              userEmail: principal.email,
+              role: 'Principal',
+              college,
+              course,
+              pdfGenerated: false,
+              emailsSent: 0,
+              emailsFailed: 0,
+              errors: [error.message]
+            });
+          }
+        }
+
+        // Send reports to relevant HODs
+        for (const hod of relevantHODs) {
+          // Skip if already sent a report for this specific college/course combination
+          const reportKey = `${hod.email}|${college}|${course}`;
+          if (dayEndProcessedUsers.has(reportKey)) {
+            continue;
+          }
+
+          // Get IDs for recipient lookup
+          let collegeId = null;
+          let courseId = null;
+          let branchId = null;
+
+          if (hod.collegeIds.length > 0 && hod.collegeNames.includes(college)) {
+            const collegeIndex = hod.collegeNames.indexOf(college);
+            collegeId = hod.collegeIds[collegeIndex] || null;
+          }
+
+          if (!hod.allCourses && hod.courseIds.length > 0 && hod.courseNames.includes(course)) {
+            const courseIndex = hod.courseNames.indexOf(course);
+            courseId = hod.courseIds[courseIndex] || null;
+          }
+
+          if (!hod.allBranches && hod.branchIds.length > 0) {
+            branchId = hod.branchIds[0];
+          }
+
+          try {
+            const result = await sendAttendanceReportNotifications({
+              collegeId,
+              collegeName: college,
+              courseId,
+              courseName: course,
+              branchId,
+              branchName: hod.allBranches ? 'All Branches' : (hod.branchNames[0] || 'All Branches'),
+              batch: 'All Batches',
+              year: 'All Years',
+              semester: 'All Semesters',
+              attendanceDate: normalizedDate,
+              students: allStudents,
+              attendanceRecords: allAttendanceRecords,
+              allBatchesData: allBatchesData,
+              recipientUser: hod
+            });
+
+            dayEndReportResults.push({
+              user: hod.name,
+              userEmail: hod.email,
+              role: 'HOD',
+              college,
+              course,
+              ...result
+            });
+
+            dayEndProcessedUsers.add(reportKey);
+            console.log(`   📧 Day-end report sent to HOD: ${hod.name} (${hod.email}) for ${college} - ${course}`);
+          } catch (error) {
+            console.error(`   ❌ Error sending day-end report to HOD ${hod.name} for ${college} - ${course}:`, error);
+            dayEndReportResults.push({
+              user: hod.name,
+              userEmail: hod.email,
+              role: 'HOD',
+              college,
+              course,
+              pdfGenerated: false,
+              emailsSent: 0,
+              emailsFailed: 0,
+              errors: [error.message]
+            });
+          }
+        }
+      }
+    }
+
+    // Log day-end report summary
+    const uniqueDayEndUsers = new Set();
+    for (const key of dayEndProcessedUsers) {
+      const email = key.split('|')[0];
+      uniqueDayEndUsers.add(email);
+    }
+    
+    if (dayEndProcessedUsers.size > 0) {
+      console.log(`\n📋 Day-End Report Summary: ${dayEndReportResults.length} report(s) sent to ${uniqueDayEndUsers.size} unique user(s) for completed college/course combinations`);
+    } else {
+      console.log(`\n⏳ No day-end reports sent - no college/course combinations with all batches marked`);
+    }
+
+    // Combine report results
+    const allReportResults = [...reportResults, ...dayEndReportResults];
+
     res.json({
       success: true,
       message: 'Attendance updated successfully',
@@ -1472,7 +1701,8 @@ exports.markAttendance = async (req, res) => {
           ...r,
           success: r.smsSent || r.emailSent
         })),
-        reportResults
+        reportResults: allReportResults,
+        dayEndReportResults
       }
     });
   } catch (error) {
@@ -1488,6 +1718,406 @@ exports.markAttendance = async (req, res) => {
     if (connection) {
       connection.release();
     }
+  }
+};
+
+// Manually send day-end reports to Principals and HODs
+exports.sendDayEndReports = async (req, res) => {
+  try {
+    const { date } = req.body;
+    
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date is required'
+      });
+    }
+
+    // Normalize date
+    const normalizedDate = getDateOnlyString(date);
+    
+    if (!normalizedDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+    
+    // Get sender information
+    const sender = req.user || req.admin;
+    if (!sender) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const senderName = sender.name || sender.username || 'System';
+    const senderEmail = sender.email || '';
+    
+    console.log(`\n📧 Manual Day-End Report Request for ${normalizedDate}`);
+    console.log(`   Sender: ${senderName} (${senderEmail})`);
+
+    // Get all attendance data for the date
+    const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
+    
+    // Filter attendance data by sender's scope first
+    let filteredAttendanceData = allAttendanceData;
+    if (req.userScope && !req.userScope.unrestricted) {
+      const { filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
+      
+      // Convert req.userScope to the format needed for filterAttendanceByUserScope
+      const senderScope = {
+        collegeNames: req.userScope.collegeNames || [],
+        courseNames: req.userScope.courseNames || [],
+        branchNames: req.userScope.branchNames || [],
+        allCourses: req.userScope.allCourses || false,
+        allBranches: req.userScope.allBranches || false,
+        role: sender.role
+      };
+      
+      filteredAttendanceData = filterAttendanceByUserScope(allAttendanceData, senderScope);
+      console.log(`   📊 Filtered by sender scope: ${filteredAttendanceData.length}/${allAttendanceData.length} groups`);
+      
+      if (filteredAttendanceData.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No attendance data found in your scope',
+          data: {
+            attendanceDate: normalizedDate,
+            reportResults: [],
+            totalSent: 0,
+            totalFailed: 0,
+            totalRecipients: 0
+          }
+        });
+      }
+    }
+    
+    // Get all active Principals and HODs with their access scopes
+    const { getAllNotificationUsers, filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
+    const { principals, hods } = await getAllNotificationUsers();
+
+    console.log(`📊 Manual Day-End Report Status for ${normalizedDate}:`);
+    console.log(`   Total attendance groups (after sender scope filter): ${filteredAttendanceData.length}`);
+    console.log(`   Total Principals: ${principals.length}`);
+    console.log(`   Total HODs: ${hods.length}`);
+
+    const reportResults = [];
+    const processedUsers = new Set();
+
+    // Group attendance data by college/course
+    const groupsByCollegeCourse = new Map();
+    for (const group of allAttendanceData) {
+      const college = group.college || 'Unknown';
+      const course = group.course || 'Unknown';
+      const key = `${college}|${course}`;
+      
+      if (!groupsByCollegeCourse.has(key)) {
+        groupsByCollegeCourse.set(key, {
+          college,
+          course,
+          groups: []
+        });
+      }
+      
+      groupsByCollegeCourse.get(key).groups.push(group);
+    }
+
+    // Process each Principal with RBAC scope filtering
+    for (const principal of principals) {
+      console.log(`\n👤 Processing Principal: ${principal.name} (${principal.email})`);
+      console.log(`   Scope: Colleges: ${principal.collegeNames.join(', ') || 'All'}, Courses: ${principal.allCourses ? 'All' : principal.courseNames.join(', ') || 'None'}, Branches: ${principal.allBranches ? 'All' : principal.branchNames.join(', ') || 'None'}`);
+
+      // Filter attendance data by principal's scope (from already sender-filtered data)
+      const filteredGroups = filterAttendanceByUserScope(filteredAttendanceData, principal);
+
+      if (filteredGroups.length === 0) {
+        console.log(`   ⚠️  No attendance data found in principal's scope`);
+        continue;
+      }
+
+      console.log(`   📋 Found ${filteredGroups.length} group(s) in principal's scope`);
+
+      // Group filtered groups by college for per-college reports
+      const groupsByCollege = new Map();
+      for (const group of filteredGroups) {
+        const collegeKey = group.college || 'Unknown';
+        if (!groupsByCollege.has(collegeKey)) {
+          groupsByCollege.set(collegeKey, []);
+        }
+        groupsByCollege.get(collegeKey).push(group);
+      }
+
+      // Send separate report for each college in principal's scope
+      for (const [collegeName, collegeGroups] of groupsByCollege) {
+        // Combine all students and attendance records from all groups for this college
+        const allStudents = [];
+        const allAttendanceRecords = [];
+        const allBatchesData = [];
+
+        for (const group of collegeGroups) {
+          allStudents.push(...group.students);
+          allAttendanceRecords.push(...group.attendanceRecords);
+          allBatchesData.push(group);
+        }
+
+        // Get actual courses from groups that have students (only courses with attendance data)
+        const actualCourses = [...new Set(
+          collegeGroups
+            .filter(g => g.students && g.students.length > 0) // Only groups with students
+            .map(g => g.course)
+            .filter(c => c && c !== 'Unknown')
+        )];
+        const actualBranches = [...new Set(
+          collegeGroups
+            .filter(g => g.students && g.students.length > 0) // Only groups with students
+            .map(g => g.branch)
+            .filter(b => b && b !== 'Unknown')
+        )];
+
+        // Get college ID
+        let collegeId = null;
+        if (principal.collegeNames.includes(collegeName)) {
+          const collegeIndex = principal.collegeNames.indexOf(collegeName);
+          collegeId = principal.collegeIds[collegeIndex] || null;
+        }
+
+        // Determine report scope description based on actual courses in the data (sender's scope)
+        // Don't include branches here - they will be added separately in email subject
+        let scopeDescription;
+        if (actualCourses.length === 0) {
+          scopeDescription = 'All Courses';
+        } else if (actualCourses.length === 1) {
+          scopeDescription = actualCourses[0];
+        } else if (actualCourses.length <= 5) {
+          // Show courses if 5 or fewer
+          scopeDescription = actualCourses.join(', ');
+        } else {
+          // Too many courses, show count
+          scopeDescription = `${actualCourses.length} Courses`;
+        }
+
+        // Determine branch name from actual branches in the data
+        let branchNameForReport;
+        if (actualBranches.length === 0) {
+          branchNameForReport = principal.allBranches ? 'All Branches' : (principal.branchNames.join(', ') || 'All Branches');
+        } else if (actualBranches.length === 1) {
+          branchNameForReport = actualBranches[0];
+        } else if (actualBranches.length <= 5) {
+          branchNameForReport = actualBranches.join(', ');
+        } else {
+          branchNameForReport = `${actualBranches.length} Branches`;
+        }
+
+        const reportKey = `${principal.email}|${collegeName}`;
+        if (processedUsers.has(reportKey)) {
+          continue;
+        }
+
+        try {
+          const result = await sendAttendanceReportNotifications({
+            collegeId,
+            collegeName: collegeName,
+            courseId: null, // Scope-based report
+            courseName: scopeDescription,
+            branchId: null, // Scope-based report
+            branchName: branchNameForReport,
+            batch: 'All Batches',
+            year: 'All Years',
+            semester: 'All Semesters',
+            attendanceDate: normalizedDate,
+            students: allStudents,
+            attendanceRecords: allAttendanceRecords,
+            allBatchesData: allBatchesData,
+            recipientUser: principal, // Pass user info for personalized email
+            senderName: senderName // Pass sender name
+          });
+
+          reportResults.push({
+            user: principal.name,
+            userEmail: principal.email,
+            role: 'Principal',
+            college: collegeName,
+            course: scopeDescription,
+            ...result
+          });
+
+          processedUsers.add(reportKey);
+          console.log(`   📧 Day-end report sent to Principal: ${principal.name} (${principal.email}) for ${collegeName}`);
+        } catch (error) {
+          console.error(`   ❌ Error sending day-end report to Principal ${principal.name} for ${collegeName}:`, error);
+          reportResults.push({
+            user: principal.name,
+            userEmail: principal.email,
+            role: 'Principal',
+            college: collegeName,
+            course: scopeDescription,
+            pdfGenerated: false,
+            emailsSent: 0,
+            emailsFailed: 0,
+            errors: [error.message]
+          });
+        }
+      }
+    }
+
+    // Process each HOD with RBAC scope filtering
+    for (const hod of hods) {
+      console.log(`\n👤 Processing HOD: ${hod.name} (${hod.email})`);
+      console.log(`   Scope: Colleges: ${hod.collegeNames.join(', ') || 'All'}, Courses: ${hod.allCourses ? 'All' : hod.courseNames.join(', ') || 'None'}, Branches: ${hod.branchNames.join(', ') || 'None'}`);
+
+      // Filter attendance data by HOD's scope (from already sender-filtered data)
+      const filteredGroups = filterAttendanceByUserScope(filteredAttendanceData, hod);
+
+      if (filteredGroups.length === 0) {
+        console.log(`   ⚠️  No attendance data found in HOD's scope`);
+        continue;
+      }
+
+      console.log(`   📋 Found ${filteredGroups.length} group(s) in HOD's scope`);
+
+      // Combine all students and attendance records from all groups in HOD's scope
+      const allStudents = [];
+      const allAttendanceRecords = [];
+      const allBatchesData = [];
+
+      for (const group of filteredGroups) {
+        allStudents.push(...group.students);
+        allAttendanceRecords.push(...group.attendanceRecords);
+        allBatchesData.push(group);
+      }
+
+      // Get actual courses from groups that have students (only courses with attendance data)
+      const actualCourses = [...new Set(
+        filteredGroups
+          .filter(g => g.students && g.students.length > 0) // Only groups with students
+          .map(g => g.course)
+          .filter(c => c && c !== 'Unknown')
+      )];
+      const actualBranches = [...new Set(
+        filteredGroups
+          .filter(g => g.students && g.students.length > 0) // Only groups with students
+          .map(g => g.branch)
+          .filter(b => b && b !== 'Unknown')
+      )];
+
+      // Get IDs for recipient lookup
+      let collegeId = null;
+      let courseId = null;
+      let branchId = null;
+
+      if (hod.collegeIds.length > 0) {
+        collegeId = hod.collegeIds[0];
+      }
+
+      if (!hod.allCourses && hod.courseIds.length > 0) {
+        courseId = hod.courseIds[0];
+      }
+
+      if (!hod.allBranches && hod.branchIds.length > 0) {
+        branchId = hod.branchIds[0];
+      }
+
+      // Get names for display - use actual courses and branches from filtered data (sender's scope)
+      const collegeName = hod.collegeNames[0] || 'Unknown';
+      let courseName;
+      if (actualCourses.length === 0) {
+        courseName = hod.allCourses ? 'All Courses' : (hod.courseNames[0] || 'Unknown');
+      } else if (actualCourses.length === 1) {
+        courseName = actualCourses[0];
+      } else if (actualCourses.length <= 5) {
+        courseName = actualCourses.join(', ');
+      } else {
+        courseName = `${actualCourses.length} Courses`;
+      }
+      
+      // Determine branch name from actual branches in the data
+      let branchName;
+      if (actualBranches.length === 0) {
+        branchName = hod.allBranches ? 'All Branches' : (hod.branchNames[0] || 'Unknown');
+      } else if (actualBranches.length === 1) {
+        branchName = actualBranches[0];
+      } else if (actualBranches.length <= 5) {
+        branchName = actualBranches.join(', ');
+      } else {
+        branchName = `${actualBranches.length} Branches`;
+      }
+
+      const reportKey = `${hod.email}|${collegeName}|${courseName}`;
+      if (processedUsers.has(reportKey)) {
+        continue;
+      }
+
+      try {
+        const result = await sendAttendanceReportNotifications({
+          collegeId,
+          collegeName,
+          courseId,
+          courseName,
+          branchId,
+          branchName,
+          batch: 'All Batches',
+          year: 'All Years',
+          semester: 'All Semesters',
+          attendanceDate: normalizedDate,
+          students: allStudents,
+          attendanceRecords: allAttendanceRecords,
+          allBatchesData: allBatchesData,
+          recipientUser: hod, // Pass user info for personalized email
+          senderName: senderName // Pass sender name
+        });
+
+        reportResults.push({
+          user: hod.name,
+          userEmail: hod.email,
+          role: 'HOD',
+          college: collegeName,
+          course: courseName,
+          ...result
+        });
+
+        processedUsers.add(reportKey);
+        console.log(`   📧 Day-end report sent to HOD: ${hod.name} (${hod.email})`);
+      } catch (error) {
+        console.error(`   ❌ Error sending day-end report to HOD ${hod.name}:`, error);
+        reportResults.push({
+          user: hod.name,
+          userEmail: hod.email,
+          role: 'HOD',
+          college: collegeName,
+          course: courseName,
+          pdfGenerated: false,
+          emailsSent: 0,
+          emailsFailed: 0,
+          errors: [error.message]
+        });
+      }
+    }
+
+    // Log summary
+    const totalSent = reportResults.filter(r => r.emailsSent > 0).length;
+    const totalFailed = reportResults.filter(r => r.emailsFailed > 0).length;
+
+    console.log(`\n📋 Manual Day-End Report Summary: ${totalSent} report(s) sent successfully, ${totalFailed} failed`);
+
+    res.json({
+      success: true,
+      message: `Day-end reports sent to ${totalSent} recipient(s)`,
+      data: {
+        attendanceDate: normalizedDate,
+        reportResults,
+        totalSent,
+        totalFailed,
+        totalRecipients: processedUsers.size
+      }
+    });
+  } catch (error) {
+    console.error('Failed to send day-end reports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while sending day-end reports'
+    });
   }
 };
 

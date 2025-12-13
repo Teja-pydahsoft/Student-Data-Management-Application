@@ -16,5 +16,6 @@ router.get('/', attachUserScope, attendanceController.getAttendance);
 router.post('/', attachUserScope, attendanceController.markAttendance);
 router.delete('/', attachUserScope, attendanceController.deleteAttendanceForDate);
 router.post('/retry-sms', attendanceController.retrySms);
+router.post('/send-day-end-reports', attachUserScope, attendanceController.sendDayEndReports);
 
 module.exports = router;

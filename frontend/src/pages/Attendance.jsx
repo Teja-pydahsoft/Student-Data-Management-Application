@@ -16,7 +16,8 @@ import {
   Download,
   ArrowUpDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -179,6 +180,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [dayEndGrouped, setDayEndGrouped] = useState([]);
   const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
   const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
+  const [sendingReports, setSendingReports] = useState(false);
   const [markHolidayLoading, setMarkHolidayLoading] = useState(false);
   const [holidayReasonModalOpen, setHolidayReasonModalOpen] = useState(false);
   const [holidayReason, setHolidayReason] = useState('');
@@ -817,6 +819,39 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     } catch (error) {
       console.error('Download report error:', error);
       toast.error('Unable to download report');
+    }
+  };
+
+  const handleSendDayEndReports = async () => {
+    if (!attendanceDate) {
+      toast.error('Please select a date');
+      return;
+    }
+
+    setSendingReports(true);
+    try {
+      const response = await api.post('/attendance/send-day-end-reports', {
+        date: attendanceDate
+      });
+
+      if (response.data?.success) {
+        const { totalSent, totalFailed, totalRecipients } = response.data.data || {};
+        if (totalSent > 0) {
+          toast.success(`Reports sent successfully to ${totalSent} recipient(s)`);
+        } else {
+          toast.info('No reports were sent. Please check if there are any recipients configured.');
+        }
+        if (totalFailed > 0) {
+          toast.error(`${totalFailed} report(s) failed to send`);
+        }
+      } else {
+        throw new Error(response.data?.message || 'Failed to send reports');
+      }
+    } catch (error) {
+      console.error('Send reports error:', error);
+      toast.error(error.response?.data?.message || 'Unable to send reports');
+    } finally {
+      setSendingReports(false);
     }
   };
 
@@ -2464,12 +2499,31 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     Excel
                   </button>
                 </div>
-                <button
-                  onClick={() => setDayEndReportOpen(false)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSendDayEndReports}
+                    disabled={sendingReports}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {sendingReports ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={14} />
+                        Send Reports
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDayEndReportOpen(false)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>

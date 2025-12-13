@@ -1,40 +1,52 @@
 const { masterPool } = require('../config/database');
 
+// Exclude the same courses as in attendance page (must match frontend EXCLUDED_COURSES)
+const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma'];
+
 /**
  * Get all attendance data for a specific date, grouped by batch/course/branch/year/semester
  * This is used to check if all batches are marked and to generate comprehensive reports
  */
 const getAllAttendanceForDate = async (attendanceDate) => {
   try {
+    // Build query with course exclusions
+    let query = `
+      SELECT
+        s.id,
+        s.admission_number,
+        s.student_name,
+        s.pin_no,
+        s.student_mobile,
+        s.parent_mobile1,
+        s.parent_mobile2,
+        s.batch,
+        s.course,
+        s.branch,
+        s.current_year,
+        s.current_semester,
+        s.college,
+        s.student_data,
+        s.student_status,
+        ar.status AS attendance_status
+      FROM students s
+      LEFT JOIN attendance_records ar
+        ON ar.student_id = s.id
+       AND ar.attendance_date = ?
+      WHERE s.student_status = 'Regular'
+    `;
+    
+    const params = [attendanceDate];
+    
+    // Exclude certain courses (same as attendance page)
+    if (EXCLUDED_COURSES.length > 0) {
+      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      params.push(...EXCLUDED_COURSES);
+    }
+    
+    query += ` ORDER BY s.college, s.course, s.batch, s.branch, s.current_year, s.current_semester, s.student_name`;
+    
     // Get all students with their attendance for the date
-    const [rows] = await masterPool.query(
-      `
-        SELECT
-          s.id,
-          s.admission_number,
-          s.student_name,
-          s.pin_no,
-          s.student_mobile,
-          s.parent_mobile1,
-          s.parent_mobile2,
-          s.batch,
-          s.course,
-          s.branch,
-          s.current_year,
-          s.current_semester,
-          s.college,
-          s.student_data,
-          s.student_status,
-          ar.status AS attendance_status
-        FROM students s
-        LEFT JOIN attendance_records ar
-          ON ar.student_id = s.id
-         AND ar.attendance_date = ?
-        WHERE s.student_status = 'Regular'
-        ORDER BY s.college, s.course, s.batch, s.branch, s.current_year, s.current_semester, s.student_name
-      `,
-      [attendanceDate]
-    );
+    const [rows] = await masterPool.query(query, params);
 
     // Group by College → Course → Batch → Branch → Year → Semester
     const groups = new Map();
