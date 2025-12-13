@@ -883,7 +883,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.studentName) params.append('studentName', filters.studentName);
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile);
 
-      const response = await api.get(`/attendance?${params.toString()}`);
+      // Use DELETE endpoint with countOnly=true to get the count (it won't actually delete)
+      const response = await api.delete(`/attendance?${params.toString()}`);
       setDeleteCount(response.data.data.count || 0);
       setDeleteConfirmModalOpen(true);
     } catch (error) {

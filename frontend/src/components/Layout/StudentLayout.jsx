@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import {
     Home,
     User,
     LogOut,
     Menu,
     X,
-    BookOpen,
-    Calendar,
     FileText
 } from 'lucide-react';
-import useAuthStore from '../store/authStore';
+import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 
 const StudentLayout = ({ children }) => {
@@ -21,14 +19,12 @@ const StudentLayout = ({ children }) => {
     const handleLogout = () => {
         logout();
         toast.success('Logged out successfully');
-        navigate('/login');
+        navigate('/student/login');
     };
 
     const navItems = [
-        { icon: Home, label: 'Dashboard', path: '/dashboard' },
-        { icon: User, label: 'Profile', path: '/profile' },
-        // { icon: BookOpen, label: 'Results', path: '/results' }, // Future
-        // { icon: Calendar, label: 'Timetable', path: '/timetable' }, // Future
+        { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
+        { icon: User, label: 'Profile', path: '/student/profile' },
     ];
 
     return (
@@ -87,7 +83,7 @@ const StudentLayout = ({ children }) => {
                         ))}
                         {/* Semester Registration (Special) */}
                         <NavLink
-                            to="/semester-registration"
+                            to="/student/semester-registration"
                             onClick={() => setSidebarOpen(false)}
                             className={({ isActive }) => `
                   flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors mt-4
@@ -132,7 +128,5 @@ const StudentLayout = ({ children }) => {
     );
 };
 
-// Need access to Outlet
-import { Outlet } from 'react-router-dom';
-
 export default StudentLayout;
+

@@ -19,13 +19,29 @@ import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
 
+// Student Pages
+import StudentDashboard from './pages/student/Dashboard';
+import StudentProfile from './pages/student/Profile';
+import SemesterRegistration from './pages/student/SemesterRegistration';
+
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
+import StudentLayout from './components/Layout/StudentLayout';
 
-// Protected Route Component
+// Protected Route Component for Admin
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuthStore();
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  const { isAuthenticated, userType } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (userType === 'student') return <Navigate to="/student/dashboard" />;
+  return children;
+};
+
+// Protected Route Component for Student
+const ProtectedStudentRoute = ({ children }) => {
+  const { isAuthenticated, userType } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/student/login" />;
+  if (userType === 'admin') return <Navigate to="/" />;
+  return children;
 };
 
 function App() {
@@ -59,6 +75,7 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
+        <Route path="/student/login" element={<Login />} />
         <Route path="/form/:formId" element={<PublicForm />} />
         
         {/* Protected Admin Routes */}
@@ -83,6 +100,21 @@ function App() {
           <Route path="fees" element={<FeeManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />
+        </Route>
+        
+        {/* Protected Student Routes */}
+        <Route
+          path="/student"
+          element={
+            <ProtectedStudentRoute>
+              <StudentLayout />
+            </ProtectedStudentRoute>
+          }
+        >
+          <Route index element={<Navigate to="/student/dashboard" replace />} />
+          <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="profile" element={<StudentProfile />} />
+          <Route path="semester-registration" element={<SemesterRegistration />} />
         </Route>
         
         {/* Fallback */}

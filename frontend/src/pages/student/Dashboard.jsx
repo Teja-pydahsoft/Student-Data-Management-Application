@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, User, CheckCircle, Smartphone, Mail, Calendar, MapPin, Hash } from 'lucide-react';
-import useAuthStore from '../store/authStore';
-import axios from 'axios';
+import useAuthStore from '../../store/authStore';
+import api from '../../config/api';
 import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -17,8 +17,7 @@ const Dashboard = () => {
             try {
                 if (!user?.admission_number) return;
 
-                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                const response = await axios.get(`${apiUrl}/api/students/${user.admission_number}`);
+                const response = await api.get(`/students/${user.admission_number}`);
 
                 if (response.data.success) {
                     setStudentData(response.data.data);
@@ -66,7 +65,7 @@ const Dashboard = () => {
                         Registration for the upcoming semester is now live. Complete the process to secure your subjects.
                     </p>
                     <button
-                        onClick={() => navigate('/semester-registration')}
+                        onClick={() => navigate('/student/semester-registration')}
                         className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-sm cursor-pointer"
                     >
                         Register Now
@@ -155,7 +154,7 @@ const Dashboard = () => {
 
                     <div className="mt-auto">
                         <Link
-                            to="/profile"
+                            to="/student/profile"
                             className="flex items-center justify-between w-full p-4 rounded-lg border border-gray-200 hover:border-purple-200 hover:bg-purple-50 transition-colors group"
                         >
                             <span className="font-medium text-gray-700 group-hover:text-purple-700">View Full Profile</span>
@@ -169,3 +168,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

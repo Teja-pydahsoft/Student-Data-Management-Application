@@ -73,9 +73,20 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Error:', error.response?.status, error.response?.data || error.message);
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('admin');
-      window.location.href = '/login';
+      // Don't redirect if this is a login attempt (login endpoints should handle their own errors)
+      const isLoginEndpoint = error.config?.url?.includes('/login') || error.config?.url?.includes('/auth/login');
+      
+      if (!isLoginEndpoint) {
+        const userType = localStorage.getItem('userType');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('admin');
+        // Redirect to appropriate login page only if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = userType === 'student' ? '/student/login' : '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }

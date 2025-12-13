@@ -12,8 +12,13 @@ import {
 // Re-export for backward compatibility
 export { MODULE_ROUTE_MAP, getModuleKeyForPath };
 
-const resolveDefaultRoute = (user) => {
+const resolveDefaultRoute = (user, isStudent = false) => {
   if (!user) return '/login';
+  
+  // Student users go to student dashboard
+  if (isStudent || user.admission_number) {
+    return '/student/dashboard';
+  }
   
   // Super admin and legacy admin have full access - go to dashboard
   if (isFullAccessRole(user.role)) return '/';
@@ -48,29 +53,104 @@ const resolveDefaultRoute = (user) => {
   return '/';
 };
 
-const useAuthStore = create((set) => ({
-  user: JSON.parse(localStorage.getItem('user')) || null,
-  token: localStorage.getItem('token') || null,
-  isAuthenticated: !!localStorage.getItem('token'),
+const useAuthStore = create((set) => {
+  // Initialize from localStorage
+  const storedUser = localStorage.getItem('user');
+  const storedToken = localStorage.getItem('token');
+  const storedUserType = localStorage.getItem('userType');
   
-  login: async (username, password) => {
+  return {
+    user: storedUser ? JSON.parse(storedUser) : null,
+    token: storedToken || null,
+    isAuthenticated: !!storedToken,
+    userType: storedUserType || null, // 'admin' or 'student'
+    
+    login: async (username, password) => {
+      try {
+        const response = await api.post('/auth/login', { username, password });
+        
+        // Check if response has success flag
+        if (!response.data.success) {
+          return { 
+            success: false, 
+            message: response.data.message || 'Login failed' 
+          };
+        }
+        
+        const { token, user } = response.data;
+        
+        if (!token || !user) {
+          return { 
+            success: false, 
+            message: 'Invalid response from server' 
+          };
+        }
+        
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('userType', 'admin');
+        localStorage.removeItem('admin');
+        
+        set({ user, token, isAuthenticated: true, userType: 'admin' });
+        return { success: true, redirectPath: resolveDefaultRoute(user, false) };
+      } catch (error) {
+        console.error('Admin login error:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please check your credentials.';
+        return { 
+          success: false, 
+          message: errorMessage
+        };
+      }
+    },
+  
+  loginAsStudent: async (username, password) => {
     try {
-      const response = await api.post('/auth/login', { username, password });
+      const response = await api.post('/students/login', { username, password });
+      
+      // Check if response has success flag
+      if (!response.data.success) {
+        return { 
+          success: false, 
+          message: response.data.message || 'Login failed' 
+        };
+      }
+      
       const { token, user } = response.data;
+      
+      if (!token || !user) {
+        return { 
+          success: false, 
+          message: 'Invalid response from server' 
+        };
+      }
       
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('userType', 'student');
       localStorage.removeItem('admin');
       
-      set({ user, token, isAuthenticated: true });
-      return { success: true, redirectPath: resolveDefaultRoute(user) };
+      set({ user, token, isAuthenticated: true, userType: 'student' });
+      return { success: true, redirectPath: resolveDefaultRoute(user, true) };
     } catch (error) {
+      console.error('Student login error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please check your credentials.';
       return { 
         success: false, 
-        message: error.response?.data?.message || 'Login failed' 
+        message: errorMessage
       };
     }
   },
+  
+  setAuth: (user, token, userType = 'student') => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('userType', userType);
+    set({ user, token, isAuthenticated: true, userType });
+  },
+  
+  updateUser: (userData) => set((state) => ({
+    user: { ...state.user, ...userData }
+  })),
   
   logout: () => {
     // Clear all React Query cache immediately
@@ -79,6 +159,7 @@ const useAuthStore = create((set) => ({
     // Clear all localStorage items (comprehensive cleanup)
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('userType');
     localStorage.removeItem('admin');
     
     // Clear any other potential cache/data items
@@ -98,27 +179,31 @@ const useAuthStore = create((set) => ({
     }
     
     // Clear state
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, token: null, isAuthenticated: false, userType: null });
   },
   
   verifyToken: async () => {
     try {
-      const response = await api.get('/auth/verify');
+      const userType = localStorage.getItem('userType');
+      const endpoint = userType === 'student' ? '/students/verify' : '/auth/verify';
+      const response = await api.get(endpoint);
       const { user } = response.data || {};
       if (user) {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.removeItem('admin');
-        set({ user, isAuthenticated: true });
+        set({ user, isAuthenticated: true, userType: userType || 'admin' });
         return true;
       }
       throw new Error('Invalid response');
     } catch (error) {
-      set({ user: null, token: null, isAuthenticated: false });
+      set({ user: null, token: null, isAuthenticated: false, userType: null });
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('userType');
       return false;
     }
-  },
-}));
+  }
+  }
+});
 
 export default useAuthStore;

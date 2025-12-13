@@ -9,9 +9,9 @@ import {
     Loader2,
     Smartphone
 } from 'lucide-react';
-import useAuthStore from '../store/authStore';
+import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
-import axios from 'axios';
+import api from '../../config/api';
 
 const SemesterRegistration = () => {
     const { user } = useAuthStore();
@@ -40,10 +40,7 @@ const SemesterRegistration = () => {
             try {
                 if (!user?.admission_number) return;
 
-                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                const response = await axios.get(`${apiUrl}/api/students/${user.admission_number}`, {
-                    headers: { Authorization: `Bearer ${useAuthStore.getState().token}` }
-                });
+                const response = await api.get(`/students/${user.admission_number}`);
 
                 if (response.data.success) {
                     const student = response.data.data;
@@ -75,15 +72,12 @@ const SemesterRegistration = () => {
 
         setLoading(true);
         try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-            const response = await axios.post(`${apiUrl}/api/students/otp/send`, {
+            const response = await api.post('/students/otp/send', {
                 admissionNumber: user.admission_number,
                 mobileNumber: mobile,
                 year: studentData?.current_year || 'N/A',
                 semester: studentData?.current_semester || 'N/A',
                 type: type.charAt(0).toUpperCase() + type.slice(1) // 'Student' or 'Parent'
-            }, {
-                headers: { Authorization: `Bearer ${useAuthStore.getState().token}` }
             });
 
             if (response.data.success) {
@@ -115,13 +109,10 @@ const SemesterRegistration = () => {
 
         setLoading(true);
         try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-            const response = await axios.post(`${apiUrl}/api/students/otp/verify`, {
+            const response = await api.post('/students/otp/verify', {
                 admissionNumber: user.admission_number,
                 mobileNumber: mobile,
                 otp: otp
-            }, {
-                headers: { Authorization: `Bearer ${useAuthStore.getState().token}` }
             });
 
             if (response.data.success) {
@@ -427,21 +418,21 @@ const SemesterRegistration = () => {
                                         )}
                                     </div>
                                 )}
-                            </div>
 
-                            <div className="flex justify-between pt-4">
-                                <button
-                                    onClick={() => setCurrentStep(1)}
-                                    className="px-6 py-2 text-gray-600 font-medium hover:text-gray-900"
-                                >
-                                    Back
-                                </button>
-                                <button
-                                    onClick={handleNextStep}
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95"
-                                >
-                                    Next Step <ArrowRight size={18} />
-                                </button>
+                                <div className="flex justify-between pt-4">
+                                    <button
+                                        onClick={() => setCurrentStep(1)}
+                                        className="px-6 py-2 text-gray-600 font-medium hover:text-gray-900"
+                                    >
+                                        Back
+                                    </button>
+                                    <button
+                                        onClick={handleNextStep}
+                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95"
+                                    >
+                                        Next Step <ArrowRight size={18} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -476,3 +467,4 @@ const SemesterRegistration = () => {
 };
 
 export default SemesterRegistration;
+

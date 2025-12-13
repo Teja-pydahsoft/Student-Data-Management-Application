@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LogIn, Loader2, Eye, EyeOff, Users, Shield } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
@@ -7,19 +7,27 @@ import LoadingAnimation from '../components/LoadingAnimation';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuthStore();
+  const location = useLocation();
+  const { login, loginAsStudent, isAuthenticated, userType } = useAuthStore();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Determine if this is a student login based on route
+  const isStudentLogin = location.pathname.startsWith('/student/login');
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      if (userType === 'student' || isStudentLogin) {
+        navigate('/student/dashboard');
+      } else {
+        navigate('/');
+      }
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, userType, isStudentLogin]);
 
   const handleChange = (e) => {
     setFormData({
@@ -37,12 +45,28 @@ const Login = () => {
     }
 
     setLoading(true);
-    const result = await login(formData.username, formData.password);
+    
+    // Try login - attempt both student and admin login to handle credentials from either type
+    let result;
+    if (isStudentLogin) {
+      // On student login page, try student login first, then admin as fallback
+      result = await loginAsStudent(formData.username, formData.password);
+      if (!result.success) {
+        result = await login(formData.username, formData.password);
+      }
+    } else {
+      // On admin login page, try admin login first, then student as fallback
+      result = await login(formData.username, formData.password);
+      if (!result.success) {
+        result = await loginAsStudent(formData.username, formData.password);
+      }
+    }
+    
     setLoading(false);
 
     if (result.success) {
       toast.success('Login successful!');
-      navigate(result.redirectPath || '/');
+      navigate(result.redirectPath || (isStudentLogin ? '/student/dashboard' : '/'));
     } else {
       toast.error(result.message);
     }
@@ -67,9 +91,13 @@ const Login = () => {
             loading="lazy"
           />
           <h1 className="text-xl sm:text-2xl font-semibold text-text-primary mb-1 tracking-tight">
-            Portal Login
+            {isStudentLogin ? 'Student Portal Login' : 'Portal Login'}
           </h1>
-          <p className="text-muted-text text-xs sm:text-sm">Access your assigned student management modules</p>
+          <p className="text-muted-text text-xs sm:text-sm">
+            {isStudentLogin 
+              ? 'Sign in to access your student dashboard' 
+              : 'Access your assigned student management modules'}
+          </p>
         </div>
 
         {/* Form */}
@@ -90,7 +118,7 @@ const Login = () => {
                 value={formData.username}
                 onChange={handleChange}
                 className="w-full px-4 py-3 text-base sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl bg-white text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 touch-manipulation min-h-[44px]"
-                placeholder="Enter admin username"
+                placeholder={isStudentLogin ? "Enter Admission No or PIN" : "Enter admin username"}
                 disabled={loading}
               />
               <Users

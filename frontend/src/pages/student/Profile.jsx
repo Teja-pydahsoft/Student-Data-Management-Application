@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../../config/api';
 import { User, Mail, Phone, MapPin, Calendar, Book, Hash } from 'lucide-react';
-import useAuthStore from '../store/authStore';
+import useAuthStore from '../../store/authStore';
 import { toast } from 'react-hot-toast';
 
 const Profile = () => {
@@ -12,10 +12,7 @@ const Profile = () => {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                const response = await axios.get(`${apiUrl}/api/students/${user.admission_number}`, {
-                    headers: { Authorization: `Bearer ${useAuthStore.getState().token}` }
-                });
+                const response = await api.get(`/students/${user.admission_number}`);
 
                 if (response.data.success) {
                     setStudentData(response.data.data);
@@ -46,15 +43,9 @@ const Profile = () => {
 
     // Helper to safely get data
     const get = (path, fallback = 'N/A') => {
-        // Very basic implementation, assuming studentData structure matches backend return
-        // The backend returns { student: ..., currentStage: ... }
-        // Or if using the getStudentByAdmission endpoint: { success: true, data: { ...studentFields, student_data: {...} } }
         if (!displayData) return fallback;
         return displayData[path] || fallback;
     };
-
-    // The backend 'getStudentByAdmission' returns a flat object mixed with some parsed JSON in student_data?
-    // Actually the controller returns: { success: true, data: student } where student object has fields.
 
     // Helper to get nested student_data fields safely (Case-Insensitive)
     const getStudentData = (key, fallback = 'N/A') => {
@@ -234,3 +225,4 @@ const Profile = () => {
 };
 
 export default Profile;
+
