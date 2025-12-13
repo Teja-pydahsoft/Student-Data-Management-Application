@@ -9,10 +9,13 @@ const multer = require('multer');
 const photoUpload = multer({ dest: 'uploads/' });
 
 // Configure multer for document uploads (multiple files)
-const documentUpload = multer({ 
+const documentUpload = multer({
   dest: 'uploads/',
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit per file
 });
+
+// Public student login
+router.post('/login', studentController.login);
 
 // All routes are protected and scoped by user's assigned colleges/courses/branches
 router.get('/', authMiddleware, attachUserScope, studentController.getAllStudents);
@@ -46,6 +49,8 @@ router.put('/:admissionNumber', authMiddleware, attachUserScope, studentControll
 router.put('/:admissionNumber/pin-number', authMiddleware, attachUserScope, studentController.updatePinNumber);
 router.get('/:admissionNumber/password', authMiddleware, attachUserScope, studentController.viewStudentPassword);
 router.post('/:admissionNumber/reset-password', authMiddleware, attachUserScope, studentController.resetStudentPassword);
+router.post('/otp/send', authMiddleware, studentController.sendOtp);
+router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.delete('/:admissionNumber', authMiddleware, attachUserScope, studentController.deleteStudent);
 
 module.exports = router;

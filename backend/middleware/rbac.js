@@ -28,7 +28,7 @@ const parseArrayData = (data) => {
 const verifyRole = (...allowedRoles) => {
   return (req, res, next) => {
     const user = req.user || req.admin;
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -59,7 +59,7 @@ const verifyRole = (...allowedRoles) => {
 const verifyPermission = (module, operation = 'read') => {
   return async (req, res, next) => {
     const user = req.user || req.admin;
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -92,7 +92,7 @@ const verifyPermission = (module, operation = 'read') => {
 const attachUserScope = async (req, res, next) => {
   try {
     const user = req.user || req.admin;
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -109,6 +109,20 @@ const attachUserScope = async (req, res, next) => {
         allCourses: true,
         allBranches: true,
         unrestricted: true
+      };
+      return next();
+    }
+
+    // Students don't have RBAC scope (they are not in rbac_users table)
+    if (user.role === 'student') {
+      req.userScope = {
+        collegeIds: [],
+        courseIds: [],
+        branchIds: [],
+        allCourses: false,
+        allBranches: false,
+        unrestricted: false,
+        isStudent: true
       };
       return next();
     }
@@ -131,12 +145,12 @@ const attachUserScope = async (req, res, next) => {
     }
 
     const userData = rows[0];
-    
+
     // Parse array data from JSON columns
     const collegeIds = parseArrayData(userData.college_ids);
     const courseIds = parseArrayData(userData.course_ids);
     const branchIds = parseArrayData(userData.branch_ids);
-    
+
     // Fall back to single IDs if arrays are empty
     if (collegeIds.length === 0 && userData.college_id) {
       collegeIds.push(userData.college_id);
@@ -205,7 +219,7 @@ const attachUserScope = async (req, res, next) => {
  */
 const verifyCanCreateRole = (req, res, next) => {
   const user = req.user || req.admin;
-  
+
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -335,7 +349,7 @@ const verifyCanManageUser = async (req, res, next) => {
       if (targetBranchIds.length === 0 && targetUser.branch_id) {
         targetBranchIds.push(targetUser.branch_id);
       }
-      
+
       const hasOverlap = targetBranchIds.some(id => currentBranchIds.includes(id));
       if (!hasOverlap) {
         return res.status(403).json({

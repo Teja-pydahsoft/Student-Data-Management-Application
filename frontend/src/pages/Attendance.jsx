@@ -186,6 +186,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [pendingFilter, setPendingFilter] = useState('all'); // all | pending | marked
   const [showPendingStudents, setShowPendingStudents] = useState(false);
   const [allBatchesMarkedModalOpen, setAllBatchesMarkedModalOpen] = useState(false);
+  const [deleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
+  const [deleteCount, setDeleteCount] = useState(0);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [gettingDeleteCount, setGettingDeleteCount] = useState(false);
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
     rows = rows.filter((row) => {
@@ -859,6 +863,63 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       toast.error(error.response?.data?.message || 'Unable to mark as no class work');
     } finally {
       setMarkHolidayLoading(false);
+    }
+  };
+
+  const handleGetDeleteCount = async () => {
+    setGettingDeleteCount(true);
+    try {
+      const params = new URLSearchParams({
+        date: attendanceDate,
+        countOnly: 'true'
+      });
+
+      // Add filter parameters if they exist
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      if (filters.currentYear) params.append('currentYear', filters.currentYear);
+      if (filters.currentSemester) params.append('currentSemester', filters.currentSemester);
+      if (filters.studentName) params.append('studentName', filters.studentName);
+      if (filters.parentMobile) params.append('parentMobile', filters.parentMobile);
+
+      const response = await api.get(`/attendance?${params.toString()}`);
+      setDeleteCount(response.data.data.count || 0);
+      setDeleteConfirmModalOpen(true);
+    } catch (error) {
+      console.error('Failed to get delete count:', error);
+      toast.error(error.response?.data?.message || 'Failed to get count of records');
+    } finally {
+      setGettingDeleteCount(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteConfirmModalOpen(false);
+    setDeleteLoading(true);
+    try {
+      const params = new URLSearchParams({
+        date: attendanceDate
+      });
+
+      // Add filter parameters if they exist
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      if (filters.currentYear) params.append('currentYear', filters.currentYear);
+      if (filters.currentSemester) params.append('currentSemester', filters.currentSemester);
+      if (filters.studentName) params.append('studentName', filters.studentName);
+      if (filters.parentMobile) params.append('parentMobile', filters.parentMobile);
+
+      const response = await api.delete(`/attendance?${params.toString()}`);
+      toast.success(response.data.message || `Deleted ${response.data.data.deletedCount} attendance record(s)`);
+      await loadAttendance(1);
+    } catch (error) {
+      console.error('Failed to delete attendance:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete attendance records');
+    } finally {
+      setDeleteLoading(false);
+      setDeleteCount(0);
     }
   };
 
@@ -2472,6 +2533,75 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Clear Today's Attendance</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  This will delete attendance records for {attendanceDate} matching your current filters
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setDeleteConfirmModalOpen(false);
+                  setDeleteCount(0);
+                }}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                disabled={deleteLoading}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-red-100 p-2">
+                    <AlertTriangle size={20} className="text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-red-900">
+                      {deleteCount} attendance record{deleteCount !== 1 ? 's' : ''} will be deleted
+                    </p>
+                    <p className="text-xs text-red-700 mt-1">
+                      This action cannot be undone. Make sure you want to delete these records.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setDeleteConfirmModalOpen(false);
+                    setDeleteCount(0);
+                  }}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                  className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Confirm Delete'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Statistics */}
       <section className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
@@ -2555,23 +2685,21 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             {isAdmin && isToday && (
               <button
                 type="button"
-                onClick={async () => {
-                  if (!window.confirm(`Are you sure you want to delete all attendance records for ${attendanceDate}? This action cannot be undone.`)) {
-                    return;
-                  }
-                  try {
-                    await api.delete(`/attendance?date=${attendanceDate}`);
-                    toast.success('Attendance records deleted successfully');
-                    await loadAttendance(1);
-                  } catch (error) {
-                    console.error('Failed to delete attendance:', error);
-                    toast.error(error.response?.data?.message || 'Failed to delete attendance records');
-                  }
-                }}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px]"
+                onClick={handleGetDeleteCount}
+                disabled={gettingDeleteCount || deleteLoading}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <X size={16} />
-                Clear Today's Data
+                {gettingDeleteCount || deleteLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    {gettingDeleteCount ? 'Counting...' : 'Deleting...'}
+                  </>
+                ) : (
+                  <>
+                    <X size={16} />
+                    Clear Today's Data
+                  </>
+                )}
               </button>
             )}
             <button

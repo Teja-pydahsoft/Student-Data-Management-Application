@@ -56,6 +56,7 @@ module.exports = {
   createCache,
   studentsCache,
   filterOptionsCache,
-  statsCache
+  statsCache,
+  otpCache: createCache(5 * 60 * 1000) // 5 minutes TTL for OTPs
 };
 

@@ -73,13 +73,29 @@ const useAuthStore = create((set) => ({
   },
   
   logout: () => {
-    // Clear all React Query cache
+    // Clear all React Query cache immediately
     queryClient.clear();
     
-    // Clear localStorage
+    // Clear all localStorage items (comprehensive cleanup)
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('admin');
+    
+    // Clear any other potential cache/data items
+    // Clear all localStorage items that might contain cached data
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('react-query') || key.startsWith('cache') || key.startsWith('app-'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+    } catch (error) {
+      // Ignore errors during cleanup
+      console.warn('Error during localStorage cleanup:', error);
+    }
     
     // Clear state
     set({ user: null, token: null, isAuthenticated: false });

@@ -785,6 +785,7 @@ exports.getAttendance = async (req, res) => {
 exports.deleteAttendanceForDate = async (req, res) => {
   try {
     const attendanceDate = getDateOnlyString(req.query.date || req.body.date);
+    const countOnly = req.query.countOnly === 'true' || req.body.countOnly === true;
     
     if (!attendanceDate) {
       return res.status(400).json({
@@ -793,10 +794,145 @@ exports.deleteAttendanceForDate = async (req, res) => {
       });
     }
 
-    // Delete all attendance records for the specified date
+    // Extract filter parameters
+    const {
+      batch,
+      currentYear,
+      currentSemester,
+      studentName,
+      parentMobile,
+      course,
+      branch
+    } = req.query;
+
+    // Build the WHERE clause for filtering students
+    let whereConditions = [];
+    const params = [];
+
+    // Filter for regular students only
+    whereConditions.push('s.student_status = ?');
+    params.push('Regular');
+
+    // Exclude certain courses
+    if (EXCLUDED_COURSES.length > 0) {
+      whereConditions.push(`s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`);
+      params.push(...EXCLUDED_COURSES);
+    }
+
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        whereConditions.push(scopeCondition);
+        params.push(...scopeParams);
+      }
+    }
+
+    // Apply filters
+    if (batch) {
+      whereConditions.push('s.batch = ?');
+      params.push(batch);
+    }
+
+    if (currentYear) {
+      const parsedYear = parseInt(currentYear, 10);
+      if (!Number.isNaN(parsedYear)) {
+        whereConditions.push('s.current_year = ?');
+        params.push(parsedYear);
+      }
+    }
+
+    if (currentSemester) {
+      const parsedSemester = parseInt(currentSemester, 10);
+      if (!Number.isNaN(parsedSemester)) {
+        whereConditions.push('s.current_semester = ?');
+        params.push(parsedSemester);
+      }
+    }
+
+    if (course) {
+      whereConditions.push('s.course = ?');
+      params.push(course);
+    }
+
+    if (branch) {
+      whereConditions.push('s.branch = ?');
+      params.push(branch);
+    }
+
+    if (studentName) {
+      const keyword = `%${studentName}%`;
+      whereConditions.push(`(
+        s.student_name LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+        OR s.pin_no LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+      )`);
+      params.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
+    }
+
+    if (parentMobile) {
+      const mobileLike = `%${parentMobile}%`;
+      whereConditions.push(`(
+        s.parent_mobile1 LIKE ?
+        OR s.parent_mobile2 LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile 1"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile 2"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."parent_mobile1"')) LIKE ?
+        OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."parent_mobile2"')) LIKE ?
+      )`);
+      params.push(mobileLike, mobileLike, mobileLike, mobileLike, mobileLike, mobileLike);
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? `WHERE ${whereConditions.join(' AND ')}`
+      : 'WHERE 1=1';
+
+    // Build query to count/delete attendance records matching filters
+    // We need to join with students table to apply filters
+    const queryBase = `
+      FROM attendance_records AS ar
+      INNER JOIN students AS s ON s.id = ar.student_id
+      ${whereClause}
+      AND ar.attendance_date = ?
+    `;
+    
+    params.push(attendanceDate);
+
+    if (countOnly) {
+      // Just return the count without deleting
+      const [countResult] = await masterPool.query(
+        `SELECT COUNT(*) AS count ${queryBase}`,
+        params
+      );
+      
+      return res.json({
+        success: true,
+        message: `Found ${countResult[0].count} attendance record(s) matching filters`,
+        data: {
+          date: attendanceDate,
+          count: countResult[0].count,
+          filters: {
+            batch: batch || null,
+            course: course || null,
+            branch: branch || null,
+            currentYear: currentYear || null,
+            currentSemester: currentSemester || null,
+            studentName: studentName || null,
+            parentMobile: parentMobile || null
+          }
+        }
+      });
+    }
+
+    // Delete the attendance records using JOIN
+    // MySQL DELETE with JOIN syntax: DELETE alias FROM table AS alias INNER JOIN ...
     const [result] = await masterPool.query(
-      'DELETE FROM attendance_records WHERE attendance_date = ?',
-      [attendanceDate]
+      `DELETE ar ${queryBase}`,
+      params
     );
 
     res.json({

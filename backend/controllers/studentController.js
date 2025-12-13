@@ -1,4 +1,6 @@
 const { masterPool, stagingPool } = require('../config/database');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { studentsCache } = require('../services/cache');
 const multer = require('multer');
 const csv = require('csv-parser');
@@ -9,6 +11,8 @@ const {
   normalizeStage
 } = require('../services/academicProgression');
 const { getScopeConditionString } = require('../utils/scoping');
+const { otpCache } = require('../services/cache'); // Import otpCache
+const smsService = require('../services/smsService'); // Import smsService
 
 // Configure multer for file uploads
 const upload = multer({ dest: 'uploads/' });
@@ -70,7 +74,7 @@ exports.uploadStudentPhoto = async (req, res) => {
     }
 
     // Log the successful upload with PIN number
-    const logMessage = pinNo 
+    const logMessage = pinNo
       ? `✅ Photo updated for student with PIN: ${pinNo} (Admission: ${admissionNumber})`
       : `✅ Photo updated for student (Admission: ${admissionNumber})`;
     console.log(logMessage);
@@ -205,7 +209,7 @@ const FIELD_MAPPING = {
   'Year': 'current_year',
   'Semister': 'current_semester',
   'Semester': 'current_semester',
-  
+
   // Alternative field names (for backward compatibility)
   'Student Mobile Number': 'student_mobile',
   'Admission Date': 'admission_date',
@@ -284,7 +288,7 @@ const normalizeHeaderKeyForLookup = (header) => {
 // Create a comprehensive field mapping with all possible variations
 const createComprehensiveFieldMapping = () => {
   const mapping = {};
-  
+
   // Define all possible field name variations for each database field
   const fieldVariations = {
     pin_no: ['pinnumber', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'pinno', 'pin_no', 'pin', 'pinnumber', 'pin_number', 'rollno', 'rollnumber', 'roll_no', 'rollnumber', 'roll_number', 'rollno', 'roll_no'],
@@ -389,7 +393,7 @@ const getFirstNonEmpty = (...values) =>
 // Data conversion functions to handle various input formats
 const convertDate = (value) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim();
   if (!str) return '';
 
@@ -421,7 +425,7 @@ const convertDate = (value) => {
     'nov': '11', 'november': '11',
     'dec': '12', 'december': '12'
   };
-  
+
   const ddmonyyyy = str.match(/^(\d{1,2})[-/.\s]+([a-z]+)[-/.\s]+(\d{4})$/i);
   if (ddmonyyyy) {
     const day = ddmonyyyy[1].padStart(2, '0');
@@ -490,9 +494,9 @@ const convertDate = (value) => {
 
 const convertGender = (value) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim().toUpperCase();
-  
+
   // Handle various gender formats
   if (str === 'M' || str === 'MALE' || str === 'BOY' || str === '1') {
     return 'M';
@@ -503,15 +507,15 @@ const convertGender = (value) => {
   if (str === 'OTHER' || str === 'O' || str === '3') {
     return 'Other';
   }
-  
+
   return str; // Return as-is if not recognized
 };
 
 const convertStudentType = (value) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim().toUpperCase();
-  
+
   // Normalize equivalent student types
   // CQ and CONV are the same - store as CONV
   if (str === 'CQ') {
@@ -520,7 +524,7 @@ const convertStudentType = (value) => {
   if (str === 'CONV') {
     return 'CONV';
   }
-  
+
   // MQ and MANG are the same - store as MANG
   if (str === 'MQ') {
     return 'MANG';
@@ -528,24 +532,24 @@ const convertStudentType = (value) => {
   if (str === 'MANG') {
     return 'MANG';
   }
-  
+
   // Return as-is (uppercase) for other types like LSPOT, LATER, SPOT, etc.
   return str;
 };
 
 const convertPhoneNumber = (value) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim();
-  
+
   // Remove common phone number formatting characters
   let cleaned = str.replace(/[\s\-\(\)\.]/g, '');
-  
+
   // Handle Excel number formatting (remove scientific notation)
   if (typeof value === 'number') {
     cleaned = value.toString().replace(/\.0+$/, ''); // Remove trailing .0
   }
-  
+
   // Remove leading + or 0 if present
   if (cleaned.startsWith('+')) {
     cleaned = cleaned.substring(1);
@@ -553,28 +557,28 @@ const convertPhoneNumber = (value) => {
   if (cleaned.startsWith('0') && cleaned.length > 10) {
     cleaned = cleaned.substring(1);
   }
-  
+
   return cleaned;
 };
 
 const convertAdmissionNumber = (value) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim();
-  
+
   // Handle Excel number formatting
   if (typeof value === 'number') {
     return value.toString().replace(/\.0+$/, ''); // Remove trailing .0
   }
-  
+
   return str.toUpperCase(); // Convert to uppercase
 };
 
 const convertText = (value, capitalize = false) => {
   if (!value || value === '') return '';
-  
+
   const str = value.toString().trim();
-  
+
   if (capitalize) {
     // Capitalize first letter of each word
     return str
@@ -583,28 +587,28 @@ const convertText = (value, capitalize = false) => {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }
-  
+
   return str;
 };
 
 const convertNumber = (value) => {
   if (value === undefined || value === null || value === '') return '';
-  
+
   if (typeof value === 'number') {
     return value.toString();
   }
-  
+
   const str = value.toString().trim();
   if (str === '') return '';
-  
+
   // Remove non-numeric characters except decimal point
   const cleaned = str.replace(/[^\d.]/g, '');
-  
+
   // If it's a whole number, remove decimal point
   if (cleaned.includes('.') && cleaned.endsWith('.0')) {
     return cleaned.replace(/\.0+$/, '');
   }
-  
+
   return cleaned || str;
 };
 
@@ -615,47 +619,47 @@ const convertFieldValue = (fieldName, value) => {
   }
 
   const field = fieldName.toLowerCase();
-  
+
   // Date fields
   if (field.includes('dob') || field.includes('date') || field.includes('birth')) {
     return convertDate(value);
   }
-  
+
   // Gender field
   if (field.includes('gender') || field === 'sex' || field === 'mf' || field === 'm/f') {
     return convertGender(value);
   }
-  
+
   // Student type field - check for stud_type field
   if (field === 'stud_type' || field.includes('stud_type') || field.includes('studtype') || field.includes('studenttype') || field === 'type' || field === 'category') {
     return convertStudentType(value);
   }
-  
+
   // Phone number fields
   if (field.includes('mobile') || field.includes('phone') || field.includes('contact')) {
     return convertPhoneNumber(value);
   }
-  
+
   // Admission number fields
   if (field.includes('admission') || field.includes('admit') || field.includes('enrollment')) {
     return convertAdmissionNumber(value);
   }
-  
+
   // Name fields - capitalize
   if (field.includes('name') && !field.includes('number')) {
     return convertText(value, true);
   }
-  
+
   // Number fields
   if (field.includes('year') || field.includes('semester') || field.includes('sem')) {
     return convertNumber(value);
   }
-  
+
   // Aadhar number - remove spaces and convert to uppercase
   if (field.includes('adhar') || field.includes('aadhar') || field.includes('uid')) {
     return value.toString().trim().replace(/\s+/g, '').toUpperCase();
   }
-  
+
   // Batch field - preserve exact value, especially numeric values like "2025"
   if (field === 'batch') {
     // If it's a number, convert to string to preserve it exactly
@@ -665,7 +669,7 @@ const convertFieldValue = (fieldName, value) => {
     // If it's a string, just trim it
     return value.toString().trim();
   }
-  
+
   // Default: trim and return
   return convertText(value);
 };
@@ -675,7 +679,7 @@ const countFilledFields = (sanitized) => {
   if (!sanitized || typeof sanitized !== 'object') {
     return 0;
   }
-  
+
   let count = 0;
   Object.values(sanitized).forEach((value) => {
     if (value !== null && value !== undefined && value !== '') {
@@ -686,7 +690,7 @@ const countFilledFields = (sanitized) => {
       }
     }
   });
-  
+
   return count;
 };
 
@@ -698,7 +702,7 @@ const mapRowToStudentRecord = (row, rowNumber) => {
     if (!header || header.toString().trim() === '') {
       return;
     }
-    
+
     // Store raw value
     const cleanedValue = sanitizeCellValue(rawValue);
     raw[header] = cleanedValue;
@@ -706,16 +710,16 @@ const mapRowToStudentRecord = (row, rowNumber) => {
     // Normalize header and find matching database field
     const normalizedHeader = normalizeHeaderKeyForLookup(header);
     const mappedKey = FIELD_LOOKUP[normalizedHeader];
-    
+
     if (mappedKey && cleanedValue !== '') {
       // Convert value based on field type
       let convertedValue = convertFieldValue(mappedKey, rawValue);
-      
+
       // Ensure student type conversion is applied (double-check)
       if (mappedKey === 'stud_type' && convertedValue) {
         convertedValue = convertStudentType(convertedValue);
       }
-      
+
       if (convertedValue !== '') {
         sanitized[mappedKey] = convertedValue;
       }
@@ -788,7 +792,7 @@ const fetchExistingAdmissionNumbers = async (admissionNumbers = []) => {
 const buildCourseBranchIndex = async (collegeId = null) => {
   let query = 'SELECT id, name, code, college_id FROM courses WHERE is_active = 1';
   let queryParams = [];
-  
+
   if (collegeId !== null && collegeId !== undefined) {
     const parsedCollegeId = parseInt(collegeId, 10);
     if (!Number.isNaN(parsedCollegeId)) {
@@ -796,7 +800,7 @@ const buildCourseBranchIndex = async (collegeId = null) => {
       queryParams.push(parsedCollegeId);
     }
   }
-  
+
   const [courses] = await masterPool.query(query, queryParams);
 
   const baseIndex = {
@@ -1061,7 +1065,7 @@ const checkCourseCompletion = (currentStage, courseConfig) => {
 
   // Get the number of semesters for the final year
   let semestersForFinalYear = DEFAULT_SEMESTERS_PER_YEAR;
-  
+
   if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig)) {
     const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === totalYears);
     if (yearConfig && yearConfig.semesters) {
@@ -1090,7 +1094,7 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
 
   const student = students[0];
   const parsedStudentData = parseJSON(student.student_data) || {};
-  
+
   const currentStage = resolveStageFromData(parsedStudentData, {
     year: student.current_year || 1,
     semester: student.current_semester || 1
@@ -1114,16 +1118,16 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
              LIMIT 1`,
             [student.course]
           );
-          
+
           if (courseRows.length > 0) {
             const course = courseRows[0];
             courseConfig = {
               totalYears: course.total_years,
               semestersPerYear: course.semesters_per_year,
-              yearSemesterConfig: course.year_semester_config 
-                ? (typeof course.year_semester_config === 'string' 
-                    ? JSON.parse(course.year_semester_config) 
-                    : course.year_semester_config)
+              yearSemesterConfig: course.year_semester_config
+                ? (typeof course.year_semester_config === 'string'
+                  ? JSON.parse(course.year_semester_config)
+                  : course.year_semester_config)
                 : null
             };
           }
@@ -1143,7 +1147,7 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     if (!nextStage) {
       // Check if student has completed all years and semesters based on course configuration
       const hasCompletedCourse = checkCourseCompletion(currentStage, courseConfig);
-      
+
       if (hasCompletedCourse) {
         // Mark student as course completed
         await connection.query(
@@ -1184,14 +1188,14 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
           ]
         );
 
-        return { 
-          status: 'COURSE_COMPLETED', 
-          student, 
+        return {
+          status: 'COURSE_COMPLETED',
+          student,
           currentStage,
           message: 'Student has completed all years and semesters. Status updated to "Course Completed".'
         };
       }
-      
+
       return { status: 'MAX_STAGE', student, currentStage };
     }
   }
@@ -1326,7 +1330,7 @@ exports.previewBulkUploadStudents = async (req, res) => {
     );
 
     const existingAdmissions = await fetchExistingAdmissionNumbers(uniqueAdmissionsForLookup);
-    
+
     // Get collegeId from request body (for multipart/form-data) or query params
     const collegeId = req.body?.collegeId || req.query?.collegeId || null;
     const courseIndex = await buildCourseBranchIndex(collegeId);
@@ -1355,90 +1359,90 @@ exports.previewBulkUploadStudents = async (req, res) => {
     // Auto-assign is always on, so always generate admission numbers
     // Group records by academic year to find max admission number per year
     const recordsByYear = new Map(); // year -> array of records without admission numbers
-    
-    processedRows.forEach((record) => {
-        const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
-        if (!normalizedAdmission) {
-          // Get academic year from batch field
-          let academicYear = record.sanitized.batch || record.sanitized.academic_year;
-          
-          // Extract year if batch contains range like "2024-2028" or "2024-25"
-          if (academicYear && typeof academicYear === 'string') {
-            const yearMatch = academicYear.match(/^(\d{4})/);
-            if (yearMatch) {
-              academicYear = yearMatch[1];
-            }
-          }
-          
-          // Default to current year if no batch/academic year specified
-          if (!academicYear) {
-            academicYear = new Date().getFullYear().toString();
-          }
-          
-          if (!recordsByYear.has(academicYear)) {
-            recordsByYear.set(academicYear, []);
-          }
-          recordsByYear.get(academicYear).push(record);
-        }
-      });
 
-      // For each academic year, find max admission number and generate new ones
-      if (recordsByYear.size > 0) {
-        const masterConn = await masterPool.getConnection();
-        try {
-          for (const [year, records] of recordsByYear) {
-            // Query MySQL to find max admission number for this year
-            // Format: YEAR0001, YEAR0002, etc.
-            const yearPrefix = year.toString();
-            const [existingRows] = await masterConn.query(
-              `SELECT admission_number FROM students 
+    processedRows.forEach((record) => {
+      const normalizedAdmission = normalizeAdmissionNumber(record.sanitized.admission_number);
+      if (!normalizedAdmission) {
+        // Get academic year from batch field
+        let academicYear = record.sanitized.batch || record.sanitized.academic_year;
+
+        // Extract year if batch contains range like "2024-2028" or "2024-25"
+        if (academicYear && typeof academicYear === 'string') {
+          const yearMatch = academicYear.match(/^(\d{4})/);
+          if (yearMatch) {
+            academicYear = yearMatch[1];
+          }
+        }
+
+        // Default to current year if no batch/academic year specified
+        if (!academicYear) {
+          academicYear = new Date().getFullYear().toString();
+        }
+
+        if (!recordsByYear.has(academicYear)) {
+          recordsByYear.set(academicYear, []);
+        }
+        recordsByYear.get(academicYear).push(record);
+      }
+    });
+
+    // For each academic year, find max admission number and generate new ones
+    if (recordsByYear.size > 0) {
+      const masterConn = await masterPool.getConnection();
+      try {
+        for (const [year, records] of recordsByYear) {
+          // Query MySQL to find max admission number for this year
+          // Format: YEAR0001, YEAR0002, etc.
+          const yearPrefix = year.toString();
+          const [existingRows] = await masterConn.query(
+            `SELECT admission_number FROM students 
                WHERE admission_number REGEXP ? 
                ORDER BY admission_number DESC`,
-              [`^${yearPrefix}[0-9]{4}$`]
-            );
+            [`^${yearPrefix}[0-9]{4}$`]
+          );
 
-            // Find the maximum sequence number for this year
-            let maxSeq = 0;
-            existingRows.forEach(row => {
-              const admNum = row.admission_number;
-              if (admNum && admNum.startsWith(yearPrefix)) {
-                const seqPart = admNum.substring(yearPrefix.length);
-                const seqNum = parseInt(seqPart, 10);
-                if (!isNaN(seqNum) && seqNum > maxSeq) {
-                  maxSeq = seqNum;
-                }
+          // Find the maximum sequence number for this year
+          let maxSeq = 0;
+          existingRows.forEach(row => {
+            const admNum = row.admission_number;
+            if (admNum && admNum.startsWith(yearPrefix)) {
+              const seqPart = admNum.substring(yearPrefix.length);
+              const seqNum = parseInt(seqPart, 10);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
               }
-            });
+            }
+          });
 
-            // Also check current batch for duplicates
-            processedRows.forEach(r => {
-              const admNum = r.sanitized.admission_number;
-              if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
-                const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
-                if (!isNaN(seqNum) && seqNum > maxSeq) {
-                  maxSeq = seqNum;
-                }
+          // Also check current batch for duplicates
+          processedRows.forEach(r => {
+            const admNum = r.sanitized.admission_number;
+            if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+              const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
               }
-            });
+            }
+          });
 
-            console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
+          console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
 
-            // Generate admission numbers for records in this year
-            let nextSeq = maxSeq + 1;
-            records.forEach((record) => {
-              const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
-              record.sanitized.admission_number = generatedAdmission;
-              record.sanitized.admission_no = generatedAdmission;
-              console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
-              nextSeq++;
-            });
+          // Generate admission numbers for records in this year
+          let nextSeq = maxSeq + 1;
+          records.forEach((record) => {
+            const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+            record.sanitized.admission_number = generatedAdmission;
+            record.sanitized.admission_no = generatedAdmission;
+            console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
+            nextSeq++;
+          });
 
-            console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
-          }
-        } finally {
-          masterConn.release();
+          console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
         }
+      } finally {
+        masterConn.release();
       }
+    }
 
     // Track duplicates: for each admission number, find the row with most filled fields
     const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
@@ -1451,11 +1455,11 @@ exports.previewBulkUploadStudents = async (req, res) => {
       if (!normalizedAdmission) {
         return;
       }
-      
+
       if (!admissionGroups.has(normalizedAdmission)) {
         admissionGroups.set(normalizedAdmission, []);
       }
-      
+
       const filledCount = countFilledFields(record.sanitized);
       admissionGroups.get(normalizedAdmission).push({
         rowNumber: record.rowNumber,
@@ -1475,10 +1479,10 @@ exports.previewBulkUploadStudents = async (req, res) => {
           }
           return a.rowNumber - b.rowNumber;
         });
-        
+
         const bestRow = rows[0];
         bestRowMap.set(normalizedAdmission, bestRow.rowNumber);
-        
+
         // Mark all other rows as duplicates
         for (let i = 1; i < rows.length; i++) {
           duplicateRowNumbers.add(rows[i].rowNumber);
@@ -1526,7 +1530,7 @@ exports.previewBulkUploadStudents = async (req, res) => {
         const currentFilledCount = countFilledFields(sanitized);
         const bestRecord = processedRows.find(r => r.rowNumber === bestRowNumber);
         const bestFilledCount = bestRecord ? countFilledFields(bestRecord.sanitized) : 0;
-        
+
         issues.push(
           `Admission number already appears in row ${bestRowNumber} (${bestFilledCount} fields filled). This row (${currentFilledCount} fields filled) will be skipped - the row with most filled fields is kept.`
         );
@@ -1556,17 +1560,17 @@ exports.previewBulkUploadStudents = async (req, res) => {
           ...resultBase,
           course: courseValidation.course
             ? {
-                id: courseValidation.course.id,
-                name: courseValidation.course.name,
-                code: courseValidation.course.code || null
-              }
+              id: courseValidation.course.id,
+              name: courseValidation.course.name,
+              code: courseValidation.course.code || null
+            }
             : null,
           branch: courseValidation.branch
             ? {
-                id: courseValidation.branch.id,
-                name: courseValidation.branch.name,
-                code: courseValidation.branch.code || null
-              }
+              id: courseValidation.branch.id,
+              name: courseValidation.branch.name,
+              code: courseValidation.branch.code || null
+            }
             : null
         });
       } else {
@@ -1678,90 +1682,90 @@ exports.commitBulkUploadStudents = async (req, res) => {
   // Auto-assign is always on, so always generate admission numbers
   // Group records by academic year to find max admission number per year
   const recordsByYear = new Map(); // year -> array of records without admission numbers
-  
-  preparedRecords.forEach((record) => {
-      const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
-      if (!normalizedAdmission) {
-        // Get academic year from batch field
-        let academicYear = record.sanitizedData.batch || record.sanitizedData.academic_year;
-        
-        // Extract year if batch contains range like "2024-2028" or "2024-25"
-        if (academicYear && typeof academicYear === 'string') {
-          const yearMatch = academicYear.match(/^(\d{4})/);
-          if (yearMatch) {
-            academicYear = yearMatch[1];
-          }
-        }
-        
-        // Default to current year if no batch/academic year specified
-        if (!academicYear) {
-          academicYear = new Date().getFullYear().toString();
-        }
-        
-        if (!recordsByYear.has(academicYear)) {
-          recordsByYear.set(academicYear, []);
-        }
-        recordsByYear.get(academicYear).push(record);
-      }
-    });
 
-    // For each academic year, find max admission number and generate new ones
-    if (recordsByYear.size > 0) {
-      const masterConn = await masterPool.getConnection();
-      try {
-        for (const [year, records] of recordsByYear) {
-          // Query MySQL to find max admission number for this year
-          // Format: YEAR0001, YEAR0002, etc.
-          const yearPrefix = year.toString();
-          const [existingRows] = await masterConn.query(
-            `SELECT admission_number FROM students 
+  preparedRecords.forEach((record) => {
+    const normalizedAdmission = normalizeAdmissionNumber(record.sanitizedData.admission_number);
+    if (!normalizedAdmission) {
+      // Get academic year from batch field
+      let academicYear = record.sanitizedData.batch || record.sanitizedData.academic_year;
+
+      // Extract year if batch contains range like "2024-2028" or "2024-25"
+      if (academicYear && typeof academicYear === 'string') {
+        const yearMatch = academicYear.match(/^(\d{4})/);
+        if (yearMatch) {
+          academicYear = yearMatch[1];
+        }
+      }
+
+      // Default to current year if no batch/academic year specified
+      if (!academicYear) {
+        academicYear = new Date().getFullYear().toString();
+      }
+
+      if (!recordsByYear.has(academicYear)) {
+        recordsByYear.set(academicYear, []);
+      }
+      recordsByYear.get(academicYear).push(record);
+    }
+  });
+
+  // For each academic year, find max admission number and generate new ones
+  if (recordsByYear.size > 0) {
+    const masterConn = await masterPool.getConnection();
+    try {
+      for (const [year, records] of recordsByYear) {
+        // Query MySQL to find max admission number for this year
+        // Format: YEAR0001, YEAR0002, etc.
+        const yearPrefix = year.toString();
+        const [existingRows] = await masterConn.query(
+          `SELECT admission_number FROM students 
              WHERE admission_number REGEXP ? 
              ORDER BY admission_number DESC`,
-            [`^${yearPrefix}[0-9]{4}$`]
-          );
+          [`^${yearPrefix}[0-9]{4}$`]
+        );
 
-          // Find the maximum sequence number for this year
-          let maxSeq = 0;
-          existingRows.forEach(row => {
-            const admNum = row.admission_number;
-            if (admNum && admNum.startsWith(yearPrefix)) {
-              const seqPart = admNum.substring(yearPrefix.length);
-              const seqNum = parseInt(seqPart, 10);
-              if (!isNaN(seqNum) && seqNum > maxSeq) {
-                maxSeq = seqNum;
-              }
+        // Find the maximum sequence number for this year
+        let maxSeq = 0;
+        existingRows.forEach(row => {
+          const admNum = row.admission_number;
+          if (admNum && admNum.startsWith(yearPrefix)) {
+            const seqPart = admNum.substring(yearPrefix.length);
+            const seqNum = parseInt(seqPart, 10);
+            if (!isNaN(seqNum) && seqNum > maxSeq) {
+              maxSeq = seqNum;
             }
-          });
+          }
+        });
 
-          // Also check current batch for duplicates
-          preparedRecords.forEach(r => {
-            const admNum = r.sanitizedData.admission_number;
-            if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
-              const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
-              if (!isNaN(seqNum) && seqNum > maxSeq) {
-                maxSeq = seqNum;
-              }
+        // Also check current batch for duplicates
+        preparedRecords.forEach(r => {
+          const admNum = r.sanitizedData.admission_number;
+          if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+            const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
+            if (!isNaN(seqNum) && seqNum > maxSeq) {
+              maxSeq = seqNum;
             }
-          });
+          }
+        });
 
-          console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
+        console.log(`Academic year ${year}: Found max sequence ${maxSeq}`);
 
-          // Generate admission numbers for records in this year
-          let nextSeq = maxSeq + 1;
-          records.forEach((record) => {
-            const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
-            record.sanitizedData.admission_number = generatedAdmission;
-            record.sanitizedData.admission_no = generatedAdmission;
-            console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
-            nextSeq++;
-          });
+        // Generate admission numbers for records in this year
+        let nextSeq = maxSeq + 1;
+        records.forEach((record) => {
+          const generatedAdmission = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+          record.sanitizedData.admission_number = generatedAdmission;
+          record.sanitizedData.admission_no = generatedAdmission;
+          console.log(`Generated admission number: ${generatedAdmission} for academic year ${year}`);
+          nextSeq++;
+        });
 
-          console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
-        }
-      } finally {
-        masterConn.release();
+        console.log(`Auto-generated ${records.length} admission numbers for academic year ${year}`);
       }
+    } finally {
+      masterConn.release();
     }
+  }
 
   // Track duplicates: for each admission number, find the row with most filled fields
   const admissionGroups = new Map(); // admission -> array of {rowNumber, record, filledCount}
@@ -1774,11 +1778,11 @@ exports.commitBulkUploadStudents = async (req, res) => {
     if (!normalizedAdmission) {
       return;
     }
-    
+
     if (!admissionGroups.has(normalizedAdmission)) {
       admissionGroups.set(normalizedAdmission, []);
     }
-    
+
     const filledCount = countFilledFields(record.sanitizedData);
     admissionGroups.get(normalizedAdmission).push({
       rowNumber: record.rowNumber,
@@ -1798,10 +1802,10 @@ exports.commitBulkUploadStudents = async (req, res) => {
         }
         return a.rowNumber - b.rowNumber;
       });
-      
+
       const bestRow = rows[0];
       bestRowMap.set(normalizedAdmission, bestRow.rowNumber);
-      
+
       // Mark all other rows as duplicates
       for (let i = 1; i < rows.length; i++) {
         duplicateRowNumbers.add(rows[i].rowNumber);
@@ -1858,7 +1862,7 @@ exports.commitBulkUploadStudents = async (req, res) => {
         const currentFilledCount = countFilledFields(sanitized);
         const bestRecord = preparedRecords.find(r => r.rowNumber === bestRowNumber);
         const bestFilledCount = bestRecord ? countFilledFields(bestRecord.sanitizedData) : 0;
-        
+
         errors.push(
           `Admission number already appears in row ${bestRowNumber} (${bestFilledCount} fields filled). This row (${currentFilledCount} fields filled) will be skipped - the row with most filled fields is kept.`
         );
@@ -2044,11 +2048,10 @@ exports.commitBulkUploadStudents = async (req, res) => {
       success: true,
       message:
         successCount > 0
-          ? `${successCount} student record${successCount === 1 ? '' : 's'} uploaded successfully${
-              failedCount > 0
-                ? `, ${failedCount} record${failedCount === 1 ? '' : 's'} skipped`
-                : ''
-            }`
+          ? `${successCount} student record${successCount === 1 ? '' : 's'} uploaded successfully${failedCount > 0
+            ? `, ${failedCount} record${failedCount === 1 ? '' : 's'} skipped`
+            : ''
+          }`
           : 'No student records were uploaded',
       successCount,
       failedCount,
@@ -2123,23 +2126,43 @@ exports.getAllStudents = async (req, res) => {
       'previous_college', 'certificates_status', 'remarks', 'college'
     ];
 
+    // Create cache key that includes user ID and scope to prevent cache sharing between users
+    const user = req.user || req.admin;
+    const userId = user ? (user.id || user.username || 'anonymous') : 'anonymous';
+
+    // Create a scope identifier from userScope
+    let scopeId = 'unrestricted';
+    if (req.userScope && !req.userScope.unrestricted) {
+      // Create a deterministic string from scope properties
+      const scopeParts = [
+        req.userScope.collegeIds?.sort().join(',') || '',
+        req.userScope.courseIds?.sort().join(',') || '',
+        req.userScope.branchIds?.sort().join(',') || '',
+        req.userScope.allCourses ? 'allCourses' : '',
+        req.userScope.allBranches ? 'allBranches' : ''
+      ];
+      scopeId = scopeParts.filter(p => p).join('|');
+    }
+
     const cacheKey = fetchAll
       ? null
       : JSON.stringify({
-          search: search || '',
-          limit: pageSize,
-          offset: pageOffset,
-          filter_dateFrom: filter_dateFrom || null,
-          filter_dateTo: filter_dateTo || null,
-          filter_pinNumberStatus: filter_pinNumberStatus || null,
-          filter_year: parsedFilterYear,
-          filter_semester: parsedFilterSemester,
-          filter_batch: normalizedFilterBatch,
-          filter_college: normalizedFilterCollege,
-          filter_course: normalizedFilterCourse,
-          filter_branch: normalizedFilterBranch,
-          filters: normalizedOtherFilters
-        });
+        userId: userId,
+        scopeId: scopeId,
+        search: search || '',
+        limit: pageSize,
+        offset: pageOffset,
+        filter_dateFrom: filter_dateFrom || null,
+        filter_dateTo: filter_dateTo || null,
+        filter_pinNumberStatus: filter_pinNumberStatus || null,
+        filter_year: parsedFilterYear,
+        filter_semester: parsedFilterSemester,
+        filter_batch: normalizedFilterBatch,
+        filter_college: normalizedFilterCollege,
+        filter_course: normalizedFilterCourse,
+        filter_branch: normalizedFilterBranch,
+        filters: normalizedOtherFilters
+      });
 
     if (cacheKey) {
       const cachedResponse = studentsCache.get(cacheKey);
@@ -2163,7 +2186,7 @@ exports.getAllStudents = async (req, res) => {
     // Exclude "Course Completed" students by default unless explicitly filtered
     // Check if student_status filter is present (will be applied later in studentFieldFilters)
     const hasStudentStatusFilter = normalizedOtherFilters.filter_student_status !== undefined;
-    
+
     if (!hasStudentStatusFilter) {
       query += ' AND (student_status IS NULL OR student_status != ?)';
       params.push('Course Completed');
@@ -2418,9 +2441,9 @@ exports.getAllStudents = async (req, res) => {
 
   } catch (error) {
     console.error('Get students error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching students' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching students'
     });
   }
 };
@@ -2436,9 +2459,9 @@ exports.getStudentByAdmission = async (req, res) => {
     );
 
     if (students.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
 
@@ -2464,9 +2487,9 @@ exports.getStudentByAdmission = async (req, res) => {
 
   } catch (error) {
     console.error('Get student error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching student' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching student'
     });
   }
 };
@@ -2514,7 +2537,7 @@ exports.updateStudent = async (req, res) => {
     }
 
     const existingStudent = existingStudents[0];
-    
+
     // Sanitize existing student data for logging (remove large base64 image data)
     const sanitizedExisting = { ...existingStudent };
     if (sanitizedExisting.student_photo && typeof sanitizedExisting.student_photo === 'string') {
@@ -2531,12 +2554,12 @@ exports.updateStudent = async (req, res) => {
     if (sanitizedExisting.student_data) {
       sanitizedExisting.student_data = JSON.stringify(existingStudentDataParsed);
     }
-    
+
     console.log('Existing student data:', JSON.stringify(sanitizedExisting, null, 2));
 
     // Parse existing student_data to merge with incoming data
     const existingStudentData = parseJSON(existingStudent.student_data) || {};
-    
+
     // Map form field names to database columns
     // Build update query for individual columns
     const updateFields = [];
@@ -2577,7 +2600,7 @@ exports.updateStudent = async (req, res) => {
       ) {
         // Convert values for specific column types
         let convertedValue = value;
-        
+
         // Handle gender ENUM conversion - must match MySQL ENUM('M', 'F', 'Other')
         if (columnName === 'gender') {
           if (value && typeof value === 'string' && value.trim() !== '') {
@@ -2597,12 +2620,12 @@ exports.updateStudent = async (req, res) => {
             return;
           }
         }
-        
+
         // Handle year/semester as integers
         if (columnName === 'current_year' || columnName === 'current_semester') {
           convertedValue = parseInt(value, 10) || 1;
         }
-        
+
         updateFields.push(`${columnName} = ?`);
         updateValues.push(convertedValue);
         updatedColumns.add(columnName);
@@ -2618,7 +2641,7 @@ exports.updateStudent = async (req, res) => {
     if (dataForJson['Student Photo'] && typeof dataForJson['Student Photo'] === 'string' && dataForJson['Student Photo'].startsWith('data:image/')) {
       delete dataForJson['Student Photo'];
     }
-    
+
     // Always update the JSON data field
     const serializedStudentData = JSON.stringify(dataForJson);
     updateFields.push('student_data = ?');
@@ -2641,15 +2664,15 @@ exports.updateStudent = async (req, res) => {
     // Get PIN number for logging
     const pinNo = existingStudent.pin_no || null;
     const hasPhotoUpdate = mutableStudentData.student_photo || mutableStudentData['Student Photo'];
-    
+
     // Log update with PIN number, especially if photo was updated
     if (hasPhotoUpdate) {
-      const logMessage = pinNo 
+      const logMessage = pinNo
         ? `✅ Student details updated (Photo updated) - PIN: ${pinNo}, Admission: ${admissionNumber}`
         : `✅ Student details updated (Photo updated) - Admission: ${admissionNumber}`;
       console.log(logMessage);
     } else {
-      const logMessage = pinNo 
+      const logMessage = pinNo
         ? `✅ Student details updated - PIN: ${pinNo}, Admission: ${admissionNumber}`
         : `✅ Student details updated - Admission: ${admissionNumber}`;
       console.log(logMessage);
@@ -2684,7 +2707,7 @@ exports.updateStudent = async (req, res) => {
       sqlMessage: error.sqlMessage,
       sql: error.sql
     });
-    
+
     // Provide more specific error messages for common issues
     let errorMessage = 'Server error while updating student';
     if (error.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || error.code === 'ER_DATA_TOO_LONG') {
@@ -2694,7 +2717,7 @@ exports.updateStudent = async (req, res) => {
     } else if (error.sqlMessage) {
       errorMessage = `Database error: ${error.sqlMessage}`;
     }
-    
+
     res.status(500).json({
       success: false,
       message: errorMessage,
@@ -2707,7 +2730,7 @@ exports.updateStudent = async (req, res) => {
 exports.updatePinNumber = async (req, res) => {
   console.log('[PIN UPDATE] Request received for:', req.params.admissionNumber);
   console.log('[PIN UPDATE] Body:', req.body);
-  
+
   try {
     const { admissionNumber } = req.params;
     const { pinNumber } = req.body;
@@ -2762,7 +2785,7 @@ exports.updatePinNumber = async (req, res) => {
     clearStudentsCache();
 
     console.log('[PIN UPDATE] ✅ SUCCESS - PIN updated to:', pinNumber);
-    
+
     res.json({
       success: true,
       message: 'PIN number updated successfully'
@@ -3033,9 +3056,9 @@ exports.deleteStudent = async (req, res) => {
 
   } catch (error) {
     console.error('Delete student error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while deleting student' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting student'
     });
   }
 };
@@ -3051,7 +3074,7 @@ exports.getDashboardStats = async (req, res) => {
       // Build scope-aware query for regular students
       let statsQuery = "SELECT COUNT(*) as total FROM students WHERE student_status = 'Regular'";
       const statsParams = [];
-      
+
       // Apply user scope filtering
       if (req.userScope) {
         const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -3060,7 +3083,7 @@ exports.getDashboardStats = async (req, res) => {
           statsParams.push(...scopeParams);
         }
       }
-      
+
       const [studentCount] = await masterPool.query(statsQuery, statsParams);
       totalStudents = studentCount?.[0]?.total || 0;
     } catch (dbError) {
@@ -3138,7 +3161,7 @@ exports.createStudent = async (req, res) => {
   try {
     console.log('📝 Create Student - Incoming request body:', JSON.stringify(req.body, null, 2));
     console.log('📝 Create Student - Files:', req.files ? req.files.map(f => ({ name: f.originalname, fieldname: f.fieldname })) : 'none');
-    
+
     // Handle both JSON and FormData
     let incomingData;
     if (req.body.studentData && typeof req.body.studentData === 'object') {
@@ -3146,7 +3169,7 @@ exports.createStudent = async (req, res) => {
     } else if (typeof req.body === 'object' && !Array.isArray(req.body)) {
       // Handle FormData - all fields are strings, need to parse numbers
       incomingData = { ...req.body };
-      
+
       // Convert numeric fields
       if (incomingData.current_year) {
         incomingData.current_year = parseInt(incomingData.current_year, 10) || 1;
@@ -3159,7 +3182,7 @@ exports.createStudent = async (req, res) => {
     }
 
     delete incomingData.studentData;
-    
+
     console.log('📝 Create Student - Parsed incomingData:', JSON.stringify({
       course: incomingData.course,
       branch: incomingData.branch,
@@ -3222,7 +3245,7 @@ exports.createStudent = async (req, res) => {
     let photoDataUrl = null;
     if (incomingData.student_photo && typeof incomingData.student_photo === 'string') {
       const photoData = incomingData.student_photo;
-      
+
       // If it's already a base64 data URL, keep it as-is
       if (photoData.startsWith('data:image/')) {
         photoDataUrl = photoData;
@@ -3259,7 +3282,7 @@ exports.createStudent = async (req, res) => {
     // Remove photo from incomingData to prevent bloating student_data JSON
     const dataForJson = { ...incomingData };
     delete dataForJson.student_photo;
-    
+
     // Don't store large base64 in JSON, only reference it
     if (photoDataUrl && !photoDataUrl.startsWith('data:')) {
       dataForJson.student_photo = photoDataUrl;
@@ -3270,7 +3293,7 @@ exports.createStudent = async (req, res) => {
     const insertColumns = ['admission_number', 'current_year', 'current_semester', 'student_data'];
     const insertPlaceholders = ['?', '?', '?', '?'];
     const insertValues = [admissionNumber, resolvedStage.year, resolvedStage.semester, serializedStudentData];
-    
+
     // Store photo as base64 data URL in dedicated column
     if (photoDataUrl) {
       incomingData.student_photo = photoDataUrl;
@@ -3300,14 +3323,14 @@ exports.createStudent = async (req, res) => {
     });
 
     const insertQuery = `INSERT INTO students (${insertColumns.join(', ')}) VALUES (${insertPlaceholders.join(', ')})`;
-    
+
     console.log('📝 Create Student - Insert columns:', insertColumns);
     console.log('📝 Create Student - Checking for course/branch in columns:', {
       hasCourse: insertColumns.includes('course'),
       hasBranch: insertColumns.includes('branch'),
       hasCollege: insertColumns.includes('college')
     });
-    
+
     await masterPool.query(insertQuery, insertValues);
 
     // Handle document uploads if files are present
@@ -3339,14 +3362,14 @@ exports.createStudent = async (req, res) => {
             // Extract document name from fieldname (format: document_Document_Name)
             const docName = file.fieldname.replace(/^document_/, '').replace(/_/g, ' ');
             const fileName = file.originalname || `${docName.replace(/\s+/g, '_')}_${admissionNumber}`;
-            
+
             const uploadResult = await s3Service.uploadStudentDocument(
               file.path,
               fileName,
               file.mimetype || 'application/pdf',
               studentInfo
             );
-            
+
             uploadedDocuments[docName] = {
               fileId: uploadResult.key,
               fileName: uploadResult.fileName,
@@ -3371,7 +3394,7 @@ exports.createStudent = async (req, res) => {
             'SELECT student_data FROM students WHERE admission_number = ?',
             [admissionNumber]
           );
-          
+
           if (currentStudentRows.length > 0) {
             const currentStudentData = parseJSON(currentStudentRows[0].student_data) || {};
             const updatedStudentData = {
@@ -3381,7 +3404,7 @@ exports.createStudent = async (req, res) => {
                 ...uploadedDocuments
               }
             };
-            
+
             await masterPool.query(
               'UPDATE students SET student_data = ? WHERE admission_number = ?',
               [JSON.stringify(updatedStudentData), admissionNumber]
@@ -3400,29 +3423,29 @@ exports.createStudent = async (req, res) => {
     if (!incomingData.certificates_status || incomingData.certificates_status === 'Pending') {
       try {
         const documentSettingsController = require('../controllers/documentSettingsController');
-        
+
         // Determine course type
         const courseNameLower = (incomingData.course || '').toLowerCase();
-        const courseType = courseNameLower.includes('pg') || courseNameLower.includes('post graduate') || 
-                          courseNameLower.includes('m.tech') || courseNameLower.includes('mtech') ? 'PG' : 'UG';
-        
+        const courseType = courseNameLower.includes('pg') || courseNameLower.includes('post graduate') ||
+          courseNameLower.includes('m.tech') || courseNameLower.includes('mtech') ? 'PG' : 'UG';
+
         // Get document requirements
         const stages = courseType === 'PG' ? ['10th', 'Inter', 'Diploma', 'UG'] : ['10th', 'Inter', 'Diploma'];
         let allDocumentsUploaded = true;
         let hasRequirements = false;
-        
+
         for (const stage of stages) {
           try {
             const [reqRows] = await masterPool.query(
               'SELECT * FROM document_requirements WHERE course_type = ? AND academic_stage = ? AND is_enabled = 1',
               [courseType, stage]
             );
-            
+
             if (reqRows.length > 0) {
               hasRequirements = true;
               const req = reqRows[0];
               const requiredDocs = parseJSON(req.required_documents) || [];
-              
+
               for (const docName of requiredDocs) {
                 // Check if document was uploaded (check both uploadedDocuments and student_data)
                 const docKey = docName.replace(/\s+/g, '_');
@@ -3431,18 +3454,18 @@ exports.createStudent = async (req, res) => {
                   break;
                 }
               }
-              
+
               if (!allDocumentsUploaded) break;
             }
           } catch (err) {
             console.log(`No requirements for ${courseType}/${stage}`);
           }
         }
-        
+
         // Auto-set certificates_status
         if (hasRequirements) {
           const finalStatus = allDocumentsUploaded ? 'Submitted' : 'Pending';
-          
+
           // Update certificates_status in database if it's in the columns
           if (insertColumns.includes('certificates_status')) {
             const statusIndex = insertColumns.indexOf('certificates_status');
@@ -3466,7 +3489,7 @@ exports.createStudent = async (req, res) => {
               );
             }
           }
-          
+
           console.log(`📋 Auto-set certificates_status to "${finalStatus}" based on document upload status`);
         }
       } catch (statusError) {
@@ -3836,8 +3859,8 @@ exports.bulkPromoteStudents = async (req, res) => {
       }
     };
 
-  try {
-    // Process promotions with limited parallelism
+    try {
+      // Process promotions with limited parallelism
       await processWithLimit(students, MAX_PARALLEL, promotionWorker);
 
       // Process left-out students (update remarks and status) sequentially
@@ -3987,11 +4010,11 @@ exports.getFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester } = req.query;
-    
+
     // Build WHERE clause based on applied filters
     let whereClause = 'WHERE 1=1';
     const params = [];
-    
+
     // Apply user scope filtering first
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -4000,7 +4023,7 @@ exports.getFilterOptions = async (req, res) => {
         params.push(...scopeParams);
       }
     }
-    
+
     if (course) {
       whereClause += ' AND course = ?';
       params.push(course);
@@ -4021,7 +4044,7 @@ exports.getFilterOptions = async (req, res) => {
       whereClause += ' AND current_semester = ?';
       params.push(parseInt(semester, 10));
     }
-    
+
     // Get unique values for all dropdown filter fields, applying cascading filters
     const [studTypeRows] = await masterPool.query(
       `SELECT DISTINCT stud_type FROM students ${whereClause} AND stud_type IS NOT NULL AND stud_type <> '' ORDER BY stud_type ASC`,
@@ -4079,11 +4102,11 @@ exports.getQuickFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
-    
+
     // Build WHERE clause based on applied filters - NO course exclusions here
     const params = [];
     let whereClause = `WHERE 1=1`;
-    
+
     // Apply user scope filtering first
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -4092,7 +4115,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         params.push(...scopeParams);
       }
     }
-    
+
     if (college) {
       whereClause += ' AND college = ?';
       params.push(college);
@@ -4117,18 +4140,18 @@ exports.getQuickFilterOptions = async (req, res) => {
       whereClause += ' AND current_semester = ?';
       params.push(parseInt(semester, 10));
     }
-    
+
     // Fetch distinct values for each filter, applying cascading filters
     const [batchRows] = await masterPool.query(
       `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
       params
     );
-    
+
     // For years and semesters, build separate WHERE clauses that exclude year/semester filters
     // so they cascade properly based on batch/course/branch
     const yearParams = [];
     let yearWhereClause = `WHERE 1=1`;
-    
+
     // Apply user scope filtering
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -4137,7 +4160,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         yearParams.push(...scopeParams);
       }
     }
-    
+
     if (college) {
       yearWhereClause += ' AND college = ?';
       yearParams.push(college);
@@ -4155,18 +4178,18 @@ exports.getQuickFilterOptions = async (req, res) => {
       yearParams.push(batch);
     }
     // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
-    
+
     const [yearRows] = await masterPool.query(
       `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
       yearParams
     );
-    
+
     // For semesters, use the same WHERE clause as years
     const [semesterRows] = await masterPool.query(
       `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
       yearParams
     );
-    
+
     // For courses, if college is selected, filter courses by college
     let courseRows;
     if (college) {
@@ -4175,7 +4198,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table (these are the valid courses for this college)
@@ -4184,7 +4207,7 @@ exports.getQuickFilterOptions = async (req, res) => {
           [collegeId]
         );
         const validCourseNames = collegeCourses.map(c => c.name);
-        
+
         if (validCourseNames.length > 0) {
           // Get distinct courses from students that match:
           // 1. The current filters (college, batch, year, semester, etc.)
@@ -4211,7 +4234,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         params
       );
     }
-    
+
     // For branches, if college is selected, filter branches by college and valid courses
     let branchRows;
     if (college) {
@@ -4220,7 +4243,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table
@@ -4230,7 +4253,7 @@ exports.getQuickFilterOptions = async (req, res) => {
         );
         const validCourseNames = collegeCourses.map(c => c.name);
         const validCourseIds = collegeCourses.map(c => c.id);
-        
+
         if (validCourseNames.length > 0) {
           // If course is also selected, filter branches for that specific course
           if (course) {
@@ -4243,7 +4266,7 @@ exports.getQuickFilterOptions = async (req, res) => {
                 [selectedCourse.id]
               );
               const validBranchNames = courseBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
                 // Get distinct branches from students that match:
                 // 1. The current filters (college, course, batch, year, semester, etc.)
@@ -4272,7 +4295,7 @@ exports.getQuickFilterOptions = async (req, res) => {
                 validCourseIds
               );
               const validBranchNames = allBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
                 const placeholders = validBranchNames.map(() => '?').join(',');
                 const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
@@ -4477,7 +4500,7 @@ exports.bulkUpdatePinNumbers = async (req, res) => {
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
       ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
-       JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
+        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
     );
 
     if (successCount > 0) {
@@ -4508,5 +4531,223 @@ exports.bulkUpdatePinNumbers = async (req, res) => {
     });
   } finally {
     connection.release();
+  }
+};
+
+// Student Login
+exports.login = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
+      });
+    }
+
+    // Find student credential
+    const [credentials] = await masterPool.query(
+      `SELECT sc.*, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+       FROM student_credentials sc
+       JOIN students s ON sc.student_id = s.id
+       WHERE sc.username = ? LIMIT 1`,
+      [username]
+    );
+
+    if (credentials.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials. Please check your username.'
+      });
+    }
+
+    const studentValid = credentials[0];
+
+    // Verify password if hash exists
+    if (!studentValid.password_hash) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account not initialized. Please contact administrator to generate credentials.'
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, studentValid.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    // Create Token
+    const token = jwt.sign(
+      {
+        id: studentValid.student_id,
+        admissionNumber: studentValid.admission_number,
+        role: 'student'
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Filter sensitive data
+    const user = {
+      admission_number: studentValid.admission_number,
+      username: studentValid.username,
+      name: studentValid.student_name,
+      current_year: studentValid.current_year,
+      current_semester: studentValid.current_semester,
+      course: studentValid.course,
+      branch: studentValid.branch,
+      college: studentValid.college,
+      student_photo: studentValid.student_photo
+    };
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user
+    });
+
+  } catch (error) {
+    console.error('Student login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login'
+    });
+  }
+};
+
+// Get Student by Admission Number
+exports.getStudentByAdmission = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+
+    const [students] = await masterPool.query(
+      `SELECT s.*, 
+              sc.username
+       FROM students s
+       LEFT JOIN student_credentials sc ON s.id = sc.student_id
+       WHERE s.admission_number = ?`,
+      [admissionNumber]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const student = students[0];
+
+    // Remove sensitive data if necessary, though this is a protected route
+    // for the student themselves usually.
+
+    res.json({
+      success: true,
+      data: student
+    });
+
+  } catch (error) {
+    console.error('Get student error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching student details'
+    });
+  }
+};
+
+// Send OTP
+exports.sendOtp = async (req, res) => {
+  try {
+    const { admissionNumber, mobileNumber, year, semester, type } = req.body;
+
+    if (!admissionNumber || !mobileNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admission number and mobile number are required'
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store in cache (5 minutes TTL)
+    const cacheKey = `otp:${admissionNumber}:${mobileNumber}`;
+    otpCache.set(cacheKey, otp);
+
+    // Send SMS
+    // Template: Your {Student/Parent} OTP for {Year}-{Semester} Semester Registration is {OTP}. Valid for 5 minutes - Pydah College
+    const message = `Your ${type || 'Student'} OTP for ${year || ''}-${semester || ''} Semester Registration is ${otp}. Valid for 5 minutes - Pydah College`;
+    await smsService.sendSms({
+      to: mobileNumber,
+      message: message,
+      templateId: process.env.OTP_TEMPLATE_ID,
+      peId: process.env.OTP_PE_ID
+    });
+
+    console.log(`[OTP] Sent ${otp} to ${mobileNumber} for ${admissionNumber}`);
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully'
+    });
+
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while sending OTP'
+    });
+  }
+};
+
+// Verify OTP
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { admissionNumber, mobileNumber, otp } = req.body;
+
+    if (!admissionNumber || !mobileNumber || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admission number, mobile number, and OTP are required'
+      });
+    }
+
+    const cacheKey = `otp:${admissionNumber}:${mobileNumber}`;
+    const storedOtp = otpCache.get(cacheKey);
+
+    if (!storedOtp) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP expired or not found'
+      });
+    }
+
+    if (storedOtp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP'
+      });
+    }
+
+    // Clear OTP after successful verification
+    otpCache.delete(cacheKey);
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully'
+    });
+
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while verifying OTP'
+    });
   }
 };
