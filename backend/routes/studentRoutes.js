@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/studentController');
 const authMiddleware = require('../middleware/auth');
-const { attachUserScope, verifyPermission } = require('../middleware/rbac');
+const { attachUserScope, verifyPermission, allowStudentOwnProfileOrPermission } = require('../middleware/rbac');
 const { MODULES } = require('../constants/rbac');
 const multer = require('multer');
 
@@ -134,7 +134,7 @@ router.post(
 router.get(
   '/:admissionNumber',
   authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  allowStudentOwnProfileOrPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
   attachUserScope,
   studentController.getStudentByAdmission
 );

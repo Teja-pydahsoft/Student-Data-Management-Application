@@ -2999,14 +2999,15 @@ exports.resetStudentPassword = async (req, res) => {
 
     const student = students[0];
 
-    // Regenerate credentials
+    // Regenerate credentials (pass isPasswordReset = true to use password reset SMS template)
     const { generateStudentCredentials } = require('../utils/studentCredentials');
     const credResult = await generateStudentCredentials(
       student.id,
       student.admission_number,
       student.pin_no,
       student.student_name,
-      student.student_mobile
+      student.student_mobile,
+      true // isPasswordReset = true
     );
 
     if (!credResult.success) {

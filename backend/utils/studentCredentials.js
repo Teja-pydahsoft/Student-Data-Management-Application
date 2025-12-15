@@ -2,6 +2,12 @@ const { masterPool } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const { sendSms } = require('../services/smsService');
 
+// DLT SMS Template IDs for student credentials
+const STUDENT_CREATION_SMS_TEMPLATE_ID =
+  process.env.STUDENT_CREATION_SMS_TEMPLATE_ID || '1707176525577028276';
+const STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID =
+  process.env.STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID || '1707176526611076697';
+
 /**
  * Generate and store student login credentials
  * Username: PIN number OR mobile number (prefer PIN)
@@ -12,9 +18,10 @@ const { sendSms } = require('../services/smsService');
  * @param {string} pinNo - Student PIN number (optional)
  * @param {string} studentName - Student name
  * @param {string} studentMobile - Student mobile number
+ * @param {boolean} isPasswordReset - Whether this is a password reset (default: false for account creation)
  * @returns {Promise<{success: boolean, username?: string, error?: string}>}
  */
-async function generateStudentCredentials(studentId, admissionNumber, pinNo, studentName, studentMobile) {
+async function generateStudentCredentials(studentId, admissionNumber, pinNo, studentName, studentMobile, isPasswordReset = false) {
   try {
     // Validate required fields
     if (!studentMobile || studentMobile.trim() === '') {
@@ -73,19 +80,46 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
 
     // Send SMS notification with login credentials
     try {
-      // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
-      const loginUrl = process.env.STUDENT_PORTAL_URL || 'https://pydahsdms.vercel.app/';
-      const smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl} - Pydah College`;
+      // Remove trailing slash from URL to match DLT template format exactly
+      let loginUrl = (process.env.STUDENT_PORTAL_URL || 'https://pydahsdms.vercel.app').trim();
+      loginUrl = loginUrl.replace(/\/+$/, ''); // Remove trailing slashes
       
-      await sendSms({
+      let smsMessage;
+      let templateId;
+      
+      if (isPasswordReset) {
+        // DLT Template 2: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#}- Pydah College"
+        // Format must match exactly: Login: {URL}- Pydah College (no space before dash, URL has no trailing slash)
+        smsMessage = `Hello ${studentName || 'Student'} your password has been updated. Username: ${username} New Password: ${plainPassword} Login: ${loginUrl}- Pydah College`;
+        templateId = STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID;
+      } else {
+        // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
+        // Format must match exactly: Login: {URL}- Pydah College (no space before dash, URL has no trailing slash)
+        smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl}- Pydah College`;
+        templateId = STUDENT_CREATION_SMS_TEMPLATE_ID;
+      }
+      
+      // Log the exact message being sent for debugging
+      console.log(`[SMS Template] Sending ${isPasswordReset ? 'password reset' : 'account creation'} SMS to ${studentMobile.replace(/\D/g, '')}`);
+      console.log(`[SMS Template] Template ID: ${templateId}`);
+      console.log(`[SMS Template] Message: "${smsMessage}"`);
+      console.log(`[SMS Template] Message length: ${smsMessage.length} characters`);
+      
+      const smsResult = await sendSms({
         to: studentMobile.replace(/\D/g, ''), // Ensure only digits
         message: smsMessage,
+        templateId: templateId,
         meta: {
           student: { admissionNumber },
-          type: 'password_credentials'
+          type: isPasswordReset ? 'password_reset' : 'account_creation'
         }
       });
-      console.log(`✅ SMS sent with credentials to ${studentMobile} for student ${admissionNumber}`);
+      
+      if (smsResult.success) {
+        console.log(`✅ SMS sent successfully to ${studentMobile.replace(/\D/g, '')} for student ${admissionNumber} (${isPasswordReset ? 'password reset' : 'account creation'})`);
+      } else {
+        console.error(`❌ SMS failed to send: ${smsResult.reason || 'Unknown error'}`, smsResult);
+      }
     } catch (smsError) {
       console.error('Error sending SMS with credentials (non-fatal):', smsError);
       // Don't fail credential generation if SMS fails

@@ -85,6 +85,57 @@ const verifyPermission = (module, operation = 'read') => {
 };
 
 /**
+ * Allow students to view their own profile or require permission for others
+ * Usage: allowStudentOwnProfileOrPermission(MODULES.STUDENT_MANAGEMENT, 'view')
+ */
+const allowStudentOwnProfileOrPermission = (module, operation = 'read') => {
+  return async (req, res, next) => {
+    const user = req.user || req.admin;
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Super admin (including legacy 'admin') has all permissions
+    if (isSuperAdmin(user)) {
+      return next();
+    }
+
+    // If user is a student, allow access to their own profile
+    if (user.role === 'student') {
+      const admissionNumber = req.params.admissionNumber || req.params.id;
+      const studentAdmissionNumber = user.admission_number || user.admissionNumber;
+      
+      // Allow if student is accessing their own profile
+      if (admissionNumber && studentAdmissionNumber && 
+          (admissionNumber === studentAdmissionNumber || 
+           admissionNumber === String(studentAdmissionNumber))) {
+        return next();
+      }
+      
+      // Deny if student is trying to access another student's profile
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own profile.'
+      });
+    }
+
+    // For non-students, check if user has the required permission
+    if (!hasPermission(user.permissions, module, operation)) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied. Required permission: ${module} (${operation})`
+      });
+    }
+
+    next();
+  };
+};
+
+/**
  * Attach user scope to request
  * This fetches the user's assigned colleges, courses, branches and attaches them
  * for use in filtering queries
@@ -378,6 +429,7 @@ module.exports = {
   isSuperAdmin,
   verifyRole,
   verifyPermission,
+  allowStudentOwnProfileOrPermission,
   attachUserScope,
   verifyCanCreateRole,
   verifyCanManageUser,
