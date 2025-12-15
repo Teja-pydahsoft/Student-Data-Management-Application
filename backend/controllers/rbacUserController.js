@@ -20,6 +20,12 @@ const { getNotificationSetting } = require('./settingsController');
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
 
+// DLT SMS Template IDs for user credentials and password reset
+const USER_CREATION_SMS_TEMPLATE_ID =
+  process.env.USER_CREATION_SMS_TEMPLATE_ID || '1707176525577028276';
+const PASSWORD_RESET_SMS_TEMPLATE_ID =
+  process.env.PASSWORD_RESET_SMS_TEMPLATE_ID || '1707176526611076697';
+
 // Helper function to replace template variables
 const replaceTemplateVariables = (template, variables) => {
   let result = template;
@@ -859,10 +865,11 @@ exports.createUser = async (req, res) => {
             try {
               const smsMessage = notificationSettings.smsTemplate
                 ? replaceTemplateVariables(notificationSettings.smsTemplate, variables)
-                : `Hello ${variables.name} your account has been created. Username: ${variables.username} Password: ${variables.password}. Login: ${variables.loginUrl} - Pydah College`;
+                : `Hello ${variables.name} your account has been created. Username: ${variables.username} Password: ${variables.password}. Login: ${variables.loginUrl}- Pydah College`;
               const smsResult = await sendSms({
                 to: phone.trim(),
-                message: smsMessage
+                message: smsMessage,
+                templateId: USER_CREATION_SMS_TEMPLATE_ID
               });
               smsSent = smsResult.success;
               if (!smsResult.success) {
@@ -1442,10 +1449,11 @@ exports.resetPassword = async (req, res) => {
           try {
             const smsMessage = notificationSettings.smsTemplate
               ? replaceTemplateVariables(notificationSettings.smsTemplate, variables)
-              : `Hello ${variables.name} your password has been updated. Username: ${variables.username} New Password: ${variables.password} Login: ${variables.loginUrl} - Pydah College`;
+              : `Hello ${variables.name} your password has been updated. Username: ${variables.username} New Password: ${variables.password} Login: ${variables.loginUrl}- Pydah College`;
             const smsResult = await sendSms({
               to: user.phone.trim(),
-              message: smsMessage
+              message: smsMessage,
+              templateId: PASSWORD_RESET_SMS_TEMPLATE_ID
             });
             smsSent = smsResult.success;
             if (!smsResult.success) {

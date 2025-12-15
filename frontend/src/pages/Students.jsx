@@ -30,6 +30,8 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import { SkeletonTable, SkeletonStudentsTable } from '../components/SkeletonLoader';
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
+import useAuthStore from '../store/authStore';
+import { BACKEND_MODULES, hasPermission as hasModulePermission } from '../constants/rbac';
 
 // Student status options
 const STUDENT_STATUS_OPTIONS = [
@@ -77,8 +79,19 @@ const REGISTRATION_STATUS_OPTIONS = [
   'Completed'
 ];
 
-const Students = () => {
+  const Students = () => {
   const location = useLocation();
+  const { user } = useAuthStore();
+  const userPermissions = user?.permissions || {};
+
+  // RBAC-derived capabilities for Student Management
+  const canViewStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'view');
+  const canAddStudent = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'add_student');
+  const canBulkUploadStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'bulk_upload');
+  const canEditStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'edit_student');
+  const canDeleteStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'delete_student');
+  const canUpdatePin = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'update_pin');
+  const canExportStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'export');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -1200,7 +1213,7 @@ completedStudents++;
   // Render editable cell
   const renderEditableCell = (student, field, fieldType = 'text', options = []) => {
     const studentKey = student.id || student.admission_number || student.admissionNumber;
-    const isEditing = editingCell?.studentId === studentKey && editingCell?.field === field;
+    const isEditing = canEditStudents && editingCell?.studentId === studentKey && editingCell?.field === field;
     const currentValue = student[field] || '';
 
     if (isEditing) {
@@ -1388,6 +1401,10 @@ completedStudents++;
   };
 
   const handleEdit = () => {
+    if (!canEditStudents) {
+      toast.error('You do not have permission to edit student details.');
+      return;
+    }
     setEditMode(true);
   };
 
@@ -1478,6 +1495,10 @@ completedStudents++;
   };
 
   const handleSaveRollNumber = async () => {
+    if (!canUpdatePin) {
+      toast.error('You do not have permission to update PIN numbers.');
+      return;
+    }
     if (savingPinNumber) return; // Prevent double submission
     
     console.log('[PIN UPDATE] Starting update for:', selectedStudent?.admission_number, 'New PIN:', tempRollNumber);
@@ -1517,6 +1538,10 @@ completedStudents++;
   };
 
   const handleDelete = async (admissionNumber) => {
+    if (!canDeleteStudents) {
+      toast.error('You do not have permission to delete students.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this student?')) {
       return;
     }
@@ -1544,6 +1569,10 @@ completedStudents++;
   };
 
   const handleBulkDelete = async () => {
+    if (!canDeleteStudents) {
+      toast.error('You do not have permission to delete students.');
+      return;
+    }
     if (selectedCount === 0 || bulkDeleteMutation.isPending) {
       return;
     }
@@ -1785,6 +1814,20 @@ completedStudents++;
   // Never show full-page loader - always show page structure
   // Only the table area will show loading state
 
+  // If user somehow reaches this page without view permission, show a clean access message
+  if (!canViewStudents) {
+    return (
+      <div className="p-6 lg:p-8">
+        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">No Access to Student Database</h2>
+          <p className="text-sm text-gray-600">
+            You have view or edit access disabled for the Student Management module. Please contact an administrator if you need access.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
       <div className="flex flex-col gap-4">
@@ -1807,52 +1850,62 @@ completedStudents++;
           >
             Search
           </button>
-          {/* Action Buttons Inline */}
+          {/* Action Buttons Inline - respect RBAC permissions */}
           <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto">
-          <Link
-            to="/students/add"
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
-          >
-            <Plus size={18} />
-            <span>Add Student</span>
-          </Link>
+            {canAddStudent && (
+              <Link
+                to="/students/add"
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+              >
+                <Plus size={18} />
+                <span>Add Student</span>
+              </Link>
+            )}
 
-          <button
-            onClick={async () => {
-              await fetchForms();
-              setShowBulkStudentUpload(true);
-            }}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
-            disabled={loadingForms}
-          >
-            <Upload size={18} />
-            <span>{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
-          </button>
+            {canBulkUploadStudents && (
+              <button
+                onClick={async () => {
+                  await fetchForms();
+                  setShowBulkStudentUpload(true);
+                }}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                disabled={loadingForms}
+              >
+                <Upload size={18} />
+                <span>{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
+              </button>
+            )}
 
-          <button
-            onClick={() => setShowManualRollNumber(true)}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
-          >
-            <UserCog size={18} />
-            <span>Update PIN Numbers</span>
-          </button>
+            {canUpdatePin && (
+              <button
+                onClick={() => setShowManualRollNumber(true)}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+              >
+                <UserCog size={18} />
+                <span>Update PIN Numbers</span>
+              </button>
+            )}
 
-          <button
-            onClick={handleBulkDelete}
-            disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
-          >
-            <Trash2 size={18} />
-            <span>{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
-          </button>
+            {canDeleteStudents && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+              >
+                <Trash2 size={18} />
+                <span>{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+              </button>
+            )}
 
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
-          >
-            <Download size={18} />
-            <span>Export CSV</span>
-          </button>
+            {canExportStudents && (
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+              >
+                <Download size={18} />
+                <span>Export CSV</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -2608,6 +2661,8 @@ completedStudents++;
                       <span className="hidden sm:inline">View Password</span>
                       <span className="sm:hidden">View</span>
                     </button>
+                {canEditStudents && (
+                  <>
                     <button 
                       onClick={handleResetPassword} 
                       disabled={resettingPassword}
@@ -2623,6 +2678,8 @@ completedStudents++;
                       <span className="hidden sm:inline">Edit</span>
                       <span className="sm:hidden">Edit</span>
                     </button>
+                  </>
+                )}
                   </>
                 )}
                 <button onClick={() => {
@@ -2877,7 +2934,7 @@ completedStudents++;
                             ) : (
                               <span className="text-gray-400 text-xs italic">Not assigned</span>
                             )}
-                            {!editMode && (
+                            {!editMode && canUpdatePin && (
                               <button
                                 onClick={() => setEditingRollNumber(true)}
                                 className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"

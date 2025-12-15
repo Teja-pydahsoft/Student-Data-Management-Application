@@ -18,6 +18,8 @@ const STUDENT_STATUS_OPTIONS = [
   'Course Completed'
 ];
 const SCHOLAR_STATUS_OPTIONS = ['Eligible', 'Not Eligible'];
+const FEE_STATUS_OPTIONS = ['no due', 'due', 'permitted'];
+const REGISTRATION_STATUS_OPTIONS = ['Pending', 'Completed'];
 const CASTE_OPTIONS = ['OC', 'BC-A', 'BC-B', 'BC-C', 'BC-D', 'BC-E', 'SC', 'ST', 'EWS', 'Other'];
 const CERTIFICATES_STATUS_OPTIONS = ['Verified', 'Unverified', 'Submitted', 'Pending', 'Partial', 'Originals Returned', 'Not Required'];
 
@@ -50,6 +52,8 @@ const AddStudent = () => {
     student_name: '',
     student_status: '',
     scholar_status: '',
+    fee_status: '',
+    registration_status: '',
     student_mobile: '',
     parent_mobile1: '',
     parent_mobile2: '',
@@ -577,6 +581,8 @@ const AddStudent = () => {
       { field: 'stud_type', label: 'Student Type' },
       { field: 'student_status', label: 'Student Status' },
       { field: 'scholar_status', label: 'Scholar Status' },
+      { field: 'fee_status', label: 'Fee Status' },
+      { field: 'registration_status', label: 'Registration Status' },
       { field: 'student_mobile', label: 'Student Mobile' },
       { field: 'parent_mobile1', label: 'Parent Mobile 1' },
       { field: 'caste', label: 'Caste' },
@@ -676,7 +682,7 @@ const AddStudent = () => {
           <div className="border-b border-border-light pb-6">
             <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              Basic Information
+              Basic & Academic Information
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
@@ -1006,6 +1012,48 @@ const AddStudent = () => {
                 >
                   <option value="">Select Scholar Status</option>
                   {SCHOLAR_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 10. Fee Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fee Status <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="fee_status"
+                  value={studentData.fee_status}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                >
+                  <option value="">Select Fee Status</option>
+                  {FEE_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 11. Registration Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Registration Status <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="registration_status"
+                  value={studentData.registration_status}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                >
+                  <option value="">Select Registration Status</option>
+                  {REGISTRATION_STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>

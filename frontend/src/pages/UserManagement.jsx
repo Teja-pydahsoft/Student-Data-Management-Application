@@ -347,6 +347,11 @@ const UserManagement = () => {
   const [loadingEditCourses, setLoadingEditCourses] = useState(false);
   const [loadingEditBranches, setLoadingEditBranches] = useState(false);
 
+  // Module access modal state
+  const [showModuleAccessModal, setShowModuleAccessModal] = useState(false);
+  const [moduleAccessUser, setModuleAccessUser] = useState(null);
+  const [selectedModuleKey, setSelectedModuleKey] = useState(null);
+
   const hasUserManagementAccess = useMemo(() => {
     if (isFullAccessRole(user?.role)) return true;
     if (user?.permissions) {
@@ -1472,23 +1477,31 @@ const UserManagement = () => {
                             </div>
                           </td>
                           <td className="px-5 py-4">
-                            {hasModuleAccess ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold w-fit">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModuleAccessUser(userData);
+                                setSelectedModuleKey(null);
+                                setShowModuleAccessModal(true);
+                              }}
+                              className={`w-full max-w-[180px] inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                                hasModuleAccess
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                {hasModuleAccess ? (
                                   <CheckCircle2 size={12} />
-                                  Granted
-                                </span>
-                                <span className="text-[10px] text-slate-500">{permStatus.granted}/{permStatus.total} modules</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold w-fit">
+                                ) : (
                                   <AlertCircle size={12} />
-                                  Pending
-                                </span>
-                                <span className="text-[10px] text-slate-500">Needs configuration</span>
-                              </div>
-                            )}
+                                )}
+                                <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
+                              </span>
+                              <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
+                                {permStatus.granted}/{permStatus.total}
+                              </span>
+                            </button>
                           </td>
                           <td className="px-5 py-4">
                             {userData.isActive ? (
@@ -1596,23 +1609,31 @@ const UserManagement = () => {
                         <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                           <div>
                             <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Module Access</h4>
-                            {hasModuleAccess ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold w-fit">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModuleAccessUser(userData);
+                                setSelectedModuleKey(null);
+                                setShowModuleAccessModal(true);
+                              }}
+                              className={`w-full inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                                hasModuleAccess
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                {hasModuleAccess ? (
                                   <CheckCircle2 size={12} />
-                                  Granted
-                                </span>
-                                <span className="text-[10px] text-slate-500">{permStatus.granted}/{permStatus.total} modules</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold w-fit">
+                                ) : (
                                   <AlertCircle size={12} />
-                                  Pending
-                                </span>
-                                <span className="text-[10px] text-slate-500">Needs config</span>
-                              </div>
-                            )}
+                                )}
+                                <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
+                              </span>
+                              <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
+                                {permStatus.granted}/{permStatus.total}
+                              </span>
+                            </button>
                           </div>
                           <div>
                             <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</h4>
@@ -1735,6 +1756,303 @@ const UserManagement = () => {
         }}
         emptyMessage="No branches available for selected courses"
       />
+
+      {/* Module Access Modal - Left: modules list, Right: access details */}
+      {showModuleAccessModal && moduleAccessUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-lg sm:rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Settings size={20} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                    Module Access - {moduleAccessUser.name}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-white/80 truncate">
+                    {moduleAccessUser.email} • {ROLE_LABELS[moduleAccessUser.role] || moduleAccessUser.role}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowModuleAccessModal(false);
+                  setModuleAccessUser(null);
+                  setSelectedModuleKey(null);
+                }}
+                className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body: Left sidebar (modules), Right content (permissions) */}
+            <div className="flex-1 flex flex-col sm:flex-row min-h-[360px] max-h-[70vh]">
+              {/* Left: Module list */}
+              <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/80 overflow-y-auto">
+                <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                    Pages / Modules
+                  </p>
+                </div>
+                <div className="p-2 space-y-1">
+                  {Object.keys(BACKEND_MODULES).map((key) => {
+                    const moduleKey = BACKEND_MODULES[key];
+                    const modulePerms = MODULE_PERMISSIONS[moduleKey];
+                    const moduleLabel = MODULE_LABELS[moduleKey] || moduleKey;
+                    if (!modulePerms) return null;
+
+                    const permsForUser = moduleAccessUser.permissions?.[moduleKey] || {};
+                    const enabledCount = Object.values(permsForUser).filter((v) => v === true).length;
+                    const totalCount = modulePerms.permissions.length;
+                    const isActive = selectedModuleKey === moduleKey;
+
+                    return (
+                      <button
+                        key={moduleKey}
+                        type="button"
+                        onClick={() => setSelectedModuleKey(moduleKey)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm text-left transition-all ${
+                          isActive
+                            ? 'bg-white text-blue-700 border border-blue-200 shadow-sm'
+                            : 'bg-transparent text-slate-700 hover:bg-white'
+                        }`}
+                      >
+                        <span className="truncate font-medium">{moduleLabel}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                          {enabledCount}/{totalCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Permissions for selected module */}
+              <div className="flex-1 bg-white overflow-y-auto">
+                {(() => {
+                  const effectiveModuleKey =
+                    selectedModuleKey || Object.values(BACKEND_MODULES)[0];
+                  const modulePerms = MODULE_PERMISSIONS[effectiveModuleKey];
+                  const moduleLabel = MODULE_LABELS[effectiveModuleKey] || effectiveModuleKey;
+                  if (!modulePerms) {
+                    return (
+                      <div className="h-full flex items-center justify-center p-6">
+                        <p className="text-sm text-slate-500">
+                          Select a module from the left to configure access.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const permsForUser =
+                    moduleAccessUser.permissions?.[effectiveModuleKey] || {};
+                  const allEnabled = modulePerms.permissions.every(
+                    (p) => permsForUser[p] === true
+                  );
+
+                  const toggleSinglePermission = (permKey) => {
+                    setModuleAccessUser((prev) => {
+                      if (!prev) return prev;
+                      const currentPerms = prev.permissions || {};
+                      const moduleEntry = currentPerms[effectiveModuleKey] || {};
+                      const updatedModuleEntry = {
+                        ...moduleEntry,
+                        [permKey]: !moduleEntry[permKey],
+                      };
+                      const updatedPermissions = {
+                        ...currentPerms,
+                        [effectiveModuleKey]: updatedModuleEntry,
+                      };
+                      return { ...prev, permissions: updatedPermissions };
+                    });
+                    setUsers((prevUsers) =>
+                      prevUsers.map((u) =>
+                        u.id === moduleAccessUser.id
+                          ? {
+                              ...u,
+                              permissions: {
+                                ...u.permissions,
+                                [effectiveModuleKey]: {
+                                  ...(u.permissions?.[effectiveModuleKey] || {}),
+                                  [permKey]:
+                                    !(
+                                      u.permissions?.[effectiveModuleKey]?.[permKey]
+                                    ),
+                                },
+                              },
+                            }
+                          : u
+                      )
+                    );
+                    setEditForm((prev) =>
+                      prev && prev.id === moduleAccessUser.id
+                        ? {
+                            ...prev,
+                            permissions: {
+                              ...prev.permissions,
+                              [effectiveModuleKey]: {
+                                ...(prev.permissions?.[effectiveModuleKey] || {}),
+                                [permKey]:
+                                  !(
+                                    prev.permissions?.[effectiveModuleKey]?.[permKey]
+                                  ),
+                              },
+                            },
+                          }
+                        : prev
+                    );
+                  };
+
+                  const toggleAllForModule = (grant) => {
+                    setModuleAccessUser((prev) => {
+                      if (!prev) return prev;
+                      const currentPerms = prev.permissions || {};
+                      const updatedModuleEntry = {};
+                      modulePerms.permissions.forEach((p) => {
+                        updatedModuleEntry[p] = grant;
+                      });
+                      const updatedPermissions = {
+                        ...currentPerms,
+                        [effectiveModuleKey]: updatedModuleEntry,
+                      };
+                      return { ...prev, permissions: updatedPermissions };
+                    });
+                    setUsers((prevUsers) =>
+                      prevUsers.map((u) =>
+                        u.id === moduleAccessUser.id
+                          ? {
+                              ...u,
+                              permissions: {
+                                ...u.permissions,
+                                [effectiveModuleKey]: modulePerms.permissions.reduce(
+                                  (acc, p) => ({ ...acc, [p]: grant }),
+                                  {}
+                                ),
+                              },
+                            }
+                          : u
+                      )
+                    );
+                    setEditForm((prev) =>
+                      prev && prev.id === moduleAccessUser.id
+                        ? {
+                            ...prev,
+                            permissions: {
+                              ...prev.permissions,
+                              [effectiveModuleKey]: modulePerms.permissions.reduce(
+                                (acc, p) => ({ ...acc, [p]: grant }),
+                                {}
+                              ),
+                            },
+                          }
+                        : prev
+                    );
+                  };
+
+                  return (
+                    <div className="h-full flex flex-col">
+                      <div className="px-4 sm:px-5 py-3 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                            Access Controls
+                          </p>
+                          <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                            {moduleLabel}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleAllForModule(true)}
+                            className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                          >
+                            Grant All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleAllForModule(false)}
+                            className="px-3 py-1.5 text-[11px] font-semibold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 transition-colors"
+                          >
+                            Revoke All
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 p-4 sm:p-5 space-y-3 overflow-y-auto">
+                        <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                          <p>
+                            Turn individual permissions on or off for this page. Granting all
+                            permissions will give full control for{' '}
+                            <span className="font-semibold">{moduleLabel}</span>.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {modulePerms.permissions.map((permKey) => {
+                            const enabled = permsForUser[permKey] === true;
+                            const label = modulePerms.labels[permKey] || permKey;
+                            return (
+                              <button
+                                key={permKey}
+                                type="button"
+                                onClick={() => toggleSinglePermission(permKey)}
+                                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs text-left transition-all ${
+                                  enabled
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
+                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className={`w-5 h-5 rounded-md flex items-center justify-center border ${
+                                      enabled
+                                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                                        : 'bg-slate-50 border-slate-300 text-slate-400'
+                                    }`}
+                                  >
+                                    {enabled ? (
+                                      <Check size={13} />
+                                    ) : (
+                                      <X size={13} />
+                                    )}
+                                  </span>
+                                  <span className="font-medium truncate">{label}</span>
+                                </span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                    enabled
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-slate-100 text-slate-500'
+                                  }`}
+                                >
+                                  {enabled ? 'Allowed' : 'Disabled'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {allEnabled && (
+                          <div className="flex items-center gap-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                            <Sparkles size={14} />
+                            <span>
+                              All permissions are granted for this module. The user has full
+                              control over <span className="font-semibold">{moduleLabel}</span>.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal with Improved Permissions UI */}
       {editingUser && editForm && (
