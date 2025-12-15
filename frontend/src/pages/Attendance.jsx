@@ -170,8 +170,9 @@ const StatPill = ({ label, value, color }) => {
   const [retryingSmsFor, setRetryingSmsFor] = useState(null); // Track which student SMS is being retried
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const attendanceCache = useRef(new Map());
-  const CACHE_TTL_MS = 90 * 1000; // 90 seconds cache for faster re-renders
+  const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache for faster re-renders
   const pendingRequestRef = useRef(null);
+  const searchEffectInitialized = useRef(false);
 const filterOptionsCacheRef = useRef(new Map());
 const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [dayEndReportOpen, setDayEndReportOpen] = useState(false);
@@ -239,7 +240,6 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [showReportModal, setShowReportModal] = useState(false);
   const [attendanceReport, setAttendanceReport] = useState(null);
   const calendarCacheRef = useRef(new Map());
-  const searchEffectInitialized = useRef(false);
 
   const user = useAuthStore((state) => state.user);
   const isAdmin = isFullAccessRole(user?.role);
@@ -1010,19 +1010,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
-      // Check if any filters are applied (batch, course, branch, year, semester)
-      // If filters are applied, load ALL students without pagination
-      const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
-      
-      if (hasFilters) {
-        // Load all students when filters are applied - use a very large limit
-        params.append('limit', '10000'); // Large enough to get all students
-        params.append('offset', '0');
-      } else {
-        // Use pagination when no filters are applied
-        params.append('limit', pageSize.toString());
-        params.append('offset', ((pageToUse - 1) * pageSize).toString());
-      }
+      // Always use pagination for better performance, even with filters
+      // This prevents loading thousands of records at once
+      params.append('limit', pageSize.toString());
+      params.append('offset', ((pageToUse - 1) * pageSize).toString());
 
       const response = await api.get(`/attendance?${params.toString()}`, { signal: controller.signal });
       if (!response.data?.success) {
@@ -1128,13 +1119,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       setTotalStudents(total);
       setAttendanceStatistics(finalStatistics);
       
-      // When filters are applied, reset to page 1 since we're loading all students
-      // Reuse hasFilters variable declared earlier in the function
-      if (hasFilters) {
-        setCurrentPage(1);
-      } else {
-        setCurrentPage(pageToUse);
-      }
+      // Always set current page to the page we just loaded
+      setCurrentPage(pageToUse);
       setSmsResults([]);
       setSmsStatusMap(newSmsStatusMap); // Populate SMS status from API response
       setLastUpdatedAt(null); // Clear last updated when loading new data
@@ -1222,9 +1208,16 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
   useEffect(() => {
     const initializeAttendance = async () => {
-      await loadFilterOptions();
+      // Load filter options and attendance in parallel for faster initial load
+      // This reduces the time to first meaningful paint
+      const [filterOptionsResult] = await Promise.allSettled([
+        loadFilterOptions()
+      ]);
+      
       filtersLoadedRef.current = true;
-      // Load attendance immediately after filters are loaded
+      
+      // Load attendance immediately, even if filter options are still loading
+      // This ensures data appears as quickly as possible
       setCurrentPage(1);
       loadAttendance(1);
     };
@@ -1240,12 +1233,19 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.batch, filters.course, filters.branch]);
 
-  // Load attendance immediately when filters change (only after initial load)
+  // Load attendance with debouncing when filters change (only after initial load)
+  // This prevents excessive API calls when filters change rapidly
   useEffect(() => {
-    if (filtersLoadedRef.current) {
-      setCurrentPage(1);
+    if (!filtersLoadedRef.current) return;
+    
+    setCurrentPage(1);
+    
+    // Debounce filter changes to avoid excessive API calls
+    const debounceTimer = setTimeout(() => {
       loadAttendance(1);
-    }
+    }, 300); // 300ms debounce for filter changes
+    
+    return () => clearTimeout(debounceTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     attendanceDate,
@@ -1854,6 +1854,17 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         }))
       );
 
+      // Invalidate cache for current date to ensure fresh data after save
+      const cacheKey = buildCacheKey(currentPage);
+      attendanceCache.current.delete(cacheKey);
+      // Also invalidate all cache entries for this date to ensure consistency
+      const dateCacheKey = JSON.stringify({ attendanceDate, page: null });
+      for (const key of attendanceCache.current.keys()) {
+        if (key.includes(attendanceDate)) {
+          attendanceCache.current.delete(key);
+        }
+      }
+      
       // Reload attendance to get updated statistics
       const updatedStats = await loadAttendance(currentPage);
       

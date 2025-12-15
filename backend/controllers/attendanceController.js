@@ -406,23 +406,16 @@ exports.getAttendance = async (req, res) => {
 
     const params = [attendanceDate];
 
-    // Filter for regular students only
+    // Optimize: Order WHERE conditions to use composite index effectively
+    // Start with indexed columns in order: student_status, course, batch, current_year, current_semester
     query += ` AND s.student_status = 'Regular'`;
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      params.push(...EXCLUDED_COURSES);
+    
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      query += ' AND s.course = ?';
+      params.push(course);
     }
-
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        query += ` AND ${scopeCondition}`;
-        params.push(...scopeParams);
-      }
-    }
-
+    
     if (batch) {
       query += ' AND s.batch = ?';
       params.push(batch);
@@ -443,28 +436,42 @@ exports.getAttendance = async (req, res) => {
         params.push(parsedSemester);
       }
     }
-
-    if (course) {
-      query += ' AND s.course = ?';
-      params.push(course);
-    }
-
+    
     if (branch) {
       query += ' AND s.branch = ?';
       params.push(branch);
     }
+    
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      params.push(...EXCLUDED_COURSES);
+    }
+
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        query += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
 
     if (studentName) {
       const keyword = `%${studentName}%`;
+      // Optimize: Check indexed columns first (student_name, pin_no) for better performance
+      // JSON extraction is expensive, so we prioritize fixed columns
       query += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       params.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
@@ -472,12 +479,15 @@ exports.getAttendance = async (req, res) => {
 
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
+      // Optimize: Check indexed columns first (parent_mobile1, parent_mobile2) for better performance
       query += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       params.push(mobileLike, mobileLike, mobileLike, mobileLike);
@@ -495,22 +505,13 @@ exports.getAttendance = async (req, res) => {
     
     const countParams = [];
     
-    // Apply same filters to count query
+    // Optimize: Order WHERE conditions to use composite index effectively
     countQuery += ` AND s.student_status = 'Regular'`;
     
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      countParams.push(...EXCLUDED_COURSES);
-    }
-    
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        countQuery += ` AND ${scopeCondition}`;
-        countParams.push(...scopeParams);
-      }
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      countQuery += ' AND s.course = ?';
+      countParams.push(course);
     }
     
     if (batch) {
@@ -534,27 +535,40 @@ exports.getAttendance = async (req, res) => {
       }
     }
     
-    if (course) {
-      countQuery += ' AND s.course = ?';
-      countParams.push(course);
-    }
-    
     if (branch) {
       countQuery += ' AND s.branch = ?';
       countParams.push(branch);
     }
     
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      countParams.push(...EXCLUDED_COURSES);
+    }
+    
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        countQuery += ` AND ${scopeCondition}`;
+        countParams.push(...scopeParams);
+      }
+    }
+    
     if (studentName) {
       const keyword = `%${studentName}%`;
+      // Optimize: Check indexed columns first for better performance
       countQuery += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       countParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
@@ -562,12 +576,15 @@ exports.getAttendance = async (req, res) => {
     
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
+      // Optimize: Check indexed columns first for better performance
       countQuery += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       countParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
@@ -579,35 +596,37 @@ exports.getAttendance = async (req, res) => {
     // Get total count with all filters applied
     const [countRows] = await masterPool.query(countQuery, countParams);
     const total = countRows?.[0]?.total || 0;
-    // Get statistics for all students (not just current page) - use same query structure
-    // Build WHERE clause for statistics (same filters as main query)
-    let statsWhereClause = 'WHERE 1=1 AND s.student_status = \'Regular\'';
-    const statsParams = [];
     
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      statsWhereClause += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      statsParams.push(...EXCLUDED_COURSES);
+    // Optimize: Combine all statistics queries into a single query using conditional aggregation
+    // This reduces database round trips from 3 queries to 1
+    let statsQuery = `
+      SELECT 
+        COUNT(DISTINCT CASE WHEN ar.status = 'present' THEN s.id END) AS present_count,
+        COUNT(DISTINCT CASE WHEN ar.status = 'absent' THEN s.id END) AS absent_count,
+        COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) AS marked_count
+      FROM students s
+      LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
+      WHERE 1=1 AND s.student_status = 'Regular'
+    `;
+    
+    const statsParams = [attendanceDate];
+    
+    // Optimize: Order WHERE conditions to use composite index effectively
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      statsQuery += ' AND s.course = ?';
+      statsParams.push(course);
     }
     
-    // Apply same filters to stats query
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        statsWhereClause += ` AND ${scopeCondition}`;
-        statsParams.push(...scopeParams);
-      }
-    }
-
     if (batch) {
-      statsWhereClause += ' AND s.batch = ?';
+      statsQuery += ' AND s.batch = ?';
       statsParams.push(batch);
     }
 
     if (currentYear) {
       const parsedYear = parseInt(currentYear, 10);
       if (!Number.isNaN(parsedYear)) {
-        statsWhereClause += ' AND s.current_year = ?';
+        statsQuery += ' AND s.current_year = ?';
         statsParams.push(parsedYear);
       }
     }
@@ -615,32 +634,45 @@ exports.getAttendance = async (req, res) => {
     if (currentSemester) {
       const parsedSemester = parseInt(currentSemester, 10);
       if (!Number.isNaN(parsedSemester)) {
-        statsWhereClause += ' AND s.current_semester = ?';
+        statsQuery += ' AND s.current_semester = ?';
         statsParams.push(parsedSemester);
       }
     }
-
-    if (course) {
-      statsWhereClause += ' AND s.course = ?';
-      statsParams.push(course);
-    }
-
+    
     if (branch) {
-      statsWhereClause += ' AND s.branch = ?';
+      statsQuery += ' AND s.branch = ?';
       statsParams.push(branch);
+    }
+    
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      statsQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      statsParams.push(...EXCLUDED_COURSES);
+    }
+    
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        statsQuery += ` AND ${scopeCondition}`;
+        statsParams.push(...scopeParams);
+      }
     }
 
     if (studentName) {
       const keyword = `%${studentName}%`;
-      statsWhereClause += `
+      // Optimize: Check indexed columns first for better performance
+      statsQuery += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       statsParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
@@ -648,49 +680,27 @@ exports.getAttendance = async (req, res) => {
 
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
-      statsWhereClause += `
+      // Optimize: Check indexed columns first for better performance
+      statsQuery += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       statsParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
     }
-
-    // Use separate queries for accurate counting
-    // Get present count
-    const presentQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'present'
-      ${statsWhereClause}
-    `;
     
-    // Get absent count
-    const absentQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'absent'
-      ${statsWhereClause}
-    `;
+    // Execute single optimized stats query
+    const [statsRows] = await masterPool.query(statsQuery, statsParams);
+    const statsRow = statsRows[0] || {};
     
-    // Get marked count (any status)
-    const markedQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
-      ${statsWhereClause}
-    `;
-    
-    const [presentRows] = await masterPool.query(presentQuery, [attendanceDate, ...statsParams]);
-    const [absentRows] = await masterPool.query(absentQuery, [attendanceDate, ...statsParams]);
-    const [markedRows] = await masterPool.query(markedQuery, [attendanceDate, ...statsParams]);
-    
-    const presentCount = parseInt(presentRows[0]?.count || 0, 10);
-    const absentCount = parseInt(absentRows[0]?.count || 0, 10);
-    const markedCount = parseInt(markedRows[0]?.count || 0, 10);
+    const presentCount = parseInt(statsRow.present_count || 0, 10);
+    const absentCount = parseInt(statsRow.absent_count || 0, 10);
+    const markedCount = parseInt(statsRow.marked_count || 0, 10);
     const unmarkedCount = Math.max(0, total - markedCount);
     
     const statistics = {
