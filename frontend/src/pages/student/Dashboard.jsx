@@ -43,10 +43,20 @@ const Dashboard = () => {
             || (displayData?.student_data ? (displayData.student_data['Fee Status'] || displayData.student_data.fee_status) : '')
             || '';
         const raw = String(rawSource).trim().toLowerCase();
-        const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
-        const isPartial = raw === 'partially_completed' || raw.includes('partial');
-        const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
-        return label;
+        const normalized = raw.replace(/\s+/g, '_');
+        const isCompleted =
+            normalized === 'completed' ||
+            normalized === 'no_due' ||
+            normalized === 'nodue' ||
+            raw.includes('complete') ||
+            raw.includes('paid');
+        const isPartial =
+            normalized === 'partially_completed' ||
+            normalized === 'permitted' ||
+            raw.includes('partial');
+        if (isCompleted) return 'Completed';
+        if (isPartial) return 'Partially Completed';
+        return 'Pending';
     };
     const normalizeRegistrationStatus = () => {
         const rawSource = displayData?.registration_status

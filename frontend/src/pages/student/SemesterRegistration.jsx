@@ -513,12 +513,24 @@ const SemesterRegistration = () => {
                                         || (studentData?.student_data ? (studentData.student_data['Fee Status'] || studentData.student_data.fee_status) : '')
                                         || '';
                                     const raw = String(rawSource).trim().toLowerCase();
+                                    const normalized = raw.replace(/\s+/g, '_');
 
-                                    const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
-                                    const isPartial = raw === 'partially_completed' || raw.includes('partial');
-                                    const isPending = raw === 'pending' || raw.includes('pending') || raw === '';
+                                    const isCompleted =
+                                        normalized === 'completed' ||
+                                        normalized === 'no_due' ||
+                                        normalized === 'nodue' ||
+                                        raw.includes('complete') ||
+                                        raw.includes('paid');
+                                    const isPartial =
+                                        normalized === 'partially_completed' ||
+                                        normalized === 'permitted' ||
+                                        raw.includes('partial');
 
-                                    const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
+                                    const label = isCompleted
+                                        ? 'Completed'
+                                        : isPartial
+                                            ? 'Partially Completed'
+                                            : 'Pending';
                                     const cls = label === 'Completed'
                                         ? 'bg-green-100 text-green-800'
                                         : label === 'Partially Completed'
@@ -537,10 +549,10 @@ const SemesterRegistration = () => {
                                         - <span className="font-semibold">Pending</span>: No fee payments recorded.
                                     </p>
                                     <p>
-                                        - <span className="font-semibold">Partially Completed</span>: Some payments done, remaining due.
+                                        - <span className="font-semibold">Partially Completed</span>: Some payments done, remaining due or permitted temporarily.
                                     </p>
                                     <p>
-                                        - <span className="font-semibold">Completed</span>: All required fees cleared.
+                                        - <span className="font-semibold">Completed</span>: All required fees cleared / no dues.
                                     </p>
                                 </div>
                             </div>
@@ -563,7 +575,15 @@ const SemesterRegistration = () => {
                             <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
                             {(() => {
                                 const raw = (studentData?.fee_status || '').toLowerCase();
-                                const canProceed = raw === 'completed' || raw === 'partially_completed' || raw === 'partial' || raw === 'partially';
+                                const normalized = raw.replace(/\s+/g, '_');
+                                const canProceed =
+                                    normalized === 'completed' ||
+                                    normalized === 'no_due' ||
+                                    normalized === 'nodue' ||
+                                    normalized === 'partially_completed' ||
+                                    normalized === 'permitted' ||
+                                    raw === 'partial' ||
+                                    raw === 'partially';
                                 return (
                                     <button
                                         onClick={() => setCurrentStep(currentStep + 1)}
@@ -702,14 +722,25 @@ const SemesterRegistration = () => {
                             </div>
                         </div>
 
-                        <div className="mt-8 flex justify-between items-center">
+                            <div className="mt-8 flex justify-between items-center">
                             <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Back</button>
                             {(() => {
                                 const feeRaw = (studentData?.fee_status || '').toLowerCase();
-                                const canFinalize = feeRaw === 'completed' || feeRaw === 'partially_completed' || feeRaw === 'partial' || feeRaw === 'partially';
+                                const normalizedFee = feeRaw.replace(/\s+/g, '_');
+                                const allowedFeeStatuses = new Set([
+                                    'completed',
+                                    'partially_completed',
+                                    'partial',
+                                    'partially',
+                                    'no_due',
+                                    'nodue',
+                                    'no_due_status',
+                                    'permitted'
+                                ]);
+                                const canFinalize = allowedFeeStatuses.has(normalizedFee);
                                 const handleFinalize = async () => {
                                     if (!canFinalize) {
-                                        toast.error('Complete or partially complete fees to finalize');
+                                        toast.error('Fees must be no due, permitted, completed, or partially completed to finalize');
                                         return;
                                     }
                                     try {

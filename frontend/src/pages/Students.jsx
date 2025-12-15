@@ -134,6 +134,7 @@ const Students = () => {
   const [permitEndingDate, setPermitEndingDate] = useState('');
   const [permitRemarks, setPermitRemarks] = useState('');
   const [pendingFeeStatusChange, setPendingFeeStatusChange] = useState(null);
+  const [pendingPermitAdmissionNumber, setPendingPermitAdmissionNumber] = useState(null);
   const [editingCell, setEditingCell] = useState(null); // { studentId, field }
   const [cellEditValue, setCellEditValue] = useState('');
   const [inlineEditChanges, setInlineEditChanges] = useState(new Map()); // Track changes before saving
@@ -1146,9 +1147,11 @@ completedStudents++;
       return;
     }
 
-    // Special handling for fee_status
+    // Special handling for fee_status -> 'permitted' (requires permit details)
     if (field === 'fee_status' && newValue === 'permitted') {
+      // Store which student is being permitted so we can save after modal confirmation
       setPendingFeeStatusChange(newValue);
+      setPendingPermitAdmissionNumber(admissionNumber);
       setShowPermitModal(true);
       setEditingCell(null);
       setCellEditValue('');
@@ -1208,7 +1211,11 @@ completedStudents++;
             onChange={(e) => {
               const newValue = e.target.value;
               if (newValue === 'permitted' && field === 'fee_status') {
+                // Inline edit flow for permitting fees – open modal and remember student
+                const admissionNumber =
+                  student.admission_number || student.admissionNumber || student.admissionNo;
                 setPendingFeeStatusChange(newValue);
+                setPendingPermitAdmissionNumber(admissionNumber || null);
                 setShowPermitModal(true);
                 setEditingCell(null);
                 setCellEditValue('');
@@ -3715,6 +3722,7 @@ completedStudents++;
                 onClick={() => {
                   setShowPermitModal(false);
                   setPendingFeeStatusChange(null);
+                  setPendingPermitAdmissionNumber(null);
                   setPermitEndingDate('');
                   setPermitRemarks('');
                 }}
@@ -3728,11 +3736,15 @@ completedStudents++;
                     toast.error('Please enter permit ending date');
                     return;
                   }
+                  if (!permitRemarks || !permitRemarks.trim()) {
+                    toast.error('Please enter permit remarks');
+                    return;
+                  }
                   
-                  // If this is from inline editing, save directly
-                  if (pendingFeeStatusChange && editingCell && editingCell.admissionNumber) {
+                  // If this is from inline editing, save directly using the stored admission number
+                  if (pendingFeeStatusChange === 'permitted' && pendingPermitAdmissionNumber) {
                     try {
-                      await api.put(`/students/${editingCell.admissionNumber}/fee-status`, {
+                      await api.put(`/students/${pendingPermitAdmissionNumber}/fee-status`, {
                         fee_status: 'permitted',
                         permit_ending_date: permitEndingDate,
                         permit_remarks: permitRemarks
@@ -3745,12 +3757,14 @@ completedStudents++;
                     setEditingCell(null);
                     setCellEditValue('');
                   } else {
-                    // Otherwise, set for modal edit
+                    // Otherwise, this is from full student edit modal – just set status,
+                    // handleSaveEdit will call the fee-status endpoint with permit data.
                     setEditFeeStatus('permitted');
                   }
                   
                   setShowPermitModal(false);
                   setPendingFeeStatusChange(null);
+                  setPendingPermitAdmissionNumber(null);
                 }}
                 className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
               >

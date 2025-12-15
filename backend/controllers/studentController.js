@@ -4766,48 +4766,60 @@ exports.getStudentByAdmission = async (req, res) => {
       : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
 
     // Derive fee_status from student_fees for the student's current year/semester
+    // BUT: if admin has explicitly set special statuses like 'permitted' or 'no due',
+    // respect that value for the student portal and do not override it from payments.
     let derivedFeeStatus = fallbackFeeStatus || null;
-    try {
-      const [feeRows] = await masterPool.query(
-        `SELECT amount, paid_amount, payment_status
-         FROM student_fees
-         WHERE student_id = ? AND year = ? AND semester = ?`,
-        [student.id, stage.year, stage.semester]
-      );
+    const normalizedFallbackFee =
+      (fallbackFeeStatus || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+    const protectedFeeStatuses = new Set(['permitted', 'no_due', 'nodue']);
 
-      if (Array.isArray(feeRows) && feeRows.length > 0) {
-        let allPaid = true;
-        let anyPaidOrPartial = false;
+    if (!protectedFeeStatuses.has(normalizedFallbackFee)) {
+      try {
+        const [feeRows] = await masterPool.query(
+          `SELECT amount, paid_amount, payment_status
+           FROM student_fees
+           WHERE student_id = ? AND year = ? AND semester = ?`,
+          [student.id, stage.year, stage.semester]
+        );
 
-        for (const row of feeRows) {
-          const amountVal = parseFloat(row.amount) || 0;
-          const paidVal = parseFloat(row.paid_amount) || 0;
-          const status = String(row.payment_status || '').toLowerCase();
+        if (Array.isArray(feeRows) && feeRows.length > 0) {
+          let allPaid = true;
+          let anyPaidOrPartial = false;
 
-          const isPaid = status === 'paid' || paidVal >= amountVal;
-          const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+          for (const row of feeRows) {
+            const amountVal = parseFloat(row.amount) || 0;
+            const paidVal = parseFloat(row.paid_amount) || 0;
+            const status = String(row.payment_status || '').toLowerCase();
 
-          if (isPaid) {
-            anyPaidOrPartial = true;
-          } else if (isPartial) {
-            anyPaidOrPartial = true;
-            allPaid = false;
+            const isPaid = status === 'paid' || paidVal >= amountVal;
+            const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+
+            if (isPaid) {
+              anyPaidOrPartial = true;
+            } else if (isPartial) {
+              anyPaidOrPartial = true;
+              allPaid = false;
+            } else {
+              // pending
+              allPaid = false;
+            }
+          }
+
+          if (allPaid) {
+            derivedFeeStatus = 'completed';
+          } else if (anyPaidOrPartial) {
+            derivedFeeStatus = 'partially_completed';
           } else {
-            // pending
-            allPaid = false;
+            derivedFeeStatus = 'pending';
           }
         }
-
-        if (allPaid) {
-          derivedFeeStatus = 'completed';
-        } else if (anyPaidOrPartial) {
-          derivedFeeStatus = 'partially_completed';
-        } else {
-          derivedFeeStatus = 'pending';
-        }
+      } catch (e) {
+        console.warn('Failed to derive fee status from student_fees:', e);
       }
-    } catch (e) {
-      console.warn('Failed to derive fee status from student_fees:', e);
     }
 
     const responsePayload = {
@@ -4956,11 +4968,19 @@ exports.updateFeeStatus = async (req, res) => {
     }
 
     // If fee_status is 'permitted', require permit_ending_date
-    if (fee_status === 'permitted' && !permit_ending_date) {
-      return res.status(400).json({
-        success: false,
-        message: 'Permit ending date is required when fee status is "permitted"'
-      });
+    if (fee_status === 'permitted') {
+      if (!permit_ending_date) {
+        return res.status(400).json({
+          success: false,
+          message: 'Permit ending date is required when fee status is "permitted"'
+        });
+      }
+      if (!permit_remarks || !permit_remarks.toString().trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Permit remarks are required when fee status is "permitted"'
+        });
+      }
     }
 
     // If column exists, update column; otherwise, update JSON field only
