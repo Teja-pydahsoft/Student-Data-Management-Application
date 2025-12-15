@@ -2672,16 +2672,23 @@ exports.updateStudent = async (req, res) => {
     applyStageToPayload(mutableStudentData, resolvedStage);
 
     const updatedColumns = new Set();
+    // Allow clearing statuses (set to NULL) via inline dropdowns
+    const allowEmptyUpdates = new Set([
+      'scholar_status',
+      'student_status',
+      'registration_status',
+      'fee_status',
+      'certificates_status'
+    ]);
 
     for (const [key, value] of Object.entries(mutableStudentData)) {
       const columnName = FIELD_MAPPING[key];
+      const hasNonEmptyValue = value !== undefined && value !== '' && value !== '{}' && value !== null;
+      const shouldAllowEmptyUpdate = columnName && allowEmptyUpdates.has(columnName) && (value === '' || value === null);
       if (
         columnName &&
         !updatedColumns.has(columnName) &&
-        value !== undefined &&
-        value !== '' &&
-        value !== '{}' &&
-        value !== null
+        (hasNonEmptyValue || shouldAllowEmptyUpdate)
       ) {
         // Skip updating missing status columns when they don't exist in schema
         if (columnName === 'registration_status' || columnName === 'fee_status') {
@@ -2694,6 +2701,10 @@ exports.updateStudent = async (req, res) => {
 
         // Convert values for specific column types
         let convertedValue = value;
+        if (shouldAllowEmptyUpdate) {
+          convertedValue = null;
+          mutableStudentData[key] = null;
+        }
 
         // Handle gender ENUM conversion - must match MySQL ENUM('M', 'F', 'Other')
         if (columnName === 'gender') {

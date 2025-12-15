@@ -60,6 +60,17 @@ const FEE_STATUS_OPTIONS = [
   'permitted'
 ];
 
+// Scholar status options
+const SCHOLAR_STATUS_OPTIONS = [
+  'eligible',
+  'not eligible',
+  'approved',
+  'rejected from the first year',
+  'rejected from the second year',
+  'rejected from the third year',
+  'rejected from the final year'
+];
+
 // Registration status options
 const REGISTRATION_STATUS_OPTIONS = [
   'Pending',
@@ -90,7 +101,7 @@ const Students = () => {
   const [dropdownFilterOptions, setDropdownFilterOptions] = useState({
     stud_type: [],
     student_status: [],
-    scholar_status: [],
+    scholar_status: SCHOLAR_STATUS_OPTIONS,
     caste: [],
     gender: [],
     certificates_status: [],
@@ -207,6 +218,9 @@ const Students = () => {
 
   const students = studentsData?.students || [];
   const totalStudents = studentsData?.pagination?.total || 0;
+  const scholarStatusOptions = dropdownFilterOptions.scholar_status?.length
+    ? dropdownFilterOptions.scholar_status
+    : SCHOLAR_STATUS_OPTIONS;
   
   // Helper function to extract numeric part from PIN (last 4-5 digits)
   const extractPinNumeric = (pinString) => {
@@ -809,10 +823,15 @@ completedStudents++;
       const response = await api.get(url);
       if (response.data?.success) {
         const data = response.data.data || {};
+        const mergeOptions = (base = [], fallback = []) => {
+          const merged = new Set([...(fallback || []), ...(base || [])]);
+          return Array.from(merged);
+        };
+
         setDropdownFilterOptions({
           stud_type: data.stud_type || [],
           student_status: data.student_status || [],
-          scholar_status: data.scholar_status || [],
+          scholar_status: mergeOptions(data.scholar_status, SCHOLAR_STATUS_OPTIONS),
           caste: data.caste || [],
           gender: data.gender || [],
           certificates_status: data.certificates_status || [],
@@ -1084,17 +1103,41 @@ completedStudents++;
   };
 
   // Inline editing handlers
-  const handleCellClick = (studentId, field, currentValue, fieldType = 'text') => {
-    setEditingCell({ studentId, field, fieldType });
+  const handleCellClick = (student, field, currentValue, fieldType = 'text') => {
+    const studentId = student.id || student.admission_number || student.admissionNumber;
+    const admissionNumber =
+      student.admission_number ||
+      student.admissionNumber ||
+      student.admissionNo ||
+      student.admission_number;
+
+    setEditingCell({
+      studentId,
+      admissionNumber,
+      field,
+      fieldType,
+      originalValue: currentValue || ''
+    });
     setCellEditValue(currentValue || '');
   };
 
-  const handleCellBlur = async (student) => {
+  const handleCellBlur = async (student, overrideValue = null) => {
     if (!editingCell) return;
     
-    const { field, admissionNumber } = editingCell;
-    const newValue = cellEditValue.trim();
-    const originalValue = student[field] || '';
+    const { field } = editingCell;
+    const admissionNumber =
+      editingCell.admissionNumber ||
+      student.admission_number ||
+      student.admissionNumber ||
+      student.admissionNo ||
+      student.id;
+
+    const newValueRaw = overrideValue !== null ? overrideValue : cellEditValue;
+    const newValue = (newValueRaw ?? '').toString().trim();
+    const originalValue =
+      editingCell.originalValue !== undefined
+        ? (editingCell.originalValue ?? '').toString().trim()
+        : (student[field] || '').toString().trim();
 
     // If value hasn't changed, just clear editing
     if (newValue === originalValue) {
@@ -1153,7 +1196,8 @@ completedStudents++;
 
   // Render editable cell
   const renderEditableCell = (student, field, fieldType = 'text', options = []) => {
-    const isEditing = editingCell?.studentId === student.id && editingCell?.field === field;
+    const studentKey = student.id || student.admission_number || student.admissionNumber;
+    const isEditing = editingCell?.studentId === studentKey && editingCell?.field === field;
     const currentValue = student[field] || '';
 
     if (isEditing) {
@@ -1170,7 +1214,7 @@ completedStudents++;
                 setCellEditValue('');
               } else {
                 setCellEditValue(newValue);
-                handleCellBlur({ ...student, [field]: newValue });
+                handleCellBlur({ ...student, [field]: newValue }, newValue);
               }
             }}
             onBlur={() => handleCellBlur(student)}
@@ -1287,7 +1331,8 @@ completedStudents++;
       ...(student.branch && { branch: student.branch }),
       ...(student.stud_type && { stud_type: student.stud_type }),
       ...(student.student_status && { student_status: student.student_status }),
-      ...(student.scholar_status && { scholar_status: student.scholar_status }),
+      // Always include scholar_status so it can be updated from blank
+      scholar_status: student.scholar_status || '',
       ...(student.student_address && { student_address: student.student_address }),
       ...(student.city_village && { city_village: student.city_village }),
       ...(student.mandal_name && { mandal_name: student.mandal_name }),
@@ -2021,7 +2066,10 @@ completedStudents++;
                   className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
-                  {(dropdownFilterOptions.scholar_status || []).map((status) => (
+                  {(dropdownFilterOptions.scholar_status && dropdownFilterOptions.scholar_status.length > 0
+                    ? dropdownFilterOptions.scholar_status
+                    : SCHOLAR_STATUS_OPTIONS
+                  ).map((status) => (
                     <option key={status} value={status}>{status}</option>
                   ))}
                 </select>
@@ -2218,12 +2266,6 @@ completedStudents++;
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Student Type</div>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Status</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Scholar Status</div>
-                  </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Caste</div>
                   </th>
@@ -2231,10 +2273,16 @@ completedStudents++;
                     <div className="font-semibold whitespace-nowrap">Gender</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                    <div className="font-semibold whitespace-nowrap">Status</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
                     <div className="font-semibold whitespace-nowrap">Certificate Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Fee Status</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                    <div className="font-semibold whitespace-nowrap">Scholar Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Registration Status</div>
@@ -2257,8 +2305,14 @@ completedStudents++;
                       key={student.admission_number} 
                       className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                       onClick={(e) => {
-                        // Don't trigger if clicking on checkbox
-                        if (e.target.type === 'checkbox' || e.target.closest('input[type="checkbox"]')) {
+                        // Don't trigger view modal if interacting with inputs/selects/inline editors
+                        if (
+                          e.target.type === 'checkbox' ||
+                          e.target.closest('input[type="checkbox"]') ||
+                          e.target.closest('select') ||
+                          e.target.closest('input') ||
+                          e.target.closest('textarea')
+                        ) {
                           return;
                         }
                         handleViewDetails(student);
@@ -2313,12 +2367,6 @@ completedStudents++;
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
-                      </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'scholar_status', 'text')}
-                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'caste', 'text')}
                       </td>
@@ -2326,10 +2374,16 @@ completedStudents++;
                         {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
                       </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'certificates_status', 'select', CERTIFICATES_STATUS_OPTIONS)}
                       </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'scholar_status', 'select', scholarStatusOptions)}
                       </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'registration_status', 'select', REGISTRATION_STATUS_OPTIONS)}
@@ -2418,12 +2472,28 @@ completedStudents++;
                         <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || '-'}</p>
                       </div>
                       <div>
+                        <p className="text-xs text-gray-500">Caste</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.caste || ''}>{student.caste || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Gender</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.gender || ''}>{student.gender || '-'}</p>
+                      </div>
+                      <div>
                         <p className="text-xs text-gray-500">Status</p>
                         <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
                       </div>
                       <div>
+                        <p className="text-xs text-gray-500">Certificate Status</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.certificates_status || ''}>{student.certificates_status || '-'}</p>
+                      </div>
+                      <div>
                         <p className="text-xs text-gray-500">Fee Status</p>
                         <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Scholar Status</p>
+                        <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Registration Status</p>
@@ -3355,8 +3425,9 @@ completedStudents++;
                                 className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               >
                                 <option value="">Select Scholar Status</option>
-                                <option value="eligible">eligible</option>
-                                <option value="not eligible">not eligible</option>
+                                {scholarStatusOptions.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
                               </select>
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">

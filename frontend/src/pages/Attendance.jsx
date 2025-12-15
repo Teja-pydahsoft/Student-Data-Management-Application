@@ -1030,10 +1030,36 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       }
 
       const fetchedStudents = (response.data.data?.students || []).map((student) => {
+        // Parse student_data if present to derive statuses
+        let parsedData = {};
+        if (student.student_data) {
+          try {
+            parsedData =
+              typeof student.student_data === 'string'
+                ? JSON.parse(student.student_data || '{}')
+                : student.student_data || {};
+          } catch (_e) {
+            parsedData = {};
+          }
+        }
+
+        // Derive registration_status with fallbacks
+        const regRaw =
+          student.registration_status ||
+          student.registrationStatus ||
+          parsedData.registration_status ||
+          parsedData['Registration Status'] ||
+          '';
+        const registration_status = regRaw && typeof regRaw === 'string'
+          ? regRaw.trim()
+          : regRaw;
+
         // If student has attendanceStatus, use it; otherwise default to 'present' for display
         const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : 'present';
+
         return {
           ...student,
+          registration_status,
           attendanceStatus: status,
           // Normalize admission number field for downstream handlers
           admissionNumber: student.admissionNumber || student.admission_number || student.admissionNo || null,

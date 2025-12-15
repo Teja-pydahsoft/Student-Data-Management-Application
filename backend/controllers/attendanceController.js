@@ -391,6 +391,8 @@ exports.getAttendance = async (req, res) => {
         s.branch,
         s.current_year,
         s.current_semester,
+        s.registration_status,
+        s.fee_status,
         s.student_data,
         ar.id AS attendance_record_id,
         ar.status AS attendance_status,
@@ -742,6 +744,16 @@ exports.getAttendance = async (req, res) => {
         studentData.pin_no ||
         null;
 
+      const resolvedRegistrationStatus =
+        (row.registration_status && String(row.registration_status).trim().length > 0)
+          ? row.registration_status
+          : (studentData.registration_status || studentData['Registration Status'] || null);
+
+      const resolvedFeeStatus =
+        (row.fee_status && String(row.fee_status).trim().length > 0)
+          ? row.fee_status
+          : (studentData.fee_status || studentData['Fee Status'] || null);
+
       return {
         id: row.id,
         admissionNumber: row.admission_number || studentData['Admission Number'] || studentData.admission_number || null,
@@ -756,8 +768,8 @@ exports.getAttendance = async (req, res) => {
         currentYear: row.current_year || studentData['Current Academic Year'] || null,
         currentSemester: row.current_semester || studentData['Current Semester'] || null,
         attendanceStatus: row.attendance_status || null,
-        registration_status: studentData.registration_status || null,
-        fee_status: studentData.fee_status || null,
+        registration_status: resolvedRegistrationStatus,
+        fee_status: resolvedFeeStatus,
         smsSent: row.sms_sent === 1 || row.sms_sent === true
       };
     });
