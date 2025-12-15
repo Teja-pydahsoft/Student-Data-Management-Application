@@ -64,10 +64,10 @@ app.use((req, res, next) => {
 });
 
 
-app.get('/', (req, res) => {
-  console.log('🌐 Root endpoint accessed');
-  res.sendFile(path.resolve(__dirname, 'test.html'));
-});
+// app.get('/', (req, res) => {
+//   console.log('🌐 Root endpoint accessed');
+//   res.sendFile(path.resolve(__dirname, 'test.html'));
+// });
 
 
 
