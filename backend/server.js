@@ -64,7 +64,18 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'test.html'));
+  // res.sendFile(path.join(__dirname, 'test.html'));
+  res.json({
+    success: true,
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    corsOrigins: allowedOrigins,
+    database: process.env.DB_NAME || 'student_database',
+    port: PORT,
+    uptime: process.uptime()
+  });
+
 });
 
 
