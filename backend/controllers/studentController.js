@@ -1206,12 +1206,26 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
   applyStageToPayload(parsedStudentData, nextStage);
   const serializedStudentData = JSON.stringify(parsedStudentData);
 
-  await connection.query(
-    `UPDATE students
-     SET current_year = ?, current_semester = ?, student_data = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [nextStage.year, nextStage.semester, serializedStudentData, student.id]
-  );
+  // Check if fee_status and registration_status columns exist
+  const hasFeeStatusColumn = await columnExists('fee_status');
+  const hasRegStatusColumn = await columnExists('registration_status');
+  let updateQuery = `UPDATE students
+     SET current_year = ?, current_semester = ?, student_data = ?, updated_at = CURRENT_TIMESTAMP`;
+  const updateParams = [nextStage.year, nextStage.semester, serializedStudentData];
+
+  // Set fee_status to 'due' when promoting
+  if (hasFeeStatusColumn) {
+    updateQuery += `, fee_status = 'due'`;
+  }
+  // Set registration_status to 'pending' when promoting
+  if (hasRegStatusColumn) {
+    updateQuery += `, registration_status = 'pending'`;
+  }
+
+  updateQuery += ` WHERE id = ?`;
+  updateParams.push(student.id);
+
+  await connection.query(updateQuery, updateParams);
 
   // Validate admin_id exists before inserting audit log
   let validAdminId = null;
@@ -4921,7 +4935,7 @@ const columnExists = async (columnName) => {
 exports.updateFeeStatus = async (req, res) => {
   try {
     const { admissionNumber } = req.params;
-    const { fee_status } = req.body;
+    const { fee_status, permit_ending_date, permit_remarks } = req.body;
 
     if (!fee_status) {
       return res.status(400).json({
@@ -4930,20 +4944,61 @@ exports.updateFeeStatus = async (req, res) => {
       });
     }
 
+    // If fee_status is 'permitted', require permit_ending_date
+    if (fee_status === 'permitted' && !permit_ending_date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Permit ending date is required when fee status is "permitted"'
+      });
+    }
+
     // If column exists, update column; otherwise, update JSON field only
     const hasFeeStatusColumn = await columnExists('fee_status');
+    const hasPermitEndingDateColumn = await columnExists('permit_ending_date');
+    const hasPermitRemarksColumn = await columnExists('permit_remarks');
 
     if (hasFeeStatusColumn) {
-      const [result] = await masterPool.query(
-        'UPDATE students SET fee_status = ? WHERE admission_number = ?',
-        [fee_status, admissionNumber]
-      );
+      let updateQuery = 'UPDATE students SET fee_status = ?';
+      const updateParams = [fee_status];
+
+      // Add permit fields if columns exist
+      if (hasPermitEndingDateColumn) {
+        updateQuery += ', permit_ending_date = ?';
+        updateParams.push(permit_ending_date || null);
+      }
+      if (hasPermitRemarksColumn) {
+        updateQuery += ', permit_remarks = ?';
+        updateParams.push(permit_remarks || null);
+      }
+
+      updateQuery += ' WHERE admission_number = ?';
+      updateParams.push(admissionNumber);
+
+      const [result] = await masterPool.query(updateQuery, updateParams);
 
       if (result.affectedRows === 0) {
         return res.status(404).json({
           success: false,
           message: 'Student not found'
         });
+      }
+
+      // If permit ending date has passed, automatically set registration_status to 'pending'
+      if (fee_status === 'permitted' && permit_ending_date) {
+        const permitDate = new Date(permit_ending_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        permitDate.setHours(0, 0, 0, 0);
+
+        if (permitDate < today) {
+          const hasRegStatusColumn = await columnExists('registration_status');
+          if (hasRegStatusColumn) {
+            await masterPool.query(
+              'UPDATE students SET registration_status = ? WHERE admission_number = ?',
+              ['pending', admissionNumber]
+            );
+          }
+        }
       }
     } else {
       // Fallback: update JSON field inside student_data
@@ -4959,6 +5014,14 @@ exports.updateFeeStatus = async (req, res) => {
       try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
       parsed.fee_status = fee_status;
       parsed['Fee Status'] = fee_status;
+      if (permit_ending_date) {
+        parsed.permit_ending_date = permit_ending_date;
+        parsed['Permit Ending Date'] = permit_ending_date;
+      }
+      if (permit_remarks) {
+        parsed.permit_remarks = permit_remarks;
+        parsed['Permit Remarks'] = permit_remarks;
+      }
       const serialized = JSON.stringify(parsed);
       const [upd] = await masterPool.query(
         'UPDATE students SET student_data = ? WHERE admission_number = ?',
@@ -4980,6 +5043,71 @@ exports.updateFeeStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while updating fee status'
+    });
+  }
+};
+
+// Check and update registration status for expired permits
+exports.checkExpiredPermits = async (req, res) => {
+  try {
+    const hasPermitEndingDateColumn = await columnExists('permit_ending_date');
+    const hasRegStatusColumn = await columnExists('registration_status');
+    const hasFeeStatusColumn = await columnExists('fee_status');
+
+    if (!hasPermitEndingDateColumn || !hasRegStatusColumn || !hasFeeStatusColumn) {
+      return res.json({
+        success: true,
+        message: 'Required columns do not exist',
+        updated: 0
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Find all students with fee_status = 'permitted' and permit_ending_date < today
+    const [students] = await masterPool.query(
+      `SELECT admission_number, permit_ending_date, registration_status 
+       FROM students 
+       WHERE fee_status = 'permitted' 
+       AND permit_ending_date IS NOT NULL 
+       AND permit_ending_date < ? 
+       AND registration_status != 'pending'`,
+      [todayStr]
+    );
+
+    if (students.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No expired permits found',
+        updated: 0
+      });
+    }
+
+    // Update registration_status to 'pending' for all expired permits
+    const [result] = await masterPool.query(
+      `UPDATE students 
+       SET registration_status = 'pending' 
+       WHERE fee_status = 'permitted' 
+       AND permit_ending_date IS NOT NULL 
+       AND permit_ending_date < ? 
+       AND registration_status != 'pending'`,
+      [todayStr]
+    );
+
+    clearStudentsCache();
+
+    res.json({
+      success: true,
+      message: `Updated ${result.affectedRows} student(s) with expired permits`,
+      updated: result.affectedRows
+    });
+  } catch (error) {
+    console.error('Check expired permits error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while checking expired permits'
     });
   }
 };

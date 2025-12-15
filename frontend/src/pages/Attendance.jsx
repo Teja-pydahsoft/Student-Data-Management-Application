@@ -2918,21 +2918,21 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                 const label = isCompleted ? 'Completed' : 'Pending';
                                 const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
                                 const handleDoubleClick = async () => {
-                                  if (isCompleted) return; // Already completed
                                   const admissionNumber = student.admissionNumber || student.admission_number;
                                   if (!admissionNumber) {
                                     toast.error('Missing admission number for update');
                                     return;
                                   }
+                                  const targetStatus = isCompleted ? 'pending' : 'completed';
                                   try {
                                     const response = await api.put(`/students/${admissionNumber}/registration-status`, {
-                                      registration_status: 'completed'
+                                      registration_status: targetStatus
                                     });
                                     if (response.data?.success) {
                                       setStudents((prev) => prev.map((s) =>
-                                        s.id === student.id ? { ...s, registration_status: 'completed' } : s
+                                        s.id === student.id ? { ...s, registration_status: targetStatus } : s
                                       ));
-                                      toast.success('Registration marked as completed');
+                                      toast.success(`Registration marked as ${targetStatus}`);
                                     } else {
                                       throw new Error(response.data?.message || 'Failed to update status');
                                     }
@@ -2941,15 +2941,15 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                     try {
                                       const fallback = await api.put(`/students/${admissionNumber}`, {
                                         studentData: {
-                                          'Registration Status': 'completed',
-                                          registration_status: 'completed'
+                                          'Registration Status': targetStatus,
+                                          registration_status: targetStatus
                                         }
                                       });
                                       if (fallback.data?.success) {
                                         setStudents((prev) => prev.map((s) =>
-                                          s.id === student.id ? { ...s, registration_status: 'completed' } : s
+                                          s.id === student.id ? { ...s, registration_status: targetStatus } : s
                                         ));
-                                        toast.success('Registration marked as completed');
+                                        toast.success(`Registration marked as ${targetStatus}`);
                                       } else {
                                         toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
                                       }

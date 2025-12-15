@@ -51,6 +51,7 @@ router.get('/:admissionNumber/password', authMiddleware, attachUserScope, studen
 router.post('/:admissionNumber/reset-password', authMiddleware, attachUserScope, studentController.resetStudentPassword);
 router.put('/:admissionNumber/fee-status', authMiddleware, attachUserScope, studentController.updateFeeStatus);
 router.put('/:admissionNumber/registration-status', authMiddleware, attachUserScope, studentController.updateRegistrationStatus);
+router.post('/check-expired-permits', authMiddleware, attachUserScope, studentController.checkExpiredPermits);
 router.post('/otp/send', authMiddleware, studentController.sendOtp);
 router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.delete('/:admissionNumber', authMiddleware, attachUserScope, studentController.deleteStudent);

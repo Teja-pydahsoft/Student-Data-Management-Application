@@ -55,9 +55,9 @@ const CERTIFICATES_STATUS_OPTIONS = [
 
 // Fee status options
 const FEE_STATUS_OPTIONS = [
-  'Pending',
-  'Partial',
-  'Completed'
+  'no due',
+  'due',
+  'permitted'
 ];
 
 // Registration status options
@@ -119,6 +119,13 @@ const Students = () => {
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [editRegistrationStatus, setEditRegistrationStatus] = useState('');
   const [editFeeStatus, setEditFeeStatus] = useState('');
+  const [showPermitModal, setShowPermitModal] = useState(false);
+  const [permitEndingDate, setPermitEndingDate] = useState('');
+  const [permitRemarks, setPermitRemarks] = useState('');
+  const [pendingFeeStatusChange, setPendingFeeStatusChange] = useState(null);
+  const [editingCell, setEditingCell] = useState(null); // { studentId, field }
+  const [cellEditValue, setCellEditValue] = useState('');
+  const [inlineEditChanges, setInlineEditChanges] = useState(new Map()); // Track changes before saving
   const skipFilterFetchRef = useRef(false);
   const filtersRef = useRef(filters);
   const searchTermRef = useRef(searchTerm);
@@ -537,6 +544,27 @@ const Students = () => {
       setProfileCompletion(completion);
     }
   }, [editData, showModal, selectedStudent, calculateProfileCompletion]);
+
+  // Check expired permits on component mount and when students data changes
+  useEffect(() => {
+    const checkExpiredPermits = async () => {
+      try {
+        const response = await api.post('/students/check-expired-permits');
+        if (response.data?.success && response.data?.updated > 0) {
+          // Silently refresh students if any were updated
+          invalidateStudents();
+        }
+      } catch (error) {
+        // Silently fail - don't show error to user on background check
+        console.error('Failed to check expired permits:', error);
+      }
+    };
+
+    // Check on mount and when students data is available
+    if (students && students.length > 0) {
+      checkExpiredPermits();
+    }
+  }, [students, invalidateStudents]);
 
   // Calculate stats when students or filters change - update immediately
   const studentsLengthRef = useRef(0);
@@ -1055,6 +1083,139 @@ completedStudents++;
     invalidateStudents();
   };
 
+  // Inline editing handlers
+  const handleCellClick = (studentId, field, currentValue, fieldType = 'text') => {
+    setEditingCell({ studentId, field, fieldType });
+    setCellEditValue(currentValue || '');
+  };
+
+  const handleCellBlur = async (student) => {
+    if (!editingCell) return;
+    
+    const { field, admissionNumber } = editingCell;
+    const newValue = cellEditValue.trim();
+    const originalValue = student[field] || '';
+
+    // If value hasn't changed, just clear editing
+    if (newValue === originalValue) {
+      setEditingCell(null);
+      setCellEditValue('');
+      return;
+    }
+
+    // Special handling for fee_status
+    if (field === 'fee_status' && newValue === 'permitted') {
+      setPendingFeeStatusChange(newValue);
+      setShowPermitModal(true);
+      setEditingCell(null);
+      setCellEditValue('');
+      return;
+    }
+
+    // Save the change immediately
+    try {
+      if (field === 'fee_status') {
+        await api.put(`/students/${admissionNumber}/fee-status`, {
+          fee_status: newValue
+        });
+      } else if (field === 'registration_status') {
+        await api.put(`/students/${admissionNumber}/registration-status`, {
+          registration_status: newValue
+        });
+      } else {
+        // Update via general update endpoint
+        const updateData = { [field]: newValue };
+        await updateStudentMutation.mutateAsync({
+          admissionNumber: admissionNumber,
+          data: { studentData: updateData }
+        });
+      }
+      
+      toast.success(`${field} updated successfully`);
+      invalidateStudents();
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to update ${field}`);
+    }
+
+    setEditingCell(null);
+    setCellEditValue('');
+  };
+
+  const handleCellKeyDown = (e, student) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleCellBlur(student);
+    } else if (e.key === 'Escape') {
+      setEditingCell(null);
+      setCellEditValue('');
+    }
+  };
+
+  // Render editable cell
+  const renderEditableCell = (student, field, fieldType = 'text', options = []) => {
+    const isEditing = editingCell?.studentId === student.id && editingCell?.field === field;
+    const currentValue = student[field] || '';
+
+    if (isEditing) {
+      if (fieldType === 'select') {
+        return (
+          <select
+            value={cellEditValue}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              if (newValue === 'permitted' && field === 'fee_status') {
+                setPendingFeeStatusChange(newValue);
+                setShowPermitModal(true);
+                setEditingCell(null);
+                setCellEditValue('');
+              } else {
+                setCellEditValue(newValue);
+                handleCellBlur({ ...student, [field]: newValue });
+              }
+            }}
+            onBlur={() => handleCellBlur(student)}
+            onKeyDown={(e) => handleCellKeyDown(e, student)}
+            autoFocus
+            className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            {options.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        );
+      } else {
+        return (
+          <input
+            type={fieldType}
+            value={cellEditValue}
+            onChange={(e) => setCellEditValue(e.target.value)}
+            onBlur={() => handleCellBlur(student)}
+            onKeyDown={(e) => handleCellKeyDown(e, student)}
+            autoFocus
+            className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        );
+      }
+    }
+
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCellClick(student, field, currentValue, fieldType);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          handleCellClick(student, field, currentValue, fieldType);
+        }}
+        className="cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded transition-colors"
+        title="Click or double-click to edit"
+      >
+        {currentValue || '-'}
+      </div>
+    );
+  };
+
   const handleViewPassword = async () => {
     if (!selectedStudent) return;
     
@@ -1169,6 +1330,8 @@ completedStudents++;
     setEditData(stageSyncedFields);
     setEditRegistrationStatus(student.registration_status || 'pending');
     setEditFeeStatus(student.fee_status || 'pending');
+    setPermitEndingDate(student.permit_ending_date || '');
+    setPermitRemarks(student.permit_remarks || '');
     setShowModal(true);
   };
 
@@ -1196,6 +1359,21 @@ completedStudents++;
       }
       if (editFeeStatus) {
         synchronizedData.fee_status = editFeeStatus;
+      }
+
+      // If fee status is 'permitted', update via fee-status endpoint to include permit data
+      if (editFeeStatus === 'permitted') {
+        try {
+          await api.put(`/students/${selectedStudent.admission_number}/fee-status`, {
+            fee_status: editFeeStatus,
+            permit_ending_date: permitEndingDate,
+            permit_remarks: permitRemarks
+          });
+          toast.success('Fee status updated successfully');
+        } catch (error) {
+          toast.error(error.response?.data?.message || 'Failed to update fee status');
+          throw error;
+        }
       }
 
       await updateStudentMutation.mutateAsync({
@@ -2135,19 +2313,27 @@ completedStudents++;
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.student_status || ''}>
-                        <span className="block truncate">{student.student_status || '-'}</span>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
                       </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.scholar_status || ''}>
-                        <span className="block truncate">{student.scholar_status || '-'}</span>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'scholar_status', 'text')}
                       </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.caste || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.gender || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.certificates_status || 'Pending'}>
-                        <span className="block truncate">{student.certificates_status || 'Pending'}</span>
+                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'caste', 'text')}
                       </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.fee_status || 'pending'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.registration_status || 'pending'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'certificates_status', 'select', CERTIFICATES_STATUS_OPTIONS)}
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
+                      </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                        {renderEditableCell(student, 'registration_status', 'select', REGISTRATION_STATUS_OPTIONS)}
+                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
@@ -3185,7 +3371,16 @@ completedStudents++;
                             {editMode ? (
                               <select
                                 value={editFeeStatus || ''}
-                                onChange={(e) => setEditFeeStatus(e.target.value)}
+                                onChange={(e) => {
+                                  const newStatus = e.target.value;
+                                  if (newStatus === 'permitted') {
+                                    // Show permit modal
+                                    setPendingFeeStatusChange(newStatus);
+                                    setShowPermitModal(true);
+                                  } else {
+                                    setEditFeeStatus(newStatus);
+                                  }
+                                }}
                                 className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               >
                                 <option value="">Select Fee Status</option>
@@ -3412,6 +3607,88 @@ completedStudents++;
           refreshStudents(1);
         }}
       />
+
+      {/* Permit Modal */}
+      {showPermitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Permit Information</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Permit Ending Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={permitEndingDate}
+                  onChange={(e) => setPermitEndingDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Remarks
+                </label>
+                <textarea
+                  value={permitRemarks}
+                  onChange={(e) => setPermitRemarks(e.target.value)}
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                  placeholder="Enter remarks for the permit"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowPermitModal(false);
+                  setPendingFeeStatusChange(null);
+                  setPermitEndingDate('');
+                  setPermitRemarks('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!permitEndingDate) {
+                    toast.error('Please enter permit ending date');
+                    return;
+                  }
+                  
+                  // If this is from inline editing, save directly
+                  if (pendingFeeStatusChange && editingCell && editingCell.admissionNumber) {
+                    try {
+                      await api.put(`/students/${editingCell.admissionNumber}/fee-status`, {
+                        fee_status: 'permitted',
+                        permit_ending_date: permitEndingDate,
+                        permit_remarks: permitRemarks
+                      });
+                      toast.success('Fee status updated successfully');
+                      invalidateStudents();
+                    } catch (error) {
+                      toast.error(error.response?.data?.message || 'Failed to update fee status');
+                    }
+                    setEditingCell(null);
+                    setCellEditValue('');
+                  } else {
+                    // Otherwise, set for modal edit
+                    setEditFeeStatus('permitted');
+                  }
+                  
+                  setShowPermitModal(false);
+                  setPendingFeeStatusChange(null);
+                }}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ManualRollNumberModal
         isOpen={showManualRollNumber}
