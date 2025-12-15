@@ -144,7 +144,7 @@ const StatPill = ({ label, value, color }) => {
   const [coursesWithBranches, setCoursesWithBranches] = useState([]);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [columnOrder, setColumnOrder] = useState([
-    'student', 'pin', 'batch', 'course', 'branch', 'year', 'semester', 'parentContact', 'attendance', 'smsStatus', 'insights'
+    'student', 'pin', 'registrationStatus', 'batch', 'course', 'branch', 'year', 'semester', 'parentContact', 'attendance', 'smsStatus', 'insights'
   ]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1035,6 +1035,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         return {
           ...student,
           attendanceStatus: status,
+          // Normalize admission number field for downstream handlers
+          admissionNumber: student.admissionNumber || student.admission_number || student.admissionNo || null,
           // Keep track of whether student was actually marked in DB
           hasAttendanceRecord: !!student.attendanceStatus
         };
@@ -2821,6 +2823,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     const columnConfig = {
                       student: { label: 'Student', sortable: true },
                       pin: { label: 'PIN', sortable: true },
+                      registrationStatus: { label: 'Registration Status', sortable: true },
                       batch: { label: 'Batch', sortable: true },
                       course: { label: 'Course', sortable: true },
                       branch: { label: 'Branch', sortable: true },
@@ -2903,6 +2906,68 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                           return (
                             <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
                               {student.pinNumber || 'N/A'}
+                            </td>
+                          );
+                        }
+                        if (columnKey === 'registrationStatus') {
+                          return (
+                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                              {(() => {
+                                const raw = (student.registration_status || '').toLowerCase();
+                                const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
+                                const label = isCompleted ? 'Completed' : 'Pending';
+                                const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                                const handleDoubleClick = async () => {
+                                  if (isCompleted) return; // Already completed
+                                  const admissionNumber = student.admissionNumber || student.admission_number;
+                                  if (!admissionNumber) {
+                                    toast.error('Missing admission number for update');
+                                    return;
+                                  }
+                                  try {
+                                    const response = await api.put(`/students/${admissionNumber}/registration-status`, {
+                                      registration_status: 'completed'
+                                    });
+                                    if (response.data?.success) {
+                                      setStudents((prev) => prev.map((s) =>
+                                        s.id === student.id ? { ...s, registration_status: 'completed' } : s
+                                      ));
+                                      toast.success('Registration marked as completed');
+                                    } else {
+                                      throw new Error(response.data?.message || 'Failed to update status');
+                                    }
+                                  } catch (error) {
+                                    // Fallback to generic student update (JSON student_data)
+                                    try {
+                                      const fallback = await api.put(`/students/${admissionNumber}`, {
+                                        studentData: {
+                                          'Registration Status': 'completed',
+                                          registration_status: 'completed'
+                                        }
+                                      });
+                                      if (fallback.data?.success) {
+                                        setStudents((prev) => prev.map((s) =>
+                                          s.id === student.id ? { ...s, registration_status: 'completed' } : s
+                                        ));
+                                        toast.success('Registration marked as completed');
+                                      } else {
+                                        toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
+                                      }
+                                    } catch (fallbackError) {
+                                      toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Update failed'));
+                                    }
+                                  }
+                                };
+                                return (
+                                  <span
+                                    onDoubleClick={handleDoubleClick}
+                                    title={!isCompleted ? 'Double-click to mark as completed' : undefined}
+                                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls} select-none cursor-pointer`}
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           );
                         }

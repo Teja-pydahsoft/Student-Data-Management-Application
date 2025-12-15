@@ -53,6 +53,19 @@ const CERTIFICATES_STATUS_OPTIONS = [
   'Not Required'
 ];
 
+// Fee status options
+const FEE_STATUS_OPTIONS = [
+  'Pending',
+  'Partial',
+  'Completed'
+];
+
+// Registration status options
+const REGISTRATION_STATUS_OPTIONS = [
+  'Pending',
+  'Completed'
+];
+
 const Students = () => {
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,6 +117,8 @@ const Students = () => {
   const [pageSize, setPageSize] = useState(25);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+  const [editRegistrationStatus, setEditRegistrationStatus] = useState('');
+  const [editFeeStatus, setEditFeeStatus] = useState('');
   const skipFilterFetchRef = useRef(false);
   const filtersRef = useRef(filters);
   const searchTermRef = useRef(searchTerm);
@@ -1152,6 +1167,8 @@ completedStudents++;
 
     setSelectedStudent(stageSyncedStudent);
     setEditData(stageSyncedFields);
+    setEditRegistrationStatus(student.registration_status || 'pending');
+    setEditFeeStatus(student.fee_status || 'pending');
     setShowModal(true);
   };
 
@@ -1173,9 +1190,19 @@ completedStudents++;
         editData.current_semester || editData['Current Semester']
       );
 
+      // Ensure statuses are included within studentData (backend maps these via FIELD_MAPPING)
+      if (editRegistrationStatus) {
+        synchronizedData.registration_status = editRegistrationStatus;
+      }
+      if (editFeeStatus) {
+        synchronizedData.fee_status = editFeeStatus;
+      }
+
       await updateStudentMutation.mutateAsync({
         admissionNumber: selectedStudent.admission_number,
-        data: { studentData: synchronizedData }
+        data: { 
+          studentData: synchronizedData
+        }
       });
 
       console.log('Save successful');
@@ -1862,6 +1889,31 @@ completedStudents++;
                 </select>
               </div>
               <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Fee Status</label>
+                <select
+                  value={filters.fee_status || ''}
+                  onChange={(e) => handleFilterChange('fee_status', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="partially_paid">Partially Paid</option>
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs font-medium text-gray-600 mb-1">Registration Status</label>
+                <select
+                  value={filters.registration_status || ''}
+                  onChange={(e) => handleFilterChange('registration_status', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-600 mb-1">Year</label>
                 <select
                   value={filters.year || ''}
@@ -2004,6 +2056,12 @@ completedStudents++;
                     <div className="font-semibold whitespace-nowrap">Certificate Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">Fee Status</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                    <div className="font-semibold whitespace-nowrap">Registration Status</div>
+                  </th>
+                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Year</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
@@ -2088,6 +2146,8 @@ completedStudents++;
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.certificates_status || 'Pending'}>
                         <span className="block truncate">{student.certificates_status || 'Pending'}</span>
                       </td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.fee_status || 'pending'}</td>
+                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.registration_status || 'pending'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
@@ -2174,6 +2234,14 @@ completedStudents++;
                       <div>
                         <p className="text-xs text-gray-500">Status</p>
                         <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Fee Status</p>
+                        <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Registration Status</p>
+                        <p className="text-sm font-medium text-gray-900">{student.registration_status || 'pending'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Year/Sem</p>
@@ -3107,6 +3175,52 @@ completedStudents++;
                             ) : (
                               <p className="text-sm text-gray-900 font-medium">
                                 {editData.scholar_status || editData['Scholar Status'] || selectedStudent?.scholar_status || '-'}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                              Fee Status
+                            </label>
+                            {editMode ? (
+                              <select
+                                value={editFeeStatus || ''}
+                                onChange={(e) => setEditFeeStatus(e.target.value)}
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                              >
+                                <option value="">Select Fee Status</option>
+                                {FEE_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm text-gray-900 font-medium">
+                                {editFeeStatus || editData.fee_status || editData['Fee Status'] || selectedStudent?.fee_status || '-'}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                              Registration Status
+                            </label>
+                            {editMode ? (
+                              <select
+                                value={editRegistrationStatus || ''}
+                                onChange={(e) => setEditRegistrationStatus(e.target.value)}
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                              >
+                                <option value="">Select Registration Status</option>
+                                {REGISTRATION_STATUS_OPTIONS.map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-sm text-gray-900 font-medium">
+                                {editRegistrationStatus || editData.registration_status || editData['Registration Status'] || selectedStudent?.registration_status || '-'}
                               </p>
                             )}
                           </div>

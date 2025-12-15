@@ -49,6 +49,8 @@ router.put('/:admissionNumber', authMiddleware, attachUserScope, studentControll
 router.put('/:admissionNumber/pin-number', authMiddleware, attachUserScope, studentController.updatePinNumber);
 router.get('/:admissionNumber/password', authMiddleware, attachUserScope, studentController.viewStudentPassword);
 router.post('/:admissionNumber/reset-password', authMiddleware, attachUserScope, studentController.resetStudentPassword);
+router.put('/:admissionNumber/fee-status', authMiddleware, attachUserScope, studentController.updateFeeStatus);
+router.put('/:admissionNumber/registration-status', authMiddleware, attachUserScope, studentController.updateRegistrationStatus);
 router.post('/otp/send', authMiddleware, studentController.sendOtp);
 router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.delete('/:admissionNumber', authMiddleware, attachUserScope, studentController.deleteStudent);

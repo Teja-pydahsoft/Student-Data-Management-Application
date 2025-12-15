@@ -209,6 +209,9 @@ const FIELD_MAPPING = {
   'Year': 'current_year',
   'Semister': 'current_semester',
   'Semester': 'current_semester',
+  'Fee Status': 'fee_status',
+  'Registration Status': 'registration_status',
+
 
   // Alternative field names (for backward compatibility)
   'Student Mobile Number': 'student_mobile',
@@ -2410,11 +2413,22 @@ exports.getAllStudents = async (req, res) => {
 
       applyStageToPayload(parsedData, stage);
 
+      // Resolve fee_status and registration_status to top-level fields
+      const resolvedFeeStatus = (student.fee_status && String(student.fee_status).trim().length > 0)
+        ? student.fee_status
+        : (parsedData?.fee_status || parsedData?.['Fee Status'] || null);
+
+      const resolvedRegistrationStatus = (student.registration_status && String(student.registration_status).trim().length > 0)
+        ? student.registration_status
+        : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
+
       return {
         ...student,
         current_year: stage.year,
         current_semester: stage.semester,
-        student_data: parsedData
+        student_data: parsedData,
+        fee_status: resolvedFeeStatus,
+        registration_status: resolvedRegistrationStatus
       };
     });
 
@@ -2477,8 +2491,65 @@ exports.getStudentByAdmission = async (req, res) => {
       ...students[0],
       current_year: stage.year,
       current_semester: stage.semester,
-      student_data: parsedData
+      student_data: parsedData,
+      // Ensure top-level fee/registration statuses are available even if columns are empty
+      fee_status: (students[0].fee_status && String(students[0].fee_status).trim().length > 0)
+        ? students[0].fee_status
+        : (parsedData?.fee_status || parsedData?.['Fee Status'] || null),
+      registration_status: (students[0].registration_status && String(students[0].registration_status).trim().length > 0)
+        ? students[0].registration_status
+        : (parsedData?.registration_status || parsedData?.['Registration Status'] || null)
     };
+
+    // Derive fee status from student_fees for the student's current year and semester
+    // This ensures the portal reflects the latest payments even if the top-level column isn't updated
+    try {
+      const studentId = students[0].id;
+      const currentYear = stage.year;
+      const currentSemester = stage.semester;
+
+      // Fetch fee records for the current stage
+      const [feeRows] = await masterPool.query(
+        `SELECT amount, paid_amount, payment_status
+         FROM student_fees
+         WHERE student_id = ? AND year = ? AND semester = ?`,
+        [studentId, currentYear, currentSemester]
+      );
+
+      if (Array.isArray(feeRows) && feeRows.length > 0) {
+        let allPaid = true;
+        let anyPaidOrPartial = false;
+
+        for (const row of feeRows) {
+          const amountVal = parseFloat(row.amount) || 0;
+          const paidVal = parseFloat(row.paid_amount) || 0;
+          const status = String(row.payment_status || '').toLowerCase();
+
+          const isPaid = status === 'paid' || paidVal >= amountVal;
+          const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+
+          if (!isPaid) {
+            allPaid = false;
+          }
+          if (isPaid || isPartial) {
+            anyPaidOrPartial = true;
+          }
+        }
+
+        let derivedStatus = 'pending';
+        if (allPaid) {
+          derivedStatus = 'completed';
+        } else if (anyPaidOrPartial) {
+          derivedStatus = 'partially_completed';
+        }
+
+        // Prefer derived status when fee records exist for the current stage
+        student.fee_status = derivedStatus;
+      }
+    } catch (deriveError) {
+      console.error('Failed to derive fee status from student_fees:', deriveError);
+      // Keep existing fee_status fallback if derivation fails
+    }
 
     res.json({
       success: true,
@@ -2588,7 +2659,7 @@ exports.updateStudent = async (req, res) => {
 
     const updatedColumns = new Set();
 
-    Object.entries(mutableStudentData).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(mutableStudentData)) {
       const columnName = FIELD_MAPPING[key];
       if (
         columnName &&
@@ -2598,6 +2669,15 @@ exports.updateStudent = async (req, res) => {
         value !== '{}' &&
         value !== null
       ) {
+        // Skip updating missing status columns when they don't exist in schema
+        if (columnName === 'registration_status' || columnName === 'fee_status') {
+          const exists = await columnExists(columnName);
+          if (!exists) {
+            // Still stored into student_data JSON later; skip column update
+            continue;
+          }
+        }
+
         // Convert values for specific column types
         let convertedValue = value;
 
@@ -2613,11 +2693,11 @@ exports.updateStudent = async (req, res) => {
               convertedValue = 'Other';
             } else {
               // Skip invalid gender values to prevent ENUM errors
-              return;
+              continue;
             }
           } else {
             // Skip empty gender values
-            return;
+            continue;
           }
         }
 
@@ -2630,7 +2710,7 @@ exports.updateStudent = async (req, res) => {
         updateValues.push(convertedValue);
         updatedColumns.add(columnName);
       }
-    });
+    }
 
     // Prepare JSON data (exclude large photo data to prevent bloating)
     const dataForJson = { ...mutableStudentData };
@@ -4621,7 +4701,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// Get Student by Admission Number
+// Get Student by Admission Number (derive fee_status from student_fees for current stage)
 exports.getStudentByAdmission = async (req, res) => {
   try {
     const { admissionNumber } = req.params;
@@ -4644,12 +4724,79 @@ exports.getStudentByAdmission = async (req, res) => {
 
     const student = students[0];
 
-    // Remove sensitive data if necessary, though this is a protected route
-    // for the student themselves usually.
+    // Parse JSON student_data and resolve current stage
+    const parsedData = parseJSON(student.student_data) || {};
+    const stage = resolveStageFromData(parsedData, {
+      year: student.current_year || 1,
+      semester: student.current_semester || 1
+    });
+    applyStageToPayload(parsedData, stage);
+
+    // Fallback fee/registration status (from columns or JSON)
+    const fallbackFeeStatus = (student.fee_status && String(student.fee_status).trim().length > 0)
+      ? student.fee_status
+      : (parsedData?.fee_status || parsedData?.['Fee Status'] || null);
+    const fallbackRegistrationStatus = (student.registration_status && String(student.registration_status).trim().length > 0)
+      ? student.registration_status
+      : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
+
+    // Derive fee_status from student_fees for the student's current year/semester
+    let derivedFeeStatus = fallbackFeeStatus || null;
+    try {
+      const [feeRows] = await masterPool.query(
+        `SELECT amount, paid_amount, payment_status
+         FROM student_fees
+         WHERE student_id = ? AND year = ? AND semester = ?`,
+        [student.id, stage.year, stage.semester]
+      );
+
+      if (Array.isArray(feeRows) && feeRows.length > 0) {
+        let allPaid = true;
+        let anyPaidOrPartial = false;
+
+        for (const row of feeRows) {
+          const amountVal = parseFloat(row.amount) || 0;
+          const paidVal = parseFloat(row.paid_amount) || 0;
+          const status = String(row.payment_status || '').toLowerCase();
+
+          const isPaid = status === 'paid' || paidVal >= amountVal;
+          const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+
+          if (isPaid) {
+            anyPaidOrPartial = true;
+          } else if (isPartial) {
+            anyPaidOrPartial = true;
+            allPaid = false;
+          } else {
+            // pending
+            allPaid = false;
+          }
+        }
+
+        if (allPaid) {
+          derivedFeeStatus = 'completed';
+        } else if (anyPaidOrPartial) {
+          derivedFeeStatus = 'partially_completed';
+        } else {
+          derivedFeeStatus = 'pending';
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to derive fee status from student_fees:', e);
+    }
+
+    const responsePayload = {
+      ...student,
+      current_year: stage.year,
+      current_semester: stage.semester,
+      student_data: parsedData,
+      fee_status: derivedFeeStatus,
+      registration_status: fallbackRegistrationStatus
+    };
 
     res.json({
       success: true,
-      data: student
+      data: responsePayload
     });
 
   } catch (error) {
@@ -4748,6 +4895,153 @@ exports.verifyOtp = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while verifying OTP'
+    });
+  }
+};
+
+// Helper: check if column exists in students table
+const columnExists = async (columnName) => {
+  try {
+    const [rows] = await masterPool.query(
+      `SELECT COUNT(*) AS count
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'students'
+         AND COLUMN_NAME = ?`,
+      [columnName]
+    );
+    return Number(rows?.[0]?.count || 0) > 0;
+  } catch (_e) {
+    // If we cannot check, default to false to avoid ER_BAD_FIELD_ERROR
+    return false;
+  }
+};
+
+// Update fee status
+exports.updateFeeStatus = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+    const { fee_status } = req.body;
+
+    if (!fee_status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Fee status is required'
+      });
+    }
+
+    // If column exists, update column; otherwise, update JSON field only
+    const hasFeeStatusColumn = await columnExists('fee_status');
+
+    if (hasFeeStatusColumn) {
+      const [result] = await masterPool.query(
+        'UPDATE students SET fee_status = ? WHERE admission_number = ?',
+        [fee_status, admissionNumber]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+    } else {
+      // Fallback: update JSON field inside student_data
+      const [rows] = await masterPool.query(
+        'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
+        [admissionNumber]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Student not found' });
+      }
+      const current = rows[0]?.student_data || '{}';
+      let parsed;
+      try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
+      parsed.fee_status = fee_status;
+      parsed['Fee Status'] = fee_status;
+      const serialized = JSON.stringify(parsed);
+      const [upd] = await masterPool.query(
+        'UPDATE students SET student_data = ? WHERE admission_number = ?',
+        [serialized, admissionNumber]
+      );
+      if (upd.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Student not found' });
+      }
+    }
+
+    clearStudentsCache();
+
+    res.json({
+      success: true,
+      message: 'Fee status updated successfully'
+    });
+  } catch (error) {
+    console.error('Update fee status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating fee status'
+    });
+  }
+};
+
+// Update registration status
+exports.updateRegistrationStatus = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+    const { registration_status } = req.body;
+
+    if (!registration_status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registration status is required'
+      });
+    }
+
+    const hasRegStatusColumn = await columnExists('registration_status');
+
+    if (hasRegStatusColumn) {
+      const [result] = await masterPool.query(
+        'UPDATE students SET registration_status = ? WHERE admission_number = ?',
+        [registration_status, admissionNumber]
+      );
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Student not found' });
+      }
+    } else {
+      // Fallback: update JSON field inside student_data
+      const [rows] = await masterPool.query(
+        'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
+        [admissionNumber]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Student not found' });
+      }
+      const current = rows[0]?.student_data || '{}';
+      let parsed;
+      try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
+      parsed.registration_status = registration_status;
+      parsed['Registration Status'] = registration_status;
+      const serialized = JSON.stringify(parsed);
+      const [upd] = await masterPool.query(
+        'UPDATE students SET student_data = ? WHERE admission_number = ?',
+        [serialized, admissionNumber]
+      );
+      if (upd.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: 'Student not found' });
+      }
+    }
+
+    clearStudentsCache();
+
+    res.json({
+      success: true,
+      message: 'Registration status updated successfully'
+    });
+  } catch (error) {
+    console.error('Update registration status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating registration status'
     });
   }
 };

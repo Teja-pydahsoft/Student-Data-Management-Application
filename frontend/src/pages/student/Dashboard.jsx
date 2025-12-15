@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, Mail, Calendar, MapPin, Hash } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 import { toast } from 'react-hot-toast';
@@ -37,13 +37,30 @@ const Dashboard = () => {
     const displayData = studentData || user;
     const get = (path, fallback = 'N/A') => displayData?.[path] || fallback;
 
-    // Placeholder stats
-    const attendanceStats = {
-        totalClasses: 120,
-        present: 102,
-        percentage: 85,
-        lastUpdate: 'Today'
+    // Normalize status helpers
+    const normalizeFeeStatus = () => {
+        const rawSource = displayData?.fee_status
+            || (displayData?.student_data ? (displayData.student_data['Fee Status'] || displayData.student_data.fee_status) : '')
+            || '';
+        const raw = String(rawSource).trim().toLowerCase();
+        const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
+        const isPartial = raw === 'partially_completed' || raw.includes('partial');
+        const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
+        return label;
     };
+    const normalizeRegistrationStatus = () => {
+        const rawSource = displayData?.registration_status
+            || (displayData?.student_data ? (displayData.student_data['Registration Status'] || displayData.student_data.registration_status) : '')
+            || '';
+        const raw = String(rawSource).trim().toLowerCase();
+        return raw === 'completed' ? 'Completed' : 'Pending';
+    };
+
+    const feeStatusLabel = normalizeFeeStatus();
+    const registrationLabel = normalizeRegistrationStatus();
+    const isRegistrationCompleted = registrationLabel === 'Completed' && feeStatusLabel === 'Completed';
+
+    // Attendance overview removed: avoid showing any placeholder or false stats
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -57,73 +74,44 @@ const Dashboard = () => {
                 </p>
             </div>
 
-            {/* Quick Actions Card */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
-                <div className="relative z-10">
-                    <h2 className="text-2xl font-bold mb-2">Semester Registration Open</h2>
-                    <p className="text-blue-100 mb-6 max-w-lg">
-                        Registration for the upcoming semester is now live. Complete the process to secure your subjects.
-                    </p>
-                    <button
-                        onClick={() => navigate('/student/semester-registration')}
-                        className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-sm cursor-pointer"
-                    >
-                        Register Now
-                    </button>
-                </div>
-                {/* Decorative circle */}
-                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Attendance Card - Main Focus */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-semibold text-gray-900">Attendance Overview</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${attendanceStats.percentage >= 75 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                            {attendanceStats.percentage >= 75 ? 'Good Standing' : 'Needs Improvement'}
-                        </span>
+            {/* Quick Actions Card / Completed Banner */}
+            {isRegistrationCompleted ? (
+                <div className="bg-green-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
+                    <div className="relative z-10">
+                        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                            <CheckCircle className="text-white" /> Registration Completed
+                        </h2>
+                        <p className="text-green-100 mb-6 max-w-lg">
+                            Your semester registration is complete. You can view your profile or return later to make changes if fees update.
+                        </p>
+                        <button
+                            onClick={() => navigate('/student/profile')}
+                            className="bg-white text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors shadow-sm cursor-pointer"
+                        >
+                            Go to Profile
+                        </button>
                     </div>
-
-                    <div className="flex flex-col sm:flex-row items-center gap-8">
-                        {/* Circular Progress (CSS only) */}
-                        <div className="relative h-32 w-32 flex-shrink-0">
-                            <svg className="h-full w-full transform -rotate-90" viewBox="0 0 36 36">
-                                <path
-                                    className="text-gray-100"
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3"
-                                />
-                                <path
-                                    className={`${attendanceStats.percentage >= 75 ? 'text-green-500' : 'text-yellow-500'}`}
-                                    strokeDasharray={`${attendanceStats.percentage}, 100`}
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3"
-                                />
-                            </svg>
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                                <span className="text-2xl font-bold text-gray-900">{attendanceStats.percentage}%</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 w-full">
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                                <p className="text-gray-500 text-xs uppercase tracking-wide">Total Classes</p>
-                                <p className="text-xl font-bold text-gray-900">{attendanceStats.totalClasses}</p>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                                <p className="text-gray-500 text-xs uppercase tracking-wide">Present</p>
-                                <p className="text-xl font-bold text-gray-900">{attendanceStats.present}</p>
-                            </div>
-                        </div>
-                    </div>
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
                 </div>
+            ) : (
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
+                    <div className="relative z-10">
+                        <h2 className="text-2xl font-bold mb-2">Semester Registration Open</h2>
+                        <p className="text-blue-100 mb-6 max-w-lg">
+                            {feeStatusLabel === 'Pending' ? 'Fees are pending. Complete or partially complete fees to proceed.' : 'Registration is open. You may proceed.'}
+                        </p>
+                        <button
+                            onClick={() => navigate('/student/semester-registration')}
+                            className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-sm cursor-pointer"
+                        >
+                            Register Now
+                        </button>
+                    </div>
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-8">
 
                 {/* Profile Quick Details */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
@@ -141,6 +129,14 @@ const Dashboard = () => {
                         <div className="flex items-center gap-3 text-sm">
                             <User size={16} className="text-gray-400" />
                             <span className="text-gray-700 truncate">{get('student_name', user?.name)}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                            <CheckCircle size={16} className={isRegistrationCompleted ? 'text-green-500' : 'text-yellow-500'} />
+                            <span className="text-gray-700">Registration: {registrationLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                            <BookOpen size={16} className={feeStatusLabel === 'Completed' ? 'text-green-500' : (feeStatusLabel === 'Partially Completed' ? 'text-yellow-500' : 'text-red-500')} />
+                            <span className="text-gray-700">Fees: {feeStatusLabel}</span>
                         </div>
                         <div className="flex items-center gap-3 text-sm">
                             <Smartphone size={16} className="text-gray-400" />

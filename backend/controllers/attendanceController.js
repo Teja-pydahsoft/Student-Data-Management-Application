@@ -744,6 +744,7 @@ exports.getAttendance = async (req, res) => {
 
       return {
         id: row.id,
+        admissionNumber: row.admission_number || studentData['Admission Number'] || studentData.admission_number || null,
         pinNumber: pinNumberValue,
         studentName: resolvedName,
         parentMobile1,
@@ -755,6 +756,8 @@ exports.getAttendance = async (req, res) => {
         currentYear: row.current_year || studentData['Current Academic Year'] || null,
         currentSemester: row.current_semester || studentData['Current Semester'] || null,
         attendanceStatus: row.attendance_status || null,
+        registration_status: studentData.registration_status || null,
+        fee_status: studentData.fee_status || null,
         smsSent: row.sms_sent === 1 || row.sms_sent === true
       };
     });
@@ -1086,14 +1089,25 @@ exports.markAttendance = async (req, res) => {
           continue;
         }
 
-        await connection.query(
-          `
-            UPDATE attendance_records
-            SET status = ?, holiday_reason = ?, marked_by = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `,
-          [record.status, record.status === 'holiday' ? record.holidayReason : null, adminId, existing.id]
-        );
+        // Build UPDATE query - include holiday_reason if status is holiday
+        let updateQuery = `
+          UPDATE attendance_records
+          SET status = ?, marked_by = ?`;
+        let updateParams = [record.status, adminId];
+        
+        // Add holiday_reason if status is holiday and reason is provided
+        if (record.status === 'holiday' && record.holidayReason) {
+          updateQuery += `, holiday_reason = ?`;
+          updateParams.push(record.holidayReason);
+        } else if (record.status !== 'holiday') {
+          // Clear holiday_reason if status is not holiday
+          updateQuery += `, holiday_reason = NULL`;
+        }
+        
+        updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+        updateParams.push(existing.id);
+        
+        await connection.query(updateQuery, updateParams);
 
         updatedCount += 1;
 
@@ -1101,21 +1115,28 @@ exports.markAttendance = async (req, res) => {
           smsQueue.push({ student, attendanceDate: normalizedDate });
         }
       } else {
-        await connection.query(
-          `
-            INSERT INTO attendance_records
-              (student_id, admission_number, attendance_date, status, holiday_reason, marked_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          `,
-          [
-            record.studentId,
-            student.admission_number || null,
-            normalizedDate,
-            record.status,
-            record.status === 'holiday' ? record.holidayReason : null,
-            adminId
-          ]
-        );
+        // Build INSERT query - include holiday_reason if status is holiday
+        // Check if we need to handle holiday_reason column
+        let insertQuery = `
+          INSERT INTO attendance_records
+            (student_id, admission_number, attendance_date, status, marked_by`;
+        let insertParams = [
+          record.studentId,
+          student.admission_number || null,
+          normalizedDate,
+          record.status,
+          adminId
+        ];
+        
+        // Add holiday_reason if status is holiday and reason is provided
+        if (record.status === 'holiday' && record.holidayReason) {
+          insertQuery += `, holiday_reason`;
+          insertParams.push(record.holidayReason);
+        }
+        
+        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
+        
+        await connection.query(insertQuery, insertParams);
 
         insertedCount += 1;
 
@@ -2469,8 +2490,7 @@ exports.getAttendanceSummary = async (req, res) => {
           COUNT(*) AS total_students,
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
-          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
-          GROUP_CONCAT(DISTINCT ar.holiday_reason SEPARATOR ' | ') AS holiday_reasons
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -2601,7 +2621,7 @@ exports.getAttendanceSummary = async (req, res) => {
             presentToday: present,
             absentToday: absent,
             holidayToday: holiday,
-            holidayReasons: row.holiday_reasons || null,
+            
             markedToday: marked,
             pendingToday: Math.max(0, total - marked)
           };

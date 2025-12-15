@@ -7,7 +7,9 @@ import {
     ArrowRight,
     CheckCircle,
     Loader2,
-    Smartphone
+    Smartphone,
+    BookOpen,
+    RefreshCw
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -34,33 +36,43 @@ const SemesterRegistration = () => {
 
     const [studentData, setStudentData] = useState(null);
 
-    // Fetch student details on mount
-    useEffect(() => {
-        const fetchStudentDetails = async () => {
-            try {
-                if (!user?.admission_number) return;
+    // Fetch student details (reusable)
+    const fetchStudentDetails = async () => {
+        try {
+            if (!user?.admission_number) return;
 
-                const response = await api.get(`/students/${user.admission_number}`);
+            const response = await api.get(`/students/${user.admission_number}`);
 
-                if (response.data.success) {
-                    const student = response.data.data;
-                    setStudentData(student);
-                    setVerificationState(prev => ({
-                        ...prev,
-                        studentMobile: student.student_mobile || '',
-                        parentMobile: student.parent_mobile1 || student.parent_mobile2 || ''
-                    }));
-                }
-            } catch (error) {
-                console.error('Error fetching student details:', error);
-                toast.error('Failed to load student contact details');
-            } finally {
-                setInitialLoading(false);
+            if (response.data.success) {
+                const student = response.data.data;
+                setStudentData(student);
+                setVerificationState(prev => ({
+                    ...prev,
+                    studentMobile: student.student_mobile || '',
+                    parentMobile: student.parent_mobile1 || student.parent_mobile2 || ''
+                }));
             }
-        };
+        } catch (error) {
+            console.error('Error fetching student details:', error);
+            toast.error('Failed to load student contact details');
+        } finally {
+            setInitialLoading(false);
+        }
+    };
 
+    // Initial fetch on mount
+    useEffect(() => {
         fetchStudentDetails();
+        // Refetch if user changes
     }, [user]);
+
+    // Refetch when landing on Fee Status or Confirmation steps to reflect latest updates
+    useEffect(() => {
+        if (currentStep === 3 || currentStep === 6) {
+            fetchStudentDetails();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentStep]);
 
     const handleSendOTP = async (type) => {
         const mobile = type === 'student' ? verificationState.studentMobile : verificationState.parentMobile;
@@ -140,9 +152,9 @@ const SemesterRegistration = () => {
     const steps = [
         { id: 1, title: 'Verification', icon: ShieldCheck },
         { id: 2, title: 'Certificates', icon: FileText },
-        { id: 3, title: 'Course Selection', icon: BookOpen },
-        { id: 4, title: 'Electives', icon: CheckCircle },
-        { id: 5, title: 'Preview', icon: FileText },
+        { id: 3, title: 'Fee Status', icon: BookOpen },
+        { id: 4, title: 'Promotion Status', icon: CheckCircle },
+        { id: 5, title: 'Scholarship', icon: FileText },
         { id: 6, title: 'Confirmation', icon: CheckCircle }
     ];
 
@@ -155,6 +167,47 @@ const SemesterRegistration = () => {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <Loader2 className="animate-spin text-blue-600" size={32} />
+            </div>
+        );
+    }
+
+    // If registration is already completed, show a completion banner instead of steps
+    const registrationRawSource = (studentData?.registration_status)
+        || (studentData?.student_data ? (studentData.student_data['Registration Status'] || studentData.student_data.registration_status) : '')
+        || '';
+    const registrationRaw = String(registrationRawSource).trim().toLowerCase();
+    const registrationCompleted = registrationRaw === 'completed' || registrationRaw.includes('complete');
+
+    if (registrationCompleted) {
+        return (
+            <div className="max-w-4xl mx-auto">
+                <div className="mb-8">
+                    <h1 className="text-2xl font-bold text-gray-900 heading-font">Semester Registration</h1>
+                    <p className="text-gray-500">Your registration for the current semester is complete.</p>
+                </div>
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
+                    <div className="relative z-10">
+                        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2"><CheckCircle /> Registration Completed</h2>
+                        <p className="text-emerald-100 mb-6 max-w-lg">
+                            Great job! You have successfully completed semester registration. You can view your dashboard or profile anytime.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => navigate('/student/dashboard')}
+                                className="bg-white text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors shadow-sm cursor-pointer"
+                            >
+                                Go to Dashboard
+                            </button>
+                            <button
+                                onClick={() => navigate('/student/profile')}
+                                className="bg-white/90 text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-white transition-colors shadow-sm cursor-pointer"
+                            >
+                                View Profile
+                            </button>
+                        </div>
+                    </div>
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                </div>
             </div>
         );
     }
@@ -438,26 +491,271 @@ const SemesterRegistration = () => {
                     </div>
                 )}
 
-                {currentStep > 2 && (
-                    <div className="p-12 text-center">
-                        <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <BookOpen size={40} />
+                {currentStep === 3 && (
+                    <div className="p-8">
+                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            <BookOpen />
+                            Fee Status
+                            <button
+                                onClick={fetchStudentDetails}
+                                className="ml-3 inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-gray-200 hover:bg-gray-100 text-gray-700"
+                                title="Refresh fee status"
+                            >
+                                <RefreshCw size={14} /> Refresh
+                            </button>
+                        </h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="border rounded-xl p-6 bg-gray-50">
+                                <p className="text-sm text-gray-500">Current Fee Status</p>
+                                {(() => {
+                                    const rawSource = studentData?.fee_status
+                                        || (studentData?.student_data ? (studentData.student_data['Fee Status'] || studentData.student_data.fee_status) : '')
+                                        || '';
+                                    const raw = String(rawSource).trim().toLowerCase();
+
+                                    const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
+                                    const isPartial = raw === 'partially_completed' || raw.includes('partial');
+                                    const isPending = raw === 'pending' || raw.includes('pending') || raw === '';
+
+                                    const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
+                                    const cls = label === 'Completed'
+                                        ? 'bg-green-100 text-green-800'
+                                        : label === 'Partially Completed'
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-red-100 text-red-800';
+
+                                    return (
+                                        <span className={`inline-flex items-center mt-2 px-3 py-1 rounded-full text-sm font-medium ${cls}`}>
+                                            {label}
+                                        </span>
+                                    );
+                                })()}
+
+                                <div className="mt-4 text-xs text-gray-600">
+                                    <p>
+                                        - <span className="font-semibold">Pending</span>: No fee payments recorded.
+                                    </p>
+                                    <p>
+                                        - <span className="font-semibold">Partially Completed</span>: Some payments done, remaining due.
+                                    </p>
+                                    <p>
+                                        - <span className="font-semibold">Completed</span>: All required fees cleared.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="border rounded-xl p-6 bg-white">
+                                <p className="text-sm text-gray-500">Your Details</p>
+                                <div className="mt-2 text-sm text-gray-800">
+                                    <p><span className="text-gray-500">Name:</span> {studentData?.student_name || '-'}</p>
+                                    <p><span className="text-gray-500">Admission No:</span> {studentData?.admission_number || studentData?.admission_no || '-'}</p>
+                                    <p><span className="text-gray-500">Course:</span> {studentData?.course || '-'}</p>
+                                    <p><span className="text-gray-500">Branch:</span> {studentData?.branch || '-'}</p>
+                                </div>
+                                <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded border border-blue-100">
+                                    For detailed fee breakdown, please contact administration.
+                                </div>
+                            </div>
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Coming Soon</h2>
-                        <p className="text-gray-500">Step {currentStep} is under development.</p>
-                        <div className="flex justify-center gap-4 mt-6">
-                            <button
-                                onClick={() => setCurrentStep(prev => prev - 1)}
-                                className="text-gray-600 font-medium hover:underline"
-                            >
-                                Back
-                            </button>
-                            <button
-                                onClick={() => setCurrentStep(1)}
-                                className="text-blue-600 font-medium hover:underline"
-                            >
-                                Back to Start
-                            </button>
+
+                        <div className="mt-8 flex justify-between">
+                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
+                            {(() => {
+                                const raw = (studentData?.fee_status || '').toLowerCase();
+                                const canProceed = raw === 'completed' || raw === 'partially_completed' || raw === 'partial' || raw === 'partially';
+                                return (
+                                    <button
+                                        onClick={() => setCurrentStep(currentStep + 1)}
+                                        disabled={!canProceed}
+                                        className={`px-4 py-2 rounded-lg ${canProceed ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                                    >
+                                        Next
+                                    </button>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 4 && (
+                    <div className="p-8">
+                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            <CheckCircle className="text-green-600" />
+                            Promotion Status
+                        </h2>
+
+                        {(() => {
+                            const currentYear = Number(studentData?.current_year || 1);
+                            const currentSem = Number(studentData?.current_semester || 1);
+                            const MAX_YEARS = 4; // fallback when course config is unavailable
+                            const SEMS_PER_YEAR = 2; // fallback default
+
+                            let nextYear = currentYear;
+                            let nextSem = currentSem;
+                            let completed = false;
+
+                            if (currentSem < SEMS_PER_YEAR) {
+                                nextSem = currentSem + 1;
+                            } else if (currentYear < MAX_YEARS) {
+                                nextYear = currentYear + 1;
+                                nextSem = 1;
+                            } else {
+                                completed = true;
+                            }
+
+                            const badgeCls = completed ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800';
+                            const badgeText = completed ? 'Course Completed' : 'Eligible to Promote';
+
+                            return (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="border rounded-xl p-6 bg-gray-50">
+                                        <p className="text-sm text-gray-500">Current Stage</p>
+                                        <p className="mt-1 text-lg font-semibold text-gray-800">Year {currentYear}, Semester {currentSem}</p>
+                                        <span className={`inline-flex items-center mt-3 px-3 py-1 rounded-full text-sm font-medium ${badgeCls}`}>{badgeText}</span>
+                                    </div>
+                                    <div className="border rounded-xl p-6 bg-white">
+                                        <p className="text-sm text-gray-500">Next Stage</p>
+                                        <p className="mt-1 text-lg font-semibold text-gray-800">
+                                            {completed ? '—' : `Year ${nextYear}, Semester ${nextSem}`}
+                                        </p>
+                                        <div className="mt-3 text-xs text-gray-600">
+                                            Promotion eligibility may consider fee completion and academic policies.
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        <div className="mt-8 flex justify-between">
+                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
+                            <button onClick={() => setCurrentStep(currentStep + 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Next</button>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 5 && (
+                    <div className="p-8">
+                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                            <FileText />
+                            Scholarship
+                        </h2>
+
+                        <div className="border rounded-xl p-6 bg-gray-50">
+                            <p className="text-sm text-gray-500">Current Scholarship Status</p>
+                            {(() => {
+                                const raw = (studentData?.scholar_status || '').toLowerCase();
+                                const label = raw === 'approved' || raw === 'accepted'
+                                    ? 'Approved'
+                                    : raw === 'rejected'
+                                        ? 'Rejected'
+                                        : raw === 'pending'
+                                            ? 'Pending'
+                                            : (studentData?.scholar_status ? String(studentData.scholar_status) : 'Not Applied');
+                                const cls = label === 'Approved'
+                                    ? 'bg-green-100 text-green-800'
+                                    : label === 'Rejected'
+                                        ? 'bg-red-100 text-red-800'
+                                        : 'bg-yellow-100 text-yellow-800';
+                                return (
+                                    <span className={`inline-flex items-center mt-2 px-3 py-1 rounded-full text-sm font-medium ${cls}`}>
+                                        {label}
+                                    </span>
+                                );
+                            })()}
+
+                            <div className="mt-4 text-xs text-gray-600">
+                                For scholarship applications or updates, please reach out to administration.
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex justify-between">
+                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
+                            <button onClick={() => setCurrentStep(currentStep + 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Next</button>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 6 && (
+                    <div className="p-8">
+                        <h2 className="text-xl font-bold text-gray-900 mb-6">Confirmation</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="border rounded-xl p-6 bg-gray-50">
+                                <p className="text-sm text-gray-500">Overview</p>
+                                <ul className="mt-2 text-sm text-gray-800 space-y-2">
+                                    <li><span className="text-gray-500">Verification:</span> {(verificationState.studentVerified && verificationState.parentVerified) ? 'Completed' : 'Pending'}</li>
+                                    <li><span className="text-gray-500">Certificates:</span> {(studentData?.certificates_status || '').toLowerCase().includes('verified') ? 'Verified' : (studentData?.certificates_status || 'Pending')}</li>
+                                    <li><span className="text-gray-500">Fee:</span> {studentData?.fee_status || 'Pending'}</li>
+                                    <li><span className="text-gray-500">Promotion:</span> {(studentData?.current_year && studentData?.current_semester) ? `Year ${studentData.current_year}, Semester ${studentData.current_semester}` : '-'}</li>
+                                    <li><span className="text-gray-500">Scholarship:</span> {studentData?.scholar_status || 'Not Applied'}</li>
+                                </ul>
+                                <div className="mt-3 text-xs text-gray-600">Ensure fee is completed or partially completed to finalize.</div>
+                            </div>
+                            <div className="border rounded-xl p-6 bg-white">
+                                <p className="text-sm text-gray-500">Your Details</p>
+                                <div className="mt-2 text-sm text-gray-800">
+                                    <p><span className="text-gray-500">Name:</span> {studentData?.student_name || '-'}</p>
+                                    <p><span className="text-gray-500">Admission No:</span> {studentData?.admission_number || studentData?.admission_no || '-'}</p>
+                                    <p><span className="text-gray-500">Course:</span> {studentData?.course || '-'}</p>
+                                    <p><span className="text-gray-500">Branch:</span> {studentData?.branch || '-'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex justify-between items-center">
+                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Back</button>
+                            {(() => {
+                                const feeRaw = (studentData?.fee_status || '').toLowerCase();
+                                const canFinalize = feeRaw === 'completed' || feeRaw === 'partially_completed' || feeRaw === 'partial' || feeRaw === 'partially';
+                                const handleFinalize = async () => {
+                                    if (!canFinalize) {
+                                        toast.error('Complete or partially complete fees to finalize');
+                                        return;
+                                    }
+                                    try {
+                                        const response = await api.put(`/students/${user.admission_number}/registration-status`, {
+                                            registration_status: 'completed'
+                                        });
+                                        if (response.data?.success) {
+                                            toast.success('Semester registration finalized. Redirecting to dashboard…');
+                                            setStudentData((prev) => ({ ...prev, registration_status: 'completed' }));
+                                            // Navigate to student dashboard after successful finalize
+                                            navigate('/student/dashboard');
+                                        } else {
+                                            throw new Error(response.data?.message || 'Failed to finalize');
+                                        }
+                                    } catch (error) {
+                                        // Fallback: update via generic student update (JSON student_data)
+                                        try {
+                                            const fallback = await api.put(`/students/${user.admission_number}`, {
+                                                studentData: {
+                                                    'Registration Status': 'completed',
+                                                    registration_status: 'completed'
+                                                }
+                                            });
+                                            if (fallback.data?.success) {
+                                                toast.success('Semester registration finalized. Redirecting to dashboard…');
+                                                setStudentData((prev) => ({ ...prev, registration_status: 'completed' }));
+                                                // Navigate to student dashboard after successful finalize
+                                                navigate('/student/dashboard');
+                                            } else {
+                                                toast.error(fallback.data?.message || (error.response?.data?.message || 'Finalize failed'));
+                                            }
+                                        } catch (fallbackError) {
+                                            toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Finalize failed'));
+                                        }
+                                    }
+                                };
+                                return (
+                                    <button
+                                        onClick={handleFinalize}
+                                        disabled={!canFinalize}
+                                        className={`px-6 py-3 rounded-lg font-semibold ${canFinalize ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                                    >
+                                        Finalize Registration
+                                    </button>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}
