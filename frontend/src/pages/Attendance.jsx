@@ -865,17 +865,51 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       toast.error('Select year and semester to mark no class work');
       return;
     }
-    const records = students
-      .filter((s) => Number.isInteger(s.id))
-      .map((s) => ({ studentId: s.id, status: 'holiday' }));
-    if (records.length === 0) {
-      toast.error('No students found to mark as holiday');
-      return;
+    
+    // Fetch ALL students matching the filters from backend (not just loaded ones)
+    // This ensures we mark all students, not just the 50 currently loaded
+    setMarkHolidayLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('date', attendanceDate);
+      
+      // Add all filter parameters
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      if (filters.currentYear) params.append('currentYear', filters.currentYear);
+      if (filters.currentSemester) params.append('currentSemester', filters.currentSemester);
+      
+      // Use a very large limit to get all students matching the filters
+      params.append('limit', '10000');
+      params.append('offset', '0');
+      
+      const response = await api.get(`/attendance?${params.toString()}`);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch students');
+      }
+      
+      const allFilteredStudents = response.data.data?.students || [];
+      const records = allFilteredStudents
+        .filter((s) => Number.isInteger(s.id))
+        .map((s) => ({ studentId: s.id, status: 'holiday' }));
+      
+      if (records.length === 0) {
+        toast.error('No students found to mark as holiday');
+        setMarkHolidayLoading(false);
+        return;
+      }
+      
+      // Show modal to enter holiday reason
+      setPendingHolidayRecords(records);
+      setHolidayReason('');
+      setHolidayReasonModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch students for holiday marking:', error);
+      toast.error(error.response?.data?.message || 'Unable to fetch students');
+    } finally {
+      setMarkHolidayLoading(false);
     }
-    // Show modal to enter holiday reason
-    setPendingHolidayRecords(records);
-    setHolidayReason('');
-    setHolidayReasonModalOpen(true);
   };
 
   const handleConfirmHolidayMarking = async () => {
