@@ -154,6 +154,11 @@ const StatPill = ({ label, value, color }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalStudents, setTotalStudents] = useState(0);
+  // Infinite scroll state for filtered results
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadedPages, setLoadedPages] = useState(1);
+  const scrollObserverRef = useRef(null);
   const [attendanceStatistics, setAttendanceStatistics] = useState({
     total: 0,
     present: 0,
@@ -959,18 +964,25 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     }
   };
 
-  const loadAttendance = async (pageOverride = null) => {
-    setLoading(true);
-    setSelectedDateHolidayInfo(null);
-    // Clear statistics and total students when loading starts to show loading state
-    setAttendanceStatistics({
-      total: 0,
-      present: 0,
-      absent: 0,
-      marked: 0,
-      unmarked: 0
-    });
-    setTotalStudents(0); // Clear total students count to show loading state
+  const loadAttendance = async (pageOverride = null, append = false) => {
+    // If appending (infinite scroll), use loadingMore instead of loading
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setSelectedDateHolidayInfo(null);
+      // Clear statistics and total students when loading starts to show loading state
+      setAttendanceStatistics({
+        total: 0,
+        present: 0,
+        absent: 0,
+        marked: 0,
+        unmarked: 0
+      });
+      setTotalStudents(0); // Clear total students count to show loading state
+      setLoadedPages(1); // Reset loaded pages when starting fresh
+    }
+    
     try {
       // Cancel any in-flight attendance request to avoid queueing when filters change rapidly
       if (pendingRequestRef.current) {
@@ -984,9 +996,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       // Check if filters are applied (excluding search filters like studentName and parentMobile)
       const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
       
-      // When filters are applied, always use page 1 (offset 0) since we load all students
+      // When filters are applied, use infinite scroll with 50 students per page
       // When no filters, use pagination normally
-      const pageToUse = hasFilters ? 1 : (pageOverride !== null ? pageOverride : currentPage);
+      let pageToUse;
+      if (hasFilters) {
+        if (append) {
+          // When appending, load the next page
+          pageToUse = loadedPages + 1;
+        } else {
+          // When starting fresh, reset to page 1
+          pageToUse = 1;
+        }
+      } else {
+        pageToUse = pageOverride !== null ? pageOverride : currentPage;
+      }
       const cacheKey = buildCacheKey(pageToUse);
 
       // Check cache and use it immediately if fresh, otherwise continue with fetch
@@ -1015,13 +1038,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
-      // When filters are applied, load ALL students that match the filters (no pagination)
-      // This ensures operations like "Mark Holiday" work on all filtered students
+      // When filters are applied, use infinite scroll with 50 students per page
+      // When no filters, use pagination normally
       if (hasFilters) {
-        // When filters are applied, load all students (use a large limit like 10000)
-        // This ensures all filtered students are available for operations
-        params.append('limit', '10000');
-        params.append('offset', '0');
+        // Use 50 students per page for infinite scroll when filters are applied
+        const filterPageSize = 50;
+        params.append('limit', filterPageSize.toString());
+        params.append('offset', ((pageToUse - 1) * filterPageSize).toString());
       } else {
         // When no filters, use pagination for better performance
         params.append('limit', pageSize.toString());
@@ -1126,16 +1149,42 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         };
       }
 
-      setStudents(fetchedStudents);
-      setStatusMap(statusSnapshot);
-      setInitialStatusMap({ ...statusSnapshot });
+      // Handle appending for infinite scroll vs replacing
+      if (append && hasFilters) {
+        // Append new students to existing list
+        setStudents(prevStudents => {
+          // Avoid duplicates by checking IDs
+          const existingIds = new Set(prevStudents.map(s => s.id));
+          const newStudents = fetchedStudents.filter(s => !existingIds.has(s.id));
+          const updatedStudents = [...prevStudents, ...newStudents];
+          // Update hasMore based on whether we got a full page and if there are more to load
+          setHasMore(fetchedStudents.length === 50 && updatedStudents.length < total);
+          return updatedStudents;
+        });
+        // Merge status maps
+        setStatusMap(prev => ({ ...prev, ...statusSnapshot }));
+        setInitialStatusMap(prev => ({ ...prev, ...statusSnapshot }));
+        setSmsStatusMap(prev => ({ ...prev, ...newSmsStatusMap }));
+        setLoadedPages(pageToUse);
+      } else {
+        // Replace students (initial load or no filters)
+        setStudents(fetchedStudents);
+        setStatusMap(statusSnapshot);
+        setInitialStatusMap({ ...statusSnapshot });
+        setSmsStatusMap(newSmsStatusMap);
+        if (hasFilters) {
+          setLoadedPages(1);
+          // Check if there are more pages to load
+          setHasMore(fetchedStudents.length === 50 && fetchedStudents.length < total);
+        }
+      }
+      
       setTotalStudents(total);
       setAttendanceStatistics(finalStatistics);
       
       // Always set current page to the page we just loaded
       setCurrentPage(pageToUse);
       setSmsResults([]);
-      setSmsStatusMap(newSmsStatusMap); // Populate SMS status from API response
       setLastUpdatedAt(null); // Clear last updated when loading new data
 
       if (response.data?.data?.holiday) {
@@ -1172,24 +1221,32 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         return;
       }
       console.error('Attendance fetch failed:', error);
-      toast.error(error.response?.data?.message || 'Unable to load attendance');
-      setStudents([]);
-      setStatusMap({});
-      setInitialStatusMap({});
-      setTotalStudents(0);
-      setSelectedDateHolidayInfo(null);
-      // Keep statistics cleared on error to show loading state
-      setAttendanceStatistics({
-        total: 0,
-        present: 0,
-        absent: 0,
-        marked: 0,
-        unmarked: 0
-      });
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        toast.error(error.response?.data?.message || 'Unable to load attendance');
+        setStudents([]);
+        setStatusMap({});
+        setInitialStatusMap({});
+        setTotalStudents(0);
+        setSelectedDateHolidayInfo(null);
+        // Keep statistics cleared on error to show loading state
+        setAttendanceStatistics({
+          total: 0,
+          present: 0,
+          absent: 0,
+          marked: 0,
+          unmarked: 0
+        });
+      }
     } finally {
       // Only clear loading if this is the latest request
       pendingRequestRef.current = null;
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
     
     // Return default statistics if function completes without returning
@@ -1201,6 +1258,46 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       unmarked: 0
     };
   };
+
+  // Load more students for infinite scroll
+  const loadMoreStudents = async () => {
+    const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+    if (!hasFilters || loadingMore || !hasMore) {
+      return;
+    }
+    await loadAttendance(null, true);
+  };
+
+  // Set up Intersection Observer for infinite scroll when filters are applied
+  useEffect(() => {
+    const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+    
+    if (!hasFilters || !scrollObserverRef.current) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasMore && !loadingMore) {
+          loadMoreStudents();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '100px', // Start loading 100px before reaching the bottom
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(scrollObserverRef.current);
+
+    return () => {
+      if (scrollObserverRef.current) {
+        observer.unobserve(scrollObserverRef.current);
+      }
+    };
+  }, [filters.batch, filters.course, filters.branch, filters.currentYear, filters.currentSemester, hasMore, loadingMore, students.length]);
 
   useEffect(() => {
     if (!calendarMonthKey) return;
@@ -1252,6 +1349,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     if (!filtersLoadedRef.current) return;
     
     setCurrentPage(1);
+    setLoadedPages(1); // Reset loaded pages when filters change
+    setHasMore(false); // Reset hasMore when filters change
     
     // Debounce filter changes to avoid excessive API calls
     const debounceTimer = setTimeout(() => {
@@ -3440,6 +3539,24 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             })}
           </div>
           
+          {/* Infinite scroll observer and loading indicator */}
+          {(() => {
+            const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+            if (hasFilters && hasMore) {
+              return (
+                <div ref={scrollObserverRef} className="py-4 flex justify-center">
+                  {loadingMore && (
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Loader2 size={20} className="animate-spin" />
+                      <span className="text-sm">Loading more students...</span>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return null;
+          })()}
+          
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
             <div className="text-sm text-gray-600">
               {totalStudents === 0
@@ -3448,8 +3565,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     // Check if filters are applied
                     const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
                     if (hasFilters) {
-                      // When filters are applied, show all students loaded
-                      return `Showing all ${totalStudents.toLocaleString()} student${totalStudents !== 1 ? 's' : ''}`;
+                      // When filters are applied, show loaded vs total students
+                      return `Showing ${students.length.toLocaleString()} of ${totalStudents.toLocaleString()} student${totalStudents !== 1 ? 's' : ''}`;
                     } else {
                       // When no filters, show pagination info
                       return `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`;
