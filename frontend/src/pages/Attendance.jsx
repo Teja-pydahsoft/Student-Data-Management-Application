@@ -796,8 +796,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const handleDayEndDownload = async (format = 'xlsx') => {
     try {
       const params = new URLSearchParams();
-      params.append('fromDate', attendanceDate);
-      params.append('toDate', attendanceDate);
+      params.append('date', attendanceDate);
       params.append('format', format);
       params.append('student_status', 'Regular');
       if (filters.batch) params.append('batch', filters.batch);
@@ -806,7 +805,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.currentYear) params.append('year', filters.currentYear);
       if (filters.currentSemester) params.append('semester', filters.currentSemester);
 
-      const response = await api.get(`/attendance/download?${params.toString()}`, {
+      const response = await api.get(`/attendance/day-end-download?${params.toString()}`, {
         responseType: 'blob'
       });
 
@@ -818,12 +817,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `attendance_report_${attendanceDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      const fileName = `day_end_report_${attendanceDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.download = fileName;
       link.click();
       window.URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${format.toUpperCase()} report`);
     } catch (error) {
       console.error('Download report error:', error);
-      toast.error('Unable to download report');
+      toast.error(error.response?.data?.message || 'Unable to download report');
     }
   };
 
@@ -2676,6 +2677,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               )}
               <div className="flex justify-end">
                 <div className="flex items-center gap-2 mr-auto">
+                  <button
+                    onClick={() => handleDayEndDownload('pdf')}
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                  >
+                    <Download size={12} />
+                    PDF
+                  </button>
                   <button
                     onClick={() => handleDayEndDownload('xlsx')}
                     className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"

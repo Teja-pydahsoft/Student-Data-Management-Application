@@ -3664,3 +3664,308 @@ exports.downloadAttendanceReport = async (req, res) => {
   }
 };
 
+// Download day-end report in PDF or Excel format
+exports.downloadDayEndReport = async (req, res) => {
+  try {
+    const {
+      date,
+      format,
+      batch,
+      course,
+      branch,
+      year,
+      semester,
+      student_status,
+      studentStatus
+    } = req.query;
+    
+    const statusFilter = student_status || studentStatus || 'Regular';
+    const normalizedFormat = (format || 'xlsx').toLowerCase();
+    const attendanceDate = getDateOnlyString(date || new Date());
+    
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    if (normalizedFormat !== 'pdf' && normalizedFormat !== 'xlsx') {
+      return res.status(400).json({
+        success: false,
+        message: 'Format must be either pdf or xlsx'
+      });
+    }
+
+    const filters = {
+      batch: normalizeTextFilter(batch),
+      course: normalizeTextFilter(course),
+      branch: normalizeTextFilter(branch),
+      year: parseOptionalInteger(year),
+      semester: parseOptionalInteger(semester),
+      studentStatus: statusFilter
+    };
+
+    // Build filter conditions
+    const countFilter = buildWhereClause(filters, 's');
+    
+    // Apply user scope filtering
+    let scopeCondition = '';
+    let scopeParams = [];
+    if (req.userScope) {
+      const { scopeCondition: scopeCond, params: scopeP } = getScopeConditionString(req.userScope, 's');
+      if (scopeCond) {
+        scopeCondition = ` AND ${scopeCond}`;
+        scopeParams = scopeP;
+      }
+    }
+
+    // Get grouped summary data (same query as getAttendanceSummary)
+    const [groupedRows] = await masterPool.query(
+      `
+        SELECT 
+          s.college AS college,
+          s.batch AS batch,
+          s.course AS course,
+          s.branch AS branch,
+          s.current_year AS year,
+          s.current_semester AS semester,
+          COUNT(*) AS total_students,
+          SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+          SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+        FROM students s
+        LEFT JOIN attendance_records ar 
+          ON ar.student_id = s.id 
+          AND ar.attendance_date = ?
+        WHERE 1=1${countFilter.clause}${scopeCondition}
+        GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+        ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+      `,
+      [attendanceDate, ...countFilter.params, ...scopeParams]
+    );
+
+    // Transform grouped data to match frontend format
+    const groupedData = groupedRows.map((row) => {
+      const present = Number(row.present) || 0;
+      const absent = Number(row.absent) || 0;
+      const holiday = Number(row.holiday) || 0;
+      const total = Number(row.total_students) || 0;
+      const marked = present + absent + holiday;
+      return {
+        college: row.college || '—',
+        batch: row.batch || '—',
+        course: row.course || '—',
+        branch: row.branch || '—',
+        year: row.year || '—',
+        semester: row.semester || '—',
+        totalStudents: total,
+        presentToday: present,
+        absentToday: absent,
+        holidayToday: holiday,
+        markedToday: marked,
+        pendingToday: Math.max(0, total - marked)
+      };
+    });
+
+    // Get total statistics
+    const [countRows] = await masterPool.query(
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${scopeCondition}`,
+      [...countFilter.params, ...scopeParams]
+    );
+    const totalStudents = countRows[0]?.totalStudents || 0;
+
+    const [dailyRows] = await masterPool.query(
+      `
+        SELECT ar.status, COUNT(*) AS count
+        FROM attendance_records ar
+        INNER JOIN students s ON s.id = ar.student_id
+        WHERE ar.attendance_date = ?${countFilter.clause}${scopeCondition}
+        GROUP BY ar.status
+      `,
+      [attendanceDate, ...countFilter.params, ...scopeParams]
+    );
+
+    const presentToday = Number(dailyRows.find(r => r.status === 'present')?.count || 0);
+    const absentToday = Number(dailyRows.find(r => r.status === 'absent')?.count || 0);
+    const holidayToday = Number(dailyRows.find(r => r.status === 'holiday')?.count || 0);
+    const markedToday = presentToday + absentToday + holidayToday;
+    const unmarkedToday = Math.max(0, totalStudents - markedToday);
+
+    if (normalizedFormat === 'pdf') {
+      // Generate PDF
+      const PDFDocument = require('pdfkit');
+      const fs = require('fs');
+      const os = require('os');
+      const path = require('path');
+
+      const tempDir = os.tmpdir();
+      const fileName = `day_end_report_${Date.now()}.pdf`;
+      const filePath = path.join(tempDir, fileName);
+
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Header
+      doc.fontSize(18).font('Helvetica-Bold').text('Day End Attendance Report', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(12).font('Helvetica').text(`Date: ${attendanceDate}`, { align: 'center' });
+      doc.moveDown(1);
+
+      // Summary statistics
+      doc.fontSize(14).font('Helvetica-Bold').text('Summary', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Total Students: ${totalStudents}`);
+      doc.text(`Marked Today: ${markedToday}`);
+      doc.text(`Present: ${presentToday} | Absent: ${absentToday} | Holiday: ${holidayToday}`);
+      doc.text(`Unmarked: ${unmarkedToday}`);
+      doc.moveDown(1);
+
+      // Filters
+      const filterTexts = [];
+      if (filters.batch) filterTexts.push(`Batch: ${filters.batch}`);
+      if (filters.course) filterTexts.push(`Course: ${filters.course}`);
+      if (filters.branch) filterTexts.push(`Branch: ${filters.branch}`);
+      if (filters.year) filterTexts.push(`Year: ${filters.year}`);
+      if (filters.semester) filterTexts.push(`Semester: ${filters.semester}`);
+      if (filterTexts.length > 0) {
+        doc.fontSize(10).font('Helvetica').text(`Filters: ${filterTexts.join(', ')}`);
+        doc.moveDown(1);
+      }
+
+      // Table
+      doc.fontSize(12).font('Helvetica-Bold').text('Grouped Summary', { underline: true });
+      doc.moveDown(0.5);
+
+      // Table headers
+      const startX = 40;
+      let currentY = doc.y;
+      const rowHeight = 20;
+      const colWidths = [50, 50, 60, 50, 30, 30, 40, 40, 40, 40, 40, 40];
+      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Marked', 'Pending', 'Absent', 'Holiday', 'Present'];
+
+      doc.fontSize(8).font('Helvetica-Bold');
+      let x = startX;
+      headers.forEach((header, i) => {
+        doc.text(header, x, currentY, { width: colWidths[i], align: 'left' });
+        x += colWidths[i];
+      });
+      currentY += rowHeight;
+      doc.moveTo(startX, currentY).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), currentY).stroke();
+      currentY += 5;
+
+      // Table rows
+      doc.fontSize(7).font('Helvetica');
+      groupedData.forEach((row) => {
+        if (currentY > doc.page.height - 60) {
+          doc.addPage();
+          currentY = 40;
+        }
+        
+        x = startX;
+        const values = [
+          row.college, row.batch, row.course, row.branch,
+          String(row.year), String(row.semester),
+          String(row.totalStudents), String(row.markedToday),
+          String(row.pendingToday), String(row.absentToday),
+          String(row.holidayToday), String(row.presentToday)
+        ];
+        
+        values.forEach((value, i) => {
+          doc.text(String(value || '—'), x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
+          x += colWidths[i];
+        });
+        currentY += rowHeight;
+      });
+
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      const fileBuffer = fs.readFileSync(filePath);
+      fs.unlinkSync(filePath); // Clean up temp file
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.pdf"`);
+      res.send(fileBuffer);
+    } else {
+      // Generate Excel
+      const XLSX = require('xlsx');
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Summary sheet
+      const summaryData = [
+        ['Day End Attendance Report'],
+        ['Date', attendanceDate],
+        [''],
+        ['Summary'],
+        ['Total Students', totalStudents],
+        ['Marked Today', markedToday],
+        ['Present', presentToday],
+        ['Absent', absentToday],
+        ['Holiday', holidayToday],
+        ['Unmarked', unmarkedToday],
+        [''],
+        ['Filters'],
+        ...(filters.batch ? [['Batch', filters.batch]] : []),
+        ...(filters.course ? [['Course', filters.course]] : []),
+        ...(filters.branch ? [['Branch', filters.branch]] : []),
+        ...(filters.year ? [['Year', filters.year]] : []),
+        ...(filters.semester ? [['Semester', filters.semester]] : [])
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+      // Grouped data sheet
+      const tableData = [
+        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Marked', 'Pending', 'Absent', 'Holiday', 'Present'],
+        ...groupedData.map(row => [
+          row.college, row.batch, row.course, row.branch,
+          row.year, row.semester,
+          row.totalStudents, row.markedToday, row.pendingToday,
+          row.absentToday, row.holidayToday, row.presentToday
+        ])
+      ];
+      const tableSheet = XLSX.utils.aoa_to_sheet(tableData);
+      
+      // Set column widths
+      tableSheet['!cols'] = [
+        { wch: 15 }, // College
+        { wch: 12 }, // Batch
+        { wch: 20 }, // Course
+        { wch: 15 }, // Branch
+        { wch: 8 },  // Year
+        { wch: 8 },  // Semester
+        { wch: 10 }, // Students
+        { wch: 10 }, // Marked
+        { wch: 10 }, // Pending
+        { wch: 10 }, // Absent
+        { wch: 10 }, // Holiday
+        { wch: 10 }  // Present
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, tableSheet, 'Grouped Summary');
+
+      // Generate buffer
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.xlsx"`);
+      res.send(buffer);
+    }
+  } catch (error) {
+    console.error('Failed to download day-end report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while generating day-end report'
+    });
+  }
+};
+
