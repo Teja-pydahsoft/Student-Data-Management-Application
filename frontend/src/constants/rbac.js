@@ -14,7 +14,8 @@ export const BACKEND_MODULES = {
   FEE_MANAGEMENT: 'fee_management',
   SETTINGS: 'settings',
   USER_MANAGEMENT: 'user_management',
-  REPORTS: 'reports'
+  REPORTS: 'reports',
+  TICKET_MANAGEMENT: 'ticket_management'
 };
 
 // Granular Permissions for each module
@@ -88,6 +89,13 @@ export const MODULE_PERMISSIONS = {
       view: 'View Reports',
       download: 'Download Reports'
     }
+  },
+  [BACKEND_MODULES.TICKET_MANAGEMENT]: {
+    permissions: ['read', 'write'],
+    labels: {
+      read: 'View Tickets',
+      write: 'Manage Tickets'
+    }
   }
 };
 
@@ -100,7 +108,8 @@ export const MODULE_LABELS = {
   [BACKEND_MODULES.ATTENDANCE]: 'Attendance',
   [BACKEND_MODULES.SETTINGS]: 'Settings',
   [BACKEND_MODULES.USER_MANAGEMENT]: 'User Management',
-  [BACKEND_MODULES.REPORTS]: 'Reports'
+  [BACKEND_MODULES.REPORTS]: 'Reports',
+  [BACKEND_MODULES.TICKET_MANAGEMENT]: 'Ticket Management'
 };
 
 // Frontend navigation keys
@@ -114,7 +123,9 @@ export const FRONTEND_MODULES = {
   FEES: 'fees',
   COURSES: 'courses',
   USERS: 'users',
-  REPORTS: 'reports'
+  REPORTS: 'reports',
+  TICKETS: 'tickets',
+  TASK_MANAGEMENT: 'task_management'
 };
 
 // Map frontend navigation keys to backend permission keys
@@ -128,7 +139,9 @@ export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.FEES]: [BACKEND_MODULES.FEE_MANAGEMENT],
   [FRONTEND_MODULES.COURSES]: [BACKEND_MODULES.SETTINGS],
   [FRONTEND_MODULES.USERS]: [BACKEND_MODULES.USER_MANAGEMENT],
-  [FRONTEND_MODULES.REPORTS]: [BACKEND_MODULES.REPORTS]
+  [FRONTEND_MODULES.REPORTS]: [BACKEND_MODULES.REPORTS],
+  [FRONTEND_MODULES.TICKETS]: [BACKEND_MODULES.TICKET_MANAGEMENT],
+  [FRONTEND_MODULES.TASK_MANAGEMENT]: [BACKEND_MODULES.TICKET_MANAGEMENT]
 };
 
 // Map backend module keys to frontend navigation keys (reverse mapping)
@@ -155,7 +168,9 @@ export const MODULE_ROUTE_MAP = {
   [FRONTEND_MODULES.FEES]: '/fees',
   [FRONTEND_MODULES.COURSES]: '/courses',
   [FRONTEND_MODULES.USERS]: '/users',
-  [FRONTEND_MODULES.REPORTS]: '/reports'
+  [FRONTEND_MODULES.REPORTS]: '/reports',
+  [FRONTEND_MODULES.TICKETS]: '/tickets',
+  [FRONTEND_MODULES.TASK_MANAGEMENT]: '/task-management'
 };
 
 // Get module key from path
@@ -169,6 +184,8 @@ export const getModuleKeyForPath = (path = '/') => {
   if (path.startsWith('/courses')) return FRONTEND_MODULES.COURSES;
   if (path.startsWith('/users')) return FRONTEND_MODULES.USERS;
   if (path.startsWith('/reports')) return FRONTEND_MODULES.REPORTS;
+  if (path.startsWith('/tickets')) return FRONTEND_MODULES.TICKETS;
+  if (path.startsWith('/task-management')) return FRONTEND_MODULES.TASK_MANAGEMENT;
   return null;
 };
 

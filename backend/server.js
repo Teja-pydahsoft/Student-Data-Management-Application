@@ -24,6 +24,8 @@ const academicYearRoutes = require('./routes/academicYearRoutes');
 const semesterRoutes = require('./routes/semesterRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const feeRoutes = require('./routes/feeRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
+const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -119,6 +121,8 @@ app.use('/api/academic-years', academicYearRoutes);
 app.use('/api/semesters', semesterRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/fees', feeRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/complaint-categories', complaintCategoryRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
@@ -136,6 +140,8 @@ app.use('/academic-years', academicYearRoutes);
 app.use('/semesters', semesterRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/fees', feeRoutes);
+app.use('/tickets', ticketRoutes);
+app.use('/complaint-categories', complaintCategoryRoutes);
 
 // Root API endpoint
 app.get('/api', (req, res) => {

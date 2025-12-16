@@ -15,7 +15,9 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronRight,
-  DollarSign
+  DollarSign,
+  Ticket,
+  FolderTree
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { 
@@ -46,7 +48,17 @@ const NAV_ITEMS = [
   { path: '/fees', icon: DollarSign, label: 'Fee Management', permission: FRONTEND_MODULES.FEES },
   { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
-  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS }
+  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS },
+  { 
+    path: '/tickets', 
+    icon: Ticket, 
+    label: 'Ticket Management', 
+    permission: FRONTEND_MODULES.TICKETS,
+    subItems: [
+      { path: '/tickets', label: 'Tickets', permission: FRONTEND_MODULES.TICKETS },
+      { path: '/task-management', label: 'Task Management', permission: FRONTEND_MODULES.TASK_MANAGEMENT }
+    ]
+  }
 ];
 
 const AdminLayout = () => {

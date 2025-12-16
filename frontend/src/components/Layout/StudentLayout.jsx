@@ -6,7 +6,8 @@ import {
     LogOut,
     Menu,
     X,
-    FileText
+    FileText,
+    Ticket
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ const StudentLayout = ({ children }) => {
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
         { icon: User, label: 'Profile', path: '/student/profile' },
+        { icon: Ticket, label: 'My Tickets', path: '/student/my-tickets' },
     ];
 
     return (

@@ -55,7 +55,8 @@ const MODULES = {
   FEE_MANAGEMENT: 'fee_management',
   SETTINGS: 'settings',
   USER_MANAGEMENT: 'user_management',
-  REPORTS: 'reports'
+  REPORTS: 'reports',
+  TICKET_MANAGEMENT: 'ticket_management'
 };
 
 // Granular Permissions for each module
@@ -130,6 +131,13 @@ const MODULE_PERMISSIONS = {
       view: 'View Reports',
       download: 'Download Reports'
     }
+  },
+  [MODULES.TICKET_MANAGEMENT]: {
+    permissions: ['read', 'write'],
+    labels: {
+      read: 'View Tickets',
+      write: 'Manage Tickets (Assign, Update Status, Add Comments)'
+    }
   }
 };
 
@@ -143,7 +151,8 @@ const MODULE_LABELS = {
   [MODULES.FEE_MANAGEMENT]: 'Fee Management',
   [MODULES.SETTINGS]: 'Settings',
   [MODULES.USER_MANAGEMENT]: 'User Management',
-  [MODULES.REPORTS]: 'Reports'
+  [MODULES.REPORTS]: 'Reports',
+  [MODULES.TICKET_MANAGEMENT]: 'Ticket Management'
 };
 
 // All modules as array

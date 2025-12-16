@@ -184,14 +184,13 @@ const useAuthStore = create((set) => {
   
   verifyToken: async () => {
     try {
-      const userType = localStorage.getItem('userType');
-      const endpoint = userType === 'student' ? '/students/verify' : '/auth/verify';
-      const response = await api.get(endpoint);
+      const response = await api.get('/auth/verify');
       const { user } = response.data || {};
       if (user) {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.removeItem('admin');
-        set({ user, isAuthenticated: true, userType: userType || 'admin' });
+        const persistedType = localStorage.getItem('userType');
+        set({ user, isAuthenticated: true, userType: persistedType || 'admin' });
         return true;
       }
       throw new Error('Invalid response');

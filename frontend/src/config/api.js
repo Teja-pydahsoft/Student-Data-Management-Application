@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 // If VITE_API_URL is provided at build time, normalize it and ensure it points to the backend API root
 const rawApiUrl = import.meta.env.VITE_API_URL;
@@ -77,6 +78,7 @@ api.interceptors.response.use(
       const isLoginEndpoint = error.config?.url?.includes('/login') || error.config?.url?.includes('/auth/login');
       
       if (!isLoginEndpoint) {
+        toast.error('Session expired. Please log in again.');
         const userType = localStorage.getItem('userType');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -87,6 +89,8 @@ api.interceptors.response.use(
           window.location.href = userType === 'student' ? '/student/login' : '/login';
         }
       }
+    } else if (error.response?.status === 403) {
+      toast.error(error.response?.data?.message || 'Access denied');
     }
     return Promise.reject(error);
   }

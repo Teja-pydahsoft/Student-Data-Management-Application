@@ -18,11 +18,15 @@ import FeeManagement from './pages/FeeManagement';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
+import TicketManagement from './pages/TicketManagement';
+import TaskManagement from './pages/TaskManagement';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
 import SemesterRegistration from './pages/student/SemesterRegistration';
+import RaiseTicket from './pages/student/RaiseTicket';
+import MyTickets from './pages/student/MyTickets';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -100,6 +104,8 @@ function App() {
           <Route path="fees" element={<FeeManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="tickets" element={<TicketManagement />} />
+          <Route path="task-management" element={<TaskManagement />} />
         </Route>
         
         {/* Protected Student Routes */}
@@ -115,6 +121,8 @@ function App() {
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="profile" element={<StudentProfile />} />
           <Route path="semester-registration" element={<SemesterRegistration />} />
+          <Route path="raise-ticket" element={<RaiseTicket />} />
+          <Route path="my-tickets" element={<MyTickets />} />
         </Route>
         
         {/* Fallback */}
