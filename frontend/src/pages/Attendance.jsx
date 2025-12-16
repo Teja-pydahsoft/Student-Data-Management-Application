@@ -981,7 +981,12 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const controller = new AbortController();
       pendingRequestRef.current = controller;
 
-      const pageToUse = pageOverride !== null ? pageOverride : currentPage;
+      // Check if filters are applied (excluding search filters like studentName and parentMobile)
+      const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+      
+      // When filters are applied, always use page 1 (offset 0) since we load all students
+      // When no filters, use pagination normally
+      const pageToUse = hasFilters ? 1 : (pageOverride !== null ? pageOverride : currentPage);
       const cacheKey = buildCacheKey(pageToUse);
 
       // Check cache and use it immediately if fresh, otherwise continue with fetch
@@ -1010,10 +1015,18 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
-      // Always use pagination for better performance, even with filters
-      // This prevents loading thousands of records at once
-      params.append('limit', pageSize.toString());
-      params.append('offset', ((pageToUse - 1) * pageSize).toString());
+      // When filters are applied, load ALL students that match the filters (no pagination)
+      // This ensures operations like "Mark Holiday" work on all filtered students
+      if (hasFilters) {
+        // When filters are applied, load all students (use a large limit like 10000)
+        // This ensures all filtered students are available for operations
+        params.append('limit', '10000');
+        params.append('offset', '0');
+      } else {
+        // When no filters, use pagination for better performance
+        params.append('limit', pageSize.toString());
+        params.append('offset', ((pageToUse - 1) * pageSize).toString());
+      }
 
       const response = await api.get(`/attendance?${params.toString()}`, { signal: controller.signal });
       if (!response.data?.success) {
