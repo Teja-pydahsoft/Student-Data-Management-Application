@@ -1225,9 +1225,13 @@ const Students = () => {
 
     if (isEditing) {
       if (fieldType === 'select') {
+        // Ensure current value is in options, add it if not present
+        const allOptions = [...new Set([...options, currentValue].filter(Boolean))];
+        const displayValue = cellEditValue !== '' ? cellEditValue : (currentValue || '');
+        
         return (
           <select
-            value={cellEditValue}
+            value={displayValue}
             onChange={(e) => {
               const newValue = e.target.value;
               if (newValue === 'permitted' && field === 'fee_status') {
@@ -1247,9 +1251,10 @@ const Students = () => {
             onBlur={() => handleCellBlur(student)}
             onKeyDown={(e) => handleCellKeyDown(e, student)}
             autoFocus
-            className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full px-1 py-0.5 text-xs border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
           >
-            {options.map((opt) => (
+            {!displayValue && <option value="">Select...</option>}
+            {allOptions.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
@@ -1437,8 +1442,16 @@ const Students = () => {
         synchronizedData.fee_status = editFeeStatus;
       }
 
-      // If fee status is 'permitted', update via fee-status endpoint to include permit data
+      // If fee status is 'permitted', validate and update via fee-status endpoint to include permit data
       if (editFeeStatus === 'permitted') {
+        if (!permitEndingDate) {
+          toast.error('Permit ending date is required when fee status is "permitted"');
+          return;
+        }
+        if (!permitRemarks || !permitRemarks.trim()) {
+          toast.error('Permit remarks is required when fee status is "permitted"');
+          return;
+        }
         try {
           await api.put(`/students/${selectedStudent.admission_number}/fee-status`, {
             fee_status: editFeeStatus,
@@ -1816,7 +1829,20 @@ const Students = () => {
     let courseType = null;
     if (courseName.includes('diploma')) {
       courseType = 'Diploma';
-    } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
+    } else if (
+      courseName.includes('pg') || 
+      courseName.includes('post graduate') || 
+      courseName.includes('m.tech') || 
+      courseName.includes('mtech') ||
+      courseName.includes('mba') ||
+      courseName.includes('mca') ||
+      courseName.includes('msc') ||
+      courseName.includes('m sc') ||
+      courseName.includes('aqua') ||
+      courseName.includes('m.pharma') ||
+      courseName.includes('m pharma') ||
+      (courseName.includes('pharma') && (courseName.includes('m') || courseName.startsWith('pharma')))
+    ) {
       courseType = 'PG';
     } else if (courseName) {
       courseType = 'UG';
@@ -2502,7 +2528,9 @@ const Students = () => {
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
                       </td>
-
+                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate">
+                        {student.certificates_status || 'Pending'}
+                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
                       </td>
@@ -3520,11 +3548,13 @@ const Students = () => {
                             </label>
                             {editMode ? (
                               <select
-                                value={editData.student_status || editData['Student Status'] || ''}
+                                value={editData.student_status || editData['Student Status'] || selectedStudent?.student_status || ''}
                                 onChange={(e) => updateEditField('student_status', e.target.value)}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] bg-white"
                               >
-                                <option value="">Select Status</option>
+                                {!editData.student_status && !editData['Student Status'] && !selectedStudent?.student_status && (
+                                  <option value="">Select Status</option>
+                                )}
                                 {STUDENT_STATUS_OPTIONS.map((status) => (
                                   <option key={status} value={status}>
                                     {status}
@@ -3543,11 +3573,13 @@ const Students = () => {
                             </label>
                             {editMode ? (
                               <select
-                                value={editData.scholar_status || editData['Scholar Status'] || ''}
+                                value={editData.scholar_status || editData['Scholar Status'] || selectedStudent?.scholar_status || ''}
                                 onChange={(e) => updateEditField('scholar_status', e.target.value)}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] bg-white"
                               >
-                                <option value="">Select Scholar Status</option>
+                                {!editData.scholar_status && !editData['Scholar Status'] && !selectedStudent?.scholar_status && (
+                                  <option value="">Select Scholar Status</option>
+                                )}
                                 {scholarStatusOptions.map((opt) => (
                                   <option key={opt} value={opt}>{opt}</option>
                                 ))}
@@ -3564,20 +3596,21 @@ const Students = () => {
                             </label>
                             {editMode ? (
                               <select
-                                value={editFeeStatus || ''}
+                                value={editFeeStatus || editData.fee_status || editData['Fee Status'] || selectedStudent?.fee_status || ''}
                                 onChange={(e) => {
                                   const newStatus = e.target.value;
-                                  if (newStatus === 'permitted') {
-                                    // Show permit modal
-                                    setPendingFeeStatusChange(newStatus);
-                                    setShowPermitModal(true);
-                                  } else {
-                                    setEditFeeStatus(newStatus);
+                                  setEditFeeStatus(newStatus);
+                                  // Clear permit fields if not permitted
+                                  if (newStatus !== 'permitted') {
+                                    setPermitEndingDate('');
+                                    setPermitRemarks('');
                                   }
                                 }}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] bg-white"
                               >
-                                <option value="">Select Fee Status</option>
+                                {!editFeeStatus && !editData.fee_status && !editData['Fee Status'] && !selectedStudent?.fee_status && (
+                                  <option value="">Select Fee Status</option>
+                                )}
                                 {FEE_STATUS_OPTIONS.map((status) => (
                                   <option key={status} value={status}>
                                     {status}
@@ -3589,6 +3622,61 @@ const Students = () => {
                                 {editFeeStatus || editData.fee_status || editData['Fee Status'] || selectedStudent?.fee_status || '-'}
                               </p>
                             )}
+                            {/* Permit Fields - Show when fee status is 'permitted' */}
+                            {(editFeeStatus === 'permitted' || editData.fee_status === 'permitted' || selectedStudent?.fee_status === 'permitted') && editMode && (
+                              <div className="mt-4 space-y-3 pt-3 border-t border-gray-200">
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                    Permit Ending Date <span className="text-red-500">*</span>
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={permitEndingDate}
+                                    onChange={(e) => setPermitEndingDate(e.target.value)}
+                                    className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                    Permit Remarks <span className="text-red-500">*</span>
+                                  </label>
+                                  <textarea
+                                    value={permitRemarks}
+                                    onChange={(e) => setPermitRemarks(e.target.value)}
+                                    rows="3"
+                                    className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm"
+                                    placeholder="Enter remarks for the permit"
+                                    required
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {/* Show permit info in view mode */}
+                            {(editData.fee_status === 'permitted' || selectedStudent?.fee_status === 'permitted') && !editMode && (
+                              <div className="mt-4 space-y-2 pt-3 border-t border-gray-200">
+                                {permitEndingDate && (
+                                  <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                      Permit Ending Date
+                                    </label>
+                                    <p className="text-sm text-gray-900 font-medium">
+                                      {permitEndingDate || selectedStudent?.permit_ending_date || '-'}
+                                    </p>
+                                  </div>
+                                )}
+                                {permitRemarks && (
+                                  <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                      Permit Remarks
+                                    </label>
+                                    <p className="text-sm text-gray-900 font-medium">
+                                      {permitRemarks || selectedStudent?.permit_remarks || '-'}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -3596,11 +3684,13 @@ const Students = () => {
                             </label>
                             {editMode ? (
                               <select
-                                value={editRegistrationStatus || ''}
+                                value={editRegistrationStatus || editData.registration_status || editData['Registration Status'] || selectedStudent?.registration_status || ''}
                                 onChange={(e) => setEditRegistrationStatus(e.target.value)}
-                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                                className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] bg-white"
                               >
-                                <option value="">Select Registration Status</option>
+                                {!editRegistrationStatus && !editData.registration_status && !editData['Registration Status'] && !selectedStudent?.registration_status && (
+                                  <option value="">Select Registration Status</option>
+                                )}
                                 {REGISTRATION_STATUS_OPTIONS.map((status) => (
                                   <option key={status} value={status}>
                                     {status}
@@ -3672,7 +3762,20 @@ const Students = () => {
                     let courseType = null;
                     if (courseName.includes('diploma')) {
                       courseType = 'Diploma';
-                    } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
+                    } else if (
+                      courseName.includes('pg') || 
+                      courseName.includes('post graduate') || 
+                      courseName.includes('m.tech') || 
+                      courseName.includes('mtech') ||
+                      courseName.includes('mba') ||
+                      courseName.includes('mca') ||
+                      courseName.includes('msc') ||
+                      courseName.includes('m sc') ||
+                      courseName.includes('aqua') ||
+                      courseName.includes('m.pharma') ||
+                      courseName.includes('m pharma') ||
+                      (courseName.includes('pharma') && (courseName.includes('m') || courseName.startsWith('pharma')))
+                    ) {
                       courseType = 'PG';
                     } else if (courseName) {
                       courseType = 'UG';

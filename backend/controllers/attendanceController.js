@@ -2426,6 +2426,11 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
     params.push(status);
   }
 
+  if (filters.college) {
+    conditions.push(`${prefix}college = ?`);
+    params.push(filters.college);
+  }
+
   if (filters.batch) {
     conditions.push(`${prefix}batch = ?`);
     params.push(filters.batch);
@@ -3720,6 +3725,7 @@ exports.downloadDayEndReport = async (req, res) => {
       batch,
       course,
       branch,
+      college,
       year,
       semester,
       student_status,
@@ -3748,6 +3754,7 @@ exports.downloadDayEndReport = async (req, res) => {
       batch: normalizeTextFilter(batch),
       course: normalizeTextFilter(course),
       branch: normalizeTextFilter(branch),
+      college: normalizeTextFilter(college),
       year: parseOptionalInteger(year),
       semester: parseOptionalInteger(semester),
       studentStatus: statusFilter
