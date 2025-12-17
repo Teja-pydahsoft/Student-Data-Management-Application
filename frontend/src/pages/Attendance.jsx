@@ -186,6 +186,22 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [dayEndGrouped, setDayEndGrouped] = useState([]);
   const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
   const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
+  const [dayEndFilters, setDayEndFilters] = useState({
+    college: '',
+    batch: '',
+    course: '',
+    branch: '',
+    year: '',
+    semester: ''
+  });
+  const [dayEndFilterOptions, setDayEndFilterOptions] = useState({
+    colleges: [],
+    batches: [],
+    courses: [],
+    branches: [],
+    years: [],
+    semesters: []
+  });
   const [sendingReports, setSendingReports] = useState(false);
   const [markHolidayLoading, setMarkHolidayLoading] = useState(false);
   const [holidayReasonModalOpen, setHolidayReasonModalOpen] = useState(false);
@@ -198,11 +214,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [deleteCount, setDeleteCount] = useState(0);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [gettingDeleteCount, setGettingDeleteCount] = useState(false);
+
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
     rows = rows.filter((row) => {
-      if (dayEndPreviewFilter === 'marked') return (row.markedToday || 0) > 0;
-      if (dayEndPreviewFilter === 'unmarked') return (row.pendingToday || 0) > 0;
+      if (dayEndPreviewFilter === 'marked' && (row.markedToday || 0) === 0) return false;
+      if (dayEndPreviewFilter === 'unmarked' && (row.pendingToday || 0) === 0) return false;
+      
+      if (dayEndFilters.college && row.college !== dayEndFilters.college) return false;
+      if (dayEndFilters.batch && row.batch !== dayEndFilters.batch) return false;
+      if (dayEndFilters.course && row.course !== dayEndFilters.course) return false;
+      if (dayEndFilters.branch && row.branch !== dayEndFilters.branch) return false;
+      if (dayEndFilters.year && String(row.year) !== String(dayEndFilters.year)) return false;
+      if (dayEndFilters.semester && String(row.semester) !== String(dayEndFilters.semester)) return false;
+
       return true;
     });
 
@@ -215,7 +240,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       rows.sort((a, b) => (a.course || '').localeCompare(b.course || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
     }
     return rows;
-  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy]);
+  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy, dayEndFilters]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -736,6 +761,22 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     setSelectedDateHolidayInfo(cacheEntry.holidayInfo || null);
   };
 
+  // Helper function to extract holiday reason from grouped data
+  const extractHolidayReason = (groupedData) => {
+    if (!Array.isArray(groupedData) || groupedData.length === 0) {
+      return null;
+    }
+    
+    // Find the first non-null holiday reason
+    for (const item of groupedData) {
+      if (item.holidayReasons && item.holidayReasons.trim()) {
+        return item.holidayReasons.trim();
+      }
+    }
+    
+    return null;
+  };
+
   const handleDayEndReport = async () => {
     // If modal is already open, just return (prevent multiple opens)
     if (dayEndReportOpen) return;
@@ -773,6 +814,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const markedToday = presentToday + absentToday + holidayToday;
       const unmarkedToday = Math.max(0, totalStudents - markedToday);
 
+      const groupedData = summary.groupedSummary || [];
+      setDayEndGrouped(groupedData);
+
       setDayEndReportData({
         totalStudents,
         presentToday,
@@ -781,9 +825,26 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         markedToday,
         unmarkedToday,
         filtersSnapshot: { ...filters },
-        date: attendanceDate
+        date: attendanceDate,
+        holidayReason: extractHolidayReason(groupedData)
       });
-      setDayEndGrouped(summary.groupedSummary || []);
+      
+      // Extract unique filter options from the data
+      const colleges = [...new Set(groupedData.map(item => item.college).filter(Boolean))].sort();
+      const batches = [...new Set(groupedData.map(item => item.batch).filter(Boolean))].sort();
+      const courses = [...new Set(groupedData.map(item => item.course).filter(Boolean))].sort();
+      const branches = [...new Set(groupedData.map(item => item.branch).filter(Boolean))].sort();
+      const years = [...new Set(groupedData.map(item => item.currentYear).filter(Boolean))].sort();
+      const semesters = [...new Set(groupedData.map(item => item.currentSemester).filter(Boolean))].sort();
+      
+      setDayEndFilterOptions({
+        colleges,
+        batches,
+        courses,
+        branches,
+        years,
+        semesters
+      });
       setDayEndReportOpen(true);
     } catch (error) {
       console.error('Day-end report error:', error);
@@ -799,6 +860,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       params.append('date', attendanceDate);
       params.append('format', format);
       params.append('student_status', 'Regular');
+      params.append('include_holiday_reason', 'true'); // Include holiday reasons in download
       if (filters.batch) params.append('batch', filters.batch);
       if (filters.course) params.append('course', filters.course);
       if (filters.branch) params.append('branch', filters.branch);
@@ -925,10 +987,28 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         ...r,
         holidayReason: holidayReason.trim()
       }));
+      
+      // Debug: Log what we're sending to backend
+      console.log('Sending holiday records to backend:', {
+        attendanceDate,
+        recordsCount: records.length,
+        sampleRecord: records[0],
+        holidayReason: holidayReason.trim(),
+        allRecords: records
+      });
+      
       await api.post('/attendance', {
         attendanceDate,
         records
       });
+      
+      // Debug: Log the response from backend after marking
+      console.log('Backend response after marking holidays:', {
+        success: true,
+        recordsSaved: records.length,
+        holidayReasonSent: holidayReason.trim()
+      });
+      
       toast.success('Marked as no class work for selected filters');
       await loadAttendance();
       setHolidayReason('');
@@ -1091,6 +1171,21 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         throw new Error(response.data?.message || 'Failed to fetch attendance');
       }
 
+      // Debug: Log what we received from backend
+      console.log('Received attendance data from backend:', {
+        success: response.data?.success,
+        totalStudents: response.data?.data?.students?.length,
+        sampleStudents: response.data?.data?.students?.slice(0, 3).map(s => ({
+          id: s.id,
+          name: s.name,
+          attendanceStatus: s.attendance_status,
+          holidayReason: s.holiday_reason,
+          attendanceRecordId: s.attendance_record_id,
+          allFields: Object.keys(s)
+        })),
+        fullResponse: response.data
+      });
+
       const fetchedStudents = (response.data.data?.students || []).map((student) => {
         // Parse student_data if present to derive statuses
         let parsedData = {};
@@ -1105,9 +1200,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           }
         }
 
-        // Derive registration_status with fallbacks
         const regRaw =
-          student.registration_status ||
+          parsedData['Registration Status'] ||
           student.registrationStatus ||
           parsedData.registration_status ||
           parsedData['Registration Status'] ||
@@ -1118,16 +1212,53 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
         // If student has attendanceStatus, use it; otherwise default to 'present' for display
         const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : 'present';
+        
+        // Enhanced holiday reason mapping - ensure we get it from multiple possible sources
+        let holidayReason = student.holiday_reason || null;
+        
+        // If no holiday_reason from main query, try to get it from student_data as fallback
+        if (!holidayReason && parsedData && parsedData.holiday_reason) {
+          holidayReason = parsedData.holiday_reason;
+        }
+        
+        // Debug: Log holiday data for investigation
+        if (student.attendanceStatus === 'holiday' || student.holiday_reason || holidayReason) {
+          console.log('Holiday Data Debug:', {
+            studentId: student.id,
+            studentName: student.name,
+            attendanceStatus: student.attendanceStatus,
+            holiday_reason: student.holiday_reason,
+            holidayReason: holidayReason,
+            parsedDataHoliday: parsedData.holiday_reason,
+            originalStudent: student,
+            mappedStatus: status,
+            hasHolidayReason: !!holidayReason,
+            allStudentFields: Object.keys(student)
+          });
+        }
 
         return {
           ...student,
           registration_status,
           attendanceStatus: status,
+          holidayReason: holidayReason,
           // Normalize admission number field for downstream handlers
           admissionNumber: student.admissionNumber || student.admission_number || student.admissionNo || null,
           // Keep track of whether student was actually marked in DB
           hasAttendanceRecord: !!student.attendanceStatus
         };
+      });
+
+      // Debug: Log the final mapped students
+      console.log('Final mapped students:', {
+        totalMapped: fetchedStudents.length,
+        holidayStudents: fetchedStudents.filter(s => s.attendanceStatus === 'holiday').map(s => ({
+          id: s.id,
+          name: s.name,
+          attendanceStatus: s.attendanceStatus,
+          holidayReason: s.holidayReason,
+          hasHolidayReason: !!s.holidayReason
+        }))
       });
 
       const statusSnapshot = {};
@@ -2490,7 +2621,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-sm font-semibold text-white bg-amber-600 rounded-md hover:bg-amber-700 active:bg-amber-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 >
                   {markHolidayLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
-                  Mark Holiday (Year {filters.currentYear}, Sem {filters.currentSemester})
+                  Mark No Class Work (Year {filters.currentYear}, Sem {filters.currentSemester})
                 </button>
               )}
               <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
@@ -2513,8 +2644,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       {/* Day End Report Modal */}
       {dayEndReportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-          <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
-            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
+          <div className="bg-white w-full max-w-[95vw] max-h-[90vh] rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200 shrink-0">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Day End Report</h3>
                 <p className="text-xs text-gray-500">{dayEndReportData?.date || attendanceDate}</p>
@@ -2526,13 +2657,18 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                 <X size={16} />
               </button>
             </div>
-            <div className="p-5 space-y-4 overflow-y-auto">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3">
                 <StatPill label="Total Students" value={dayEndReportData?.totalStudents ?? 0} color="gray" />
                 <StatPill label="Marked Today" value={dayEndReportData?.markedToday ?? 0} color="green" />
                 <StatPill label="Absent Today" value={dayEndReportData?.absentToday ?? 0} color="red" />
                 <StatPill label="Present Today" value={dayEndReportData?.presentToday ?? 0} color="blue" />
-                <StatPill label="Holiday Today" value={dayEndReportData?.holidayToday ?? 0} color="green" />
+                <StatPill 
+                  label={dayEndReportData?.holidayReason ? `Holiday: ${dayEndReportData.holidayReason}` : 'No Class Work Today'} 
+                  value={dayEndReportData?.holidayToday ?? 0} 
+                  color="green" 
+                  title={dayEndReportData?.holidayReason}
+                />
                 <StatPill label="Unmarked Today" value={dayEndReportData?.unmarkedToday ?? 0} color="amber" />
               </div>
               <div className="text-xs text-gray-600 space-y-1">
@@ -2572,72 +2708,139 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     )}
                 </div>
               </div>
-              {dayEndGrouped.length > 0 && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
-                    <span>Preview</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setDayEndPreviewFilter('all')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'all'
-                            ? 'bg-indigo-100 border-indigo-200 text-indigo-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        All
-                      </button>
-                      <button
-                        onClick={() => setDayEndPreviewFilter('marked')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'marked'
-                            ? 'bg-green-100 border-green-200 text-green-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Marked
-                      </button>
-                      <button
-                        onClick={() => setDayEndPreviewFilter('unmarked')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'unmarked'
-                            ? 'bg-amber-100 border-amber-200 text-amber-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Unmarked
-                      </button>
+              <>
+                {dayEndGroupedDisplay.length > 0 ? (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
+                      <span>Preview</span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setDayEndPreviewFilter('all')}
+                          className={`px-2 py-0.5 rounded border text-[11px] ${
+                            dayEndPreviewFilter === 'all'
+                              ? 'bg-indigo-100 border-indigo-200 text-indigo-700'
+                              : 'bg-white border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => setDayEndPreviewFilter('marked')}
+                          className={`px-2 py-0.5 rounded border text-[11px] ${
+                            dayEndPreviewFilter === 'marked'
+                              ? 'bg-green-100 border-green-200 text-green-700'
+                              : 'bg-white border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          Marked
+                        </button>
+                        <button
+                          onClick={() => setDayEndPreviewFilter('unmarked')}
+                          className={`px-2 py-0.5 rounded border text-[11px] ${
+                            dayEndPreviewFilter === 'unmarked'
+                              ? 'bg-amber-100 border-amber-200 text-amber-700'
+                              : 'bg-white border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          Unmarked
+                        </button>
+                      </div>
+                      <div className="ml-auto flex items-center gap-1 text-[11px] font-normal">
+                        <span className="text-gray-600">Sort</span>
+                        <select
+                          value={dayEndSortBy}
+                          onChange={(e) => setDayEndSortBy(e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white"
+                        >
+                          <option value="none">None</option>
+                          <option value="yearSem">Year/Semester</option>
+                          <option value="branch">Branch</option>
+                          <option value="course">Course</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="ml-auto flex items-center gap-1 text-[11px] font-normal">
-                      <span className="text-gray-600">Sort</span>
-                      <select
-                        value={dayEndSortBy}
-                        onChange={(e) => setDayEndSortBy(e.target.value)}
-                        className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white"
-                      >
-                        <option value="none">None</option>
-                        <option value="yearSem">Year / Sem</option>
-                        <option value="branch">Branch</option>
-                        <option value="course">Course</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto max-h-[50vh]">
-                    <table className="min-w-full text-xs">
-                      <thead className="bg-gray-100 text-gray-700 uppercase">
-                        <tr>
-                          <th className="px-3 py-2 text-left">College</th>
-                          <th className="px-3 py-2 text-left">Batch</th>
-                          <th className="px-3 py-2 text-left">Course</th>
-                          <th className="px-3 py-2 text-left">Branch</th>
-                          <th className="px-3 py-2 text-center">Year</th>
-                          <th className="px-3 py-2 text-center">Sem</th>
-                          <th className="px-3 py-2 text-right">Students</th>
-                          <th className="px-3 py-2 text-right">Marked</th>
-                          <th className="px-3 py-2 text-right">Pending</th>
-                          <th className="px-3 py-2 text-right">Absent</th>
-                          <th className="px-3 py-2 text-right">Holiday</th>
-                          <th className="px-3 py-2 text-right">Present</th>
+                    <div className="overflow-x-auto">
+                      <table className="w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left whitespace-nowrap" style={{width: '180px'}}>
+                              <select
+                                value={dayEndFilters.college}
+                                onChange={(e) => setDayEndFilters(prev => ({ ...prev, college: e.target.value }))}
+                                className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                              >
+                                <option value="">COLLEGE</option>
+                                {dayEndFilterOptions.colleges.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                          </th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap" style={{width: '80px'}}>
+                            <select
+                              value={dayEndFilters.batch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, batch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BATCH</option>
+                              {dayEndFilterOptions.batches.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap" style={{width: '120px'}}>
+                            <select
+                              value={dayEndFilters.course}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, course: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">COURSE</option>
+                              {dayEndFilterOptions.courses.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-left whitespace-nowrap" style={{width: '80px'}}>
+                            <select
+                              value={dayEndFilters.branch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, branch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BRANCH</option>
+                              {dayEndFilterOptions.branches.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-center whitespace-nowrap" style={{width: '60px'}}>
+                            <select
+                              value={dayEndFilters.year}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, year: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">YEAR</option>
+                              {dayEndFilterOptions.years.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-center whitespace-nowrap" style={{width: '60px'}}>
+                            <select
+                              value={dayEndFilters.semester}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, semester: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">SEM</option>
+                              {dayEndFilterOptions.semesters.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '70px'}}>Students</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '70px'}}>Marked</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '70px'}}>Pending</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '70px'}}>Absent</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '120px'}}>No Class Work</th>
+                          <th className="px-3 py-2 text-right whitespace-nowrap" style={{width: '70px'}}>Present</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -2649,75 +2852,80 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                           })
                           .map((row, idx) => (
                           <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white">
-                            <td className="px-3 py-2 text-gray-800">{row.college || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.batch || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.course || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.branch || '—'}</td>
-                            <td className="px-3 py-2 text-center text-gray-800">{row.year || '—'}</td>
-                            <td className="px-3 py-2 text-center text-gray-800">{row.semester || '—'}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-gray-900">{row.totalStudents ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.markedToday ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-amber-700 font-semibold">{row.pendingToday ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-red-700 font-semibold">{row.absentToday ?? 0}</td>
-                            <td className="px-3 py-2 text-right text-green-700 font-semibold">
+                            <td className="px-3 py-2 text-gray-800 text-sm whitespace-nowrap">{row.college || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800 text-sm whitespace-nowrap">{row.batch || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800 text-sm whitespace-nowrap">{row.course || '—'}</td>
+                            <td className="px-3 py-2 text-gray-800 text-sm whitespace-nowrap">{row.branch || '—'}</td>
+                            <td className="px-3 py-2 text-center text-gray-800 text-sm whitespace-nowrap">{row.year || '—'}</td>
+                            <td className="px-3 py-2 text-center text-gray-800 text-sm whitespace-nowrap">{row.semester || '—'}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-900 text-sm whitespace-nowrap">{row.totalStudents ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-green-700 font-semibold text-sm whitespace-nowrap">{row.markedToday ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-amber-700 font-semibold text-sm whitespace-nowrap">{row.pendingToday ?? 0}</td>
+                          <td className="px-3 py-2 text-right text-red-700 font-semibold text-sm whitespace-nowrap">{row.absentToday ?? 0}</td>
+                            <td className="px-3 py-2 text-right text-green-700 font-semibold text-sm whitespace-nowrap">
                               {row.holidayToday ?? 0}
                               {row.holidayReasons && (
-                                <div className="text-[10px] text-gray-600 mt-1 font-normal italic">
-                                  {row.holidayReasons}
+                                <div className="text-xs text-gray-600 mt-1 font-normal" title={row.holidayReasons}>
+                                  {row.holidayReasons.length > 20 ? `${row.holidayReasons.substring(0, 20)}...` : row.holidayReasons}
                                 </div>
                               )}
                             </td>
-                          <td className="px-3 py-2 text-right text-blue-700 font-semibold">{row.presentToday ?? 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              <td className="px-3 py-2 text-right text-blue-700 font-semibold text-sm whitespace-nowrap">{row.presentToday ?? 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No records found matching the current filters
+                  </div>
+                )}
+                <div className="flex justify-end mt-4">
+                  <div className="flex items-center gap-2 mr-auto">
+                    <button
+                      onClick={() => handleDayEndDownload('pdf')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={12} />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => handleDayEndDownload('xlsx')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={12} />
+                      Excel
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSendDayEndReports}
+                      disabled={sendingReports}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {sendingReports ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail size={14} />
+                          Send Reports
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setDayEndReportOpen(false)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      Close
+                    </button>
                   </div>
                 </div>
-              )}
-              <div className="flex justify-end">
-                <div className="flex items-center gap-2 mr-auto">
-                  <button
-                    onClick={() => handleDayEndDownload('pdf')}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
-                  >
-                    <Download size={12} />
-                    PDF
-                  </button>
-                  <button
-                    onClick={() => handleDayEndDownload('xlsx')}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
-                  >
-                    <Download size={12} />
-                    Excel
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSendDayEndReports}
-                    disabled={sendingReports}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {sendingReports ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Mail size={14} />
-                        Send Reports
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setDayEndReportOpen(false)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+              </>
             </div>
           </div>
         </div>
@@ -3236,11 +3444,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                     : 'bg-red-100 text-red-700 border border-red-200'
                                 }`}>
                                   {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
-                                  {isHoliday
-                                    ? 'No Class Work (Marked)'
-                                    : status === 'present'
-                                    ? 'Present (Marked)'
-                                    : 'Absent (Marked)'}
+                                  <div className="flex flex-col items-start text-left leading-tight">
+                                    <span>{isHoliday ? 'No Class Work (Marked)' : status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}</span>
+                                    {isHoliday && student.holidayReason && (
+                                      <span className="text-[10px] font-normal italic opacity-80 mt-0.5">{student.holidayReason}</span>
+                                    )}
+                                    {/* Debug for marked state */}
+                                    {isHoliday && console.log('Marked Holiday Render:', {
+                                      studentId: student.id,
+                                      studentName: student.name,
+                                      isHoliday,
+                                      holidayReason: student.holidayReason,
+                                      hasHolidayReason: !!student.holidayReason
+                                    })}
+                                  </div>
                                 </div>
                                 {/* Still allow changing even if marked */}
                                 {!isHoliday && (
@@ -3280,7 +3497,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                 {status === 'holiday' ? (
                                   <>
                                     <AlertTriangle size={16} />
-                                    Holiday
+                                    <div className="flex flex-col items-start text-left leading-tight">
+                                      <span>No Class Work</span>
+                                      {student.holidayReason && (
+                                        <span className="text-[10px] font-normal italic opacity-80 mt-0.5">{student.holidayReason}</span>
+                                      )}
+                                      {/* Debug for unmarked state */}
+                                      {console.log('Unmarked Holiday Render:', {
+                                        studentId: student.id,
+                                        studentName: student.name,
+                                        status,
+                                        holidayReason: student.holidayReason,
+                                        hasHolidayReason: !!student.holidayReason
+                                      })}
+                                    </div>
                                   </>
                                 ) : status === 'present' ? (
                                   <>

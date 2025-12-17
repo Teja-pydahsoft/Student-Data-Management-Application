@@ -45,7 +45,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
 
     // Generate password: first 4 letters of student name + last 4 digits of mobile
     const mobileNumber = studentMobile.replace(/\D/g, ''); // Remove non-digits
-    
+
     if (mobileNumber.length < 4) {
       return { success: false, error: 'Mobile number too short' };
     }
@@ -81,30 +81,30 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
     // Send SMS notification with login credentials
     try {
       // Remove trailing slash from URL to match DLT template format exactly
-      let loginUrl = (process.env.STUDENT_PORTAL_URL || 'https://pydahsdms.vercel.app').trim();
+      let loginUrl = (process.env.STUDENT_PORTAL_URL || 'pydahsdms.vercel.app').trim();
       loginUrl = loginUrl.replace(/\/+$/, ''); // Remove trailing slashes
-      
+
       let smsMessage;
       let templateId;
-      
+
       if (isPasswordReset) {
-        // DLT Template 2: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#}- Pydah College"
-        // Format must match exactly: Login: {URL}- Pydah College (no space before dash, URL has no trailing slash)
-        smsMessage = `Hello ${studentName || 'Student'} your password has been updated. Username: ${username} New Password: ${plainPassword} Login: ${loginUrl}- Pydah College`;
+        // DLT Template 2: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#} - Pydah College"
+        // Format: Login: {URL}- Pydah College (removed space to match DLT template)
+        smsMessage = `Hello ${studentName || 'Student'} your password has been updated. Username: ${username} New Password: ${plainPassword} Login: ${loginUrl} - Pydah College`;
         templateId = STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID;
       } else {
         // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
-        // Format must match exactly: Login: {URL}- Pydah College (no space before dash, URL has no trailing slash)
-        smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl}- Pydah College`;
+        // Format: Login: {URL}- Pydah College (removed space to match DLT template)
+        smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl} - Pydah College`;
         templateId = STUDENT_CREATION_SMS_TEMPLATE_ID;
       }
-      
+
       // Log the exact message being sent for debugging
       console.log(`[SMS Template] Sending ${isPasswordReset ? 'password reset' : 'account creation'} SMS to ${studentMobile.replace(/\D/g, '')}`);
       console.log(`[SMS Template] Template ID: ${templateId}`);
       console.log(`[SMS Template] Message: "${smsMessage}"`);
       console.log(`[SMS Template] Message length: ${smsMessage.length} characters`);
-      
+
       const smsResult = await sendSms({
         to: studentMobile.replace(/\D/g, ''), // Ensure only digits
         message: smsMessage,
@@ -114,7 +114,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
           type: isPasswordReset ? 'password_reset' : 'account_creation'
         }
       });
-      
+
       if (smsResult.success) {
         console.log(`✅ SMS sent successfully to ${studentMobile.replace(/\D/g, '')} for student ${admissionNumber} (${isPasswordReset ? 'password reset' : 'account creation'})`);
       } else {
@@ -139,7 +139,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
  * @param {string} admissionNumber - Student admission number
  * @returns {Promise<{success: boolean, username?: string, error?: string}>}
  */
-async function generateCredentialsByAdmissionNumber(admissionNumber) {
+async function generateCredentialsByAdmissionNumber(admissionNumber, isPasswordReset = false) {
   try {
     const [students] = await masterPool.query(`
       SELECT id, admission_number, pin_no, student_name, student_mobile
@@ -158,7 +158,8 @@ async function generateCredentialsByAdmissionNumber(admissionNumber) {
       student.admission_number,
       student.pin_no,
       student.student_name,
-      student.student_mobile
+      student.student_mobile,
+      isPasswordReset
     );
   } catch (error) {
     console.error('Error generating credentials by admission number:', error);

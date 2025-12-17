@@ -7,7 +7,8 @@ import {
     Menu,
     X,
     FileText,
-    Ticket
+    Ticket,
+    Megaphone
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -27,6 +28,7 @@ const StudentLayout = ({ children }) => {
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
         { icon: User, label: 'Profile', path: '/student/profile' },
         { icon: Ticket, label: 'My Tickets', path: '/student/my-tickets' },
+        { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
     ];
 
     return (

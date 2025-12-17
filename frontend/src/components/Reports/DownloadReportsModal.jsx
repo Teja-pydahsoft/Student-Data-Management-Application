@@ -143,7 +143,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
       doc.setFontSize(11);
       doc.text(`Total Working Days: ${data.totalWorkingDays || 0}`, 14, yPos);
       yPos += 6;
-      doc.text(`Total Holidays: ${data.totalHolidays || 0}`, 14, yPos);
+      doc.text(`Total No Class Work Days: ${data.totalHolidays || 0}`, 14, yPos);
       yPos += 6;
       doc.text(`Total Groups: ${filteredData.length}`, 14, yPos);
 
@@ -316,7 +316,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
 
       yPos += 10;
       doc.setFontSize(11);
-      doc.text('Holidays List', 14, yPos);
+      doc.text('No Class Work Days List', 14, yPos);
       yPos += 6;
 
       doc.setFontSize(9);
@@ -326,7 +326,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
       // Public Holidays
       if (data.publicHolidays && data.publicHolidays.length > 0) {
         doc.setFontSize(10);
-        doc.text('Public Holidays:', 14, yPos);
+        doc.text('Public No Class Work Days:', 14, yPos);
         yPos += 5;
         doc.setFontSize(8);
 
@@ -349,7 +349,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
         }
         yPos += 3;
         doc.setFontSize(10);
-        doc.text('Institute Holidays:', 14, yPos);
+        doc.text('Institute No Class Work Days:', 14, yPos);
         yPos += 5;
         doc.setFontSize(8);
 
@@ -379,7 +379,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
       leftYPos += 6;
       doc.text(`Total Absent: ${data.statistics?.totalAbsent || 0}`, leftColumnX, leftYPos);
       leftYPos += 6;
-      doc.text(`Total Holidays: ${data.statistics?.totalHolidays || 0}`, leftColumnX, leftYPos);
+      doc.text(`Total No Class Work Days: ${data.statistics?.totalHolidays || 0}`, leftColumnX, leftYPos);
       leftYPos += 6;
       doc.text(`Total Unmarked: ${data.statistics?.totalUnmarked || 0}`, leftColumnX, leftYPos);
       leftYPos += 6;
@@ -689,20 +689,20 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
                     <div className="bg-amber-50 rounded-lg border border-amber-200 p-3">
                       <div className="text-xs text-amber-600 uppercase tracking-wide flex items-center gap-1">
                         <AlertCircle size={12} />
-                        Holidays
+                        No Class Work Days
                       </div>
                       <div className="text-2xl font-bold text-amber-700 mt-1">
                         {previewData.totalHolidays || 0}
                       </div>
                     </div>
                     <div className="bg-purple-50 rounded-lg border border-purple-200 p-3">
-                      <div className="text-xs text-purple-600 uppercase tracking-wide">Public Holidays</div>
+                      <div className="text-xs text-purple-600 uppercase tracking-wide">Public No Class Work Days</div>
                       <div className="text-2xl font-bold text-purple-700 mt-1">
                         {previewData.publicHolidays?.length || 0}
                       </div>
                     </div>
                     <div className="bg-indigo-50 rounded-lg border border-indigo-200 p-3">
-                      <div className="text-xs text-indigo-600 uppercase tracking-wide">Institute Holidays</div>
+                      <div className="text-xs text-indigo-600 uppercase tracking-wide">Institute No Class Work Days</div>
                       <div className="text-2xl font-bold text-indigo-700 mt-1">
                         {previewData.instituteHolidays?.length || 0}
                       </div>
@@ -788,7 +788,7 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
                   <div className="bg-amber-50 rounded-lg border border-amber-200 p-3">
                     <div className="text-xs text-amber-600 uppercase tracking-wide flex items-center gap-1">
                       <AlertCircle size={12} />
-                      Holidays
+                      No Class Work Days
                     </div>
                     <div className="text-2xl font-bold text-amber-700 mt-1">
                       {previewData.statistics?.totalHolidays || 0}

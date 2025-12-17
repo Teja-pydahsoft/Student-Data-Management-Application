@@ -15,7 +15,8 @@ export const BACKEND_MODULES = {
   SETTINGS: 'settings',
   USER_MANAGEMENT: 'user_management',
   REPORTS: 'reports',
-  TICKET_MANAGEMENT: 'ticket_management'
+  TICKET_MANAGEMENT: 'ticket_management',
+  ANNOUNCEMENTS: 'announcements'
 };
 
 // Granular Permissions for each module
@@ -96,6 +97,15 @@ export const MODULE_PERMISSIONS = {
       read: 'View Tickets',
       write: 'Manage Tickets'
     }
+  },
+  [BACKEND_MODULES.ANNOUNCEMENTS]: {
+    permissions: ['view', 'create', 'edit', 'delete'],
+    labels: {
+      view: 'View Announcements',
+      create: 'Create Announcements',
+      edit: 'Edit Announcements',
+      delete: 'Delete Announcements'
+    }
   }
 };
 
@@ -109,7 +119,8 @@ export const MODULE_LABELS = {
   [BACKEND_MODULES.SETTINGS]: 'Settings',
   [BACKEND_MODULES.USER_MANAGEMENT]: 'User Management',
   [BACKEND_MODULES.REPORTS]: 'Reports',
-  [BACKEND_MODULES.TICKET_MANAGEMENT]: 'Ticket Management'
+  [BACKEND_MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
+  [BACKEND_MODULES.ANNOUNCEMENTS]: 'Announcements'
 };
 
 // Frontend navigation keys
@@ -125,7 +136,8 @@ export const FRONTEND_MODULES = {
   USERS: 'users',
   REPORTS: 'reports',
   TICKETS: 'tickets',
-  TASK_MANAGEMENT: 'task_management'
+  TASK_MANAGEMENT: 'task_management',
+  ANNOUNCEMENTS: 'announcements'
 };
 
 // Map frontend navigation keys to backend permission keys
@@ -141,7 +153,8 @@ export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.USERS]: [BACKEND_MODULES.USER_MANAGEMENT],
   [FRONTEND_MODULES.REPORTS]: [BACKEND_MODULES.REPORTS],
   [FRONTEND_MODULES.TICKETS]: [BACKEND_MODULES.TICKET_MANAGEMENT],
-  [FRONTEND_MODULES.TASK_MANAGEMENT]: [BACKEND_MODULES.TICKET_MANAGEMENT]
+  [FRONTEND_MODULES.TASK_MANAGEMENT]: [BACKEND_MODULES.TICKET_MANAGEMENT],
+  [FRONTEND_MODULES.ANNOUNCEMENTS]: [BACKEND_MODULES.ANNOUNCEMENTS]
 };
 
 // Map backend module keys to frontend navigation keys (reverse mapping)
@@ -154,7 +167,8 @@ export const BACKEND_TO_FRONTEND_MAP = {
   [BACKEND_MODULES.FEE_MANAGEMENT]: FRONTEND_MODULES.FEES,
   [BACKEND_MODULES.SETTINGS]: FRONTEND_MODULES.COURSES,
   [BACKEND_MODULES.USER_MANAGEMENT]: FRONTEND_MODULES.USERS,
-  [BACKEND_MODULES.REPORTS]: FRONTEND_MODULES.REPORTS
+  [BACKEND_MODULES.REPORTS]: FRONTEND_MODULES.REPORTS,
+  [BACKEND_MODULES.ANNOUNCEMENTS]: FRONTEND_MODULES.ANNOUNCEMENTS
 };
 
 // Route map for navigation
@@ -170,7 +184,8 @@ export const MODULE_ROUTE_MAP = {
   [FRONTEND_MODULES.USERS]: '/users',
   [FRONTEND_MODULES.REPORTS]: '/reports',
   [FRONTEND_MODULES.TICKETS]: '/tickets',
-  [FRONTEND_MODULES.TASK_MANAGEMENT]: '/task-management'
+  [FRONTEND_MODULES.TASK_MANAGEMENT]: '/task-management',
+  [FRONTEND_MODULES.ANNOUNCEMENTS]: '/announcements'
 };
 
 // Get module key from path
@@ -186,6 +201,7 @@ export const getModuleKeyForPath = (path = '/') => {
   if (path.startsWith('/reports')) return FRONTEND_MODULES.REPORTS;
   if (path.startsWith('/tickets')) return FRONTEND_MODULES.TICKETS;
   if (path.startsWith('/task-management')) return FRONTEND_MODULES.TASK_MANAGEMENT;
+  if (path.startsWith('/announcements')) return FRONTEND_MODULES.ANNOUNCEMENTS;
   return null;
 };
 
@@ -197,10 +213,10 @@ export const getModuleKeyForPath = (path = '/') => {
  */
 export const hasModuleAccess = (permissions, frontendModule) => {
   if (!permissions || !frontendModule) return false;
-  
+
   const backendModules = FRONTEND_TO_BACKEND_MAP[frontendModule];
   if (!backendModules || backendModules.length === 0) return false;
-  
+
   // User has access if ANY of the required backend permissions have any true permission
   return backendModules.some(backendModule => {
     const perm = permissions[backendModule];
@@ -218,10 +234,10 @@ export const hasModuleAccess = (permissions, frontendModule) => {
  */
 export const hasPermission = (permissions, module, action) => {
   if (!permissions || !module || !action) return false;
-  
+
   const modulePerm = permissions[module];
   if (!modulePerm) return false;
-  
+
   return modulePerm[action] === true;
 };
 
@@ -232,15 +248,15 @@ export const hasPermission = (permissions, module, action) => {
  */
 export const getAllowedFrontendModules = (permissions) => {
   if (!permissions) return [];
-  
+
   const allowedModules = [];
-  
+
   Object.keys(FRONTEND_TO_BACKEND_MAP).forEach(frontendModule => {
     if (hasModuleAccess(permissions, frontendModule)) {
       allowedModules.push(frontendModule);
     }
   });
-  
+
   return allowedModules;
 };
 
@@ -252,13 +268,13 @@ export const getAllowedFrontendModules = (permissions) => {
  */
 export const hasWriteAccess = (permissions, frontendModule) => {
   if (!permissions || !frontendModule) return false;
-  
+
   const backendModules = FRONTEND_TO_BACKEND_MAP[frontendModule];
   if (!backendModules || backendModules.length === 0) return false;
-  
+
   // Check for write-type permissions (edit, control, manage, etc.)
   const writeActions = ['edit', 'control', 'manage', 'add_student', 'bulk_upload', 'delete_student', 'approve', 'reject', 'mark'];
-  
+
   return backendModules.some(backendModule => {
     const perm = permissions[backendModule];
     if (!perm) return false;

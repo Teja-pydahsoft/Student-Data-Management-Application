@@ -70,10 +70,73 @@ const Dashboard = () => {
     const registrationLabel = normalizeRegistrationStatus();
     const isRegistrationCompleted = registrationLabel === 'Completed' && feeStatusLabel === 'Completed';
 
-    // Attendance overview removed: avoid showing any placeholder or false stats
+    // Announcement State
+    const [announcements, setAnnouncements] = useState([]);
+    const [showAnnouncement, setShowAnnouncement] = useState(false);
+    const [currentAnnouncement, setCurrentAnnouncement] = useState(null);
+
+    // Fetch announcements
+    useEffect(() => {
+        const fetchAnnouncements = async () => {
+            try {
+                const response = await api.get('/announcements/student');
+                if (response.data.success && response.data.data.length > 0) {
+                    const allAnnouncements = response.data.data;
+                    const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
+
+                    // Filter unseen announcements
+                    const unseen = allAnnouncements.filter(a => !seenIds.includes(a.id));
+
+                    if (unseen.length > 0) {
+                        setCurrentAnnouncement(unseen[0]); // Show the latest unseen
+                        setShowAnnouncement(true);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch announcements', error);
+            }
+        };
+        fetchAnnouncements();
+    }, []);
+
+    const closeAnnouncement = () => {
+        if (currentAnnouncement) {
+            const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
+            if (!seenIds.includes(currentAnnouncement.id)) {
+                seenIds.push(currentAnnouncement.id);
+                localStorage.setItem('seen_announcements', JSON.stringify(seenIds));
+            }
+        }
+        setShowAnnouncement(false);
+    };
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-8 animate-fade-in relative">
+            {/* Announcement Popup */}
+            {showAnnouncement && currentAnnouncement && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                        {currentAnnouncement.image_url && (
+                            <div className="h-48 w-full bg-gray-100">
+                                <img src={currentAnnouncement.image_url} alt="Announcement" className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                        <div className="p-6">
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">{currentAnnouncement.title}</h3>
+                            <p className="text-gray-600 mb-6 text-sm leading-relaxed max-h-60 overflow-y-auto">
+                                {currentAnnouncement.content}
+                            </p>
+                            <button
+                                onClick={closeAnnouncement}
+                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                            >
+                                Close & Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Welcome Section */}
             <div>
                 <h1 className="text-3xl font-bold text-gray-900 heading-font">
@@ -82,6 +145,44 @@ const Dashboard = () => {
                 <p className="text-gray-500 mt-2">
                     {displayData?.course || user?.course} | {displayData?.branch || user?.branch} | Year {displayData?.current_year || user?.current_year}
                 </p>
+            </div>
+
+            {/* Attendance Status Widget */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Today's Attendance</h3>
+                    <div className="mt-1 flex items-center gap-3">
+                        {(() => {
+                            const status = (displayData.today_attendance_status || 'not marked').toLowerCase();
+                            let colorClass = 'bg-gray-100 text-gray-600';
+                            let icon = <CheckCircle size={20} className="opacity-0" />; // Placeholder
+
+                            if (status === 'present') {
+                                colorClass = 'bg-green-100 text-green-700';
+                                icon = <CheckCircle size={20} />;
+                            } else if (status === 'absent') {
+                                colorClass = 'bg-red-100 text-red-700';
+                                icon = <MapPin size={20} />;
+                            } else if (status === 'holiday') {
+                                colorClass = 'bg-purple-100 text-purple-700';
+                                icon = <BookOpen size={20} />;
+                            }
+
+                            return (
+                                <div className={`px-4 py-1.5 rounded-full font-bold flex items-center gap-2 capitalize ${colorClass}`}>
+                                    {icon}
+                                    {status === 'not marked' ? 'Not Marked Yet' : status}
+                                </div>
+                            );
+                        })()}
+                        <span className="text-xs text-gray-400">
+                            ({new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })})
+                        </span>
+                    </div>
+                </div>
+                <Link to="/student/announcements" className="text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    View Announcements &rarr;
+                </Link>
             </div>
 
             {/* Quick Actions Card / Completed Banner */}
@@ -121,7 +222,54 @@ const Dashboard = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Recent Announcements Feed */}
+                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <span role="img" aria-label="announcement">📢</span>
+                            </div>
+                            Recent Announcements
+                        </h3>
+                        <Link to="/student/announcements" className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline">
+                            View All
+                        </Link>
+                    </div>
+
+                    <div className="space-y-4">
+                        {loading ? (
+                            <div className="text-center py-8 text-gray-500">Loading announcements...</div>
+                        ) : announcements.length > 0 ? (
+                            announcements.slice(0, 3).map((ann) => (
+                                <div key={ann.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 transition-colors group">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">{ann.title}</h4>
+                                        <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100 whitespace-nowrap">
+                                            {new Date(ann.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
+                                        {ann.content}
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setCurrentAnnouncement(ann);
+                                            setShowAnnouncement(true);
+                                        }}
+                                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                    >
+                                        Read More &rarr;
+                                    </button>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                <p className="text-gray-500 text-sm">No new announcements</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 {/* Profile Quick Details */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">

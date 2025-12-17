@@ -197,4 +197,12 @@ router.delete(
   studentController.deleteStudent
 );
 
+router.post(
+  '/bulk-resend-passwords',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'), // Requires edit_student permission
+  attachUserScope,
+  studentController.bulkResendPasswords
+);
+
 module.exports = router;

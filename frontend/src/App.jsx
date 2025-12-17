@@ -20,6 +20,7 @@ import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
 import TicketManagement from './pages/TicketManagement';
 import TaskManagement from './pages/TaskManagement';
+import Announcements from './pages/Announcements';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -27,6 +28,8 @@ import StudentProfile from './pages/student/Profile';
 import SemesterRegistration from './pages/student/SemesterRegistration';
 import RaiseTicket from './pages/student/RaiseTicket';
 import MyTickets from './pages/student/MyTickets';
+import StudentAnnouncements from './pages/student/StudentAnnouncements';
+import StudentAttendance from './pages/student/Attendance';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -51,7 +54,7 @@ const ProtectedStudentRoute = ({ children }) => {
 function App() {
   return (
     <Router>
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 3000,
@@ -75,13 +78,13 @@ function App() {
           },
         }}
       />
-      
+
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/student/login" element={<Login />} />
         <Route path="/form/:formId" element={<PublicForm />} />
-        
+
         {/* Protected Admin Routes */}
         <Route
           path="/"
@@ -106,8 +109,9 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
+          <Route path="announcements" element={<Announcements />} />
         </Route>
-        
+
         {/* Protected Student Routes */}
         <Route
           path="/student"
@@ -123,8 +127,10 @@ function App() {
           <Route path="semester-registration" element={<SemesterRegistration />} />
           <Route path="raise-ticket" element={<RaiseTicket />} />
           <Route path="my-tickets" element={<MyTickets />} />
+          <Route path="announcements" element={<StudentAnnouncements />} />
+          <Route path="attendance" element={<StudentAttendance />} />
         </Route>
-        
+
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -37,7 +37,7 @@ const textToHtml = (text) => {
 // Helper function to resolve parent email
 const resolveParentEmail = (student) => {
   if (!student) return '';
-  
+
   const data = student.student_data || {};
   return (
     student.parent_email ||
@@ -88,7 +88,7 @@ exports.getFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
-    
+
     // Build WHERE clause based on applied filters - only regular students
     const params = [];
     let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
@@ -96,7 +96,7 @@ exports.getFilterOptions = async (req, res) => {
       whereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
       params.push(...EXCLUDED_COURSES);
     }
-    
+
     // Apply user scope filtering first
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -105,7 +105,7 @@ exports.getFilterOptions = async (req, res) => {
         params.push(...scopeParams);
       }
     }
-    
+
     if (college) {
       whereClause += ' AND college = ?';
       params.push(college);
@@ -130,13 +130,13 @@ exports.getFilterOptions = async (req, res) => {
       whereClause += ' AND current_semester = ?';
       params.push(parseInt(semester, 10));
     }
-    
+
     // Fetch distinct values for each filter, applying cascading filters
     const [batchRows] = await masterPool.query(
       `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
       params
     );
-    
+
     // For years and semesters, build separate WHERE clauses that exclude year/semester filters
     // so they cascade properly based on batch/course/branch
     const yearParams = [];
@@ -145,7 +145,7 @@ exports.getFilterOptions = async (req, res) => {
       yearWhereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
       yearParams.push(...EXCLUDED_COURSES);
     }
-    
+
     // Apply user scope filtering
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
@@ -154,7 +154,7 @@ exports.getFilterOptions = async (req, res) => {
         yearParams.push(...scopeParams);
       }
     }
-    
+
     if (college) {
       yearWhereClause += ' AND college = ?';
       yearParams.push(college);
@@ -172,18 +172,18 @@ exports.getFilterOptions = async (req, res) => {
       yearParams.push(batch);
     }
     // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
-    
+
     const [yearRows] = await masterPool.query(
       `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
       yearParams
     );
-    
+
     // For semesters, use the same WHERE clause as years
     const [semesterRows] = await masterPool.query(
       `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
       yearParams
     );
-    
+
     // For courses, if college is selected, filter courses by college
     let courseRows;
     if (college) {
@@ -192,7 +192,7 @@ exports.getFilterOptions = async (req, res) => {
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table (these are the valid courses for this college)
@@ -201,7 +201,7 @@ exports.getFilterOptions = async (req, res) => {
           [collegeId]
         );
         const validCourseNames = collegeCourses.map(c => c.name);
-        
+
         if (validCourseNames.length > 0) {
           // Get distinct courses from students that match:
           // 1. The current filters (college, batch, year, semester, etc.)
@@ -228,7 +228,7 @@ exports.getFilterOptions = async (req, res) => {
         params
       );
     }
-    
+
     // For branches, if college is selected, filter branches by college and valid courses
     let branchRows;
     if (college) {
@@ -237,7 +237,7 @@ exports.getFilterOptions = async (req, res) => {
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table
@@ -247,7 +247,7 @@ exports.getFilterOptions = async (req, res) => {
         );
         const validCourseNames = collegeCourses.map(c => c.name);
         const validCourseIds = collegeCourses.map(c => c.id);
-        
+
         if (validCourseNames.length > 0) {
           // If course is also selected, filter branches for that specific course
           if (course) {
@@ -260,7 +260,7 @@ exports.getFilterOptions = async (req, res) => {
                 [selectedCourse.id]
               );
               const validBranchNames = courseBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
                 // Get distinct branches from students that match:
                 // 1. The current filters (college, course, batch, year, semester, etc.)
@@ -289,7 +289,7 @@ exports.getFilterOptions = async (req, res) => {
                 validCourseIds
               );
               const validBranchNames = allBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
                 const placeholders = validBranchNames.map(() => '?').join(',');
                 const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
@@ -396,6 +396,7 @@ exports.getAttendance = async (req, res) => {
         s.student_data,
         ar.id AS attendance_record_id,
         ar.status AS attendance_status,
+        ar.holiday_reason,
         COALESCE(ar.sms_sent, 0) AS sms_sent
       FROM students s
       LEFT JOIN attendance_records ar
@@ -409,13 +410,13 @@ exports.getAttendance = async (req, res) => {
     // Optimize: Order WHERE conditions to use composite index effectively
     // Start with indexed columns in order: student_status, course, batch, current_year, current_semester
     query += ` AND s.student_status = 'Regular'`;
-    
+
     // Apply indexed filters first (these use the composite index)
     if (course) {
       query += ' AND s.course = ?';
       params.push(course);
     }
-    
+
     if (batch) {
       query += ' AND s.batch = ?';
       params.push(batch);
@@ -436,12 +437,12 @@ exports.getAttendance = async (req, res) => {
         params.push(parsedSemester);
       }
     }
-    
+
     if (branch) {
       query += ' AND s.branch = ?';
       params.push(branch);
     }
-    
+
     // Exclude certain courses (after course filter to use index)
     if (EXCLUDED_COURSES.length > 0) {
       query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
@@ -502,23 +503,23 @@ exports.getAttendance = async (req, res) => {
       FROM students s
       WHERE 1=1
     `;
-    
+
     const countParams = [];
-    
+
     // Optimize: Order WHERE conditions to use composite index effectively
     countQuery += ` AND s.student_status = 'Regular'`;
-    
+
     // Apply indexed filters first (these use the composite index)
     if (course) {
       countQuery += ' AND s.course = ?';
       countParams.push(course);
     }
-    
+
     if (batch) {
       countQuery += ' AND s.batch = ?';
       countParams.push(batch);
     }
-    
+
     if (currentYear) {
       const parsedYear = parseInt(currentYear, 10);
       if (!Number.isNaN(parsedYear)) {
@@ -526,7 +527,7 @@ exports.getAttendance = async (req, res) => {
         countParams.push(parsedYear);
       }
     }
-    
+
     if (currentSemester) {
       const parsedSemester = parseInt(currentSemester, 10);
       if (!Number.isNaN(parsedSemester)) {
@@ -534,18 +535,18 @@ exports.getAttendance = async (req, res) => {
         countParams.push(parsedSemester);
       }
     }
-    
+
     if (branch) {
       countQuery += ' AND s.branch = ?';
       countParams.push(branch);
     }
-    
+
     // Exclude certain courses (after course filter to use index)
     if (EXCLUDED_COURSES.length > 0) {
       countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
       countParams.push(...EXCLUDED_COURSES);
     }
-    
+
     // Apply user scope filtering (after indexed filters)
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
@@ -554,7 +555,7 @@ exports.getAttendance = async (req, res) => {
         countParams.push(...scopeParams);
       }
     }
-    
+
     if (studentName) {
       const keyword = `%${studentName}%`;
       // Optimize: Check indexed columns first for better performance
@@ -573,7 +574,7 @@ exports.getAttendance = async (req, res) => {
       `;
       countParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
     }
-    
+
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
       // Optimize: Check indexed columns first for better performance
@@ -596,7 +597,7 @@ exports.getAttendance = async (req, res) => {
     // Get total count with all filters applied
     const [countRows] = await masterPool.query(countQuery, countParams);
     const total = countRows?.[0]?.total || 0;
-    
+
     // Optimize: Combine all statistics queries into a single query using conditional aggregation
     // This reduces database round trips from 3 queries to 1
     let statsQuery = `
@@ -608,16 +609,16 @@ exports.getAttendance = async (req, res) => {
       LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
       WHERE 1=1 AND s.student_status = 'Regular'
     `;
-    
+
     const statsParams = [attendanceDate];
-    
+
     // Optimize: Order WHERE conditions to use composite index effectively
     // Apply indexed filters first (these use the composite index)
     if (course) {
       statsQuery += ' AND s.course = ?';
       statsParams.push(course);
     }
-    
+
     if (batch) {
       statsQuery += ' AND s.batch = ?';
       statsParams.push(batch);
@@ -638,18 +639,18 @@ exports.getAttendance = async (req, res) => {
         statsParams.push(parsedSemester);
       }
     }
-    
+
     if (branch) {
       statsQuery += ' AND s.branch = ?';
       statsParams.push(branch);
     }
-    
+
     // Exclude certain courses (after course filter to use index)
     if (EXCLUDED_COURSES.length > 0) {
       statsQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
       statsParams.push(...EXCLUDED_COURSES);
     }
-    
+
     // Apply user scope filtering (after indexed filters)
     if (req.userScope) {
       const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
@@ -693,16 +694,16 @@ exports.getAttendance = async (req, res) => {
       `;
       statsParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
     }
-    
+
     // Execute single optimized stats query
     const [statsRows] = await masterPool.query(statsQuery, statsParams);
     const statsRow = statsRows[0] || {};
-    
+
     const presentCount = parseInt(statsRow.present_count || 0, 10);
     const absentCount = parseInt(statsRow.absent_count || 0, 10);
     const markedCount = parseInt(statsRow.marked_count || 0, 10);
     const unmarkedCount = Math.max(0, total - markedCount);
-    
+
     const statistics = {
       total: total,
       present: presentCount,
@@ -811,7 +812,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
   try {
     const attendanceDate = getDateOnlyString(req.query.date || req.body.date);
     const countOnly = req.query.countOnly === 'true' || req.body.countOnly === true;
-    
+
     if (!attendanceDate) {
       return res.status(400).json({
         success: false,
@@ -912,7 +913,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
       params.push(mobileLike, mobileLike, mobileLike, mobileLike, mobileLike, mobileLike);
     }
 
-    const whereClause = whereConditions.length > 0 
+    const whereClause = whereConditions.length > 0
       ? `WHERE ${whereConditions.join(' AND ')}`
       : 'WHERE 1=1';
 
@@ -924,7 +925,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
       ${whereClause}
       AND ar.attendance_date = ?
     `;
-    
+
     params.push(attendanceDate);
 
     if (countOnly) {
@@ -933,7 +934,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
         `SELECT COUNT(*) AS count ${queryBase}`,
         params
       );
-      
+
       return res.json({
         success: true,
         message: `Found ${countResult[0].count} attendance record(s) matching filters`,
@@ -1010,7 +1011,7 @@ exports.markAttendance = async (req, res) => {
     if (isHolidayDate && normalizedRecords.some((r) => r.status !== 'holiday')) {
       return res.status(400).json({
         success: false,
-        message: 'On holidays, only holiday status can be recorded'
+        message: 'On no class work days, only no class work status can be recorded'
       });
     }
   } catch (error) {
@@ -1116,20 +1117,44 @@ exports.markAttendance = async (req, res) => {
           UPDATE attendance_records
           SET status = ?, marked_by = ?`;
         let updateParams = [record.status, adminId];
-        
+
         // Add holiday_reason if status is holiday and reason is provided
         if (record.status === 'holiday' && record.holidayReason) {
           updateQuery += `, holiday_reason = ?`;
           updateParams.push(record.holidayReason);
+          console.log('Backend: Updating holiday reason for student', {
+            studentId: record.studentId,
+            holidayReason: record.holidayReason,
+            updateQuery: updateQuery
+          });
         } else if (record.status !== 'holiday') {
           // Clear holiday_reason if status is not holiday
           updateQuery += `, holiday_reason = NULL`;
+          console.log('Backend: Clearing holiday reason for student', {
+            studentId: record.studentId,
+            status: record.status
+          });
         }
-        
+
         updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
         updateParams.push(existing.id);
-        
+
         await connection.query(updateQuery, updateParams);
+
+        // Debug: Verify holiday reason was actually updated
+        if (record.status === 'holiday' && record.holidayReason) {
+          const [verifyUpdateResult] = await connection.query(
+            'SELECT holiday_reason FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+            [record.studentId, normalizedDate]
+          );
+          console.log('Backend: Verified holiday reason update in DB:', {
+            studentId: record.studentId,
+            date: normalizedDate,
+            savedHolidayReason: record.holidayReason,
+            dbHolidayReason: verifyUpdateResult[0]?.holiday_reason,
+            match: verifyUpdateResult[0]?.holiday_reason === record.holidayReason
+          });
+        }
 
         updatedCount += 1;
 
@@ -1149,16 +1174,36 @@ exports.markAttendance = async (req, res) => {
           record.status,
           adminId
         ];
-        
+
         // Add holiday_reason if status is holiday and reason is provided
         if (record.status === 'holiday' && record.holidayReason) {
           insertQuery += `, holiday_reason`;
           insertParams.push(record.holidayReason);
+          console.log('Backend: Inserting holiday reason for student', {
+            studentId: record.studentId,
+            holidayReason: record.holidayReason,
+            insertQuery: insertQuery
+          });
         }
-        
+
         insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
-        
+
         await connection.query(insertQuery, insertParams);
+
+        // Debug: Verify holiday reason was actually saved
+        if (record.status === 'holiday' && record.holidayReason) {
+          const [verifyResult] = await connection.query(
+            'SELECT holiday_reason FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+            [record.studentId, normalizedDate]
+          );
+          console.log('Backend: Verified holiday reason in DB:', {
+            studentId: record.studentId,
+            date: normalizedDate,
+            savedHolidayReason: record.holidayReason,
+            dbHolidayReason: verifyResult[0]?.holiday_reason,
+            match: verifyResult[0]?.holiday_reason === record.holidayReason
+          });
+        }
 
         insertedCount += 1;
 
@@ -1181,14 +1226,14 @@ exports.markAttendance = async (req, res) => {
     const notificationResults = [];
     console.log(`\n========== NOTIFICATION DISPATCH LOG (${normalizedDate}) ==========`);
     console.log(`Total absent students to notify: ${smsQueue.length}`);
-    
+
     // Get connection again for updating SMS status
     const updateConnection = await masterPool.getConnection();
-    
+
     for (const payload of smsQueue) {
       const student = payload.student;
       const studentData = student.student_data || {};
-      
+
       // Extract student details for logging and response
       const studentDetails = {
         studentId: student.id,
@@ -1200,9 +1245,9 @@ exports.markAttendance = async (req, res) => {
         branch: student.branch || studentData['Branch'] || studentData['branch'] || '',
         year: student.current_year || studentData['Current Academic Year'] || '',
         semester: student.current_semester || studentData['Current Semester'] || '',
-        parentMobile: student.parent_mobile1 || student.parent_mobile2 || 
-                      studentData['Parent Mobile Number 1'] || studentData['Parent Phone Number 1'] || 
-                      studentData['Parent Mobile Number'] || '',
+        parentMobile: student.parent_mobile1 || student.parent_mobile2 ||
+          studentData['Parent Mobile Number 1'] || studentData['Parent Phone Number 1'] ||
+          studentData['Parent Mobile Number'] || '',
         parentEmail: resolveParentEmail(student)
       };
 
@@ -1216,7 +1261,7 @@ exports.markAttendance = async (req, res) => {
 
       // Check if notifications are enabled
       const isEnabled = notificationSettings?.enabled !== false;
-      
+
       if (isEnabled) {
         // Send SMS if enabled
         if (notificationSettings?.smsEnabled !== false && studentDetails.parentMobile) {
@@ -1229,7 +1274,7 @@ exports.markAttendance = async (req, res) => {
             result.smsError = smsResult?.reason || null;
             result.sentTo = smsResult?.sentTo || studentDetails.parentMobile;
             result.apiResponse = smsResult?.data || null;
-            
+
             // Update SMS status in database if SMS was sent successfully
             if (result.smsSent) {
               try {
@@ -1261,18 +1306,18 @@ exports.markAttendance = async (req, res) => {
 
       notificationResults.push(result);
     }
-    
+
     // Release update connection
     if (updateConnection) {
       updateConnection.release();
     }
-    
+
     // Summary log
     const smsSuccessCount = notificationResults.filter(r => r.smsSent).length;
     const emailSuccessCount = notificationResults.filter(r => r.emailSent).length;
     const smsFailedCount = notificationResults.filter(r => !r.smsSent && r.smsError && r.smsError !== 'notifications_disabled').length;
     const emailFailedCount = notificationResults.filter(r => !r.emailSent && r.emailError && r.emailError !== 'notifications_disabled').length;
-    
+
     console.log(`\n========== NOTIFICATION DISPATCH SUMMARY ==========`);
     console.log(`📱 SMS: ✅ ${smsSuccessCount} sent, ❌ ${smsFailedCount} failed`);
     console.log(`📧 Email: ✅ ${emailSuccessCount} sent, ❌ ${emailFailedCount} failed`);
@@ -1283,7 +1328,7 @@ exports.markAttendance = async (req, res) => {
     // ============================================
     // Get all attendance data for the date
     const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
-    
+
     // Get all active Principals and HODs with their access scopes
     const { getAllNotificationUsers, filterAttendanceByUserScope, areAllBatchesMarkedForUserScope } = require('../services/getUserScopeAttendance');
     const { principals, hods } = await getAllNotificationUsers();
@@ -1511,14 +1556,14 @@ exports.markAttendance = async (req, res) => {
     // Check if all batches are marked for each college/course combination
     // If all batches are marked (pending = 0), automatically send day-end report
     console.log(`\n📊 Checking college/course combinations for automatic day-end reports...`);
-    
+
     // Group attendance data by college/course
     const groupsByCollegeCourse = new Map();
     for (const group of allAttendanceData) {
       const college = group.college || 'Unknown';
       const course = group.course || 'Unknown';
       const key = `${college}|${course}`;
-      
+
       if (!groupsByCollegeCourse.has(key)) {
         groupsByCollegeCourse.set(key, {
           college,
@@ -1526,7 +1571,7 @@ exports.markAttendance = async (req, res) => {
           groups: []
         });
       }
-      
+
       groupsByCollegeCourse.get(key).groups.push(group);
     }
 
@@ -1536,17 +1581,17 @@ exports.markAttendance = async (req, res) => {
     // Check each college/course combination
     for (const [key, collegeCourseData] of groupsByCollegeCourse) {
       const { college, course, groups } = collegeCourseData;
-      
+
       // Check if all batches for this college/course are marked (pending = 0)
       const allBatchesMarked = groups.every(group => group.isFullyMarked);
       const totalGroups = groups.length;
       const markedGroups = groups.filter(g => g.isFullyMarked).length;
-      
+
       console.log(`\n   📋 ${college} - ${course}: ${markedGroups}/${totalGroups} batches marked`);
-      
+
       if (allBatchesMarked && totalGroups > 0) {
         console.log(`   ✅ All batches marked for ${college} - ${course}. Sending day-end report...`);
-        
+
         // Combine all students and attendance records for this college/course
         const allStudents = [];
         const allAttendanceRecords = [];
@@ -1561,25 +1606,25 @@ exports.markAttendance = async (req, res) => {
         // Find relevant principals and HODs for this college/course
         const relevantPrincipals = principals.filter(principal => {
           // Check if principal has access to this college
-          const hasCollegeAccess = principal.collegeNames.length === 0 || 
-                                   principal.collegeNames.includes(college);
-          
+          const hasCollegeAccess = principal.collegeNames.length === 0 ||
+            principal.collegeNames.includes(college);
+
           // Check if principal has access to this course
-          const hasCourseAccess = principal.allCourses || 
-                                  principal.courseNames.includes(course);
-          
+          const hasCourseAccess = principal.allCourses ||
+            principal.courseNames.includes(course);
+
           return hasCollegeAccess && hasCourseAccess;
         });
 
         const relevantHODs = hods.filter(hod => {
           // Check if HOD has access to this college
-          const hasCollegeAccess = hod.collegeNames.length === 0 || 
-                                   hod.collegeNames.includes(college);
-          
+          const hasCollegeAccess = hod.collegeNames.length === 0 ||
+            hod.collegeNames.includes(college);
+
           // Check if HOD has access to this course
-          const hasCourseAccess = hod.allCourses || 
-                                  hod.courseNames.includes(course);
-          
+          const hasCourseAccess = hod.allCourses ||
+            hod.courseNames.includes(course);
+
           return hasCollegeAccess && hasCourseAccess;
         });
 
@@ -1723,7 +1768,7 @@ exports.markAttendance = async (req, res) => {
       const email = key.split('|')[0];
       uniqueDayEndUsers.add(email);
     }
-    
+
     if (dayEndProcessedUsers.size > 0) {
       console.log(`\n📋 Day-End Report Summary: ${dayEndReportResults.length} report(s) sent to ${uniqueDayEndUsers.size} unique user(s) for completed college/course combinations`);
     } else {
@@ -1768,7 +1813,7 @@ exports.markAttendance = async (req, res) => {
 exports.sendDayEndReports = async (req, res) => {
   try {
     const { date } = req.body;
-    
+
     if (!date) {
       return res.status(400).json({
         success: false,
@@ -1778,14 +1823,14 @@ exports.sendDayEndReports = async (req, res) => {
 
     // Normalize date
     const normalizedDate = getDateOnlyString(date);
-    
+
     if (!normalizedDate) {
       return res.status(400).json({
         success: false,
         message: 'Invalid date format'
       });
     }
-    
+
     // Get sender information
     const sender = req.user || req.admin;
     if (!sender) {
@@ -1797,18 +1842,18 @@ exports.sendDayEndReports = async (req, res) => {
 
     const senderName = sender.name || sender.username || 'System';
     const senderEmail = sender.email || '';
-    
+
     console.log(`\n📧 Manual Day-End Report Request for ${normalizedDate}`);
     console.log(`   Sender: ${senderName} (${senderEmail})`);
 
     // Get all attendance data for the date
     const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
-    
+
     // Filter attendance data by sender's scope first
     let filteredAttendanceData = allAttendanceData;
     if (req.userScope && !req.userScope.unrestricted) {
       const { filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
-      
+
       // Convert req.userScope to the format needed for filterAttendanceByUserScope
       const senderScope = {
         collegeNames: req.userScope.collegeNames || [],
@@ -1818,10 +1863,10 @@ exports.sendDayEndReports = async (req, res) => {
         allBranches: req.userScope.allBranches || false,
         role: sender.role
       };
-      
+
       filteredAttendanceData = filterAttendanceByUserScope(allAttendanceData, senderScope);
       console.log(`   📊 Filtered by sender scope: ${filteredAttendanceData.length}/${allAttendanceData.length} groups`);
-      
+
       if (filteredAttendanceData.length === 0) {
         return res.json({
           success: true,
@@ -1836,7 +1881,7 @@ exports.sendDayEndReports = async (req, res) => {
         });
       }
     }
-    
+
     // Get all active Principals and HODs with their access scopes
     const { getAllNotificationUsers, filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
     const { principals, hods } = await getAllNotificationUsers();
@@ -1855,7 +1900,7 @@ exports.sendDayEndReports = async (req, res) => {
       const college = group.college || 'Unknown';
       const course = group.course || 'Unknown';
       const key = `${college}|${course}`;
-      
+
       if (!groupsByCollegeCourse.has(key)) {
         groupsByCollegeCourse.set(key, {
           college,
@@ -1863,7 +1908,7 @@ exports.sendDayEndReports = async (req, res) => {
           groups: []
         });
       }
-      
+
       groupsByCollegeCourse.get(key).groups.push(group);
     }
 
@@ -2074,7 +2119,7 @@ exports.sendDayEndReports = async (req, res) => {
       } else {
         courseName = `${actualCourses.length} Courses`;
       }
-      
+
       // Determine branch name from actual branches in the data
       let branchName;
       if (actualBranches.length === 0) {
@@ -2168,18 +2213,18 @@ exports.sendDayEndReports = async (req, res) => {
 exports.retrySms = async (req, res) => {
   try {
     const { studentId, admissionNumber, attendanceDate, parentMobile } = req.body;
-    
+
     if (!studentId && !admissionNumber) {
       return res.status(400).json({
         success: false,
         message: 'Student ID or admission number is required'
       });
     }
-    
+
     // Get student details
     let query = 'SELECT * FROM students WHERE ';
     let params = [];
-    
+
     if (studentId) {
       query += 'id = ?';
       params.push(studentId);
@@ -2187,29 +2232,29 @@ exports.retrySms = async (req, res) => {
       query += 'admission_number = ?';
       params.push(admissionNumber);
     }
-    
+
     const [students] = await masterPool.query(query, params);
-    
+
     if (students.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
     }
-    
+
     const student = {
       ...students[0],
       student_data: parseStudentData(students[0].student_data)
     };
-    
+
     // Resolve parent mobile
-    const resolvedMobile = parentMobile || 
-      student.parent_mobile1 || 
-      student.parent_mobile2 || 
+    const resolvedMobile = parentMobile ||
+      student.parent_mobile1 ||
+      student.parent_mobile2 ||
       student.student_data?.['Parent Mobile Number 1'] ||
       student.student_data?.['Parent Phone Number 1'] ||
       student.student_data?.['Parent Mobile Number'];
-    
+
     if (!resolvedMobile) {
       return res.json({
         success: false,
@@ -2221,9 +2266,9 @@ exports.retrySms = async (req, res) => {
         }
       });
     }
-    
+
     console.log(`[SMS RETRY] Retrying notification for student ${student.admission_number}`);
-    
+
     // Get notification settings
     let notificationSettings = null;
     try {
@@ -2231,7 +2276,7 @@ exports.retrySms = async (req, res) => {
     } catch (error) {
       console.warn('Failed to load attendance notification settings:', error);
     }
-    
+
     // Send SMS
     const normalizedDate = attendanceDate || getDateOnlyString();
     const result = await sendAbsenceNotification({
@@ -2242,7 +2287,7 @@ exports.retrySms = async (req, res) => {
       attendanceDate: normalizedDate,
       notificationSettings
     });
-    
+
     // Update SMS status in database if SMS was sent successfully
     if (result?.success) {
       try {
@@ -2259,7 +2304,7 @@ exports.retrySms = async (req, res) => {
         console.warn(`Could not update sms_sent for student ${student.id}:`, updateError.message);
       }
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -2268,7 +2313,7 @@ exports.retrySms = async (req, res) => {
         sentTo: resolvedMobile
       }
     });
-    
+
   } catch (error) {
     console.error('SMS retry error:', error);
     res.status(500).json({
@@ -2438,13 +2483,13 @@ exports.getAttendanceSummary = async (req, res) => {
       course: normalizeTextFilter(req.query.course),
       branch: normalizeTextFilter(req.query.branch),
       year: parseOptionalInteger(req.query.year),
-    semester: parseOptionalInteger(req.query.semester),
-    studentStatus: 'Regular' // Day-end summary should only consider regular students
+      semester: parseOptionalInteger(req.query.semester),
+      studentStatus: 'Regular' // Day-end summary should only consider regular students
     };
 
     // Build filter conditions
     const countFilter = buildWhereClause(filters, 's');
-    
+
     // Apply user scope filtering
     let scopeCondition = '';
     let scopeParams = [];
@@ -2512,7 +2557,8 @@ exports.getAttendanceSummary = async (req, res) => {
           COUNT(*) AS total_students,
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
-          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -2643,7 +2689,8 @@ exports.getAttendanceSummary = async (req, res) => {
             presentToday: present,
             absentToday: absent,
             holidayToday: holiday,
-            
+            holidayReasons: row.holiday_reasons || null,
+
             markedToday: marked,
             pendingToday: Math.max(0, total - marked)
           };
@@ -2743,7 +2790,7 @@ exports.getStudentAttendanceHistory = async (req, res) => {
 
         if (courseRows.length > 0) {
           const courseId = courseRows[0].id;
-          
+
           // Get the current academic year (try to find active semester)
           const [semesterRows] = await masterPool.query(
             `
@@ -2797,7 +2844,7 @@ exports.getStudentAttendanceHistory = async (req, res) => {
       // Use semester dates, but limit to current date if semester hasn't ended
       const effectiveEndDate = semesterEndDate > referenceDate ? referenceDate : semesterEndDate;
       const effectiveStartDate = semesterStartDate < referenceDate ? semesterStartDate : referenceDate;
-      
+
       // For weekly: last 7 days from reference date, but within semester
       weekStart = new Date(referenceDate);
       weekStart.setDate(referenceDate.getDate() - 6);
@@ -2963,7 +3010,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
 
     // Get all student IDs
     const studentIds = studentRows.map((row) => row.id);
-    
+
     // Now get attendance records for these students in the date range
     let attendanceRows = [];
     if (studentIds.length > 0) {
@@ -3038,7 +3085,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
 
       const key = `${batch}|${course}|${branch}|${year}|${semester}`;
       const group = groupMap.get(key);
-      
+
       if (group && row.attendance_date) {
         // Normalize date to ensure consistent format matching
         const normalizedDate = getDateOnlyString(row.attendance_date);
@@ -3142,9 +3189,9 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
       allRows.push(['Report Period', `${from} to ${to}`]);
       allRows.push(['']);
       allRows.push(['Total Working Days', totalWorkingDays]);
-      allRows.push(['Total Holidays', reportData.totalHolidays]);
-      allRows.push(['Total Public Holidays', publicHolidaysList.length]);
-      allRows.push(['Total Institute Holidays', instituteHolidaysList.length]);
+      allRows.push(['Total No Class Work Days', reportData.totalHolidays]);
+      allRows.push(['Total Public No Class Work Days', publicHolidaysList.length]);
+      allRows.push(['Total Institute No Class Work Days', instituteHolidaysList.length]);
       allRows.push(['Total Groups', aggregatedData.length]);
       allRows.push(['Total Students', totals.studentCount]);
       allRows.push(['Total Present Records', totals.present]);
@@ -3198,9 +3245,9 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
       allRows.push(['']);
 
       // Holidays Section
-      allRows.push(['Holidays List']);
+      allRows.push(['No Class Work Days List']);
       allRows.push(['']);
-      const holidaysHeader = ['Date', 'Month', 'Year', 'Holiday Name', 'Type'];
+      const holidaysHeader = ['Date', 'Month', 'Year', 'Reason', 'Type'];
       allRows.push(holidaysHeader);
 
       publicHolidaysList.forEach((holiday) => {
@@ -3209,7 +3256,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
           holiday.month,
           holiday.year,
           holiday.name,
-          'Public Holiday'
+          'Public No Class Work'
         ]);
       });
 
@@ -3219,7 +3266,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
           holiday.month,
           holiday.year,
           holiday.name,
-          'Institute Holiday'
+          'Institute No Class Work'
         ]);
       });
 
@@ -3311,10 +3358,10 @@ exports.downloadAttendanceReport = async (req, res) => {
     let holidayInfo = { dates: new Set(), details: new Map() };
     let publicHolidaysList = [];
     let instituteHolidaysList = [];
-    
+
     try {
       holidayInfo = await getNonWorkingDaysForRange(from, to);
-      
+
       // Get public holidays for the date range
       const fromYear = new Date(from).getFullYear();
       const toYear = new Date(to).getFullYear();
@@ -3322,13 +3369,13 @@ exports.downloadAttendanceReport = async (req, res) => {
       for (let y = fromYear; y <= toYear; y++) {
         years.push(y);
       }
-      
+
       const allPublicHolidays = [];
       for (const year of years) {
         const { holidays } = await getPublicHolidaysForYear(year);
         allPublicHolidays.push(...(holidays || []));
       }
-      
+
       publicHolidaysList = allPublicHolidays
         .filter((h) => h.date >= from && h.date <= to)
         .map((h) => ({
@@ -3338,7 +3385,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           year: new Date(h.date).getFullYear()
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
-      
+
       // Get institute holidays
       const customHolidays = await listCustomHolidays({ startDate: from, endDate: to });
       instituteHolidaysList = customHolidays.map((h) => ({
@@ -3416,7 +3463,7 @@ exports.downloadAttendanceReport = async (req, res) => {
     // Now get attendance records for these students in the date range
     const studentIds = studentRows.map((row) => row.id);
     let attendanceRows = [];
-    
+
     if (studentIds.length > 0) {
       let attendanceQuery = `
         SELECT
@@ -3428,7 +3475,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           AND ar.attendance_date BETWEEN ? AND ?
         ORDER BY ar.student_id, ar.attendance_date
       `;
-      
+
       const attendanceParams = [...studentIds, from, to];
       [attendanceRows] = await masterPool.query(attendanceQuery, attendanceParams);
     }
@@ -3577,7 +3624,7 @@ exports.downloadAttendanceReport = async (req, res) => {
         ['Total Students', reportData.statistics.totalStudents],
         ['Total Present', reportData.statistics.totalPresent],
         ['Total Absent', reportData.statistics.totalAbsent],
-        ['Total Holidays', reportData.statistics.totalHolidays],
+        ['Total No Class Work Days', reportData.statistics.totalHolidays],
         ['Total Unmarked', reportData.statistics.totalUnmarked],
         ['Working Days', reportData.statistics.workingDays],
         [''],
@@ -3620,7 +3667,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           ...reportData.dates.map((date) => {
             const isHoliday = holidayInfo.dates.has(date);
             if (isHoliday) {
-              return 'Holiday';
+              return 'No Class Work';
             }
             const status = student.attendance.get(date);
             if (status === 'present') return 'Present';
@@ -3678,11 +3725,11 @@ exports.downloadDayEndReport = async (req, res) => {
       student_status,
       studentStatus
     } = req.query;
-    
+
     const statusFilter = student_status || studentStatus || 'Regular';
     const normalizedFormat = (format || 'xlsx').toLowerCase();
     const attendanceDate = getDateOnlyString(date || new Date());
-    
+
     if (!attendanceDate) {
       return res.status(400).json({
         success: false,
@@ -3708,7 +3755,7 @@ exports.downloadDayEndReport = async (req, res) => {
 
     // Build filter conditions
     const countFilter = buildWhereClause(filters, 's');
-    
+
     // Apply user scope filtering
     let scopeCondition = '';
     let scopeParams = [];
@@ -3733,7 +3780,8 @@ exports.downloadDayEndReport = async (req, res) => {
           COUNT(*) AS total_students,
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
-          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -3819,7 +3867,7 @@ exports.downloadDayEndReport = async (req, res) => {
       doc.fontSize(10).font('Helvetica');
       doc.text(`Total Students: ${totalStudents}`);
       doc.text(`Marked Today: ${markedToday}`);
-      doc.text(`Present: ${presentToday} | Absent: ${absentToday} | Holiday: ${holidayToday}`);
+      doc.text(`Present: ${presentToday} | Absent: ${absentToday} | No Class Work: ${holidayToday}`);
       doc.text(`Unmarked: ${unmarkedToday}`);
       doc.moveDown(1);
 
@@ -3844,7 +3892,7 @@ exports.downloadDayEndReport = async (req, res) => {
       let currentY = doc.y;
       const rowHeight = 20;
       const colWidths = [50, 50, 60, 50, 30, 30, 40, 40, 40, 40, 40, 40];
-      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Marked', 'Pending', 'Absent', 'Holiday', 'Present'];
+      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Marked', 'Pending', 'Absent', 'No Class Work', 'Present'];
 
       doc.fontSize(8).font('Helvetica-Bold');
       let x = startX;
@@ -3863,7 +3911,7 @@ exports.downloadDayEndReport = async (req, res) => {
           doc.addPage();
           currentY = 40;
         }
-        
+
         x = startX;
         const values = [
           row.college, row.batch, row.course, row.branch,
@@ -3872,7 +3920,7 @@ exports.downloadDayEndReport = async (req, res) => {
           String(row.pendingToday), String(row.absentToday),
           String(row.holidayToday), String(row.presentToday)
         ];
-        
+
         values.forEach((value, i) => {
           doc.text(String(value || '—'), x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
           x += colWidths[i];
@@ -3910,7 +3958,7 @@ exports.downloadDayEndReport = async (req, res) => {
         ['Marked Today', markedToday],
         ['Present', presentToday],
         ['Absent', absentToday],
-        ['Holiday', holidayToday],
+        ['No Class Work', holidayToday],
         ['Unmarked', unmarkedToday],
         [''],
         ['Filters'],
@@ -3925,7 +3973,7 @@ exports.downloadDayEndReport = async (req, res) => {
 
       // Grouped data sheet
       const tableData = [
-        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Marked', 'Pending', 'Absent', 'Holiday', 'Present'],
+        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Marked', 'Pending', 'Absent', 'No Class Work', 'Present'],
         ...groupedData.map(row => [
           row.college, row.batch, row.course, row.branch,
           row.year, row.semester,
@@ -3934,7 +3982,7 @@ exports.downloadDayEndReport = async (req, res) => {
         ])
       ];
       const tableSheet = XLSX.utils.aoa_to_sheet(tableData);
-      
+
       // Set column widths
       tableSheet['!cols'] = [
         { wch: 15 }, // College
@@ -3967,5 +4015,16 @@ exports.downloadDayEndReport = async (req, res) => {
       message: 'Server error while generating day-end report'
     });
   }
+};
+
+// Wrapper for logged-in student to get their own history
+exports.getStudentAttendance = async (req, res) => {
+  // Ensure user is authorized as student (or has ID)
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  // Inject ID into params for the shared function
+  req.params.studentId = req.user.id;
+  return exports.getStudentAttendanceHistory(req, res);
 };
 

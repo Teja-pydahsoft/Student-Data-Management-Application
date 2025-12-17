@@ -2565,6 +2565,24 @@ exports.getStudentByAdmission = async (req, res) => {
       // Keep existing fee_status fallback if derivation fails
     }
 
+    // Fetch today's attendance (IST)
+    try {
+      const date = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istDate = new Date(date.getTime() + istOffset);
+      const formattedDate = istDate.toISOString().split('T')[0];
+
+      const [attendanceRows] = await masterPool.query(
+        'SELECT status FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+        [students[0].id, formattedDate]
+      );
+
+      student.today_attendance_status = attendanceRows.length > 0 ? attendanceRows[0].status : 'Not Marked';
+    } catch (attendanceError) {
+      console.error('Failed to fetch attendance status:', attendanceError);
+      student.today_attendance_status = 'Not Available';
+    }
+
     res.json({
       success: true,
       data: student
@@ -4654,11 +4672,11 @@ exports.login = async (req, res) => {
 
     // Find student credential
     const [credentials] = await masterPool.query(
-      `SELECT sc.*, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
        FROM student_credentials sc
        JOIN students s ON sc.student_id = s.id
-       WHERE sc.username = ? LIMIT 1`,
-      [username]
+       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
+      [username, username, username]
     );
 
     if (credentials.length === 0) {
@@ -5203,5 +5221,65 @@ exports.updateRegistrationStatus = async (req, res) => {
       success: false,
       message: 'Server error while updating registration status'
     });
+  }
+};
+
+// Bulk resend passwords
+exports.bulkResendPasswords = async (req, res) => {
+  try {
+    const { students } = req.body; // Array of admission numbers
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ success: false, message: 'No students selected' });
+    }
+
+    const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+    const results = [];
+    let successCount = 0;
+
+    // Process in chunks to avoid overwhelming SMS provider
+    const chunkSize = 5;
+    for (let i = 0; i < students.length; i += chunkSize) {
+      const chunk = students.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (admissionNumber) => {
+        try {
+          // Pass false for isPasswordReset to use the "Account Created" template (Template 1)
+          // This matches the "First Password Creation" workflow as requested by the user
+          const result = await generateCredentialsByAdmissionNumber(admissionNumber, false);
+          if (result.success) {
+            successCount++;
+            results.push({
+              admission_number: admissionNumber,
+              status: 'Success',
+              error: null
+            });
+          } else {
+            results.push({
+              admission_number: admissionNumber,
+              status: 'Failed',
+              error: result.error
+            });
+          }
+        } catch (e) {
+          results.push({
+            admission_number: admissionNumber,
+            status: 'Failed',
+            error: e.message
+          });
+        }
+      }));
+    }
+
+    res.json({
+      success: true,
+      data: results,
+      summary: {
+        total: students.length,
+        success: successCount,
+        failed: students.length - successCount
+      }
+    });
+  } catch (error) {
+    console.error('Bulk resend error:', error);
+    res.status(500).json({ success: false, message: 'Server error during bulk processing' });
   }
 };

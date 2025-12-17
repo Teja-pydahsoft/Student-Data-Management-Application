@@ -15,9 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowUpDown,
+  Key,
+  FileSpreadsheet,
   FileText,
   Eye,
-  Key,
   RefreshCw
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
@@ -79,9 +80,15 @@ const REGISTRATION_STATUS_OPTIONS = [
   'Completed'
 ];
 
-  const Students = () => {
+const Students = () => {
   const location = useLocation();
   const { user } = useAuthStore();
+  const [bulkPasswordState, setBulkPasswordState] = useState({
+    isOpen: false,
+    processing: false,
+    results: null,
+    summary: null
+  });
   const userPermissions = user?.permissions || {};
 
   // RBAC-derived capabilities for Student Management
@@ -166,10 +173,10 @@ const REGISTRATION_STATUS_OPTIONS = [
   // Memoize filters for React Query - use stable comparison to prevent unnecessary refetches
   const prevFiltersStringRef = useRef('');
   const prevFiltersObjectRef = useRef({});
-  
+
   const memoizedFilters = useMemo(() => {
     const filterParams = {};
-    
+
     // Standard filters
     if (filters.dateFrom) filterParams.dateFrom = filters.dateFrom;
     if (filters.dateTo) filterParams.dateTo = filters.dateTo;
@@ -183,10 +190,10 @@ const REGISTRATION_STATUS_OPTIONS = [
 
     // All student database fields
     const studentFields = [
-      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status', 
-      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2', 
+      'admission_number', 'pin_no', 'stud_type', 'student_name', 'student_status',
+      'scholar_status', 'student_mobile', 'parent_mobile1', 'parent_mobile2',
       'caste', 'gender', 'father_name', 'dob', 'adhar_no', 'admission_date',
-      'student_address', 'city_village', 'mandal_name', 'district', 
+      'student_address', 'city_village', 'mandal_name', 'district',
       'previous_college', 'certificates_status', 'remarks', 'created_at'
     ];
 
@@ -208,7 +215,7 @@ const REGISTRATION_STATUS_OPTIONS = [
     if (prevFiltersStringRef.current === filtersString) {
       return prevFiltersObjectRef.current;
     }
-    
+
     prevFiltersStringRef.current = filtersString;
     prevFiltersObjectRef.current = filterParams;
     return filterParams;
@@ -216,12 +223,12 @@ const REGISTRATION_STATUS_OPTIONS = [
 
   // Use React Query to fetch students
   // Only enable students query after filters are loaded
-  const { 
-    data: studentsData, 
-    isLoading, 
+  const {
+    data: studentsData,
+    isLoading,
     isFetching,
     isError,
-    error 
+    error
   } = useStudents({
     page: currentPage,
     pageSize: pageSize,
@@ -235,7 +242,7 @@ const REGISTRATION_STATUS_OPTIONS = [
   const scholarStatusOptions = dropdownFilterOptions.scholar_status?.length
     ? dropdownFilterOptions.scholar_status
     : SCHOLAR_STATUS_OPTIONS;
-  
+
   // Helper function to extract numeric part from PIN (last 4-5 digits)
   const extractPinNumeric = (pinString) => {
     if (!pinString) return 0;
@@ -285,23 +292,23 @@ const REGISTRATION_STATUS_OPTIONS = [
   // Sort students based on sortConfig
   const sortedStudents = useMemo(() => {
     if (!sortConfig.field) return students;
-    
+
     return [...students].sort((a, b) => {
       let aValue, bValue;
       let isNumeric = false;
-      
+
       switch (sortConfig.field) {
         case 'pinNumber':
           const aPin = String(a.pin_no || '');
           const bPin = String(b.pin_no || '');
           const aSeries = extractPinSeries(aPin);
           const bSeries = extractPinSeries(bPin);
-          
+
           if (aSeries !== bSeries) {
             const seriesComparison = aSeries.localeCompare(bSeries);
             return sortConfig.direction === 'asc' ? seriesComparison : -seriesComparison;
           }
-          
+
           aValue = extractPinNumeric(aPin);
           bValue = extractPinNumeric(bPin);
           isNumeric = true;
@@ -309,19 +316,19 @@ const REGISTRATION_STATUS_OPTIONS = [
         default:
           return 0;
       }
-      
+
       if (isNumeric) {
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       }
-      
+
       const comparison = String(aValue).localeCompare(String(bValue));
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
   }, [students, sortConfig]);
-  
-  const totalPages = studentsData?.pagination?.totalPages || 
+
+  const totalPages = studentsData?.pagination?.totalPages ||
     (totalStudents > 0 ? Math.max(1, Math.ceil(totalStudents / (pageSize || 1))) : 1);
   // Only show loading for students table, not the entire page
   // Page structure (header, filters) should always be visible
@@ -392,7 +399,7 @@ const REGISTRATION_STATUS_OPTIONS = [
         parsedData = {};
       }
     }
-    
+
     // Also check if student has student_data that needs parsing
     if (student.student_data && typeof student.student_data === 'string') {
       try {
@@ -444,7 +451,7 @@ const REGISTRATION_STATUS_OPTIONS = [
       { key: 'father_name', altKeys: ['Father Name', 'fathername'] },
       { key: 'gender', altKeys: ['M/F', 'Gender'] },
       { key: 'caste', altKeys: ['Caste'] },
-      
+
       // Academic Fields
       { key: 'admission_number', altKeys: ['Admission Number', 'Admission No', 'admission_no'] },
       { key: 'course', altKeys: ['Course', 'Course Name'] },
@@ -455,24 +462,24 @@ const REGISTRATION_STATUS_OPTIONS = [
       { key: 'current_year', altKeys: ['Current Academic Year', 'Current Year', 'Year'] },
       { key: 'current_semester', altKeys: ['Current Semester', 'Semester', 'Semister'] },
       { key: 'admission_date', altKeys: ['Admission Date', 'admission_date'] },
-      
+
       // Parent Information
       { key: 'parent_mobile1', altKeys: ['Parent Mobile Number 1', 'Parent Mobile 1', 'parent_mobile_1'] },
       { key: 'parent_mobile2', altKeys: ['Parent Mobile Number 2', 'Parent Mobile 2', 'parent_mobile_2'] },
-      
+
       // Address Fields
       { key: 'student_address', altKeys: ['Student Address (D.No, Str name, Village, Mandal, Dist)', 'Student Address', 'address'] },
       { key: 'city_village', altKeys: ['City/Village', 'City/Village Name', 'city_village_name'] },
       { key: 'mandal_name', altKeys: ['Mandal Name', 'Mandal', 'mandal'] },
       { key: 'district', altKeys: ['District', 'District Name'] },
-      
+
       // Administrative Fields
       { key: 'student_status', altKeys: ['Student Status', 'studentstatus'] },
       { key: 'scholar_status', altKeys: ['Scholar Status', 'scholarstatus'] },
       { key: 'certificates_status', altKeys: ['Certificates Status', 'Certificate Status', 'certificatesstatus'] },
       { key: 'previous_college', altKeys: ['Previous College Name', 'Previous College', 'previouscollege'] },
       { key: 'remarks', altKeys: ['Remarks', 'remark'] },
-      
+
       // Photo
       { key: 'student_photo', altKeys: ['Student Photo', 'photo', 'studentphoto'] }
     ];
@@ -549,7 +556,7 @@ const REGISTRATION_STATUS_OPTIONS = [
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
-      
+
       return () => {
         // Re-enable body scrolling when modal closes
         document.body.style.overflow = '';
@@ -565,8 +572,8 @@ const REGISTRATION_STATUS_OPTIONS = [
   // Recalculate profile completion when editData changes (in edit mode)
   useEffect(() => {
     if (showModal && selectedStudent && editData) {
-      const parsedStudentData = typeof editData === 'string' 
-        ? JSON.parse(editData || '{}') 
+      const parsedStudentData = typeof editData === 'string'
+        ? JSON.parse(editData || '{}')
         : editData;
       const completion = calculateProfileCompletion(selectedStudent, parsedStudentData);
       setProfileCompletion(completion);
@@ -598,21 +605,21 @@ const REGISTRATION_STATUS_OPTIONS = [
   const studentsLengthRef = useRef(0);
   const studentsIdsRef = useRef('');
   const filtersRefForStats = useRef(JSON.stringify(filters));
-  
+
   useEffect(() => {
     const currentIds = students.map(s => s.admission_number).sort().join(',');
     const currentLength = students.length;
     const currentFiltersStr = JSON.stringify(filters);
-    
+
     // Recalculate if students changed OR filters changed
     const studentsChanged = currentLength !== studentsLengthRef.current || currentIds !== studentsIdsRef.current;
     const filtersChanged = currentFiltersStr !== filtersRefForStats.current;
-    
+
     if (studentsChanged || filtersChanged) {
       studentsLengthRef.current = currentLength;
       studentsIdsRef.current = currentIds;
       filtersRefForStats.current = currentFiltersStr;
-      
+
       // Call calculateOverallStats directly without including it in dependencies
       (async () => {
         if (students.length === 0) {
@@ -643,7 +650,7 @@ const REGISTRATION_STATUS_OPTIONS = [
         results.forEach(result => {
           totalCompletion += result.percentage;
           if (result.percentage >= 80) {
-completedStudents++;
+            completedStudents++;
           }
         });
 
@@ -655,9 +662,9 @@ completedStudents++;
           averageCompletion
         });
       })();
-     }
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [students, filters]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students, filters]);
 
   // Fetch colleges on component mount
   const fetchColleges = async () => {
@@ -682,16 +689,16 @@ completedStudents++;
   const loadAllFilters = async () => {
     try {
       setFiltersLoading(true);
-      
+
       // Step 1: Load colleges first (independent)
       await fetchColleges();
-      
+
       // Step 2: Load quick filter options (with current filters for cascading)
       await fetchQuickFilterOptions(filters);
-      
+
       // Step 3: Load dropdown filter options (with current filters for cascading)
       await fetchDropdownFilterOptions(filters);
-      
+
     } catch (error) {
       console.error('Failed to load filters:', error);
       toast.error('Failed to load some filter options');
@@ -703,21 +710,21 @@ completedStudents++;
   // Fetch filter fields when component mounts - load in sequence
   useEffect(() => {
     loadAllFilters();
-}, []); // Only run on mount
+  }, []); // Only run on mount
 
   // Refetch filter options when filters change (for cascading filters)
   // Use individual filter values to prevent unnecessary refetches
   // Only reload filter options, NOT the entire page
   const prevFiltersRef = useRef({ college: '', course: '', branch: '', batch: '', year: '', semester: '' });
   const isInitialMountRef = useRef(true);
-  
+
   useEffect(() => {
     // Skip on initial mount (already handled by loadAllFilters)
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
       return;
     }
-    
+
     const currentFilters = {
       college: filters.college || '',
       course: filters.course || '',
@@ -726,16 +733,16 @@ completedStudents++;
       year: filters.year || '',
       semester: filters.semester || ''
     };
-    
+
     // Only refetch if filter values actually changed
-    const filtersChanged = 
+    const filtersChanged =
       currentFilters.college !== prevFiltersRef.current.college ||
       currentFilters.course !== prevFiltersRef.current.course ||
       currentFilters.branch !== prevFiltersRef.current.branch ||
       currentFilters.batch !== prevFiltersRef.current.batch ||
       currentFilters.year !== prevFiltersRef.current.year ||
       currentFilters.semester !== prevFiltersRef.current.semester;
-    
+
     if (filtersChanged) {
       prevFiltersRef.current = currentFilters;
       // Update filter options based on new filters (cascading)
@@ -756,12 +763,12 @@ completedStudents++;
 
   // Only clear available fields when filters/search actually change (not on every render)
   const prevFiltersSearchRef = useRef({ filters: {}, searchTerm: '' });
-  
+
   useEffect(() => {
     const filtersString = JSON.stringify(filters);
     const searchChanged = searchTerm !== prevFiltersSearchRef.current.searchTerm;
     const filtersChanged = filtersString !== JSON.stringify(prevFiltersSearchRef.current.filters);
-    
+
     if (searchChanged || filtersChanged) {
       prevFiltersSearchRef.current = { filters, searchTerm };
       setAvailableFields([]);
@@ -774,12 +781,12 @@ completedStudents++;
       // When excludeField is set, exclude that field to show all options for that dropdown
       // Otherwise, include all parent filters for proper cascading
       const params = new URLSearchParams();
-      
+
       // Always include college if selected (unless college is being changed)
       if (currentFilters.college && excludeField !== 'college') {
         params.append('college', currentFilters.college);
       }
-      
+
       // Include course only if:
       // 1. Course is selected AND
       // 2. Course is not being changed AND
@@ -787,14 +794,14 @@ completedStudents++;
       if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') {
         params.append('course', currentFilters.course);
       }
-      
+
       // Include batch only if:
       // 1. Batch is selected AND
       // 2. Batch/year/semester are not being changed
       if (currentFilters.batch && excludeField !== 'batch' && excludeField !== 'year' && excludeField !== 'semester') {
         params.append('batch', currentFilters.batch);
       }
-      
+
       const queryString = params.toString();
       const url = `/students/quick-filters${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
@@ -831,7 +838,7 @@ completedStudents++;
       if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
       if (currentFilters.year && excludeField !== 'year') params.append('year', currentFilters.year);
       if (currentFilters.semester && excludeField !== 'semester') params.append('semester', currentFilters.semester);
-      
+
       const queryString = params.toString();
       const url = `/students/filter-options${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
@@ -866,17 +873,17 @@ completedStudents++;
   // Fetch completion percentages when students are loaded (in parallel)
   // Use stable comparison to prevent infinite loops
   const completionPercentagesStudentsRef = useRef('');
-  
+
   useEffect(() => {
     const studentIds = students.map(s => s.admission_number).sort().join(',');
-    
+
     // Only fetch if student IDs actually changed
     if (studentIds === completionPercentagesStudentsRef.current) {
       return;
     }
-    
+
     completionPercentagesStudentsRef.current = studentIds;
-    
+
     const fetchCompletionPercentages = async () => {
       if (students.length === 0) return;
 
@@ -905,17 +912,17 @@ completedStudents++;
 
   // Update selected admission numbers when students change - use stable comparison
   const selectedStudentsRef = useRef('');
-  
+
   useEffect(() => {
     const studentIds = students.map(s => s.admission_number).sort().join(',');
-    
+
     // Only update if student IDs actually changed
     if (studentIds === selectedStudentsRef.current) {
       return;
     }
-    
+
     selectedStudentsRef.current = studentIds;
-    
+
     setSelectedAdmissionNumbers((prev) => {
       const updated = new Set();
       students.forEach((student) => {
@@ -929,19 +936,19 @@ completedStudents++;
 
   // Extract available fields from students - use stable comparison to prevent infinite loops
   const availableFieldsStudentsRef = useRef('');
-  
+
   useEffect(() => {
     if (students.length === 0) {
       return;
     }
 
     const studentIds = students.map(s => s.admission_number).sort().join(',');
-    
+
     // Only extract fields if student IDs actually changed
     if (studentIds === availableFieldsStudentsRef.current) {
       return;
     }
-    
+
     availableFieldsStudentsRef.current = studentIds;
 
     // Extract available fields and their unique values from current students data
@@ -1043,7 +1050,7 @@ completedStudents++;
       if (!newFilters[field] || newFilters[field] === '') {
         delete newFilters[field];
       }
-      
+
       // Clear dependent filters when parent filter changes
       if (field === 'college') {
         // If college changes (or is cleared), clear course and branch to avoid invalid selections
@@ -1053,15 +1060,15 @@ completedStudents++;
         // If course changes (or is cleared), clear branch to avoid invalid selections
         delete newFilters.branch;
       }
-      
+
       // Auto-expand filters when a filter is applied
       if (value && !filtersExpanded) {
         setFiltersExpanded(true);
       }
-      
+
       // Update ref immediately
       filtersRef.current = newFilters;
-      
+
       // Always update filter options with cascading when a filter changes
       // This ensures child filters show only relevant options based on parent selections
       fetchQuickFilterOptions(newFilters).catch(err => {
@@ -1070,7 +1077,7 @@ completedStudents++;
       fetchDropdownFilterOptions(newFilters).catch(err => {
         console.warn('Failed to update dropdown filter options:', err);
       });
-      
+
       // Automatically apply filter when changed - React Query will refetch automatically
       setCurrentPage(1);
       return newFilters;
@@ -1137,7 +1144,7 @@ completedStudents++;
 
   const handleCellBlur = async (student, overrideValue = null) => {
     if (!editingCell) return;
-    
+
     const { field } = editingCell;
     const admissionNumber =
       editingCell.admissionNumber ||
@@ -1189,7 +1196,7 @@ completedStudents++;
           data: { studentData: updateData }
         });
       }
-      
+
       toast.success(`${field} updated successfully`);
       invalidateStudents();
     } catch (error) {
@@ -1282,7 +1289,7 @@ completedStudents++;
 
   const handleViewPassword = async () => {
     if (!selectedStudent) return;
-    
+
     setLoadingPassword(true);
     try {
       const response = await api.get(`/students/${selectedStudent.admission_number}/password`);
@@ -1301,7 +1308,7 @@ completedStudents++;
 
   const handleResetPassword = async () => {
     if (!selectedStudent) return;
-    
+
     if (!window.confirm('Are you sure you want to reset this student\'s password? A new password will be generated and sent via SMS.')) {
       return;
     }
@@ -1383,10 +1390,10 @@ completedStudents++;
     };
 
     // Calculate profile completion BEFORE opening modal (instant calculation)
-    const parsedStudentData = typeof stageSyncedFields === 'string' 
-      ? JSON.parse(stageSyncedFields || '{}') 
+    const parsedStudentData = typeof stageSyncedFields === 'string'
+      ? JSON.parse(stageSyncedFields || '{}')
       : stageSyncedFields;
-    
+
     const completion = calculateProfileCompletion(stageSyncedStudent, parsedStudentData);
     setProfileCompletion(completion);
     console.log('Profile completion calculated:', completion);
@@ -1410,7 +1417,7 @@ completedStudents++;
 
   const handleSaveEdit = async () => {
     if (savingEdit) return; // Prevent double submission
-    
+
     setSavingEdit(true);
     try {
       console.log('Saving edit data:', editData);
@@ -1447,28 +1454,28 @@ completedStudents++;
 
       await updateStudentMutation.mutateAsync({
         admissionNumber: selectedStudent.admission_number,
-        data: { 
+        data: {
           studentData: synchronizedData
         }
       });
 
       console.log('Save successful');
-      
+
       // Invalidate students query to ensure fresh data
       invalidateStudents();
-      
+
       setEditMode(false);
       setEditData(synchronizedData);
       setSelectedStudent((prev) =>
         prev
           ? {
-              ...prev,
-              current_year:
-                synchronizedData.current_year || prev.current_year,
-              current_semester:
-                synchronizedData.current_semester || prev.current_semester,
-              student_data: synchronizedData
-            }
+            ...prev,
+            current_year:
+              synchronizedData.current_year || prev.current_year,
+            current_semester:
+              synchronizedData.current_semester || prev.current_semester,
+            student_data: synchronizedData
+          }
           : prev
       );
 
@@ -1479,8 +1486,8 @@ completedStudents++;
         current_semester: synchronizedData.current_semester || selectedStudent.current_semester,
         student_data: synchronizedData
       };
-      const parsedStudentData = typeof synchronizedData === 'string' 
-        ? JSON.parse(synchronizedData || '{}') 
+      const parsedStudentData = typeof synchronizedData === 'string'
+        ? JSON.parse(synchronizedData || '{}')
         : synchronizedData;
       const updatedCompletion = calculateProfileCompletion(updatedStudent, parsedStudentData);
       setProfileCompletion(updatedCompletion);
@@ -1500,33 +1507,33 @@ completedStudents++;
       return;
     }
     if (savingPinNumber) return; // Prevent double submission
-    
+
     console.log('[PIN UPDATE] Starting update for:', selectedStudent?.admission_number, 'New PIN:', tempRollNumber);
-    
+
     setSavingPinNumber(true);
     try {
       const url = `/students/${selectedStudent.admission_number}/pin-number`;
       console.log('[PIN UPDATE] Making API call to:', url);
-      
+
       // Make the API call - axios throws on non-2xx responses
       const response = await api.put(url, {
         pinNumber: tempRollNumber,
       });
-      
+
       console.log('[PIN UPDATE] API Response:', response.data);
-      
+
       // If we reach here, the request was successful (no exception thrown)
       setEditingRollNumber(false);
-      
+
       // Update selectedStudent state
       setSelectedStudent(prev => ({ ...prev, pin_no: tempRollNumber }));
-      
+
       // Update editData state as well
       setEditData(prev => ({ ...prev, pin_no: tempRollNumber }));
 
       // Invalidate the React Query cache to refresh the student list
       invalidateStudents();
-      
+
       toast.success('PIN number updated successfully');
     } catch (error) {
       console.error('[PIN UPDATE] Error:', error);
@@ -1585,7 +1592,7 @@ completedStudents++;
 
     try {
       await bulkDeleteMutation.mutateAsync(admissionNumbers);
-      
+
       // Remove from completion percentages
       setCompletionPercentages((prev) => {
         const updated = { ...prev };
@@ -1595,11 +1602,72 @@ completedStudents++;
         return updated;
       });
       setSelectedAdmissionNumbers(new Set());
-      
+
       // Cache invalidation is handled by the mutation
     } catch (error) {
       // Error toast is handled by the mutation
     }
+  };
+
+  const handleBulkResendPasswords = async () => {
+    if (!canEditStudents) {
+      toast.error('You do not have permission to edit students.');
+      return;
+    }
+    if (selectedCount === 0) return;
+
+    if (!window.confirm(`Send password reset SMS to ${selectedCount} selected student${selectedCount === 1 ? '' : 's'}?`)) {
+      return;
+    }
+
+    setBulkPasswordState(prev => ({ ...prev, isOpen: true, processing: true, results: null }));
+
+    try {
+      const admissionNumbers = Array.from(selectedAdmissionNumbers);
+      const response = await api.post('/students/bulk-resend-passwords', {
+        students: admissionNumbers
+      });
+
+      if (response.data.success) {
+        setBulkPasswordState(prev => ({
+          ...prev,
+          processing: false,
+          results: response.data.data,
+          summary: response.data.summary
+        }));
+        toast.success('Bulk password operation completed');
+      } else {
+        toast.error(response.data.message || 'Failed to process request');
+        setBulkPasswordState(prev => ({ ...prev, isOpen: false, processing: false }));
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Server error');
+      setBulkPasswordState(prev => ({ ...prev, isOpen: false, processing: false }));
+    }
+  };
+
+  const downloadBulkPasswordReport = () => {
+    const { results } = bulkPasswordState;
+    if (!results || results.length === 0) return;
+
+    const headers = ['Admission Number', 'Status', 'Error', 'Mobile (Username)'];
+    const csvContent = [
+      headers.join(','),
+      ...results.map(r => [
+        r.admission_number,
+        r.status,
+        r.error ? `"${r.error.replace(/"/g, '""')}"` : '',
+        r.mobile || ''
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `password_resend_report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const handleExportCSV = () => {
@@ -1742,7 +1810,7 @@ completedStudents++;
   const updateCertificateStatus = (certKey, value) => {
     const newEditData = { ...editData };
     newEditData[certKey] = value;
-    
+
     // Auto-update certificates_status based on all certificates
     const courseName = (editData.course || selectedStudent?.course || '').toLowerCase();
     let courseType = null;
@@ -1753,7 +1821,7 @@ completedStudents++;
     } else if (courseName) {
       courseType = 'UG';
     }
-    
+
     if (courseType) {
       const certificates = getCertificatesForCourse(courseType);
       const allYes = certificates.every(cert => {
@@ -1762,7 +1830,7 @@ completedStudents++;
       });
       newEditData.certificates_status = allYes && certificates.length > 0 ? 'Verified' : 'Unverified';
     }
-    
+
     setEditData(newEditData);
   };
 
@@ -1844,8 +1912,8 @@ completedStudents++;
               placeholder="Search by student name, PIN number, or admission number..."
             />
           </div>
-          <button 
-            onClick={handleLocalSearch} 
+          <button
+            onClick={handleLocalSearch}
             className="bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] font-medium whitespace-nowrap"
           >
             Search
@@ -1897,6 +1965,17 @@ completedStudents++;
               </button>
             )}
 
+            {canEditStudents && (
+              <button
+                onClick={handleBulkResendPasswords}
+                disabled={selectedCount === 0 || bulkPasswordState.processing}
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-teal-600 to-teal-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+              >
+                <Key size={18} />
+                <span>{bulkPasswordState.processing ? 'Sending...' : `Send Passwords${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+              </button>
+            )}
+
             {canExportStudents && (
               <button
                 onClick={handleExportCSV}
@@ -1927,7 +2006,7 @@ completedStudents++;
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -1942,14 +2021,14 @@ completedStudents++;
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-1">Average Completion</p>
                 <p className="text-xl font-bold text-blue-600">{stats.averageCompletion}%</p>
                 <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
-                  <div 
+                  <div
                     className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
                     style={{ width: `${stats.averageCompletion}%` }}
                   ></div>
@@ -2160,20 +2239,7 @@ completedStudents++;
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Certificate Status</label>
-                <select
-                  value={filters.certificates_status || ''}
-                  onChange={(e) => handleFilterChange('certificates_status', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  <option value="">All</option>
-                  <option value="__NULL__">Pending (Null)</option>
-                  {(dropdownFilterOptions.certificates_status || []).map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
+
               <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-600 mb-1">Fee Status</label>
                 <select
@@ -2361,8 +2427,8 @@ completedStudents++;
               <tbody>
                 {sortedStudents.map((student) => {
                   return (
-                    <tr 
-                      key={student.admission_number} 
+                    <tr
+                      key={student.admission_number}
                       className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                       onClick={(e) => {
                         // Don't trigger view modal if interacting with inputs/selects/inline editors
@@ -2390,10 +2456,10 @@ completedStudents++;
                       <td className="py-2 px-3 sticky left-12 bg-white z-10 border-r border-gray-200">
                         <div className="flex items-center justify-center w-10 h-10">
                           {student.student_photo &&
-                           student.student_photo !== '{}' &&
-                           student.student_photo !== null &&
-                           student.student_photo !== '' &&
-                           student.student_photo !== '{}' ? (
+                            student.student_photo !== '{}' &&
+                            student.student_photo !== null &&
+                            student.student_photo !== '' &&
+                            student.student_photo !== '{}' ? (
                             <img
                               src={getStaticFileUrlDirect(student.student_photo)}
                               alt="Student Photo"
@@ -2436,9 +2502,7 @@ completedStudents++;
                       <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
                       </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'certificates_status', 'select', CERTIFICATES_STATUS_OPTIONS)}
-                      </td>
+
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
                       </td>
@@ -2459,10 +2523,10 @@ completedStudents++;
               </tbody>
             </table>
           </div>
-          
+
           {/* Mobile Card View */}
           <div className="lg:hidden space-y-3 p-3 sm:p-4">
-                {sortedStudents.map((student) => {
+            {sortedStudents.map((student) => {
               return (
                 <div
                   key={student.admission_number}
@@ -2482,10 +2546,10 @@ completedStudents++;
                       </div>
                       <div className="flex-shrink-0">
                         {student.student_photo &&
-                         student.student_photo !== '{}' &&
-                         student.student_photo !== null &&
-                         student.student_photo !== '' &&
-                         student.student_photo !== '{}' ? (
+                          student.student_photo !== '{}' &&
+                          student.student_photo !== null &&
+                          student.student_photo !== '' &&
+                          student.student_photo !== '{}' ? (
                           <img
                             src={getStaticFileUrlDirect(student.student_photo)}
                             alt="Student Photo"
@@ -2512,7 +2576,7 @@ completedStudents++;
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Key Information Grid */}
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
                       <div>
@@ -2543,10 +2607,7 @@ completedStudents++;
                         <p className="text-xs text-gray-500">Status</p>
                         <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Certificate Status</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.certificates_status || ''}>{student.certificates_status || '-'}</p>
-                      </div>
+
                       <div>
                         <p className="text-xs text-gray-500">Fee Status</p>
                         <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
@@ -2564,7 +2625,7 @@ completedStudents++;
                         <p className="text-sm font-medium text-gray-900">{student.current_year || '-'}/{student.current_semester || '-'}</p>
                       </div>
                     </div>
-                    
+
                     {/* Action Button */}
                     <button
                       onClick={() => handleViewDetails(student)}
@@ -2625,7 +2686,7 @@ completedStudents++;
       )}
 
       {showModal && selectedStudent && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             // Close modal when clicking on backdrop
@@ -2638,7 +2699,7 @@ completedStudents++;
             e.stopPropagation();
           }}
         >
-          <div 
+          <div
             className="bg-gray-50 rounded-lg sm:rounded-xl shadow-2xl max-w-7xl w-full max-h-[95vh] sm:h-[95vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2651,8 +2712,8 @@ completedStudents++;
               <div className="flex items-center gap-2">
                 {!editMode && (
                   <>
-                    <button 
-                      onClick={handleViewPassword} 
+                    <button
+                      onClick={handleViewPassword}
                       disabled={loadingPassword}
                       className="flex items-center gap-2 bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                       title="View Password"
@@ -2661,25 +2722,25 @@ completedStudents++;
                       <span className="hidden sm:inline">View Password</span>
                       <span className="sm:hidden">View</span>
                     </button>
-                {canEditStudents && (
-                  <>
-                    <button 
-                      onClick={handleResetPassword} 
-                      disabled={resettingPassword}
-                      className="flex items-center gap-2 bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 active:bg-orange-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Reset Password"
-                    >
-                      <RefreshCw size={16} className={`sm:w-[18px] sm:h-[18px] ${resettingPassword ? 'animate-spin' : ''}`} />
-                      <span className="hidden sm:inline">Reset Password</span>
-                      <span className="sm:hidden">Reset</span>
-                    </button>
-                    <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base">
-                      <Edit size={16} className="sm:w-[18px] sm:h-[18px]" />
-                      <span className="hidden sm:inline">Edit</span>
-                      <span className="sm:hidden">Edit</span>
-                    </button>
-                  </>
-                )}
+                    {canEditStudents && (
+                      <>
+                        <button
+                          onClick={handleResetPassword}
+                          disabled={resettingPassword}
+                          className="flex items-center gap-2 bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 active:bg-orange-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Reset Password"
+                        >
+                          <RefreshCw size={16} className={`sm:w-[18px] sm:h-[18px] ${resettingPassword ? 'animate-spin' : ''}`} />
+                          <span className="hidden sm:inline">Reset Password</span>
+                          <span className="sm:hidden">Reset</span>
+                        </button>
+                        <button onClick={handleEdit} className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base">
+                          <Edit size={16} className="sm:w-[18px] sm:h-[18px]" />
+                          <span className="hidden sm:inline">Edit</span>
+                          <span className="sm:hidden">Edit</span>
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
                 <button onClick={() => {
@@ -2745,39 +2806,99 @@ completedStudents++;
 
             {/* Main Content - Two Column Layout */}
             <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-                {/* Left Sidebar - Student Photo & Key Info */}
-                <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col overflow-hidden">
-                  <div className="space-y-5">
-                    {/* Student Photo */}
-                    <div className="flex flex-col items-center">
-                      <div className="relative">
-                        <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode && !photoUploading ? 'cursor-pointer hover:border-blue-400 active:border-blue-500 transition-colors' : ''} ${photoUploading ? 'cursor-wait opacity-75' : ''}`}>
-                          {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
-                            <img
-                              key={editData.student_photo}
-                              src={getStaticFileUrlDirect(editData.student_photo)}
-                              alt="Student Photo"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                const fallback = e.target.parentElement?.querySelector('.photo-fallback');
-                                if (fallback) fallback.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div className={`w-full h-full flex items-center justify-center photo-fallback ${editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? 'hidden' : ''}`}>
-                            <div className="text-center">
-                              <UserCog size={48} className="mx-auto text-gray-400 mb-1" />
-                              <span className="text-xs text-gray-500">No Photo</span>
+              {/* Left Sidebar - Student Photo & Key Info */}
+              <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col overflow-hidden">
+                <div className="space-y-5">
+                  {/* Student Photo */}
+                  <div className="flex flex-col items-center">
+                    <div className="relative">
+                      <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-gray-100 border-2 border-gray-200 overflow-hidden flex items-center justify-center shadow-sm relative ${editMode && !photoUploading ? 'cursor-pointer hover:border-blue-400 active:border-blue-500 transition-colors' : ''} ${photoUploading ? 'cursor-wait opacity-75' : ''}`}>
+                        {editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? (
+                          <img
+                            key={editData.student_photo}
+                            src={getStaticFileUrlDirect(editData.student_photo)}
+                            alt="Student Photo"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              const fallback = e.target.parentElement?.querySelector('.photo-fallback');
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-full h-full flex items-center justify-center photo-fallback ${editData.student_photo && editData.student_photo !== '{}' && editData.student_photo !== null && editData.student_photo !== '' ? 'hidden' : ''}`}>
+                          <div className="text-center">
+                            <UserCog size={48} className="mx-auto text-gray-400 mb-1" />
+                            <span className="text-xs text-gray-500">No Photo</span>
+                          </div>
+                        </div>
+                        {editMode && !photoUploading && (
+                          <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all">
+                            <div className="text-white text-xs font-medium opacity-0 hover:opacity-100">
+                              Click to Upload
                             </div>
                           </div>
-                          {editMode && !photoUploading && (
-                            <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all">
-                              <div className="text-white text-xs font-medium opacity-0 hover:opacity-100">
-                                Click to Upload
-                              </div>
+                        )}
+                        {photoUploading && (
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-lg">
+                            <div className="bg-white rounded-lg p-4 flex flex-col items-center gap-2">
+                              <LoadingAnimation width={32} height={32} showMessage={false} />
+                              <span className="text-sm text-gray-700 font-medium">Uploading photo...</span>
                             </div>
-                          )}
+                          </div>
+                        )}
+                      </div>
+                      {editMode && (
+                        <>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                // Validate file type
+                                if (!file.type.startsWith('image/')) {
+                                  toast.error('Please select a valid image file');
+                                  return;
+                                }
+
+                                // Validate file size (5MB limit)
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error('File size should be less than 5MB');
+                                  return;
+                                }
+
+                                setPhotoUploading(true);
+                                try {
+                                  const formData = new FormData();
+                                  formData.append('photo', file);
+                                  formData.append('admissionNumber', selectedStudent.admission_number);
+
+                                  const uploadResponse = await api.post('/students/upload-photo', formData, {
+                                    headers: {
+                                      'Content-Type': 'multipart/form-data',
+                                    },
+                                  });
+
+                                  if (uploadResponse.data.success) {
+                                    // Use the base64 data URL returned from backend for immediate display
+                                    updateEditField('student_photo', uploadResponse.data.data.photo_url);
+                                    toast.success('Photo uploaded successfully');
+                                  } else {
+                                    toast.error('Failed to upload photo');
+                                  }
+                                } catch (error) {
+                                  console.error('Photo upload error:', error);
+                                  toast.error('Failed to upload photo');
+                                } finally {
+                                  setPhotoUploading(false);
+                                }
+                              }
+                            }}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            id="student-photo-upload"
+                            disabled={photoUploading}
+                          />
                           {photoUploading && (
                             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-lg">
                               <div className="bg-white rounded-lg p-4 flex flex-col items-center gap-2">
@@ -2786,326 +2907,266 @@ completedStudents++;
                               </div>
                             </div>
                           )}
-                        </div>
-                        {editMode && (
-                          <>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={async (e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                  // Validate file type
-                                  if (!file.type.startsWith('image/')) {
-                                    toast.error('Please select a valid image file');
-                                    return;
-                                  }
-
-                                  // Validate file size (5MB limit)
-                                  if (file.size > 5 * 1024 * 1024) {
-                                    toast.error('File size should be less than 5MB');
-                                    return;
-                                  }
-
-                                  setPhotoUploading(true);
-                                  try {
-                                    const formData = new FormData();
-                                    formData.append('photo', file);
-                                    formData.append('admissionNumber', selectedStudent.admission_number);
-
-                                    const uploadResponse = await api.post('/students/upload-photo', formData, {
-                                      headers: {
-                                        'Content-Type': 'multipart/form-data',
-                                      },
-                                    });
-
-                                    if (uploadResponse.data.success) {
-                                      // Use the base64 data URL returned from backend for immediate display
-                                      updateEditField('student_photo', uploadResponse.data.data.photo_url);
-                                      toast.success('Photo uploaded successfully');
-                                    } else {
-                                      toast.error('Failed to upload photo');
-                                    }
-                                  } catch (error) {
-                                    console.error('Photo upload error:', error);
-                                    toast.error('Failed to upload photo');
-                                  } finally {
-                                    setPhotoUploading(false);
-                                  }
-                                }
-                              }}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                              id="student-photo-upload"
-                              disabled={photoUploading}
-                            />
-                            {photoUploading && (
-                              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10 rounded-lg">
-                                <div className="bg-white rounded-lg p-4 flex flex-col items-center gap-2">
-                                  <LoadingAnimation width={32} height={32} showMessage={false} />
-                                  <span className="text-sm text-gray-700 font-medium">Uploading photo...</span>
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      {editMode && (
-                        <label htmlFor="student-photo-upload" className="mt-2 text-xs text-blue-600 hover:text-blue-700 cursor-pointer">
-                          Click photo to upload
-                        </label>
+                        </>
                       )}
                     </div>
+                    {editMode && (
+                      <label htmlFor="student-photo-upload" className="mt-2 text-xs text-blue-600 hover:text-blue-700 cursor-pointer">
+                        Click photo to upload
+                      </label>
+                    )}
+                  </div>
 
-                    {/* Key Identity Info */}
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Student Name
-                        </label>
-                        {editMode ? (
+                  {/* Key Identity Info */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Student Name
+                      </label>
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={editData.student_name || editData['Student Name'] || ''}
+                          onChange={(e) => updateEditField('student_name', e.target.value)}
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold text-gray-900">
+                          {editData.student_name || editData['Student Name'] || selectedStudent?.student_name || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Roll Number
+                      </label>
+                      {editingRollNumber ? (
+                        <div className="flex items-center gap-2">
                           <input
                             type="text"
-                            value={editData.student_name || editData['Student Name'] || ''}
-                            onChange={(e) => updateEditField('student_name', e.target.value)}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                            value={tempRollNumber}
+                            onChange={(e) => setTempRollNumber(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !savingPinNumber) {
+                                e.preventDefault();
+                                handleSaveRollNumber();
+                              }
+                            }}
+                            placeholder="Enter PIN number"
+                            className="flex-1 px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                            disabled={savingPinNumber}
                           />
-                        ) : (
-                          <p className="text-sm font-bold text-gray-900">
-                            {editData.student_name || editData['Student Name'] || selectedStudent?.student_name || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Roll Number
-                        </label>
-                        {editingRollNumber ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={tempRollNumber}
-                              onChange={(e) => setTempRollNumber(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !savingPinNumber) {
-                                  e.preventDefault();
-                                  handleSaveRollNumber();
-                                }
-                              }}
-                              placeholder="Enter PIN number"
-                              className="flex-1 px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                              disabled={savingPinNumber}
-                            />
-                            <button
-                              type="button"
-                              onClick={handleSaveRollNumber}
-                              disabled={savingPinNumber}
-                              className="px-2 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            >
-                              {savingPinNumber ? (
-                                <>
-                                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                  Saving...
-                                </>
-                              ) : (
-                                'Save'
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingRollNumber(false);
-                                setTempRollNumber(selectedStudent.pin_no || '');
-                              }}
-                              disabled={savingPinNumber}
-                              className="px-2 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {selectedStudent.pin_no ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded-lg bg-green-100 text-green-800 text-sm font-semibold">
-                                {selectedStudent.pin_no}
-                              </span>
+                          <button
+                            type="button"
+                            onClick={handleSaveRollNumber}
+                            disabled={savingPinNumber}
+                            className="px-2 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          >
+                            {savingPinNumber ? (
+                              <>
+                                <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Saving...
+                              </>
                             ) : (
-                              <span className="text-gray-400 text-xs italic">Not assigned</span>
+                              'Save'
                             )}
-                            {!editMode && canUpdatePin && (
-                              <button
-                                onClick={() => setEditingRollNumber(true)}
-                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Edit PIN Number"
-                              >
-                                <Edit size={14} />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Course
-                        </label>
-                        {editMode ? (
-                          <input
-                            type="text"
-                            value={editData.course || selectedStudent.course || ''}
-                            onChange={(e) => updateEditField('course', e.target.value)}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.course || selectedStudent.course || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Branch
-                        </label>
-                        {editMode ? (
-                          <input
-                            type="text"
-                            value={editData.branch || editData.Branch || ''}
-                            onChange={(e) => updateEditField('branch', e.target.value)}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.branch || editData.Branch || selectedStudent?.branch || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Current Year & Semester
-                        </label>
-                        {editMode ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={editData.current_year || editData['Current Academic Year'] || selectedStudent.current_year || '1'}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setEditData((prev) =>
-                                  syncStageFields(
-                                    {
-                                      ...prev,
-                                      current_year: value,
-                                      'Current Academic Year': value
-                                    },
-                                    value,
-                                    prev.current_semester || prev['Current Semester'] || selectedStudent.current_semester || '1'
-                                  )
-                                );
-                              }}
-                              className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                            >
-                              <option value="1">Year 1</option>
-                              <option value="2">Year 2</option>
-                              <option value="3">Year 3</option>
-                              <option value="4">Year 4</option>
-                            </select>
-                            <select
-                              value={editData.current_semester || editData['Current Semester'] || selectedStudent.current_semester || '1'}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setEditData((prev) =>
-                                  syncStageFields(
-                                    {
-                                      ...prev,
-                                      current_semester: value,
-                                      'Current Semester': value
-                                    },
-                                    prev.current_year || prev['Current Academic Year'] || selectedStudent.current_year || '1',
-                                    value
-                                  )
-                                );
-                              }}
-                              className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                            >
-                              <option value="1">Sem 1</option>
-                              <option value="2">Sem 2</option>
-                            </select>
-                          </div>
-                        ) : (
-                          <p className="text-sm font-semibold text-indigo-700">
-                            Year {selectedStudent.current_year || selectedStudent.student_data?.current_year || '-'} • Semester {selectedStudent.current_semester || selectedStudent.student_data?.current_semester || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          College
-                        </label>
-                        {editMode ? (
-                          <select
-                            value={editData.college || editData.College || selectedStudent?.college || ''}
-                            onChange={(e) => updateEditField('college', e.target.value)}
-                            disabled={collegesLoading}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingRollNumber(false);
+                              setTempRollNumber(selectedStudent.pin_no || '');
+                            }}
+                            disabled={savingPinNumber}
+                            className="px-2 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <option value="">Select College</option>
-                            {colleges.filter(c => c.isActive !== false).map((college) => (
-                              <option key={college.id} value={college.name}>{college.name}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.college || editData.College || selectedStudent?.college || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Batch
-                        </label>
-                        {editMode ? (
-                          <input
-                            type="text"
-                            value={editData.batch || editData.Batch || ''}
-                            onChange={(e) => updateEditField('batch', e.target.value)}
-                            placeholder="Enter batch"
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.batch || editData.Batch || selectedStudent?.batch || '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Student Type
-                        </label>
-                        {editMode ? (
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {selectedStudent.pin_no ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-lg bg-green-100 text-green-800 text-sm font-semibold">
+                              {selectedStudent.pin_no}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs italic">Not assigned</span>
+                          )}
+                          {!editMode && canUpdatePin && (
+                            <button
+                              onClick={() => setEditingRollNumber(true)}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit PIN Number"
+                            >
+                              <Edit size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Course
+                      </label>
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={editData.course || selectedStudent.course || ''}
+                          onChange={(e) => updateEditField('course', e.target.value)}
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                        />
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-700">
+                          {editData.course || selectedStudent.course || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Branch
+                      </label>
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={editData.branch || editData.Branch || ''}
+                          onChange={(e) => updateEditField('branch', e.target.value)}
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                        />
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-700">
+                          {editData.branch || editData.Branch || selectedStudent?.branch || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Current Year & Semester
+                      </label>
+                      {editMode ? (
+                        <div className="grid grid-cols-2 gap-2">
                           <select
-                            value={editData.stud_type || editData.StudType || ''}
-                            onChange={(e) => updateEditField('stud_type', e.target.value)}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                            value={editData.current_year || editData['Current Academic Year'] || selectedStudent.current_year || '1'}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditData((prev) =>
+                                syncStageFields(
+                                  {
+                                    ...prev,
+                                    current_year: value,
+                                    'Current Academic Year': value
+                                  },
+                                  value,
+                                  prev.current_semester || prev['Current Semester'] || selectedStudent.current_semester || '1'
+                                )
+                              );
+                            }}
+                            className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                           >
-                            <option value="">Select Student Type</option>
-                            <option value="MANG">MANG</option>
-                            <option value="CONV">CONV</option>
-                            <option value="SPOT">SPOT</option>
+                            <option value="1">Year 1</option>
+                            <option value="2">Year 2</option>
+                            <option value="3">Year 3</option>
+                            <option value="4">Year 4</option>
                           </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.stud_type || editData.StudType || selectedStudent?.stud_type || '-'}
-                          </p>
-                        )}
-                      </div>
+                          <select
+                            value={editData.current_semester || editData['Current Semester'] || selectedStudent.current_semester || '1'}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditData((prev) =>
+                                syncStageFields(
+                                  {
+                                    ...prev,
+                                    current_semester: value,
+                                    'Current Semester': value
+                                  },
+                                  prev.current_year || prev['Current Academic Year'] || selectedStudent.current_year || '1',
+                                  value
+                                )
+                              );
+                            }}
+                            className="w-full px-2 sm:px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                          >
+                            <option value="1">Sem 1</option>
+                            <option value="2">Sem 2</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-indigo-700">
+                          Year {selectedStudent.current_year || selectedStudent.student_data?.current_year || '-'} • Semester {selectedStudent.current_semester || selectedStudent.student_data?.current_semester || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        College
+                      </label>
+                      {editMode ? (
+                        <select
+                          value={editData.college || editData.College || selectedStudent?.college || ''}
+                          onChange={(e) => updateEditField('college', e.target.value)}
+                          disabled={collegesLoading}
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <option value="">Select College</option>
+                          {colleges.filter(c => c.isActive !== false).map((college) => (
+                            <option key={college.id} value={college.name}>{college.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-700">
+                          {editData.college || editData.College || selectedStudent?.college || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Batch
+                      </label>
+                      {editMode ? (
+                        <input
+                          type="text"
+                          value={editData.batch || editData.Batch || ''}
+                          onChange={(e) => updateEditField('batch', e.target.value)}
+                          placeholder="Enter batch"
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                        />
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-700">
+                          {editData.batch || editData.Batch || selectedStudent?.batch || '-'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Student Type
+                      </label>
+                      {editMode ? (
+                        <select
+                          value={editData.stud_type || editData.StudType || ''}
+                          onChange={(e) => updateEditField('stud_type', e.target.value)}
+                          className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                        >
+                          <option value="">Select Student Type</option>
+                          <option value="MANG">MANG</option>
+                          <option value="CONV">CONV</option>
+                          <option value="SPOT">SPOT</option>
+                        </select>
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-700">
+                          {editData.stud_type || editData.StudType || selectedStudent?.stud_type || '-'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Right Side - All Student Data */}
-                <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto min-w-0">
-                  <div className="space-y-4 sm:space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              {/* Right Side - All Student Data */}
+              <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto min-w-0">
+                <div className="space-y-4 sm:space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
 
                     {/* Column 1 */}
                     <div className="space-y-4">
@@ -3127,11 +3188,10 @@ completedStudents++;
                           </label>
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                              <span className={`text-base font-bold ${
-                                profileCompletion.percentage >= 80 ? 'text-green-600' :
+                              <span className={`text-base font-bold ${profileCompletion.percentage >= 80 ? 'text-green-600' :
                                 profileCompletion.percentage >= 50 ? 'text-blue-600' :
-                                'text-gray-600'
-                              }`}>
+                                  'text-gray-600'
+                                }`}>
                                 {profileCompletion.percentage}%
                               </span>
                               <span className="text-xs text-gray-500">
@@ -3141,8 +3201,8 @@ completedStudents++;
                                 <button
                                   onClick={() => {
                                     // Recalculate on demand
-                                    const parsedStudentData = typeof editData === 'string' 
-                                      ? JSON.parse(editData || '{}') 
+                                    const parsedStudentData = typeof editData === 'string'
+                                      ? JSON.parse(editData || '{}')
                                       : editData;
                                     const completion = calculateProfileCompletion(selectedStudent, parsedStudentData);
                                     setProfileCompletion(completion);
@@ -3160,11 +3220,10 @@ completedStudents++;
                             {/* Progress Bar */}
                             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                               <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  profileCompletion.percentage >= 80 ? 'bg-green-500' :
+                                className={`h-full rounded-full transition-all duration-300 ${profileCompletion.percentage >= 80 ? 'bg-green-500' :
                                   profileCompletion.percentage >= 50 ? 'bg-blue-500' :
-                                  'bg-gray-400'
-                                }`}
+                                    'bg-gray-400'
+                                  }`}
                                 style={{ width: `${profileCompletion.percentage}%` }}
                               />
                             </div>
@@ -3604,84 +3663,82 @@ completedStudents++;
                         </div>
                       </div>
                     </div>
-                    </div>
+                  </div>
 
-                    {/* Certificate Information Section */}
-                    {(() => {
-                      // Determine course type from student data
-                      const courseName = (editData.course || selectedStudent?.course || '').toLowerCase();
-                      let courseType = null;
-                      if (courseName.includes('diploma')) {
-                        courseType = 'Diploma';
-                      } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
-                        courseType = 'PG';
-                      } else if (courseName) {
-                        courseType = 'UG';
-                      }
+                  {/* Certificate Information Section */}
+                  {(() => {
+                    // Determine course type from student data
+                    const courseName = (editData.course || selectedStudent?.course || '').toLowerCase();
+                    let courseType = null;
+                    if (courseName.includes('diploma')) {
+                      courseType = 'Diploma';
+                    } else if (courseName.includes('pg') || courseName.includes('post graduate') || courseName.includes('m.tech') || courseName.includes('mtech')) {
+                      courseType = 'PG';
+                    } else if (courseName) {
+                      courseType = 'UG';
+                    }
 
-                      if (!courseType) return null;
+                    if (!courseType) return null;
 
-                      const certificates = getCertificatesForCourse(courseType);
-                      const overallStatus = editData.certificates_status || selectedStudent?.certificates_status || null;
+                    const certificates = getCertificatesForCourse(courseType);
+                    const overallStatus = editData.certificates_status || selectedStudent?.certificates_status || null;
 
-                      return (
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mt-4">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                            Certificate Information
-                          </h4>
-                          <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                            <h5 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                              <FileText size={14} className="text-gray-600" />
-                              {editMode ? 'Edit Certificate Status' : 'Certificate Status'}
-                            </h5>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {certificates.map((cert) => {
-                                const isPresent = isCertificatePresent(cert.key);
-                                const displayStatus = getCertificateStatusDisplay(cert.key, overallStatus);
-                                const isYes = displayStatus === 'Yes';
+                    return (
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mt-4">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                          Certificate Information
+                        </h4>
+                        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                          <h5 className="text-xs font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                            <FileText size={14} className="text-gray-600" />
+                            {editMode ? 'Edit Certificate Status' : 'Certificate Status'}
+                          </h5>
 
-                                return (
-                                  <div 
-                                    key={cert.key}
-                                    className={`flex items-center justify-between p-2.5 bg-white rounded border ${
-                                      isYes ? 'border-green-200 bg-green-50' : 'border-gray-200'
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {certificates.map((cert) => {
+                              const isPresent = isCertificatePresent(cert.key);
+                              const displayStatus = getCertificateStatusDisplay(cert.key, overallStatus);
+                              const isYes = displayStatus === 'Yes';
+
+                              return (
+                                <div
+                                  key={cert.key}
+                                  className={`flex items-center justify-between p-2.5 bg-white rounded border ${isYes ? 'border-green-200 bg-green-50' : 'border-gray-200'
                                     } transition-colors`}
-                                  >
-                                    <span className="text-xs text-gray-700 flex-1 pr-2">{cert.label}</span>
-                                    {editMode ? (
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={isPresent}
-                                          onChange={(e) => updateCertificateStatus(cert.key, e.target.checked)}
-                                          className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                                        <span className="ml-2 text-xs font-medium text-gray-700 min-w-[30px]">
-                                          {isPresent ? 'Yes' : 'No'}
-                                        </span>
-                                      </label>
-                                    ) : (
-                                      <span className={`text-xs font-medium px-2 py-1 rounded ${
-                                        isYes 
-                                          ? 'text-green-700 bg-green-100' 
-                                          : 'text-red-700 bg-red-100'
-                                      }`}>
-                                        {displayStatus}
+                                >
+                                  <span className="text-xs text-gray-700 flex-1 pr-2">{cert.label}</span>
+                                  {editMode ? (
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={isPresent}
+                                        onChange={(e) => updateCertificateStatus(cert.key, e.target.checked)}
+                                        className="sr-only peer"
+                                      />
+                                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                      <span className="ml-2 text-xs font-medium text-gray-700 min-w-[30px]">
+                                        {isPresent ? 'Yes' : 'No'}
                                       </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                    </label>
+                                  ) : (
+                                    <span className={`text-xs font-medium px-2 py-1 rounded ${isYes
+                                      ? 'text-green-700 bg-green-100'
+                                      : 'text-red-700 bg-red-100'
+                                      }`}>
+                                      {displayStatus}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      );
-                    })()}
-                  </div>
+                      </div>
+                    );
+                  })()}
                 </div>
+              </div>
             </div>
 
             {/* Footer */}
@@ -3689,9 +3746,9 @@ completedStudents++;
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                 {editMode ? (
                   <>
-                    <button 
+                    <button
                       type="button"
-                      onClick={handleSaveEdit} 
+                      onClick={handleSaveEdit}
                       disabled={savingEdit}
                       className="w-full sm:flex-1 bg-green-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
                     >
@@ -3707,9 +3764,9 @@ completedStudents++;
                         'Save Changes'
                       )}
                     </button>
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => setEditMode(false)} 
+                      onClick={() => setEditMode(false)}
                       disabled={savingEdit}
                       className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                     >
@@ -3717,9 +3774,22 @@ completedStudents++;
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setShowModal(false)} className="w-full sm:w-auto sm:ml-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium touch-manipulation min-h-[44px]">
-                    Close
-                  </button>
+                  <>
+                    {canEditStudents && (
+                      <button
+                        onClick={handleResetPassword}
+                        disabled={resettingPassword}
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 active:bg-indigo-200 transition-colors font-medium touch-manipulation min-h-[44px] mr-2 flex items-center justify-center gap-2"
+                        title="Resend password via SMS"
+                      >
+                        <Key size={18} />
+                        {resettingPassword ? 'Sending...' : 'Resend Password'}
+                      </button>
+                    )}
+                    <button onClick={() => setShowModal(false)} className="w-full sm:w-auto sm:ml-auto px-4 sm:px-6 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium touch-manipulation min-h-[44px]">
+                      Close
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -3797,7 +3867,7 @@ completedStudents++;
                     toast.error('Please enter permit remarks');
                     return;
                   }
-                  
+
                   // If this is from inline editing, save directly using the stored admission number
                   if (pendingFeeStatusChange === 'permitted' && pendingPermitAdmissionNumber) {
                     try {
@@ -3818,7 +3888,7 @@ completedStudents++;
                     // handleSaveEdit will call the fee-status endpoint with permit data.
                     setEditFeeStatus('permitted');
                   }
-                  
+
                   setShowPermitModal(false);
                   setPendingFeeStatusChange(null);
                   setPendingPermitAdmissionNumber(null);
@@ -3837,6 +3907,58 @@ completedStudents++;
         onClose={() => setShowManualRollNumber(false)}
         onUpdateComplete={() => refreshStudents()}
       />
+      {/* Bulk Password Results Modal */}
+      {bulkPasswordState.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 animate-fade-in">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Key size={24} className="text-teal-600" />
+              Bulk Password Operations
+            </h3>
+
+            {bulkPasswordState.processing ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Processing password resets and sending SMS...</p>
+                <p className="text-xs text-gray-400 mt-2">Please do not close this window.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-gray-900">{bulkPasswordState.summary?.total}</div>
+                    <div className="text-xs text-gray-500">Total</div>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{bulkPasswordState.summary?.success}</div>
+                    <div className="text-xs text-green-600">Success</div>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600">{bulkPasswordState.summary?.failed}</div>
+                    <div className="text-xs text-red-600">Failed</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 mt-6">
+                  <button
+                    onClick={downloadBulkPasswordReport}
+                    className="flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-medium transition-colors"
+                  >
+                    <FileSpreadsheet size={18} />
+                    Download Detailed Report
+                  </button>
+                  <button
+                    onClick={() => setBulkPasswordState(prev => ({ ...prev, isOpen: false }))}
+                    className="w-full py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
