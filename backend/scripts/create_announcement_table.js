@@ -1,9 +1,11 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { masterPool } = require('../config/database');
 
 const createAnnouncementTable = async () => {
     try {
         console.log('Creating announcements table...');
-        
+
         await masterPool.query(`
             CREATE TABLE IF NOT EXISTS announcements (
                 id INT AUTO_INCREMENT PRIMARY KEY,
