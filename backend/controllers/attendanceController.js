@@ -89,105 +89,68 @@ exports.getFilterOptions = async (req, res) => {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
 
-    // Build WHERE clause based on applied filters - only regular students
-    const params = [];
-    let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
-    if (EXCLUDED_COURSES.length > 0) {
-      whereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      params.push(...EXCLUDED_COURSES);
-    }
+    // Helper to build WHERE clause parts (User Scope + Excluded Courses)
+    const buildBaseWhere = () => {
+      let clause = `WHERE 1=1 AND student_status = 'Regular'`;
+      const params = [];
 
-    // Apply user scope filtering first
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
-      if (scopeCondition) {
-        whereClause += ` AND ${scopeCondition}`;
-        params.push(...scopeParams);
+      if (EXCLUDED_COURSES.length > 0) {
+        clause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+        params.push(...EXCLUDED_COURSES);
       }
-    }
 
-    if (college) {
-      whereClause += ' AND college = ?';
-      params.push(college);
-    }
-    if (course) {
-      whereClause += ' AND course = ?';
-      params.push(course);
-    }
-    if (branch) {
-      whereClause += ' AND branch = ?';
-      params.push(branch);
-    }
-    if (batch) {
-      whereClause += ' AND batch = ?';
-      params.push(batch);
-    }
-    if (year) {
-      whereClause += ' AND current_year = ?';
-      params.push(parseInt(year, 10));
-    }
-    if (semester) {
-      whereClause += ' AND current_semester = ?';
-      params.push(parseInt(semester, 10));
-    }
-
-    // Fetch distinct values for each filter, applying cascading filters
-    const [batchRows] = await masterPool.query(
-      `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
-      params
-    );
-
-    // For years and semesters, build separate WHERE clauses that exclude year/semester filters
-    // so they cascade properly based on batch/course/branch
-    const yearParams = [];
-    let yearWhereClause = `WHERE 1=1 AND student_status = 'Regular'`;
-    if (EXCLUDED_COURSES.length > 0) {
-      yearWhereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      yearParams.push(...EXCLUDED_COURSES);
-    }
-
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
-      if (scopeCondition) {
-        yearWhereClause += ` AND ${scopeCondition}`;
-        yearParams.push(...scopeParams);
+      // Apply user scope filtering
+      if (req.userScope) {
+        const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+        if (scopeCondition) {
+          clause += ` AND ${scopeCondition}`;
+          params.push(...scopeParams);
+        }
       }
-    }
 
-    if (college) {
-      yearWhereClause += ' AND college = ?';
-      yearParams.push(college);
-    }
-    if (course) {
-      yearWhereClause += ' AND course = ?';
-      yearParams.push(course);
-    }
-    if (branch) {
-      yearWhereClause += ' AND branch = ?';
-      yearParams.push(branch);
-    }
+      if (college) {
+        clause += ' AND college = ?';
+        params.push(college);
+      }
+
+      return { clause, params };
+    };
+
+    // Level 0: Scope + College (For Batches)
+    const level0 = buildBaseWhere();
+
+    // Level 1: + Batch (For Courses)
+    const level1 = { clause: level0.clause, params: [...level0.params] };
     if (batch) {
-      yearWhereClause += ' AND batch = ?';
-      yearParams.push(batch);
+      level1.clause += ' AND batch = ?';
+      level1.params.push(batch);
     }
-    // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
 
-    const [yearRows] = await masterPool.query(
-      `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
-      yearParams
+    // Level 2: + Course (For Branches)
+    const level2 = { clause: level1.clause, params: [...level1.params] };
+    if (course) {
+      level2.clause += ' AND course = ?';
+      level2.params.push(course);
+    }
+
+    // Level 3: + Branch (For Years/Semesters)
+    const level3 = { clause: level2.clause, params: [...level2.params] };
+    if (branch) {
+      level3.clause += ' AND branch = ?';
+      level3.params.push(branch);
+    }
+
+    // --- Queries ---
+
+    // 1. Batches (Use Level 0 - Independent of other filters except college/scope)
+    const [batchRowsRes] = await masterPool.query(
+      `SELECT DISTINCT batch FROM students ${level0.clause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+      level0.params
     );
 
-    // For semesters, use the same WHERE clause as years
-    const [semesterRows] = await masterPool.query(
-      `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
-      yearParams
-    );
-
-    // For courses, if college is selected, filter courses by college
-    let courseRows;
+    // 2. Courses (Use Level 1 - Depend on Batch)
+    let courseRowsRes;
     if (college) {
-      // Get college ID from college name
       const [collegeRows] = await masterPool.query(
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
@@ -195,7 +158,6 @@ exports.getFilterOptions = async (req, res) => {
 
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
-        // Get courses for this college from courses table (these are the valid courses for this college)
         const [collegeCourses] = await masterPool.query(
           'SELECT name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
           [collegeId]
@@ -203,36 +165,29 @@ exports.getFilterOptions = async (req, res) => {
         const validCourseNames = collegeCourses.map(c => c.name);
 
         if (validCourseNames.length > 0) {
-          // Get distinct courses from students that match:
-          // 1. The current filters (college, batch, year, semester, etc.)
-          // 2. AND are in the list of valid courses for this college
           const placeholders = validCourseNames.map(() => '?').join(',');
-          const courseWhereClause = `${whereClause} AND course IN (${placeholders})`;
-          const courseParams = [...params, ...validCourseNames];
-          [courseRows] = await masterPool.query(
+          const courseWhereClause = `${level1.clause} AND course IN (${placeholders})`;
+          const courseQueryParams = [...level1.params, ...validCourseNames];
+          [courseRowsRes] = await masterPool.query(
             `SELECT DISTINCT course FROM students ${courseWhereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
-            courseParams
+            courseQueryParams
           );
         } else {
-          // No courses configured for this college
-          courseRows = [];
+          courseRowsRes = [];
         }
       } else {
-        // College not found, return empty courses
-        courseRows = [];
+        courseRowsRes = [];
       }
     } else {
-      // No college filter, get all courses from students
-      [courseRows] = await masterPool.query(
-        `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
-        params
+      [courseRowsRes] = await masterPool.query(
+        `SELECT DISTINCT course FROM students ${level1.clause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+        level1.params
       );
     }
 
-    // For branches, if college is selected, filter branches by college and valid courses
-    let branchRows;
+    // 3. Branches (Use Level 2 - Depend on Batch + Course)
+    let branchRowsRes;
     if (college) {
-      // Get college ID from college name
       const [collegeRows] = await masterPool.query(
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
@@ -240,7 +195,6 @@ exports.getFilterOptions = async (req, res) => {
 
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
-        // Get courses for this college from courses table
         const [collegeCourses] = await masterPool.query(
           'SELECT id, name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
           [collegeId]
@@ -249,12 +203,9 @@ exports.getFilterOptions = async (req, res) => {
         const validCourseIds = collegeCourses.map(c => c.id);
 
         if (validCourseNames.length > 0) {
-          // If course is also selected, filter branches for that specific course
           if (course) {
-            // Get course ID for the selected course
             const selectedCourse = collegeCourses.find(c => c.name === course);
             if (selectedCourse) {
-              // Get branches for this specific course from course_branches table
               const [courseBranches] = await masterPool.query(
                 'SELECT name FROM course_branches WHERE course_id = ? AND is_active = 1 ORDER BY name ASC',
                 [selectedCourse.id]
@@ -262,26 +213,21 @@ exports.getFilterOptions = async (req, res) => {
               const validBranchNames = courseBranches.map(b => b.name);
 
               if (validBranchNames.length > 0) {
-                // Get distinct branches from students that match:
-                // 1. The current filters (college, course, batch, year, semester, etc.)
-                // 2. AND are in the list of valid branches for this course
                 const placeholders = validBranchNames.map(() => '?').join(',');
-                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
-                const branchParams = [...params, ...validBranchNames];
-                [branchRows] = await masterPool.query(
+                const branchWhereClause = `${level2.clause} AND branch IN (${placeholders})`;
+                const branchQueryParams = [...level2.params, ...validBranchNames];
+                [branchRowsRes] = await masterPool.query(
                   `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-                  branchParams
+                  branchQueryParams
                 );
               } else {
-                branchRows = [];
+                branchRowsRes = [];
               }
             } else {
-              // Selected course doesn't belong to this college
-              branchRows = [];
+              branchRowsRes = [];
             }
           } else {
-            // No course selected, get all branches for all courses in this college
-            // Get all branches for all courses in this college
+            // No specific course selected, check branches for ALL valid courses
             if (validCourseIds.length > 0) {
               const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
               const [allBranches] = await masterPool.query(
@@ -292,43 +238,51 @@ exports.getFilterOptions = async (req, res) => {
 
               if (validBranchNames.length > 0) {
                 const placeholders = validBranchNames.map(() => '?').join(',');
-                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
-                const branchParams = [...params, ...validBranchNames];
-                [branchRows] = await masterPool.query(
+                const branchWhereClause = `${level2.clause} AND branch IN (${placeholders})`;
+                const branchQueryParams = [...level2.params, ...validBranchNames];
+                [branchRowsRes] = await masterPool.query(
                   `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-                  branchParams
+                  branchQueryParams
                 );
               } else {
-                branchRows = [];
+                branchRowsRes = [];
               }
             } else {
-              branchRows = [];
+              branchRowsRes = [];
             }
           }
         } else {
-          // No courses configured for this college
-          branchRows = [];
+          branchRowsRes = [];
         }
       } else {
-        // College not found, return empty branches
-        branchRows = [];
+        branchRowsRes = [];
       }
     } else {
-      // No college filter, get all branches from students
-      [branchRows] = await masterPool.query(
-        `SELECT DISTINCT branch FROM students ${whereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-        params
+      [branchRowsRes] = await masterPool.query(
+        `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+        level2.params
       );
     }
+
+    // 4. Years and Semesters (Use Level 3 - Depend on Batch + Course + Branch)
+    const [yearRows] = await masterPool.query(
+      `SELECT DISTINCT current_year AS currentYear FROM students ${level3.clause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
+      level3.params
+    );
+
+    const [semesterRows] = await masterPool.query(
+      `SELECT DISTINCT current_semester AS currentSemester FROM students ${level3.clause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
+      level3.params
+    );
 
     res.json({
       success: true,
       data: {
-        batches: batchRows.map((row) => row.batch),
+        batches: batchRowsRes.map((row) => row.batch),
         years: yearRows.map((row) => row.currentYear),
         semesters: semesterRows.map((row) => row.currentSemester),
-        courses: courseRows.map((row) => row.course),
-        branches: branchRows.map((row) => row.branch)
+        courses: courseRowsRes.map((row) => row.course),
+        branches: branchRowsRes.map((row) => row.branch)
       }
     });
   } catch (error) {
