@@ -2582,10 +2582,7 @@ exports.getStudentByAdmission = async (req, res) => {
 
     // Fetch today's attendance (IST)
     try {
-      const date = new Date();
-      const istOffset = 5.5 * 60 * 60 * 1000;
-      const istDate = new Date(date.getTime() + istOffset);
-      const formattedDate = istDate.toISOString().split('T')[0];
+      const formattedDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       const [attendanceRows] = await masterPool.query(
         'SELECT status FROM attendance_records WHERE student_id = ? AND attendance_date = ?',

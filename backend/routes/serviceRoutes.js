@@ -10,7 +10,15 @@ router.use(authMiddleware);
 
 // --- Services Configuration (Admin) ---
 // View all services: permission 'view'
-router.get('/', verifyPermission(MODULES.SERVICES, 'view'), serviceController.getServices);
+// View all services: permission 'view' for admins, public/active for students
+router.get('/', (req, res, next) => {
+    // If student (or no role which implies student in this context if auth passed), allow access
+    if (req.user && (req.user.role === 'student' || !req.user.role)) {
+        return next();
+    }
+    // For admins/staff, require permission
+    return verifyPermission(MODULES.SERVICES, 'view')(req, res, next);
+}, serviceController.getServices);
 
 // Create service: permission 'manage_config'
 router.post('/', verifyPermission(MODULES.SERVICES, 'manage_config'), serviceController.createService);

@@ -9,7 +9,8 @@ import {
     FileText,
     Ticket,
     Megaphone,
-    Briefcase
+    Briefcase,
+    CheckCircle
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -27,13 +28,15 @@ const StudentLayout = ({ children }) => {
 
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
-        { icon: User, label: 'Profile', path: '/student/profile' },
+        { icon: CheckCircle, label: 'Attendance', path: '/student/attendance' },
+        { icon: FileText, label: 'Sem Registration', path: '/student/semester-registration' },
         { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
         { icon: Briefcase, label: 'Services', path: '/student/services' },
+        { icon: User, label: 'Profile', path: '/student/profile' },
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
+        <div className="flex h-screen overflow-hidden bg-gray-50">
             {/* Mobile Menu Button */}
             <button
                 className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-white rounded-lg shadow-md"
@@ -44,7 +47,7 @@ const StudentLayout = ({ children }) => {
 
             {/* Sidebar */}
             <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
+        fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
                 <div className="h-full flex flex-col">
@@ -69,7 +72,7 @@ const StudentLayout = ({ children }) => {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 px-4 py-6 space-y-1">
+                    <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.path}
@@ -86,20 +89,7 @@ const StudentLayout = ({ children }) => {
                                 {item.label}
                             </NavLink>
                         ))}
-                        {/* Semester Registration (Special) */}
-                        <NavLink
-                            to="/student/semester-registration"
-                            onClick={() => setSidebarOpen(false)}
-                            className={({ isActive }) => `
-                  flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors mt-4
-                  ${isActive
-                                    ? 'bg-indigo-50 text-indigo-600'
-                                    : 'text-indigo-600 hover:bg-indigo-50'}
-                `}
-                        >
-                            <FileText size={20} />
-                            Sem Registration
-                        </NavLink>
+
                     </nav>
 
                     {/* Logout */}
@@ -124,8 +114,8 @@ const StudentLayout = ({ children }) => {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 overflow-x-hidden w-full p-4 lg:p-8">
-                <div className="max-w-6xl mx-auto">
+            <main className="flex-1 lg:ml-64 h-screen overflow-y-auto p-4 lg:p-8">
+                <div className="w-full">
                     <Outlet />
                 </div>
             </main>

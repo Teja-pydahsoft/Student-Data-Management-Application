@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/auth');
 
 // Public routes
 router.post('/login', authController.login);
+router.post('/unified-login', authController.unifiedLogin);
 
 // Protected routes
 router.get('/verify', authMiddleware, authController.verifyToken);

@@ -255,7 +255,7 @@ const AdminLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const hasSubItems = item.subItems && item.subItems.length > 0;

@@ -15,7 +15,7 @@ const Login = () => {
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Determine if this is a student login based on route
   const isStudentLogin = location.pathname.startsWith('/student/login');
 
@@ -45,28 +45,14 @@ const Login = () => {
     }
 
     setLoading(true);
-    
-    // Try login - attempt both student and admin login to handle credentials from either type
-    let result;
-    if (isStudentLogin) {
-      // On student login page, try student login first, then admin as fallback
-      result = await loginAsStudent(formData.username, formData.password);
-      if (!result.success) {
-        result = await login(formData.username, formData.password);
-      }
-    } else {
-      // On admin login page, try admin login first, then student as fallback
-      result = await login(formData.username, formData.password);
-      if (!result.success) {
-        result = await loginAsStudent(formData.username, formData.password);
-      }
-    }
-    
+
+    const result = await login(formData.username, formData.password);
+
     setLoading(false);
 
     if (result.success) {
       toast.success('Login successful!');
-      navigate(result.redirectPath || (isStudentLogin ? '/student/dashboard' : '/'));
+      navigate(result.redirectPath);
     } else {
       toast.error(result.message);
     }
@@ -91,12 +77,10 @@ const Login = () => {
             loading="lazy"
           />
           <h1 className="text-xl sm:text-2xl font-semibold text-text-primary mb-1 tracking-tight">
-            {isStudentLogin ? 'Student Portal Login' : 'Portal Login'}
+            Portal Login
           </h1>
           <p className="text-muted-text text-xs sm:text-sm">
-            {isStudentLogin 
-              ? 'Sign in to access your student dashboard' 
-              : 'Access your assigned student management modules'}
+            Sign in to access your dashboard
           </p>
         </div>
 
@@ -108,7 +92,7 @@ const Login = () => {
               htmlFor="username"
               className="block text-sm font-medium text-text-secondary mb-2"
             >
-              Username
+              Username / Admission No
             </label>
             <div className="relative">
               <input
@@ -118,7 +102,7 @@ const Login = () => {
                 value={formData.username}
                 onChange={handleChange}
                 className="w-full px-4 py-3 text-base sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl bg-white text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 touch-manipulation min-h-[44px]"
-                placeholder={isStudentLogin ? "Enter Admission No or PIN" : "Enter admin username"}
+                placeholder="Enter Username or Admission No"
                 disabled={loading}
               />
               <Users
@@ -180,12 +164,14 @@ const Login = () => {
           </button>
         </form>
 
+
+
         {/* Footer */}
         <div className="text-center text-xs text-muted-text mt-6">
           © {new Date().getFullYear()} Student Management System
         </div>
       </div>
-    </div>
+    </div >
   );
 };
 
