@@ -8,7 +8,8 @@ import {
     X,
     FileText,
     Ticket,
-    Megaphone
+    Megaphone,
+    Briefcase
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -27,8 +28,8 @@ const StudentLayout = ({ children }) => {
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
         { icon: User, label: 'Profile', path: '/student/profile' },
-        { icon: Ticket, label: 'My Tickets', path: '/student/my-tickets' },
         { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
+        { icon: Briefcase, label: 'Services', path: '/student/services' },
     ];
 
     return (

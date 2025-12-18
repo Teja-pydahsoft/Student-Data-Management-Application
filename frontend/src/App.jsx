@@ -21,6 +21,8 @@ import StudentPromotions from './pages/StudentPromotions';
 import TicketManagement from './pages/TicketManagement';
 import TaskManagement from './pages/TaskManagement';
 import Announcements from './pages/Announcements';
+import ServicesConfig from './pages/ServicesConfig';
+import ServiceRequests from './pages/ServiceRequests';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -30,6 +32,7 @@ import RaiseTicket from './pages/student/RaiseTicket';
 import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
 import StudentAttendance from './pages/student/Attendance';
+import StudentServices from './pages/student/Services';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -110,6 +113,8 @@ function App() {
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="services/config" element={<ServicesConfig />} />
+          <Route path="services/requests" element={<ServiceRequests />} />
         </Route>
 
         {/* Protected Student Routes */}
@@ -129,6 +134,7 @@ function App() {
           <Route path="my-tickets" element={<MyTickets />} />
           <Route path="announcements" element={<StudentAnnouncements />} />
           <Route path="attendance" element={<StudentAttendance />} />
+          <Route path="services" element={<StudentServices />} />
         </Route>
 
         {/* Fallback */}

@@ -16,7 +16,8 @@ export const BACKEND_MODULES = {
   USER_MANAGEMENT: 'user_management',
   REPORTS: 'reports',
   TICKET_MANAGEMENT: 'ticket_management',
-  ANNOUNCEMENTS: 'announcements'
+  ANNOUNCEMENTS: 'announcements',
+  SERVICES: 'services'
 };
 
 // Granular Permissions for each module
@@ -106,6 +107,14 @@ export const MODULE_PERMISSIONS = {
       edit: 'Edit Announcements',
       delete: 'Delete Announcements'
     }
+  },
+  [BACKEND_MODULES.SERVICES]: {
+    permissions: ['view', 'manage_config', 'manage_requests'],
+    labels: {
+      view: 'View Services',
+      manage_config: 'Manage Configuration (Create/Edit Services)',
+      manage_requests: 'Manage Requests (Process/Close)'
+    }
   }
 };
 
@@ -120,7 +129,8 @@ export const MODULE_LABELS = {
   [BACKEND_MODULES.USER_MANAGEMENT]: 'User Management',
   [BACKEND_MODULES.REPORTS]: 'Reports',
   [BACKEND_MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
-  [BACKEND_MODULES.ANNOUNCEMENTS]: 'Announcements'
+  [BACKEND_MODULES.ANNOUNCEMENTS]: 'Announcements',
+  [BACKEND_MODULES.SERVICES]: 'Services'
 };
 
 // Frontend navigation keys
@@ -137,7 +147,8 @@ export const FRONTEND_MODULES = {
   REPORTS: 'reports',
   TICKETS: 'tickets',
   TASK_MANAGEMENT: 'task_management',
-  ANNOUNCEMENTS: 'announcements'
+  ANNOUNCEMENTS: 'announcements',
+  SERVICES: 'services'
 };
 
 // Map frontend navigation keys to backend permission keys
@@ -154,7 +165,8 @@ export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.REPORTS]: [BACKEND_MODULES.REPORTS],
   [FRONTEND_MODULES.TICKETS]: [BACKEND_MODULES.TICKET_MANAGEMENT],
   [FRONTEND_MODULES.TASK_MANAGEMENT]: [BACKEND_MODULES.TICKET_MANAGEMENT],
-  [FRONTEND_MODULES.ANNOUNCEMENTS]: [BACKEND_MODULES.ANNOUNCEMENTS]
+  [FRONTEND_MODULES.ANNOUNCEMENTS]: [BACKEND_MODULES.ANNOUNCEMENTS],
+  [FRONTEND_MODULES.SERVICES]: [BACKEND_MODULES.SERVICES]
 };
 
 // Map backend module keys to frontend navigation keys (reverse mapping)
@@ -168,7 +180,8 @@ export const BACKEND_TO_FRONTEND_MAP = {
   [BACKEND_MODULES.SETTINGS]: FRONTEND_MODULES.COURSES,
   [BACKEND_MODULES.USER_MANAGEMENT]: FRONTEND_MODULES.USERS,
   [BACKEND_MODULES.REPORTS]: FRONTEND_MODULES.REPORTS,
-  [BACKEND_MODULES.ANNOUNCEMENTS]: FRONTEND_MODULES.ANNOUNCEMENTS
+  [BACKEND_MODULES.ANNOUNCEMENTS]: FRONTEND_MODULES.ANNOUNCEMENTS,
+  [BACKEND_MODULES.SERVICES]: FRONTEND_MODULES.SERVICES
 };
 
 // Route map for navigation
@@ -185,7 +198,8 @@ export const MODULE_ROUTE_MAP = {
   [FRONTEND_MODULES.REPORTS]: '/reports',
   [FRONTEND_MODULES.TICKETS]: '/tickets',
   [FRONTEND_MODULES.TASK_MANAGEMENT]: '/task-management',
-  [FRONTEND_MODULES.ANNOUNCEMENTS]: '/announcements'
+  [FRONTEND_MODULES.ANNOUNCEMENTS]: '/announcements',
+  [FRONTEND_MODULES.SERVICES]: '/services'
 };
 
 // Get module key from path
@@ -202,6 +216,7 @@ export const getModuleKeyForPath = (path = '/') => {
   if (path.startsWith('/tickets')) return FRONTEND_MODULES.TICKETS;
   if (path.startsWith('/task-management')) return FRONTEND_MODULES.TASK_MANAGEMENT;
   if (path.startsWith('/announcements')) return FRONTEND_MODULES.ANNOUNCEMENTS;
+  if (path.startsWith('/services')) return FRONTEND_MODULES.SERVICES;
   return null;
 };
 

@@ -1120,7 +1120,7 @@ exports.markAttendance = async (req, res) => {
         // Check if we need to handle holiday_reason column
         let insertQuery = `
           INSERT INTO attendance_records
-            (student_id, admission_number, attendance_date, status, marked_by, updated_at`;
+            (student_id, admission_number, attendance_date, status, marked_by`;
         let insertParams = [
           record.studentId,
           student.admission_number || null,
@@ -1140,7 +1140,7 @@ exports.markAttendance = async (req, res) => {
           });
         }
 
-        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')}, CURRENT_TIMESTAMP)`;
+        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
 
         await connection.query(insertQuery, insertParams);
 
@@ -2529,6 +2529,9 @@ exports.getAttendanceSummary = async (req, res) => {
       `,
       [todayKey, ...countFilter.params, ...scopeParams]
     );
+
+    console.log('DEBUG: getAttendanceSummary groupedRows[0]:', groupedRows[0]);
+
 
     let todayHolidayInfo = null;
     let weeklyHolidayInfo = { dates: new Set(), details: new Map() };

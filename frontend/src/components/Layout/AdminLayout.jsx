@@ -18,7 +18,8 @@ import {
   DollarSign,
   Ticket,
   FolderTree,
-  Megaphone
+  Megaphone,
+  Briefcase
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import {
@@ -59,6 +60,16 @@ const NAV_ITEMS = [
     subItems: [
       { path: '/tickets', label: 'Tickets', permission: FRONTEND_MODULES.TICKETS },
       { path: '/task-management', label: 'Task Management', permission: FRONTEND_MODULES.TASK_MANAGEMENT }
+    ]
+  },
+  {
+    path: '/services',
+    icon: Briefcase,
+    label: 'Services',
+    permission: FRONTEND_MODULES.SERVICES,
+    subItems: [
+      { path: '/services/requests', label: 'Service Requests', permission: FRONTEND_MODULES.SERVICES },
+      { path: '/services/config', label: 'Configuration', permission: FRONTEND_MODULES.SERVICES }
     ]
   }
 ];

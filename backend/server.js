@@ -26,6 +26,7 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const feeRoutes = require('./routes/feeRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
 const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
+const serviceRoutes = require('./routes/serviceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -124,6 +125,7 @@ app.use('/api/fees', feeRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/complaint-categories', complaintCategoryRoutes);
 app.use('/api/announcements', require('./routes/announcementRoutes'));
+app.use('/api/services', serviceRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
