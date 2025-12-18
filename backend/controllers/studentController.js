@@ -2038,11 +2038,26 @@ exports.commitBulkUploadStudents = async (req, res) => {
         }
       }
 
-      await connection.query(
-        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-         VALUES (?, ?, ?, ?, ?)`,
-        ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, req.admin.id, studentDataJson]
-      );
+      // Log action (safe)
+      try {
+        await connection.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+           VALUES (?, ?, ?, ?, ?)`,
+          ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, req.admin.id, studentDataJson]
+        );
+      } catch (auditError) {
+        console.error('Audit log error:', auditError.message);
+        try {
+          // Retry with NULL admin
+          await connection.query(
+            `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+             VALUES (?, ?, ?, NULL, ?)`,
+            ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, studentDataJson]
+          );
+        } catch (e) {
+          console.error('Audit log retry failed:', e.message);
+        }
+      }
 
       await updateStagingStudentStage(
         sanitized.admission_number,
@@ -3165,11 +3180,23 @@ exports.deleteStudent = async (req, res) => {
     }
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
-       VALUES (?, ?, ?, ?)`,
-      ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
-    );
+    // Log action (safe)
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+         VALUES (?, ?, ?, ?)`,
+        ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
+      );
+    } catch (auditError) {
+      console.error('Delete audit log error:', auditError.message);
+      try {
+        await masterPool.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+           VALUES (?, ?, ?, NULL)`,
+          ['DELETE', 'STUDENT', admissionNumber]
+        );
+      } catch (e) { }
+    }
 
     clearStudentsCache();
 
@@ -3656,11 +3683,29 @@ exports.createStudent = async (req, res) => {
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
-    );
+    // Log action
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
+      );
+    } catch (auditError) {
+      console.error('Failed to create audit log:', auditError.message);
+      // If admin doesn't exist (FK violation), try with NULL admin
+      if (auditError.code === 'ER_NO_REFERENCED_ROW_2') {
+        try {
+          await masterPool.query(
+            `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+             VALUES (?, ?, ?, NULL, ?)`,
+            ['CREATE', 'STUDENT', admissionNumber, serializedStudentData]
+          );
+          console.log('⚠️ Created audit log with NULL admin due to missing admin reference');
+        } catch (retryError) {
+          console.error('Failed to create audit log fallback:', retryError.message);
+        }
+      }
+    }
 
     clearStudentsCache();
 
@@ -4620,12 +4665,24 @@ exports.bulkUpdatePinNumbers = async (req, res) => {
     fs.unlinkSync(req.file.path);
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
-        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
-    );
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
+          JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
+      );
+    } catch (auditError) {
+      console.error('Bulk Pin audit error:', auditError.message);
+      try {
+        await masterPool.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+           VALUES (?, ?, ?, NULL, ?)`,
+          ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk',
+            JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
+        );
+      } catch (e) { }
+    }
 
     if (successCount > 0) {
       clearStudentsCache();
@@ -5175,37 +5232,44 @@ exports.updateRegistrationStatus = async (req, res) => {
       });
     }
 
-    const hasRegStatusColumn = await columnExists('registration_status');
-
-    if (hasRegStatusColumn) {
+    try {
+      // Try updating the column directly first
       const [result] = await masterPool.query(
         'UPDATE students SET registration_status = ? WHERE admission_number = ?',
         [registration_status, admissionNumber]
       );
+
       if (result.affectedRows === 0) {
         return res.status(404).json({ success: false, message: 'Student not found' });
       }
-    } else {
-      // Fallback: update JSON field inside student_data
-      const [rows] = await masterPool.query(
-        'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
-        [admissionNumber]
-      );
-      if (rows.length === 0) {
-        return res.status(404).json({ success: false, message: 'Student not found' });
-      }
-      const current = rows[0]?.student_data || '{}';
-      let parsed;
-      try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
-      parsed.registration_status = registration_status;
-      parsed['Registration Status'] = registration_status;
-      const serialized = JSON.stringify(parsed);
-      const [upd] = await masterPool.query(
-        'UPDATE students SET student_data = ? WHERE admission_number = ?',
-        [serialized, admissionNumber]
-      );
-      if (upd.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Student not found' });
+    } catch (err) {
+      // If column doesn't exist, fall back to JSON student_data
+      if (err.code === 'ER_BAD_FIELD_ERROR') {
+        const [rows] = await masterPool.query(
+          'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
+          [admissionNumber]
+        );
+        if (rows.length === 0) {
+          return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+
+        const current = rows[0]?.student_data || '{}';
+        let parsed;
+        try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
+
+        parsed.registration_status = registration_status;
+        parsed['Registration Status'] = registration_status;
+
+        const serialized = JSON.stringify(parsed);
+        const [upd] = await masterPool.query(
+          'UPDATE students SET student_data = ? WHERE admission_number = ?',
+          [serialized, admissionNumber]
+        );
+        if (upd.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+      } else {
+        throw err;
       }
     }
 

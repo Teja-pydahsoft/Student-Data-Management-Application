@@ -36,6 +36,7 @@ import { SkeletonTable, SkeletonAttendanceTable } from '../components/SkeletonLo
 import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
+import { useInvalidateStudents } from '../hooks/useStudents';
 
 const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
 
@@ -148,6 +149,7 @@ const Attendance = () => {
   ]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const invalidateStudents = useInvalidateStudents();
   const [saving, setSaving] = useState(false);
   const [statusMap, setStatusMap] = useState({});
   const [initialStatusMap, setInitialStatusMap] = useState({});
@@ -1317,6 +1319,7 @@ const Attendance = () => {
         }
 
         const regRaw =
+          student.registration_status ||
           parsedData['Registration Status'] ||
           student.registrationStatus ||
           parsedData.registration_status ||
@@ -3481,7 +3484,19 @@ const Attendance = () => {
                                         setStudents((prev) => prev.map((s) =>
                                           s.id === student.id ? { ...s, registration_status: targetStatus } : s
                                         ));
+
+                                        // Update cache if it exists for current view
+                                        const cacheKey = buildCacheKey(currentPage);
+                                        const cached = attendanceCache.current.get(cacheKey);
+                                        if (cached && cached.students) {
+                                          cached.students = cached.students.map((s) =>
+                                            s.id === student.id ? { ...s, registration_status: targetStatus } : s
+                                          );
+                                          attendanceCache.current.set(cacheKey, cached);
+                                        }
+
                                         toast.success(`Registration marked as ${targetStatus}`);
+                                        invalidateStudents();
                                       } else {
                                         throw new Error(response.data?.message || 'Failed to update status');
                                       }
@@ -3498,7 +3513,19 @@ const Attendance = () => {
                                           setStudents((prev) => prev.map((s) =>
                                             s.id === student.id ? { ...s, registration_status: targetStatus } : s
                                           ));
+
+                                          // Update cache if it exists for current view
+                                          const cacheKey = buildCacheKey(currentPage);
+                                          const cached = attendanceCache.current.get(cacheKey);
+                                          if (cached && cached.students) {
+                                            cached.students = cached.students.map((s) =>
+                                              s.id === student.id ? { ...s, registration_status: targetStatus } : s
+                                            );
+                                            attendanceCache.current.set(cacheKey, cached);
+                                          }
+
                                           toast.success(`Registration marked as ${targetStatus}`);
+                                          invalidateStudents();
                                         } else {
                                           toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
                                         }
