@@ -1120,7 +1120,7 @@ exports.markAttendance = async (req, res) => {
         // Check if we need to handle holiday_reason column
         let insertQuery = `
           INSERT INTO attendance_records
-            (student_id, admission_number, attendance_date, status, marked_by`;
+            (student_id, admission_number, attendance_date, status, marked_by, updated_at`;
         let insertParams = [
           record.studentId,
           student.admission_number || null,
@@ -1140,7 +1140,7 @@ exports.markAttendance = async (req, res) => {
           });
         }
 
-        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
+        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')}, CURRENT_TIMESTAMP)`;
 
         await connection.query(insertQuery, insertParams);
 
@@ -2517,7 +2517,8 @@ exports.getAttendanceSummary = async (req, res) => {
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
           SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
-          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -2649,6 +2650,7 @@ exports.getAttendanceSummary = async (req, res) => {
             absentToday: absent,
             holidayToday: holiday,
             holidayReasons: row.holiday_reasons || null,
+            lastUpdated: row.last_updated || null,
 
             markedToday: marked,
             pendingToday: Math.max(0, total - marked)
@@ -3742,7 +3744,8 @@ exports.downloadDayEndReport = async (req, res) => {
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
           SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
-          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -3773,7 +3776,8 @@ exports.downloadDayEndReport = async (req, res) => {
         absentToday: absent,
         holidayToday: holiday,
         markedToday: marked,
-        pendingToday: Math.max(0, total - marked)
+        pendingToday: Math.max(0, total - marked),
+        lastUpdated: row.last_updated || null
       };
     });
 
@@ -3852,13 +3856,14 @@ exports.downloadDayEndReport = async (req, res) => {
       const startX = 40;
       let currentY = doc.y;
       const rowHeight = 20;
-      const colWidths = [50, 50, 60, 50, 30, 30, 40, 40, 40, 40, 40, 40];
-      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Marked', 'Pending', 'Absent', 'No Class Work', 'Present'];
+      // Adjusted widths to fit "Time Stamp"
+      const colWidths = [50, 40, 50, 40, 25, 25, 35, 35, 35, 35, 35, 35, 60];
+      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Present', 'Absent', 'Marked', 'Pending', 'No Class', 'Time Stamp'];
 
-      doc.fontSize(8).font('Helvetica-Bold');
+      doc.fontSize(7).font('Helvetica-Bold');
       let x = startX;
       headers.forEach((header, i) => {
-        doc.text(header, x, currentY, { width: colWidths[i], align: 'left' });
+        doc.text(header, x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
         x += colWidths[i];
       });
       currentY += rowHeight;
@@ -3874,12 +3879,17 @@ exports.downloadDayEndReport = async (req, res) => {
         }
 
         x = startX;
+        const timeStamp = row.lastUpdated
+          ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+          : '—';
+
         const values = [
           row.college, row.batch, row.course, row.branch,
           String(row.year), String(row.semester),
-          String(row.totalStudents), String(row.markedToday),
-          String(row.pendingToday), String(row.absentToday),
-          String(row.holidayToday), String(row.presentToday)
+          String(row.totalStudents), String(row.presentToday),
+          String(row.absentToday), String(row.markedToday),
+          String(row.pendingToday), String(row.holidayToday),
+          timeStamp
         ];
 
         values.forEach((value, i) => {
@@ -3934,12 +3944,13 @@ exports.downloadDayEndReport = async (req, res) => {
 
       // Grouped data sheet
       const tableData = [
-        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Marked', 'Pending', 'Absent', 'No Class Work', 'Present'],
+        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Present', 'Absent', 'Marked', 'Pending', 'No Class Work', 'Time Stamp'],
         ...groupedData.map(row => [
           row.college, row.batch, row.course, row.branch,
           row.year, row.semester,
-          row.totalStudents, row.markedToday, row.pendingToday,
-          row.absentToday, row.holidayToday, row.presentToday
+          row.totalStudents, row.presentToday, row.absentToday,
+          row.markedToday, row.pendingToday, row.holidayToday,
+          row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'
         ])
       ];
       const tableSheet = XLSX.utils.aoa_to_sheet(tableData);
@@ -3953,11 +3964,12 @@ exports.downloadDayEndReport = async (req, res) => {
         { wch: 8 },  // Year
         { wch: 8 },  // Semester
         { wch: 10 }, // Students
+        { wch: 10 }, // Present
+        { wch: 10 }, // Absent
         { wch: 10 }, // Marked
         { wch: 10 }, // Pending
-        { wch: 10 }, // Absent
-        { wch: 10 }, // Holiday
-        { wch: 10 }  // Present
+        { wch: 12 }, // No Class Work
+        { wch: 15 }  // Time Stamp
       ];
 
       XLSX.utils.book_append_sheet(workbook, tableSheet, 'Grouped Summary');

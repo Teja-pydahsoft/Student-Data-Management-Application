@@ -2783,8 +2783,8 @@ const Attendance = () => {
                       type="button"
                       onClick={() => setDayEndPreviewFilter('all')}
                       className={`px-3 py-1 text-xs font-medium rounded-l-md ${dayEndPreviewFilter === 'all'
-                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                         }`}
                     >
                       All
@@ -2793,8 +2793,8 @@ const Attendance = () => {
                       type="button"
                       onClick={() => setDayEndPreviewFilter('marked')}
                       className={`px-3 py-1 text-xs font-medium ${dayEndPreviewFilter === 'marked'
-                          ? 'bg-green-100 text-green-700 border border-green-300'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border-t border-b border-gray-300'
+                        ? 'bg-green-100 text-green-700 border border-green-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border-t border-b border-gray-300'
                         }`}
                     >
                       Marked
@@ -2803,8 +2803,8 @@ const Attendance = () => {
                       type="button"
                       onClick={() => setDayEndPreviewFilter('unmarked')}
                       className={`px-3 py-1 text-xs font-medium rounded-r-md ${dayEndPreviewFilter === 'unmarked'
-                          ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                         }`}
                     >
                       Unmarked
@@ -2857,8 +2857,9 @@ const Attendance = () => {
                         <col style={{ width: '80px' }} />
                         <col style={{ width: '80px' }} />
                         <col style={{ width: '80px' }} />
-                        <col style={{ width: '150px' }} />
                         <col style={{ width: '80px' }} />
+                        <col style={{ width: '150px' }} />
+                        <col style={{ width: '100px' }} />
                       </colgroup>
                       <thead className="bg-gray-50 sticky" style={{ position: 'sticky', top: `${statsSectionHeight}px`, zIndex: 20 }}>
                         <tr>
@@ -2939,11 +2940,12 @@ const Attendance = () => {
                             </select>
                           </th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Students</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Present</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Absent</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Marked</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Pending</th>
-                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Absent</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">No Class Work</th>
-                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Present</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Time Stamp</th>
                         </tr>
                       </thead>
                     </table>
@@ -2965,8 +2967,9 @@ const Attendance = () => {
                             <col style={{ width: '80px' }} />
                             <col style={{ width: '80px' }} />
                             <col style={{ width: '80px' }} />
-                            <col style={{ width: '150px' }} />
                             <col style={{ width: '80px' }} />
+                            <col style={{ width: '150px' }} />
+                            <col style={{ width: '100px' }} />
                           </colgroup>
                           <tbody className="divide-y divide-gray-100">
                             {dayEndGroupedDisplay.map((row, idx) => (
@@ -2992,14 +2995,17 @@ const Attendance = () => {
                                 <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
                                   {row.totalStudents ?? 0}
                                 </td>
+                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
+                                  {row.presentToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
+                                  {row.absentToday ?? 0}
+                                </td>
                                 <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
                                   {row.markedToday ?? 0}
                                 </td>
                                 <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
                                   {row.pendingToday ?? 0}
-                                </td>
-                                <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
-                                  {row.absentToday ?? 0}
                                 </td>
                                 <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
                                   <div className="flex flex-col items-end">
@@ -3011,8 +3017,8 @@ const Attendance = () => {
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
-                                  {row.presentToday ?? 0}
+                                <td className="px-2 py-2 text-right text-gray-600 text-xs">
+                                  {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'}
                                 </td>
                               </tr>
                             ))}
@@ -3308,8 +3314,8 @@ const Attendance = () => {
               onClick={handleSave}
               disabled={!hasChanges || saving || editingLocked}
               className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold transition-colors touch-manipulation min-h-[44px] ${hasChanges && !saving && !editingLocked
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
             >
               {saving ? (
@@ -3581,10 +3587,10 @@ const Attendance = () => {
                                     return (
                                       <div className="flex items-center gap-3">
                                         <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${isHoliday
-                                            ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                            : status === 'present'
-                                              ? 'bg-green-100 text-green-700 border border-green-200'
-                                              : 'bg-red-100 text-red-700 border border-red-200'
+                                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                          : status === 'present'
+                                            ? 'bg-green-100 text-green-700 border border-green-200'
+                                            : 'bg-red-100 text-red-700 border border-red-200'
                                           }`}>
                                           {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
                                           <div className="flex flex-col items-start text-left leading-tight">
@@ -3623,10 +3629,10 @@ const Attendance = () => {
                                   return (
                                     <div className="flex items-center gap-3">
                                       <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'holiday'
-                                          ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                          : status === 'present'
-                                            ? 'bg-green-50 text-green-600 border border-green-100'
-                                            : 'bg-red-50 text-red-600 border border-red-100'
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                        : status === 'present'
+                                          ? 'bg-green-50 text-green-600 border border-green-100'
+                                          : 'bg-red-50 text-red-600 border border-red-100'
                                         }`}>
                                         {status === 'holiday' ? (
                                           <>
@@ -3866,8 +3872,8 @@ const Attendance = () => {
                         {showMarked && !statusChanged ? (
                           <div className="flex flex-col gap-2">
                             <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : 'bg-red-100 text-red-700 border border-red-200'
+                              ? 'bg-green-100 text-green-700 border border-green-200'
+                              : 'bg-red-100 text-red-700 border border-red-200'
                               }`}>
                               {status === 'present' ? <Check size={16} /> : <X size={16} />}
                               {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
@@ -3894,8 +3900,8 @@ const Attendance = () => {
                         ) : (
                           <div className="flex flex-col gap-2">
                             <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
-                                ? 'bg-green-50 text-green-600 border border-green-100'
-                                : 'bg-red-50 text-red-600 border border-red-100'
+                              ? 'bg-green-50 text-green-600 border border-green-100'
+                              : 'bg-red-50 text-red-600 border border-red-100'
                               }`}>
                               {status === 'present' ? <Check size={16} /> : <X size={16} />}
                               {status === 'present' ? 'Present' : 'Absent'}
@@ -4461,8 +4467,8 @@ const Attendance = () => {
                   onClick={() => selectedStudent && handleDownloadReport(selectedStudent)}
                   disabled={!selectedStudent || downloadingStudentId === selectedStudent?.id}
                   className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${downloadingStudentId === selectedStudent?.id
-                      ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                    ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
                     }`}
                 >
                   {downloadingStudentId === selectedStudent?.id ? (
@@ -4778,8 +4784,8 @@ const Attendance = () => {
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600">Attendance:</span>
                                   <span className={`text-sm font-bold ${parseFloat(percentage) >= 75 ? 'text-green-600' :
-                                      parseFloat(percentage) >= 50 ? 'text-yellow-600' :
-                                        'text-red-600'
+                                    parseFloat(percentage) >= 50 ? 'text-yellow-600' :
+                                      'text-red-600'
                                     }`}>
                                     {percentage}%
                                   </span>
@@ -4803,12 +4809,12 @@ const Attendance = () => {
                       <div
                         key={entry.date}
                         className={`rounded-xl border px-3 py-2 text-center ${entry.status === 'present'
-                            ? 'border-green-200 bg-green-50 text-green-700'
-                            : entry.status === 'absent'
-                              ? 'border-red-200 bg-red-50 text-red-600'
-                              : entry.status === 'holiday'
-                                ? 'border-amber-200 bg-amber-50 text-amber-700'
-                                : 'border-gray-200 bg-gray-50 text-gray-600'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : entry.status === 'absent'
+                            ? 'border-red-200 bg-red-50 text-red-600'
+                            : entry.status === 'holiday'
+                              ? 'border-amber-200 bg-amber-50 text-amber-700'
+                              : 'border-gray-200 bg-gray-50 text-gray-600'
                           }`}
                       >
                         <p className="text-xs font-semibold">{entry.date}</p>
