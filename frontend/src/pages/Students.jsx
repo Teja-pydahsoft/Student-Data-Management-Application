@@ -32,7 +32,7 @@ import { SkeletonTable, SkeletonStudentsTable } from '../components/SkeletonLoad
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
 import useAuthStore from '../store/authStore';
-import { BACKEND_MODULES, hasPermission as hasModulePermission } from '../constants/rbac';
+import { BACKEND_MODULES, hasPermission as hasModulePermission, USER_ROLES } from '../constants/rbac';
 
 // Student status options
 const STUDENT_STATUS_OPTIONS = [
@@ -99,6 +99,7 @@ const Students = () => {
   const canDeleteStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'delete_student');
   const canUpdatePin = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'update_pin');
   const canExportStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'export');
+  const isCashier = user?.role === USER_ROLES.CASHIER;
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -1226,7 +1227,16 @@ const Students = () => {
   // Render editable cell
   const renderEditableCell = (student, field, fieldType = 'text', options = []) => {
     const studentKey = student.id || student.admission_number || student.admissionNumber;
-    const isEditing = canEditStudents && editingCell?.studentId === studentKey && editingCell?.field === field;
+
+    // Check if user is cashier and restrict editing to only fee_status
+    const isEditsAllowedForField = isCashier ? field === 'fee_status' : true;
+
+    // Allow editing if:
+    // 1. General edit permission is true AND field allows edits (e.g. non-cashier general edit)
+    // 2. OR User is cashier AND field is fee_status (override general permission if needed)
+    const hasPermissionToEdit = (canEditStudents || (isCashier && field === 'fee_status'));
+
+    const isEditing = hasPermissionToEdit && isEditsAllowedForField && editingCell?.studentId === studentKey && editingCell?.field === field;
     const currentValue = student[field] || '';
 
     if (isEditing) {
@@ -1997,7 +2007,7 @@ const Students = () => {
               </button>
             )}
 
-            {canEditStudents && (
+            {canEditStudents && !isCashier && (
               <button
                 onClick={handleBulkResendPasswords}
                 disabled={selectedCount === 0 || bulkPasswordState.processing}
@@ -2421,29 +2431,27 @@ const Students = () => {
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Branch</div>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold whitespace-nowrap">Student Type</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold whitespace-nowrap">Caste</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold whitespace-nowrap">Gender</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Status</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Certificate Status</div>
-                  </th>
+                  {!isCashier && (
+                    <>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold whitespace-nowrap">Student Type</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold whitespace-nowrap">Caste</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold whitespace-nowrap">Gender</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                        <div className="font-semibold whitespace-nowrap">Status</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                        <div className="font-semibold whitespace-nowrap">Certificate Status</div>
+                      </th>
+                    </>
+                  )}
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Fee Status</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Scholar Status</div>
-                  </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                    <div className="font-semibold whitespace-nowrap">Registration Status</div>
                   </th>
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Year</div>
@@ -2451,9 +2459,19 @@ const Students = () => {
                   <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
                     <div className="font-semibold whitespace-nowrap">Sem</div>
                   </th>
-                  <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                    <div className="font-semibold whitespace-nowrap">Remarks</div>
-                  </th>
+                  {!isCashier && (
+                    <>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                        <div className="font-semibold whitespace-nowrap">Scholar Status</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold whitespace-nowrap">Registration Status</div>
+                      </th>
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                        <div className="font-semibold whitespace-nowrap">Remarks</div>
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2473,7 +2491,9 @@ const Students = () => {
                         ) {
                           return;
                         }
-                        handleViewDetails(student);
+                        if (!isCashier) {
+                          handleViewDetails(student);
+                        }
                       }}
                     >
                       <td className="py-2 px-3 text-center sticky left-0 bg-white z-10 border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
@@ -2524,33 +2544,41 @@ const Students = () => {
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.college || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'caste', 'text')}
-                      </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
-                      </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
-                      </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate">
-                        {student.certificates_status || 'Pending'}
-                      </td>
+                      {!isCashier && (
+                        <>
+                          <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'caste', 'text')}
+                          </td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
+                          </td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
+                          </td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate">
+                            {student.certificates_status || 'Pending'}
+                          </td>
+                        </>
+                      )}
                       <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
                       </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'scholar_status', 'select', scholarStatusOptions)}
-                      </td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                        {renderEditableCell(student, 'registration_status', 'select', REGISTRATION_STATUS_OPTIONS)}
-                      </td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
                       <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
-                      <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
-                        <span className="block truncate">{student.remarks || '-'}</span>
-                      </td>
+                      {!isCashier && (
+                        <>
+                          <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'scholar_status', 'select', scholarStatusOptions)}
+                          </td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'registration_status', 'select', REGISTRATION_STATUS_OPTIONS)}
+                          </td>
+                          <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
+                            <span className="block truncate">{student.remarks || '-'}</span>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
@@ -2600,7 +2628,7 @@ const Students = () => {
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0" onClick={() => handleViewDetails(student)}>
+                      <div className="flex-1 min-w-0" onClick={() => !isCashier && handleViewDetails(student)}>
                         <h3 className="font-semibold text-gray-900 text-base truncate">{student.student_name || '-'}</h3>
                         <p className="text-sm text-gray-600 mt-1">{student.admission_number || '-'}</p>
                         {student.pin_no && (
@@ -2629,44 +2657,55 @@ const Students = () => {
                         <p className="text-xs text-gray-500">Branch</p>
                         <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || '-'}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Caste</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.caste || ''}>{student.caste || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Gender</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.gender || ''}>{student.gender || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Status</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
-                      </div>
+                      {!isCashier && (
+                        <>
+                          <div>
+                            <p className="text-xs text-gray-500">Caste</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.caste || ''}>{student.caste || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Gender</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.gender || ''}>{student.gender || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Status</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
+                          </div>
+                        </>
+                      )}
 
                       <div>
                         <p className="text-xs text-gray-500">Fee Status</p>
                         <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500">Scholar Status</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Registration Status</p>
-                        <p className="text-sm font-medium text-gray-900">{student.registration_status || 'pending'}</p>
-                      </div>
-                      <div>
                         <p className="text-xs text-gray-500">Year/Sem</p>
                         <p className="text-sm font-medium text-gray-900">{student.current_year || '-'}/{student.current_semester || '-'}</p>
                       </div>
+
+                      {!isCashier && (
+                        <>
+                          <div>
+                            <p className="text-xs text-gray-500">Scholar Status</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Registration Status</p>
+                            <p className="text-sm font-medium text-gray-900">{student.registration_status || 'pending'}</p>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Action Button */}
-                    <button
-                      onClick={() => handleViewDetails(student)}
-                      className="w-full mt-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm"
-                    >
-                      View Details
-                    </button>
+                    {!isCashier && (
+                      <button
+                        onClick={() => handleViewDetails(student)}
+                        className="w-full mt-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm"
+                      >
+                        View Details
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -2747,7 +2786,8 @@ const Students = () => {
                 {!editMode && (
                   <>
                     {/* View Password button removed */}
-                    {canEditStudents && (
+                    {/* View Password button removed */}
+                    {canEditStudents && !isCashier && (
                       <>
                         <button
                           onClick={handleResetPassword}
