@@ -75,8 +75,10 @@ api.interceptors.response.use(
     console.error('API Error:', error.response?.status, error.response?.data || error.message);
     if (error.response?.status === 401) {
       // Don't redirect if this is a login attempt (login endpoints should handle their own errors)
-      const isLoginEndpoint = error.config?.url?.includes('/login') || error.config?.url?.includes('/auth/login');
-      
+      const isLoginEndpoint = error.config?.url?.includes('/login') ||
+        error.config?.url?.includes('/auth/login') ||
+        error.config?.url?.includes('unified-login');
+
       if (!isLoginEndpoint) {
         toast.error('Session expired. Please log in again.');
         const userType = localStorage.getItem('userType');

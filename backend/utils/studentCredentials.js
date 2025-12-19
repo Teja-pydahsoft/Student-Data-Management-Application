@@ -59,6 +59,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
       VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         password_hash = VALUES(password_hash),
+        username = VALUES(username),
         updated_at = CURRENT_TIMESTAMP
     `, [studentId, admissionNumber, username, passwordHash]);
 
