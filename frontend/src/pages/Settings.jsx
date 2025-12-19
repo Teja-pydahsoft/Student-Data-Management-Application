@@ -1646,11 +1646,15 @@ const Settings = () => {
   };
 
   const handleDeleteBranch = async (courseId, branch) => {
+    // Determine scope: if filtering by batch, delete specific branch ('single').
+    // If showing all batches (grouped view), delete all branch versions ('all').
+    const scope = branchBatchFilter ? 'single' : 'all';
+
     // Show modal with loading state first
     setDeleteModal({
       isOpen: true,
       type: 'branch',
-      item: branch,
+      item: { ...branch, deletionScope: scope },
       affectedStudents: [],
       totalStudentCount: 0,
       hasMoreStudents: false,
@@ -1658,7 +1662,7 @@ const Settings = () => {
       onConfirm: async () => {
         try {
           setSavingBranchId(branch.id);
-          const response = await api.delete(`/courses/${courseId}/branches/${branch.id}?cascade=true`);
+          const response = await api.delete(`/courses/${courseId}/branches/${branch.id}?cascade=true&scope=${scope}`);
           const deletedCount = response.data.deletedStudents || 0;
           toast.success(`Branch deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
           cancelEditBranch();
@@ -1676,7 +1680,7 @@ const Settings = () => {
 
     // Fetch affected students
     try {
-      const response = await api.get(`/courses/${courseId}/branches/${branch.id}/affected-students`);
+      const response = await api.get(`/courses/${courseId}/branches/${branch.id}/affected-students?scope=${scope}`);
       const { students, totalCount, hasMore } = response.data.data || {};
       setDeleteModal(prev => ({
         ...prev,

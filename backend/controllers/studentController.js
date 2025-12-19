@@ -1980,6 +1980,10 @@ exports.commitBulkUploadStudents = async (req, res) => {
         if (columnName === 'branch_code') {
           return;
         }
+        // Skip course_code - it's stored in student_data JSON only, not as a column
+        if (columnName === 'course_code') {
+          return;
+        }
         insertColumns.push(columnName);
         insertPlaceholders.push('?');
         insertValues.push(value);

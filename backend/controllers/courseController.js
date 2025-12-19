@@ -49,29 +49,29 @@ const buildStructure = (courseConfig, branchConfig) => {
   });
 
   // Check for per-year semester configuration
-  const yearSemesterConfig = branchConfig?.year_semester_config 
-    ? (typeof branchConfig.year_semester_config === 'string' 
-        ? JSON.parse(branchConfig.year_semester_config) 
-        : branchConfig.year_semester_config)
+  const yearSemesterConfig = branchConfig?.year_semester_config
+    ? (typeof branchConfig.year_semester_config === 'string'
+      ? JSON.parse(branchConfig.year_semester_config)
+      : branchConfig.year_semester_config)
     : courseConfig?.year_semester_config
       ? (typeof courseConfig.year_semester_config === 'string'
-          ? JSON.parse(courseConfig.year_semester_config)
-          : courseConfig.year_semester_config)
+        ? JSON.parse(courseConfig.year_semester_config)
+        : courseConfig.year_semester_config)
       : null;
 
   const years = Array.from({ length: yearsConfig.totalYears }, (_, index) => {
     const yearNumber = index + 1;
-    
+
     // Get semester count for this year
     let semesterCount = yearsConfig.semestersPerYear; // Default fallback
-    
+
     if (Array.isArray(yearSemesterConfig)) {
       const yearConfig = yearSemesterConfig.find(y => y.year === yearNumber);
       if (yearConfig && yearConfig.semesters) {
         semesterCount = yearConfig.semesters;
       }
     }
-    
+
     const semesters = Array.from(
       { length: semesterCount },
       (__unused, semIndex) => {
@@ -103,10 +103,10 @@ const serializeBranchRow = (branchRow) => ({
   isActive: branchRow.is_active === 1 || branchRow.is_active === true,
   totalYears: branchRow.total_years ?? null,
   semestersPerYear: branchRow.semesters_per_year ?? null,
-  yearSemesterConfig: branchRow.year_semester_config 
-    ? (typeof branchRow.year_semester_config === 'string' 
-        ? JSON.parse(branchRow.year_semester_config) 
-        : branchRow.year_semester_config)
+  yearSemesterConfig: branchRow.year_semester_config
+    ? (typeof branchRow.year_semester_config === 'string'
+      ? JSON.parse(branchRow.year_semester_config)
+      : branchRow.year_semester_config)
     : null,
   academicYearId: branchRow.academic_year_id ?? null,
   academicYearLabel: branchRow.academic_year_label ?? null,
@@ -126,10 +126,10 @@ const formatCourse = (courseRow, branchRows = []) => {
     isActive: courseRow.is_active === 1 || courseRow.is_active === true,
     totalYears: courseRow.total_years,
     semestersPerYear: courseRow.semesters_per_year,
-    yearSemesterConfig: courseRow.year_semester_config 
-      ? (typeof courseRow.year_semester_config === 'string' 
-          ? JSON.parse(courseRow.year_semester_config) 
-          : courseRow.year_semester_config)
+    yearSemesterConfig: courseRow.year_semester_config
+      ? (typeof courseRow.year_semester_config === 'string'
+        ? JSON.parse(courseRow.year_semester_config)
+        : courseRow.year_semester_config)
       : null,
     metadata: courseRow.metadata ? JSON.parse(courseRow.metadata) : null,
     structure: buildStructure(courseRow),
@@ -333,7 +333,7 @@ const validateBranchPayload = (
   const academicYearId = branchPayload.academicYearId ?? branchPayload.academic_year_id;
   const academicYearIds = branchPayload.academicYearIds ?? branchPayload.academic_year_ids;
   // If array is provided, use it; otherwise fall back to single ID
-  const finalAcademicYearIds = academicYearIds 
+  const finalAcademicYearIds = academicYearIds
     ? (Array.isArray(academicYearIds) ? academicYearIds : [academicYearIds])
     : (academicYearId ? [academicYearId] : []);
 
@@ -380,8 +380,8 @@ exports.getCourses = async (req, res) => {
   try {
     const includeInactive = parseBoolean(req.query.includeInactive, false);
     const collegeId = req.query.collegeId ? parseInt(req.query.collegeId, 10) : null;
-    
-    let courses = await fetchCoursesWithBranches({ 
+
+    let courses = await fetchCoursesWithBranches({
       includeInactive,
       collegeId: Number.isNaN(collegeId) ? null : collegeId
     });
@@ -434,7 +434,7 @@ exports.getCourseOptions = async (_req, res) => {
 
     // No caching to ensure fresh data after updates
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    
+
     res.json({
       success: true,
       data: sanitized
@@ -505,8 +505,8 @@ exports.createCourse = async (req, res) => {
 
     await connection.beginTransaction();
 
-    const yearSemesterConfigJson = sanitized.yearSemesterConfig 
-      ? JSON.stringify(sanitized.yearSemesterConfig) 
+    const yearSemesterConfigJson = sanitized.yearSemesterConfig
+      ? JSON.stringify(sanitized.yearSemesterConfig)
       : null;
 
     const [courseResult] = await connection.query(
@@ -991,7 +991,7 @@ exports.createBranch = async (req, res) => {
     // Create branch for each selected academic year
     const createdBranches = [];
     const connection = await masterPool.getConnection();
-    
+
     try {
       await connection.beginTransaction();
 
@@ -1309,7 +1309,7 @@ exports.updateBranch = async (req, res) => {
 
     res.json({
       success: true,
-      message: studentsUpdated > 0 
+      message: studentsUpdated > 0
         ? `Branch updated successfully. ${studentsUpdated} student record(s) updated.`
         : 'Branch updated successfully',
       data: serializeBranchRow(branchRows[0]),
@@ -1321,8 +1321,8 @@ exports.updateBranch = async (req, res) => {
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
         ? (error.message.includes('unique_branch_code_per_course')
-            ? 'Branch with the same code already exists for this course'
-            : 'Branch with the same name or code already exists for this course')
+          ? 'Branch with the same code already exists for this course'
+          : 'Branch with the same name or code already exists for this course')
         : 'Failed to update branch'
     });
   }
@@ -1335,6 +1335,7 @@ exports.deleteBranch = async (req, res) => {
   const courseId = parseInt(req.params.courseId, 10);
   const branchId = parseInt(req.params.branchId, 10);
   const cascade = req.query.cascade === 'true' || req.body.cascade === true;
+  const scope = req.query.scope || 'single'; // 'single' (specific batch) or 'all' (all batches for this branch code)
 
   if (!courseId || Number.isNaN(courseId) || !branchId || Number.isNaN(branchId)) {
     return res.status(400).json({
@@ -1348,9 +1349,13 @@ exports.deleteBranch = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Get branch and course names
+    // Get branch details including code and academic year
     const [branchRow] = await connection.query(
-      'SELECT name FROM course_branches WHERE course_id = ? AND id = ? LIMIT 1',
+      `SELECT cb.id, cb.name, cb.code, cb.academic_year_id, ay.year_label as academic_year 
+       FROM course_branches cb 
+       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id
+       WHERE cb.course_id = ? AND cb.id = ? 
+       LIMIT 1`,
       [courseId, branchId]
     );
 
@@ -1363,7 +1368,7 @@ exports.deleteBranch = async (req, res) => {
       });
     }
 
-    const branchName = branchRow[0].name;
+    const { name: branchName, code: branchCode, academic_year: academicYear } = branchRow[0];
 
     // Get course name
     const [courseRow] = await connection.query(
@@ -1373,31 +1378,49 @@ exports.deleteBranch = async (req, res) => {
 
     const courseName = courseRow.length > 0 ? courseRow[0].name : null;
     let deletedStudents = 0;
+    let deletedBranches = 0;
 
     if (cascade) {
-      // Delete all students for this branch
+      // Delete students
+      let deleteStudentQuery = 'DELETE FROM students WHERE ';
+      const deleteStudentParams = [];
+
       if (courseName) {
-        const [studentResult] = await connection.query(
-          'DELETE FROM students WHERE course = ? AND branch = ?',
-          [courseName, branchName]
-        );
-        deletedStudents = studentResult.affectedRows;
+        deleteStudentQuery += 'course = ? AND branch = ?';
+        deleteStudentParams.push(courseName, branchName);
       } else {
-        // Fallback: delete by branch name only
-        const [studentResult] = await connection.query(
-          'DELETE FROM students WHERE branch = ?',
-          [branchName]
-        );
-        deletedStudents = studentResult.affectedRows;
+        deleteStudentQuery += 'branch = ?';
+        deleteStudentParams.push(branchName);
       }
 
-      // Delete the branch
-      const [result] = await connection.query(
-        'DELETE FROM course_branches WHERE course_id = ? AND id = ?',
-        [courseId, branchId]
-      );
+      // If scope is single and we have an academic year, restrict deletion to that batch
+      if (scope === 'single' && academicYear) {
+        deleteStudentQuery += ' AND batch = ?';
+        deleteStudentParams.push(academicYear);
+      }
+      // If scope is 'all', we don't filter by batch, so it deletes for all batches
 
-      if (result.affectedRows === 0) {
+      const [studentResult] = await connection.query(deleteStudentQuery, deleteStudentParams);
+      deletedStudents = studentResult.affectedRows;
+
+      // Delete branch(es)
+      if (scope === 'all') {
+        // Delete all branches with the same code for this course
+        const [result] = await connection.query(
+          'DELETE FROM course_branches WHERE course_id = ? AND code = ?',
+          [courseId, branchCode]
+        );
+        deletedBranches = result.affectedRows;
+      } else {
+        // Delete only the specific branch
+        const [result] = await connection.query(
+          'DELETE FROM course_branches WHERE course_id = ? AND id = ?',
+          [courseId, branchId]
+        );
+        deletedBranches = result.affectedRows;
+      }
+
+      if (deletedBranches === 0) {
         await connection.rollback();
         connection.release();
         return res.status(404).json({
@@ -1412,59 +1435,57 @@ exports.deleteBranch = async (req, res) => {
       res.json({
         success: true,
         deletedStudents,
-        message: 'Branch and all related data deleted successfully.'
+        deletedBranches,
+        message: scope === 'all'
+          ? 'All batch versions of this branch and related data deleted successfully.'
+          : 'Branch version and related data deleted successfully.'
       });
     } else {
-      // Non-cascade: Hard delete (existing behavior)
+      // Non-cascade: Logic handles soft/hard delete (usually for single only, but could adapt)
+      // For now, keeping existing logic but respecting scope for 'all' check?
+      // The original non-cascade logic was a bit complex. Assuming user mostly uses cascade from UI.
+      // Let's implement basic soft/hard delete support for scope as well.
+
       const hardDelete = parseBoolean(req.query.hard, false);
+      let targetIds = [branchId];
+
+      if (scope === 'all') {
+        const [allBranches] = await connection.query(
+          'SELECT id FROM course_branches WHERE course_id = ? AND code = ?',
+          [courseId, branchCode]
+        );
+        targetIds = allBranches.map(b => b.id);
+      }
+
+      if (targetIds.length === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ success: false, message: 'No branches found' });
+      }
 
       if (hardDelete) {
         const [result] = await connection.query(
-          'DELETE FROM course_branches WHERE course_id = ? AND id = ?',
-          [courseId, branchId]
+          'DELETE FROM course_branches WHERE id IN (?)',
+          [targetIds]
         );
-
-        if (result.affectedRows === 0) {
-          await connection.rollback();
-          connection.release();
-          return res.status(404).json({
-            success: false,
-            message: 'Branch not found for this course'
-          });
-        }
-
-        await connection.commit();
-        connection.release();
-
-        return res.json({
-          success: true,
-          message: 'Branch deleted successfully'
-        });
-      }
-
-      // Soft delete - deactivate
-      const [result] = await connection.query(
-        `UPDATE course_branches
-         SET is_active = 0, updated_at = CURRENT_TIMESTAMP
-         WHERE course_id = ? AND id = ?`,
-        [courseId, branchId]
-      );
-
-      if (result.affectedRows === 0) {
-        await connection.rollback();
-        connection.release();
-        return res.status(404).json({
-          success: false,
-          message: 'Branch not found for this course'
-        });
+        deletedBranches = result.affectedRows;
+      } else {
+        const [result] = await connection.query(
+          `UPDATE course_branches
+           SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+           WHERE id IN (?)`,
+          [targetIds]
+        );
+        deletedBranches = result.affectedRows;
       }
 
       await connection.commit();
       connection.release();
 
-      res.json({
+      return res.json({
         success: true,
-        message: 'Branch deactivated successfully'
+        deletedBranches,
+        message: hardDelete ? 'Branch(es) deleted successfully' : 'Branch(es) deactivated successfully'
       });
     }
   } catch (error) {
@@ -1549,6 +1570,7 @@ exports.getAffectedStudentsByCourse = async (req, res) => {
 exports.getAffectedStudentsByBranch = async (req, res) => {
   const courseId = parseInt(req.params.courseId, 10);
   const branchId = parseInt(req.params.branchId, 10);
+  const scope = req.query.scope || 'single'; // 'single' or 'all'
 
   if (!courseId || Number.isNaN(courseId) || !branchId || Number.isNaN(branchId)) {
     return res.status(400).json({
@@ -1579,17 +1601,18 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
     const { branch_name: branchName, course_name: courseName, academic_year: academicYear } = branchRow[0];
 
     // Get all students under this branch (limit to 100 for preview)
-    // Filter by batch (academic year) if available
+    // Filter by batch (academic year) if available AND scope is single
     let query = `SELECT admission_number, student_name, batch, current_year, current_semester 
                  FROM students 
                  WHERE course = ? AND branch = ?`;
     const params = [courseName, branchName];
-    
-    if (academicYear) {
+
+    // Only apply batch filter if scope is single
+    if (scope === 'single' && academicYear) {
       query += ' AND batch = ?';
       params.push(academicYear);
     }
-    
+
     query += ' ORDER BY student_name ASC LIMIT 100';
 
     const [students] = await masterPool.query(query, params);
@@ -1597,8 +1620,8 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
     // Get total count
     let countQuery = 'SELECT COUNT(*) as total FROM students WHERE course = ? AND branch = ?';
     const countParams = [courseName, branchName];
-    
-    if (academicYear) {
+
+    if (scope === 'single' && academicYear) {
       countQuery += ' AND batch = ?';
       countParams.push(academicYear);
     }
@@ -1610,7 +1633,7 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
       data: {
         branchName,
         courseName,
-        academicYear,
+        academicYear: scope === 'all' ? 'All Batches' : academicYear,
         students,
         totalCount: countResult[0].total,
         hasMore: countResult[0].total > 100
