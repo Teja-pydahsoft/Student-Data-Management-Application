@@ -61,4 +61,10 @@ router.get('/requests', (req, res, next) => {
 // Update Request Status (Admin/Staff with permission)
 router.put('/requests/:id/status', verifyPermission(MODULES.SERVICES, 'manage_requests'), serviceController.updateRequestStatus);
 
+// Process Payment / Mark Payment (Admin)
+router.post('/pay', verifyPermission(MODULES.SERVICES, 'manage_requests'), serviceController.processPayment);
+
+// Download Certificate (Student/Admin)
+router.get('/requests/:id/download', serviceController.downloadCertificate);
+
 module.exports = router;

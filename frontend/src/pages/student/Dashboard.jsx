@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
+import { serviceService } from '../../services/serviceService';
 import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -15,6 +16,7 @@ const Dashboard = () => {
     const [attendanceHistory, setAttendanceHistory] = useState(null);
     const [polls, setPolls] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
+    const [serviceRequests, setServiceRequests] = useState([]);
 
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -26,23 +28,12 @@ const Dashboard = () => {
             try {
                 if (!user?.admission_number) return;
 
-                // 1. Fetch Student Profile
-                const profilePromise = api.get(`/students/${user.admission_number}`);
-
-                // 2. Fetch Announcements
-                const announcementsPromise = api.get('/announcements/student');
-
-                // 3. Fetch Polls
-                const pollsPromise = api.get('/polls/student');
-
-                // 4. Fetch Attendance History (for robust stats & today's status)
-                const attendancePromise = api.get('/attendance/student');
-
-                const [profileRes, announcementsRes, pollsRes, attendanceRes] = await Promise.allSettled([
-                    profilePromise,
-                    announcementsPromise,
-                    pollsPromise,
-                    attendancePromise
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes] = await Promise.allSettled([
+                    api.get(`/students/${user.admission_number}`),
+                    api.get('/announcements/student'),
+                    api.get('/polls/student'),
+                    api.get('/attendance/student'),
+                    serviceService.getRequests()
                 ]);
 
                 // Handle Profile
@@ -74,6 +65,11 @@ const Dashboard = () => {
                     setAttendanceHistory(attendanceRes.value.data.data);
                 }
 
+                // Handle Services
+                if (servicesRes.status === 'fulfilled' && servicesRes.value.data) {
+                    setServiceRequests(servicesRes.value.data);
+                }
+
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
             } finally {
@@ -94,12 +90,9 @@ const Dashboard = () => {
         let activeDays = 0; // Working days (excluding holidays)
 
         // Find Today's status from history if available
-        // Note: History fetch usually targets "current month" by default or robust range. 
-        // If the endpoint returns semester/monthly data, we check the series.
         const todayStr = new Date().toISOString().split('T')[0];
         let todayStatus = 'not marked';
 
-        // Check series for today
         const todayEntry = series.find(d => d.date.startsWith(todayStr));
         if (todayEntry) {
             todayStatus = todayEntry.status === 'present' ? 'present' :
@@ -107,7 +100,6 @@ const Dashboard = () => {
                     todayEntry.isHoliday ? 'holiday' : 'not marked';
         }
 
-        // Calculate Overview
         series.forEach(day => {
             if (!day.isHoliday) {
                 activeDays++;
@@ -131,11 +123,7 @@ const Dashboard = () => {
     const feedItems = useMemo(() => {
         const items = [];
 
-        // Add Active Polls
         polls.forEach(poll => {
-            // Check if poll is active (already handled by backend mostly, but double check)
-            // Backend `getStudentPolls` returns active polls.
-            // We can check `end_time` just in case UI wants to be strict
             items.push({
                 type: 'poll',
                 date: new Date(poll.created_at),
@@ -143,7 +131,6 @@ const Dashboard = () => {
             });
         });
 
-        // Add Announcements
         announcements.forEach(ann => {
             items.push({
                 type: 'announcement',
@@ -152,7 +139,6 @@ const Dashboard = () => {
             });
         });
 
-        // Sort by date desc
         return items.sort((a, b) => b.date - a.date);
     }, [polls, announcements]);
 
@@ -197,8 +183,17 @@ const Dashboard = () => {
         setShowAnnouncement(false);
     };
 
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'completed': return 'bg-green-100 text-green-700';
+            case 'ready_to_collect': return 'bg-purple-100 text-purple-700';
+            case 'pending': return 'bg-yellow-100 text-yellow-700';
+            default: return 'bg-gray-100 text-gray-700';
+        }
+    };
+
     return (
-        <div className="space-y-8 animate-fade-in relative z-0">
+        <div className="space-y-8 animate-fade-in relative z-0 pb-12">
             {/* Announcement Popup */}
             {showAnnouncement && currentAnnouncement && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -234,11 +229,11 @@ const Dashboard = () => {
                 </p>
             </div>
 
-            {/* Attendance Overview Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Top Stats Row: Attendance & Registration */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${isRegistrationCompleted ? 'lg:grid-cols-3' : ''} gap-6`}>
                 {/* Today's Status */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center">
-                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">Today's Attendance</h3>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-full">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Today's Attendance</h3>
                     <div className="flex items-center gap-4">
                         {(() => {
                             // Priority: Calculated entry from history > displayData.today_attendance_status
@@ -283,9 +278,9 @@ const Dashboard = () => {
                 </div>
 
                 {/* Semester Summary */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-full">
                     <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Attendance Overview</h3>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Semester Overview</h3>
                         <Link to="/student/attendance" className="text-xs text-blue-600 hover:underline font-medium">View History</Link>
                     </div>
                     {attendanceStats ? (
@@ -312,30 +307,32 @@ const Dashboard = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Registration Status Card (Only if Completed) */}
+                {isRegistrationCompleted && (
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden h-full">
+                        <div className="flex items-center justify-between mb-4 z-10">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Registration</h3>
+                            <div className="p-1.5 bg-green-100 text-green-600 rounded-lg">
+                                <CheckCircle size={18} />
+                            </div>
+                        </div>
+
+                        <div className="z-10">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-2xl font-bold text-gray-900">Completed</span>
+                            </div>
+                            <p className="text-xs text-gray-500">You are all set for this semester.</p>
+                        </div>
+
+                        <div className="absolute top-0 right-0 -mt-2 -mr-2 w-20 h-20 bg-green-50 rounded-full blur-xl opacity-60 pointer-events-none"></div>
+                        <div className="absolute bottom-0 right-10 w-16 h-16 bg-blue-50 rounded-full blur-xl opacity-40 pointer-events-none"></div>
+                    </div>
+                )}
             </div>
 
-            {/* Quick Actions / Registration Banner */}
-            {isRegistrationCompleted ? (
-                <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-2xl p-8 text-white shadow-lg shadow-green-200 overflow-hidden relative">
-                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div>
-                            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                                <CheckCircle className="text-white" /> Registration Completed
-                            </h2>
-                            <p className="text-green-100 max-w-lg">
-                                You are all set for this semester! Access your academic resources.
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => navigate('/student/profile')}
-                            className="bg-white text-green-700 px-6 py-3 rounded-lg font-bold hover:bg-green-50 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
-                        >
-                            View Profile
-                        </button>
-                    </div>
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-                </div>
-            ) : (
+            {/* Registration Pending Banner (Only if NOT Completed) */}
+            {!isRegistrationCompleted && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg shadow-blue-200 overflow-hidden relative">
                     <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div>
@@ -357,9 +354,9 @@ const Dashboard = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Feed Section (Announcements & Polls) */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Center: Feed (50% Width on Large) */}
+                <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                             <div className="p-2 bg-blue-100 rounded-lg">
@@ -396,13 +393,7 @@ const Dashboard = () => {
                                                 </div>
                                             ) : (
                                                 <Link
-                                                    to="/student/announcements" // Polls are usually in Announcements tab or separate. Assuming Announcements page handles polls? Or maybe create a Polls page.
-                                                    // Let's assume announcements page or just a "Take Poll" button that navigates/opens modal.
-                                                    // Since User Guide didn't specify Polls Page, I'll link to Announcements or where polls are.
-                                                    // Actually User likely wants to see them. I'll just link to 'Announcements' page if polls are there, or maybe 'Services'?
-                                                    // Wait, there is no "/student/polls" page usually.
-                                                    // I will assume polls are shown in "Announcements" page or I should create one?
-                                                    // For now, I won't create a new page, but the feed is useful.
+                                                    to="/student/announcements"
                                                     className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 inline-block"
                                                 >
                                                     Participate Now
@@ -450,8 +441,54 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* Profile Details (Sidebar) */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
+                {/* Services Widget (25% Width on Large) */}
+                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                <FileText size={20} />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900">Services</h3>
+                        </div>
+                        <Link to="/student/services" className="text-blue-600 hover:bg-blue-50 p-1 rounded">
+                            <ArrowRight size={16} />
+                        </Link>
+                    </div>
+
+                    {/* Active Requests List */}
+                    {serviceRequests.length > 0 ? (
+                        <div className="flex-1 space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                            {serviceRequests.map(req => (
+                                <div key={req.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-medium text-xs text-gray-900 line-clamp-1">{req.service_name}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${getStatusColor(req.status)}`}>
+                                            {req.status === 'ready_to_collect' ? 'Ready' : req.status.replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-400">{new Date(req.request_date).toLocaleDateString()}</div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-lg mb-4">
+                            <p className="text-sm">No active requests</p>
+                        </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                        Apply for Study or Custodian Certificates online.
+                    </p>
+                    <Link
+                        to="/student/services"
+                        className="w-full py-2.5 bg-gray-900 text-white text-center font-medium rounded-lg hover:bg-gray-800 transition shadow-sm text-sm"
+                    >
+                        New Request
+                    </Link>
+                </div>
+
+                {/* Profile Details (Sidebar) (25% Width on Large) */}
+                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                             <User size={24} />

@@ -29,13 +29,23 @@ export const serviceService = {
         return response.data;
     },
 
-    requestService: async (serviceId) => {
-        const response = await api.post('/services/requests', { service_id: serviceId });
+    requestService: async (data) => {
+        const response = await api.post('/services/requests', data);
         return response.data;
     },
 
+    processPayment: async (requestId) => {
+        const response = await api.post('/services/pay', { request_id: requestId });
+        return response.data;
+    },
+
+    getDownloadUrl: (requestId) => {
+        const baseUrl = api.defaults.baseURL || 'http://localhost:5000/api';
+        return `${baseUrl}/services/requests/${requestId}/download`;
+    },
+
     updateRequestStatus: async (id, data) => {
-        const response = await api.put(`/services/requests/${id}`, data);
+        const response = await api.put(`/services/requests/${id}/status`, data);
         return response.data;
     },
 };

@@ -57,22 +57,40 @@ exports.unifiedLogin = async (req, res) => {
       });
     }
 
-    // --- 1. Attempt Admin/Staff Login ---
-    let adminAccount = null;
+    // Run all lookups in parallel for maximum speed
+    const adminPromise = masterPool.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [username]);
 
-    // Check Legacy Admin
-    try {
-      const [admins] = await masterPool.query(
-        'SELECT * FROM admins WHERE username = ? LIMIT 1',
-        [username]
-      );
-      if (admins && admins.length > 0) adminAccount = admins[0];
-    } catch (e) { console.error(e); }
+    const rbacPromise = masterPool.query(
+      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, permissions, is_active
+       FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
+      [username, username]
+    );
 
-    if (adminAccount) {
+    const staffPromise = masterPool.query(
+      'SELECT id, username, email, password_hash, assigned_modules, is_active FROM staff_users WHERE username = ? LIMIT 1',
+      [username]
+    );
+
+    const studentPromise = masterPool.query(
+      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+       FROM student_credentials sc
+       JOIN students s ON sc.student_id = s.id
+       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
+      [username, username, username]
+    );
+
+    const [
+      [admins],
+      [rbacRows],
+      [staffRows],
+      [credentials]
+    ] = await Promise.all([adminPromise, rbacPromise, staffPromise, studentPromise]);
+
+    // --- 1. Check Admin ---
+    if (admins && admins.length > 0) {
+      const adminAccount = admins[0];
       if (await bcrypt.compare(password, adminAccount.password)) {
-        // ... (Existing Admin Logic reused) ...
-        // Check RBAC
+        // Check if upgraded to RBAC
         const [rbacAdmin] = await masterPool.query(
           'SELECT * FROM rbac_users WHERE username = ? AND role = ? LIMIT 1',
           [adminAccount.username, 'super_admin']
@@ -81,39 +99,23 @@ exports.unifiedLogin = async (req, res) => {
         if (rbacAdmin && rbacAdmin.length > 0) {
           const rbacUser = rbacAdmin[0];
           if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
-
           const rbacResponse = buildRBACUserResponse(rbacUser);
           const token = jwt.sign({
             id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
             collegeId: rbacUser.college_id, courseId: rbacUser.course_id, branchId: rbacUser.branch_id,
             permissions: rbacUser.permissions
           }, process.env.JWT_SECRET, { expiresIn: '24h' });
-
           return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
         }
 
-        // Legacy Admin
         const token = jwt.sign({
           id: adminAccount.id, username: adminAccount.username, role: 'admin', modules: ALL_OPERATION_KEYS
         }, process.env.JWT_SECRET, { expiresIn: '24h' });
         return res.json({ success: true, message: 'Login successful', token, user: buildAdminResponse(adminAccount) });
       }
-      // If found but password wrong, return error immediately (don't fall through to student)
-      // Actually, username collision between admin/student is rare but possible. 
-      // Safest is to fall through ONLY if not found, but if found & wrong password => 401.
-      // However, separating namespaces is better. Assuming namespaces distinct or we want strict check.
-      // Re-reading user request: "same login page". 
-      // If I type "admin" and wrong password, it says 401. 
-      // If I type "student" and it's not in admin table, it checks student table.
     }
 
-    // Check RBAC User
-    const [rbacRows] = await masterPool.query(
-      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, permissions, is_active
-       FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
-      [username, username]
-    );
-
+    // --- 2. Check RBAC User ---
     if (rbacRows && rbacRows.length > 0) {
       const rbacUser = rbacRows[0];
       if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
@@ -127,18 +129,10 @@ exports.unifiedLogin = async (req, res) => {
         }, process.env.JWT_SECRET, { expiresIn: '24h' });
         return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
       }
-      // Found but wrong password
-      // To strictly follow "unified", we could return 401 here. 
-      // But if a student has same username as an admin? Unlikely given admin usernames are usually names/emails and students are Admission Numbers.
-      // Let's assume unique namespaces for now or just return 401 if found.
     }
 
-    // Check Staff User
-    const [staffRows] = await masterPool.query(
-      'SELECT id, username, email, password_hash, assigned_modules, is_active FROM staff_users WHERE username = ? LIMIT 1',
-      [username]
-    );
-    if (staffRows.length > 0) {
+    // --- 3. Check Staff User ---
+    if (staffRows && staffRows.length > 0) {
       const staffUser = staffRows[0];
       if (!staffUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
 
@@ -151,18 +145,10 @@ exports.unifiedLogin = async (req, res) => {
       }
     }
 
-    // --- 2. Attempt Student Login (Fallback) ---
-    // Find student credential
-    const [credentials] = await masterPool.query(
-      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
-       FROM student_credentials sc
-       JOIN students s ON sc.student_id = s.id
-       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
-      [username, username, username]
-    );
-
-    if (credentials.length > 0) {
+    // --- 4. Check Student User ---
+    if (credentials && credentials.length > 0) {
       const studentValid = credentials[0];
+      // Note: Student creation script might set password_hash.
       if (!studentValid.password_hash) {
         return res.status(401).json({ success: false, message: 'Account not initialized.' });
       }
@@ -176,19 +162,19 @@ exports.unifiedLogin = async (req, res) => {
           admission_number: studentValid.admission_number,
           username: studentValid.username,
           name: studentValid.student_name,
-          current_year: studentValid.current_year, // Ensure these fields match your student table
+          current_year: studentValid.current_year,
           current_semester: studentValid.current_semester,
           course: studentValid.course,
           branch: studentValid.branch,
           college: studentValid.college,
           student_photo: studentValid.student_photo,
-          role: 'student' // Explicitly add role for frontend
+          role: 'student'
         };
         return res.json({ success: true, message: 'Login successful', token, user });
       }
     }
 
-    // --- 3. Failed All ---
+    // --- 5. Failed All ---
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
   } catch (error) {

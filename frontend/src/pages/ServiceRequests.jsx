@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { serviceService } from '../services/serviceService';
 import { toast } from 'react-hot-toast';
-import { Clock, CheckCircle, AlertCircle, Calendar, Filter, MessageSquare, ArrowRight } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Calendar, Filter, MessageSquare, ArrowRight, Download, CreditCard, Printer, X } from 'lucide-react';
+import api from '../config/api';
 
 const ServiceRequests = () => {
     const [requests, setRequests] = useState([]);
@@ -12,6 +13,7 @@ const ServiceRequests = () => {
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [actionType, setActionType] = useState(null); // 'ready', 'close'
     const [actionData, setActionData] = useState({ collect_date: '', admin_note: '' });
+    const [previewUrl, setPreviewUrl] = useState(null);
 
     const fetchRequests = async () => {
         try {
@@ -74,6 +76,37 @@ const ServiceRequests = () => {
                 collect_date: new Date().toISOString().split('T')[0],
                 admin_note: `Your ${req.service_name} is ready. Please collect it from the admin office.`
             });
+        }
+    };
+
+    const handlePayment = async (request) => {
+        if (!window.confirm(`Mark payment of ₹${request.service_price} as received?`)) return;
+
+        try {
+            await serviceService.processPayment(request.id);
+            toast.success('Payment marked as received');
+            fetchRequests();
+        } catch (error) {
+            console.error(error);
+            toast.error('Payment update failed');
+        }
+    };
+
+    const handlePrint = async (request) => {
+        try {
+            const toastId = toast.loading('Generating preview...');
+            const response = await api.get(`/services/requests/${request.id}/download`, {
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            setPreviewUrl(url); // Set preview URL to open modal
+
+            toast.dismiss(toastId);
+        } catch (error) {
+            console.error(error);
+            toast.error('Preview failed. Check if payment is cleared.');
         }
     };
 
@@ -159,9 +192,25 @@ const ServiceRequests = () => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
+                                                {req.payment_status === 'pending' && (
+                                                    <button
+                                                        onClick={() => handlePayment(req)}
+                                                        className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-semibold rounded hover:bg-green-100 flex items-center gap-1"
+                                                    >
+                                                        <CreditCard size={12} /> Mark Paid
+                                                    </button>
+                                                )}
+                                                {req.payment_status === 'paid' && (
+                                                    <button
+                                                        onClick={() => handlePrint(req)}
+                                                        className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded hover:bg-gray-200 flex items-center gap-1"
+                                                    >
+                                                        <Printer size={12} /> Print
+                                                    </button>
+                                                )}
                                                 {req.status === 'pending' && (
                                                     <button
-                                                        onClick={() => { setSelectedRequest(req); setActionType('processing'); handleUpdateStatus(); }} // Direct update for processing
+                                                        onClick={() => { setSelectedRequest(req); setActionType('processing'); handleUpdateStatus(); }}
                                                         className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-semibold rounded hover:bg-blue-100"
                                                     >
                                                         Process
@@ -239,6 +288,43 @@ const ServiceRequests = () => {
                         <div className="flex gap-3">
                             <button onClick={() => setSelectedRequest(null)} className="flex-1 py-2.5 bg-gray-100 rounded-lg font-medium text-gray-700">Cancel</button>
                             <button onClick={handleUpdateStatus} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg font-medium">Yes, Close it</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Print Preview Modal */}
+            {previewUrl && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl animate-scale-in">
+                        <div className="flex justify-between items-center p-4 border-b">
+                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                <Printer className="text-blue-600" /> Certificate Preview
+                            </h2>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => {
+                                        const iframe = document.getElementById('pdf-preview-frame');
+                                        if (iframe) iframe.contentWindow.print();
+                                    }}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition flex items-center gap-2"
+                                >
+                                    <Printer size={18} /> Print Certificate
+                                </button>
+                                <button
+                                    onClick={() => setPreviewUrl(null)}
+                                    className="p-2 hover:bg-gray-100 rounded-full transition"
+                                >
+                                    <X size={24} className="text-gray-500" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 bg-gray-100 p-4">
+                            <iframe
+                                id="pdf-preview-frame"
+                                src={previewUrl}
+                                className="w-full h-full rounded-lg shadow-inner bg-white"
+                                title="Certificate Preview"
+                            />
                         </div>
                     </div>
                 </div>

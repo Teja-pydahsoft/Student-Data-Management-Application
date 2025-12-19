@@ -1,5 +1,8 @@
 const { masterPool } = require('../config/database');
 const { buildScopeConditions } = require('../utils/scoping');
+const pdfService = require('../services/pdfService');
+const fs = require('fs');
+
 
 // --- Services Configuration (Admin) ---
 
@@ -30,7 +33,7 @@ exports.getServices = async (req, res) => {
 
 exports.createService = async (req, res) => {
     try {
-        const { name, description, price, is_active } = req.body;
+        const { name, description, price, is_active, template_type } = req.body;
 
         // Basic validation
         if (!name || price === undefined) {
@@ -38,8 +41,8 @@ exports.createService = async (req, res) => {
         }
 
         const [result] = await masterPool.execute(
-            'INSERT INTO services (name, description, price, is_active) VALUES (?, ?, ?, ?)',
-            [name, description, price, is_active !== undefined ? is_active : true]
+            'INSERT INTO services (name, description, price, is_active, template_type) VALUES (?, ?, ?, ?, ?)',
+            [name, description, price, is_active !== undefined ? is_active : true, template_type || 'standard']
         );
 
         res.status(201).json({
@@ -59,11 +62,11 @@ exports.createService = async (req, res) => {
 exports.updateService = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, price, is_active } = req.body;
+        const { name, description, price, is_active, template_type } = req.body;
 
         const [result] = await masterPool.execute(
-            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ? WHERE id = ?',
-            [name, description, price, is_active, id]
+            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ?, template_type = ? WHERE id = ?',
+            [name, description, price, is_active, template_type || 'standard', id]
         );
 
         if (result.affectedRows === 0) {
@@ -107,7 +110,7 @@ exports.deleteService = async (req, res) => {
 // Create Request (Student)
 exports.requestService = async (req, res) => {
     try {
-        const { service_id } = req.body;
+        const { service_id, purpose, ...otherData } = req.body;
         const student_id = req.user.id; // User must be a student
 
         // Verify service exists and is active
@@ -116,18 +119,19 @@ exports.requestService = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid or inactive service' });
         }
 
-        // Check for duplicate pending requests for same service? Maybe optional.
-        // Let's allow multiple for now unless user restricts.
+        // Store additional request data properly
+        const request_data = JSON.stringify({ purpose, ...otherData });
 
         const [result] = await masterPool.execute(
-            'INSERT INTO service_requests (student_id, service_id, status) VALUES (?, ?, ?)',
-            [student_id, service_id, 'pending']
+            'INSERT INTO service_requests (student_id, service_id, status, payment_status, request_data) VALUES (?, ?, ?, ?, ?)',
+            [student_id, service_id, 'pending', 'pending', request_data]
         );
 
         res.status(201).json({
             success: true,
-            message: 'Service requested successfully',
-            requestId: result.insertId
+            message: 'Service requested successfully. Please complete payment.',
+            requestId: result.insertId,
+            payment_status: 'pending'
         });
     } catch (error) {
         console.error('Error requesting service:', error);
@@ -200,9 +204,6 @@ exports.updateRequestStatus = async (req, res) => {
         const { id } = req.params;
         const { status, collect_date, admin_note } = req.body;
 
-        // Validate inputs based on status
-        // If status is 'ready_to_collect', collect_date and notification (admin_note) are expected
-
         let query = 'UPDATE service_requests SET status = ?';
         const params = [status];
 
@@ -231,3 +232,117 @@ exports.updateRequestStatus = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
+
+// Mock Payment Process
+// Mark Payment as Received (Admin/Staff)
+exports.processPayment = async (req, res) => {
+    try {
+        const { request_id } = req.body;
+
+        // Ensure user is admin (or handled by middleware)
+        const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.isAdmin);
+        if (!isAdmin) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const [requests] = await masterPool.execute(
+            'SELECT * FROM service_requests WHERE id = ?',
+            [request_id]
+        );
+
+        if (requests.length === 0) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        // Mark as paid
+        await masterPool.execute(
+            "UPDATE service_requests SET payment_status = 'paid' WHERE id = ?",
+            [request_id]
+        );
+
+        res.json({ success: true, message: 'Payment marked as received', status: 'paid' });
+    } catch (error) {
+        console.error('Error in payment:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Download Certificate
+exports.downloadCertificate = async (req, res) => {
+    try {
+        const { id } = req.params; // request id
+        const student_id = req.user.id;
+        const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.isAdmin;
+
+        // Fetch request with service and student details
+        const query = `
+            SELECT sr.*, s.name as service_name, s.template_type, st.*, 
+            c.name as college_name, c.metadata as college_metadata
+            FROM service_requests sr
+            JOIN services s ON sr.service_id = s.id
+            JOIN students st ON sr.student_id = st.id
+            LEFT JOIN colleges c ON st.college COLLATE utf8mb4_unicode_ci = c.name
+            WHERE sr.id = ?
+        `;
+
+        const [rows] = await masterPool.execute(query, [id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        const request = rows[0];
+
+        // Access Check
+        if (!isAdmin && request.student_id !== student_id) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        // Payment Check
+        if (request.payment_status !== 'paid' && !isAdmin) {
+            return res.status(400).json({ success: false, message: 'Payment not completed' });
+        }
+
+        // Parse request_data safely
+        if (typeof request.request_data === 'string') {
+            try { request.request_data = JSON.parse(request.request_data); } catch (e) { }
+        }
+
+        // Parse college metadata
+        let collegeDetails = { name: request.college_name || 'College', phone: '', website: '' };
+        if (request.college_metadata) {
+            try {
+                const meta = typeof request.college_metadata === 'string' ? JSON.parse(request.college_metadata) : request.college_metadata;
+                collegeDetails = { ...collegeDetails, ...meta };
+            } catch (e) { }
+        }
+
+        // Generate PDF based on template type
+        let filePath;
+        if (request.template_type === 'study_certificate' || request.service_name.toLowerCase().includes('study')) {
+            filePath = await pdfService.generateStudyCertificate(request, request, collegeDetails); // passing request as student object because it contains joined fields
+        } else {
+            // Default or throw
+            return res.status(400).json({ success: false, message: 'Certificate template not implemented for this service' });
+        }
+
+        // Send file as inline preview (for printing)
+        res.sendFile(filePath, {
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `inline; filename="Certificate_${request.admission_number || 'document'}.pdf"`
+            }
+        }, (err) => {
+            if (err) console.error('Error sending file:', err);
+            // Cleanup
+            setTimeout(() => {
+                try { fs.unlinkSync(filePath); } catch (e) { }
+            }, 5000); // 5s should be enough for browser to buffer
+        });
+
+    } catch (error) {
+        console.error('Error downloading certificate:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+

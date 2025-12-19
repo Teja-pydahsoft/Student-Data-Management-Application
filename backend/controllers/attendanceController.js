@@ -2530,7 +2530,7 @@ exports.getAttendanceSummary = async (req, res) => {
       [todayKey, ...countFilter.params, ...scopeParams]
     );
 
-    console.log('DEBUG: getAttendanceSummary groupedRows[0]:', groupedRows[0]);
+
 
 
     let todayHolidayInfo = null;

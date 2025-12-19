@@ -13,7 +13,8 @@ const ServicesConfig = () => {
         name: '',
         description: '',
         price: '',
-        is_active: true
+        is_active: true,
+        template_type: 'standard'
     });
 
     const fetchServices = async () => {
@@ -45,7 +46,7 @@ const ServicesConfig = () => {
             }
             setShowModal(false);
             setEditingService(null);
-            setFormData({ name: '', description: '', price: '', is_active: true });
+            setFormData({ name: '', description: '', price: '', is_active: true, template_type: 'standard' });
             fetchServices();
         } catch (error) {
             console.error(error);
@@ -59,7 +60,8 @@ const ServicesConfig = () => {
             name: service.name,
             description: service.description || '',
             price: service.price,
-            is_active: !!service.is_active
+            is_active: !!service.is_active,
+            template_type: service.template_type || 'standard'
         });
         setShowModal(true);
     };
@@ -95,7 +97,7 @@ const ServicesConfig = () => {
                 <button
                     onClick={() => {
                         setEditingService(null);
-                        setFormData({ name: '', description: '', price: '', is_active: true });
+                        setFormData({ name: '', description: '', price: '', is_active: true, template_type: 'standard' });
                         setShowModal(true);
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -201,6 +203,20 @@ const ServicesConfig = () => {
                                     value={formData.description}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Template Type (Certificate Format)</label>
+                                <select
+                                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={formData.template_type}
+                                    onChange={e => setFormData({ ...formData, template_type: e.target.value })}
+                                >
+                                    <option value="standard">Standard (None)</option>
+                                    <option value="study_certificate">Study Certificate</option>
+                                    <option value="bonafide_certificate">Bonafide Certificate</option>
+                                    <option value="bus_pass">Bus Pass Certificate</option>
+                                </select>
                             </div>
 
                             <div className="flex items-center gap-2">
