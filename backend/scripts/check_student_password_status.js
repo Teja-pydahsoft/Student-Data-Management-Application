@@ -1,5 +1,5 @@
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const { masterPool } = require('../config/database');
-require('dotenv').config();
 
 async function checkStudentPasswordStatus() {
     let connection;
@@ -69,6 +69,8 @@ async function checkStudentPasswordStatus() {
 
                 fs.writeFileSync('missing_students.txt', output);
                 console.log('✅ Output written to missing_students.txt');
+                console.log('\nMissing Students (showing up to 20 rows):');
+                console.table(missingRows.slice(0, 20));
 
                 if (result.students_without_password > 1000) {
                     console.log(`... and ${result.students_without_password - 1000} more.`);

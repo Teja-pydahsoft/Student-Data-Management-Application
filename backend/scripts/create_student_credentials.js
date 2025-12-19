@@ -1,6 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { masterPool } = require('../config/database');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
 
 /**
  * Generate student login credentials

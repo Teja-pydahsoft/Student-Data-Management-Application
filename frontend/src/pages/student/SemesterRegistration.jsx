@@ -49,11 +49,15 @@ const SemesterRegistration = () => {
 
             if (response.data.success) {
                 const student = response.data.data;
+                const sData = student.student_data || {};
+
                 setStudentData(student);
                 setVerificationState(prev => ({
                     ...prev,
                     studentMobile: student.student_mobile || '',
-                    parentMobile: student.parent_mobile1 || student.parent_mobile2 || ''
+                    parentMobile: student.parent_mobile1 || student.parent_mobile2 || '',
+                    studentVerified: !!sData.is_student_mobile_verified,
+                    parentVerified: !!sData.is_parent_mobile_verified
                 }));
             }
         } catch (error) {
@@ -116,7 +120,8 @@ const SemesterRegistration = () => {
             const response = await api.post('/students/otp/verify', {
                 admissionNumber: user.admission_number,
                 mobileNumber: mobile,
-                otp: otp
+                otp: otp,
+                type: type // 'student' or 'parent'
             });
             if (response.data.success) {
                 setVerificationState(prev => ({

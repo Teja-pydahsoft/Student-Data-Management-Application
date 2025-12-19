@@ -100,6 +100,7 @@ const Students = () => {
   const canUpdatePin = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'update_pin');
   const canExportStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'export');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -233,7 +234,7 @@ const Students = () => {
     page: currentPage,
     pageSize: pageSize,
     filters: memoizedFilters,
-    search: searchTerm,
+    search: debouncedSearch,
     enabled: !filtersLoading // Disable until filters are loaded
   });
 
@@ -350,6 +351,10 @@ const Students = () => {
 
   useEffect(() => {
     searchTermRef.current = searchTerm;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 400); // 400ms debounce delay
+    return () => clearTimeout(timer);
   }, [searchTerm]);
 
   useEffect(() => {
@@ -1037,6 +1042,7 @@ const Students = () => {
 
   // Legacy function for backward compatibility - now uses server-side filtering
   const handleLocalSearch = () => {
+    setDebouncedSearch(searchTerm); // Force immediate search update
     setCurrentPage(1);
   };
 
@@ -1228,7 +1234,7 @@ const Students = () => {
         // Ensure current value is in options, add it if not present
         const allOptions = [...new Set([...options, currentValue].filter(Boolean))];
         const displayValue = cellEditValue !== '' ? cellEditValue : (currentValue || '');
-        
+
         return (
           <select
             value={displayValue}
@@ -1830,9 +1836,9 @@ const Students = () => {
     if (courseName.includes('diploma')) {
       courseType = 'Diploma';
     } else if (
-      courseName.includes('pg') || 
-      courseName.includes('post graduate') || 
-      courseName.includes('m.tech') || 
+      courseName.includes('pg') ||
+      courseName.includes('post graduate') ||
+      courseName.includes('m.tech') ||
       courseName.includes('mtech') ||
       courseName.includes('mba') ||
       courseName.includes('mca') ||
@@ -2740,16 +2746,7 @@ const Students = () => {
               <div className="flex items-center gap-2">
                 {!editMode && (
                   <>
-                    <button
-                      onClick={handleViewPassword}
-                      disabled={loadingPassword}
-                      className="flex items-center gap-2 bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="View Password"
-                    >
-                      <Eye size={16} className="sm:w-[18px] sm:h-[18px]" />
-                      <span className="hidden sm:inline">View Password</span>
-                      <span className="sm:hidden">View</span>
-                    </button>
+                    {/* View Password button removed */}
                     {canEditStudents && (
                       <>
                         <button
@@ -3763,9 +3760,9 @@ const Students = () => {
                     if (courseName.includes('diploma')) {
                       courseType = 'Diploma';
                     } else if (
-                      courseName.includes('pg') || 
-                      courseName.includes('post graduate') || 
-                      courseName.includes('m.tech') || 
+                      courseName.includes('pg') ||
+                      courseName.includes('post graduate') ||
+                      courseName.includes('m.tech') ||
                       courseName.includes('mtech') ||
                       courseName.includes('mba') ||
                       courseName.includes('mca') ||

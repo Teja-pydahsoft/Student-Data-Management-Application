@@ -2914,6 +2914,42 @@ exports.getStudentAttendanceHistory = async (req, res) => {
         series: semesterSeries.series,
         holidays: semesterSeries.series.filter((entry) => entry.isHoliday)
       };
+    } else {
+      // Fallback: If no semester dates found, use the calculated range (e.g., monthStart or weekStart) to ensure Dashboard displays data
+      // We'll use monthStart as a reasonable default for "current view"
+      const fallbackStart = monthStart < weekStart ? monthStart : weekStart;
+      const fallbackEnd = referenceDate;
+      const fallbackEndKey = formatDateKey(fallbackEnd);
+      const fallbackStartKey = formatDateKey(fallbackStart);
+
+      const fallbackRows = historyRows.filter((row) => {
+        const rowDate = new Date(row.attendance_date);
+        return rowDate >= fallbackStart && rowDate <= fallbackEnd;
+      });
+
+      // Get holidays for fallback range
+      let fallbackHolidayInfo = { dates: new Set(), details: new Map() };
+      try {
+        fallbackHolidayInfo = await getNonWorkingDaysForRange(fallbackStartKey, fallbackEndKey);
+      } catch (error) {
+        console.warn('Failed to fetch fallback holiday range:', error.message || error);
+      }
+
+      const fallbackSeries = buildStudentSeries(
+        fallbackRows,
+        fallbackStart,
+        fallbackEnd,
+        fallbackHolidayInfo
+      );
+
+      semesterAttendance = {
+        startDate: fallbackStartKey,
+        endDate: fallbackEndKey,
+        totals: fallbackSeries.totals,
+        series: fallbackSeries.series,
+        holidays: fallbackSeries.series.filter((entry) => entry.isHoliday),
+        isFallback: true
+      };
     }
 
     res.json({

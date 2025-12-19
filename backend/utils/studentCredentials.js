@@ -43,28 +43,12 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
       return { success: false, error: 'No PIN or mobile number available' };
     }
 
-    // Generate password: first 4 letters of student name + last 4 digits of mobile
-    const mobileNumber = studentMobile.replace(/\D/g, ''); // Remove non-digits
-
-    if (mobileNumber.length < 4) {
-      return { success: false, error: 'Mobile number too short' };
+    // Generate random alphanumeric password (8 characters)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let plainPassword = '';
+    for (let i = 0; i < 8; i++) {
+      plainPassword += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-
-    // Get first 4 letters (uppercase, remove spaces and special chars)
-    const firstFourLetters = studentName
-      .replace(/[^a-zA-Z]/g, '') // Remove non-letters
-      .substring(0, 4)
-      .toUpperCase();
-
-    if (firstFourLetters.length < 4) {
-      return { success: false, error: 'Not enough letters in student name' };
-    }
-
-    // Get last 4 digits of mobile number
-    const lastFourDigits = mobileNumber.substring(mobileNumber.length - 4);
-
-    // Combine to create password
-    const plainPassword = firstFourLetters + lastFourDigits;
 
     // Hash password
     const passwordHash = await bcrypt.hash(plainPassword, 10);

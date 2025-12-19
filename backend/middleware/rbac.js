@@ -108,18 +108,21 @@ const allowStudentOwnProfileOrPermission = (module, operation = 'read') => {
     if (user.role === 'student') {
       const admissionNumber = req.params.admissionNumber || req.params.id;
       const studentAdmissionNumber = user.admission_number || user.admissionNumber;
-      
+
       // Allow if student is accessing their own profile
-      if (admissionNumber && studentAdmissionNumber && 
-          (admissionNumber === studentAdmissionNumber || 
-           admissionNumber === String(studentAdmissionNumber))) {
-        return next();
+      if (admissionNumber && studentAdmissionNumber) {
+        const normalizedParam = String(admissionNumber).trim().toLowerCase();
+        const normalizedUser = String(studentAdmissionNumber).trim().toLowerCase();
+
+        if (normalizedParam === normalizedUser) {
+          return next();
+        }
       }
-      
+
       // Deny if student is trying to access another student's profile
       return res.status(403).json({
         success: false,
-        message: 'Access denied. You can only view your own profile.'
+        message: `Access denied. You can only view your own profile. (Target: ${admissionNumber}, You: ${studentAdmissionNumber})`
       });
     }
 

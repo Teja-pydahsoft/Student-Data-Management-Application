@@ -277,6 +277,42 @@ exports.verifyToken = async (req, res) => {
       });
     }
 
+    if (authUser.role === 'student') {
+      const [students] = await masterPool.query(
+        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+         FROM students s
+         LEFT JOIN student_credentials sc ON sc.student_id = s.id
+         WHERE s.id = ?`,
+        [authUser.id]
+      );
+
+      if (!students || students.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+
+      const studentValid = students[0];
+      const user = {
+        admission_number: studentValid.admission_number,
+        username: studentValid.username,
+        name: studentValid.student_name,
+        current_year: studentValid.current_year,
+        current_semester: studentValid.current_semester,
+        course: studentValid.course,
+        branch: studentValid.branch,
+        college: studentValid.college,
+        student_photo: studentValid.student_photo,
+        role: 'student'
+      };
+
+      return res.json({
+        success: true,
+        user
+      });
+    }
+
     const [admins] = await masterPool.query(
       'SELECT id, username, email FROM admins WHERE id = ? LIMIT 1',
       [authUser.id]

@@ -21,6 +21,14 @@ const documentUpload = multer({
 
 // Public student login
 router.post('/login', studentController.login);
+router.post('/forgot-password', studentController.forgotPassword); // Public forgot password
+
+// Protected Change Password Route (Student)
+router.post(
+  '/change-password',
+  authMiddleware,
+  studentController.changePassword
+);
 
 // All routes are protected and scoped by user's assigned colleges/courses/branches
 // View-only access
@@ -176,7 +184,7 @@ router.put(
 router.put(
   '/:admissionNumber/registration-status',
   authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
+  allowStudentOwnProfileOrPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
   attachUserScope,
   studentController.updateRegistrationStatus
 );
