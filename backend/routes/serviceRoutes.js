@@ -67,4 +67,7 @@ router.post('/pay', verifyPermission(MODULES.SERVICES, 'manage_requests'), servi
 // Download Certificate (Student/Admin)
 router.get('/requests/:id/download', serviceController.downloadCertificate);
 
+// Preview Template (Admin)
+router.post('/preview', verifyPermission(MODULES.SERVICES, 'manage_config'), serviceController.previewTemplate);
+
 module.exports = router;

@@ -321,6 +321,8 @@ exports.downloadCertificate = async (req, res) => {
         let filePath;
         if (request.template_type === 'study_certificate' || request.service_name.toLowerCase().includes('study')) {
             filePath = await pdfService.generateStudyCertificate(request, request, collegeDetails); // passing request as student object because it contains joined fields
+        } else if (request.template_type === 'refund_application' || request.service_name.toLowerCase().includes('refund')) {
+            filePath = await pdfService.generateRefundApplication(request, request, collegeDetails);
         } else {
             // Default or throw
             return res.status(400).json({ success: false, message: 'Certificate template not implemented for this service' });
@@ -342,6 +344,79 @@ exports.downloadCertificate = async (req, res) => {
 
     } catch (error) {
         console.error('Error downloading certificate:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Preview Template (Admin)
+exports.previewTemplate = async (req, res) => {
+    try {
+        const { template_type, service_name } = req.body;
+        const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.isAdmin;
+
+        if (!isAdmin) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        // Blank Student Data (for template structure preview)
+        const blankStudent = {
+            student_name: '',
+            admission_number: '',
+            father_name: '',
+            current_year: '',
+            current_semester: '',
+            course: '',
+            branch: '',
+            student_mobile: '',
+            parent_mobile1: '',
+            academic_year: ''
+        };
+
+        // Blank Request Data
+        const blankRequest = {
+            request_data: JSON.stringify({
+                purpose: '',
+                reason: '',
+                excess_amount: '',
+                amount_in_words: '',
+                payment_mode: ''
+            }),
+            admission_number: ''
+        };
+
+        // Dummy College Details (Static for preview)
+        const dummyCollege = {
+            name: 'Pydah College of Engineering',
+            phone: '0884-2315333',
+            website: 'www.pydah.edu.in'
+        };
+
+        let filePath;
+        const type = template_type || '';
+        const name = service_name || '';
+
+        if (type === 'study_certificate' || name.toLowerCase().includes('study')) {
+            filePath = await pdfService.generateStudyCertificate(blankStudent, blankRequest, dummyCollege);
+        } else if (type === 'refund_application' || name.toLowerCase().includes('refund')) {
+            filePath = await pdfService.generateRefundApplication(blankStudent, blankRequest, dummyCollege);
+        } else {
+            return res.status(400).json({ success: false, message: 'Preview not available for this template type' });
+        }
+
+        res.sendFile(filePath, {
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `inline; filename="Preview_${type}.pdf"`
+            }
+        }, (err) => {
+            if (err) console.error('Error sending file:', err);
+            setTimeout(() => {
+                try { fs.unlinkSync(filePath); } catch (e) { }
+            }, 5000);
+        });
+
+    } catch (error) {
+        console.error('Error creating preview:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };

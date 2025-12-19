@@ -44,7 +44,7 @@ const Services = () => {
             setSubmitting(true);
             await serviceService.requestService({
                 service_id: selectedService.id,
-                purpose: requestForm.purpose
+                ...requestForm
             });
             toast.success('Request submitted successfully');
             setSelectedService(null);
@@ -240,16 +240,55 @@ const Services = () => {
                         </div>
 
                         <form onSubmit={handleRequest} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Purpose of Certificate</label>
-                                <textarea
-                                    required
-                                    placeholder="e.g. For Scholarship Application, Visa, etc."
-                                    className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[100px]"
-                                    value={requestForm.purpose}
-                                    onChange={e => setRequestForm({ ...requestForm, purpose: e.target.value })}
-                                />
-                            </div>
+                            {(selectedService.template_type === 'refund_application' || selectedService.name.toLowerCase().includes('refund')) ? (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Refund</label>
+                                        <textarea
+                                            required
+                                            placeholder="e.g. Paid twice, Scholarship received, etc."
+                                            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[80px]"
+                                            value={requestForm.purpose}
+                                            onChange={e => setRequestForm({ ...requestForm, purpose: e.target.value, reason: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Excess Amount (Rs.)</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="e.g. 5000"
+                                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                value={requestForm.excess_amount || ''}
+                                                onChange={e => setRequestForm({ ...requestForm, excess_amount: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Amount in Words</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="e.g. Five Thousand Only"
+                                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                value={requestForm.amount_in_words || ''}
+                                                onChange={e => setRequestForm({ ...requestForm, amount_in_words: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Purpose of Certificate</label>
+                                    <textarea
+                                        required
+                                        placeholder="e.g. For Scholarship Application, Visa, etc."
+                                        className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[100px]"
+                                        value={requestForm.purpose}
+                                        onChange={e => setRequestForm({ ...requestForm, purpose: e.target.value })}
+                                    />
+                                </div>
+                            )}
 
                             <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                 Note: Certificate generated will include your current academic details from the database. Please ensure your profile is up to date.

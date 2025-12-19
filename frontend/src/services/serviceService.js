@@ -22,6 +22,13 @@ export const serviceService = {
         return response.data;
     },
 
+    previewTemplate: async (data) => {
+        const response = await api.post('/services/preview', data, {
+            responseType: 'blob'
+        });
+        return response.data;
+    },
+
     // Requests
     getRequests: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();

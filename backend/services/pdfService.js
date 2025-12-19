@@ -946,17 +946,20 @@ const generateStudyCertificate = async (student, request, collegeDetails) => {
   const pinNo = (student.admission_number || '________________').toUpperCase();
   const year = student.current_year ? student.current_year.toString() : '__';
   const sem = student.current_semester ? student.current_semester.toString() : '__';
-  const course = (student.course || 'B.Tech').toUpperCase();
-  const branch = (student.branch || '________________________').toUpperCase();
 
-  // Calculate Academic Year (e.g., if 2024, then 2024-2025)
-  // Use student data or current date fallback
+  // Only use data if it exists, otherwise use placeholders
+  const course = student.course ? student.course.toUpperCase() : '_________';
+  const branch = (student.branch || '').toUpperCase();
+
+  // Calculate Academic Year only if student data exists, otherwise placeholder
   let academicYear = student.academic_year;
-  if (!academicYear) {
+  if (!academicYear && student.admission_number) { // Only calc if it's a real student record
     const currentMonth = new Date().getMonth(); // 0-11
     const currentYr = new Date().getFullYear();
     if (currentMonth < 5) academicYear = `${currentYr - 1}-${currentYr}`;
     else academicYear = `${currentYr}-${currentYr + 1}`;
+  } else if (!academicYear) {
+    academicYear = '_________';
   }
 
   const purpose = (requestData.purpose || '__________________________________');
@@ -975,37 +978,37 @@ const generateStudyCertificate = async (student, request, collegeDetails) => {
   // Line 1: This is to certify that Mr./Ms. [Name] (PIN No. [Pin])
   drawCenteredLine(doc, startY, [
     { text: 'This is to certify that Mr./Ms. ', font: 'Helvetica', color: baseColor },
-    { text: pad(studentName), font: dataFont, color: dataColor, underline: true },
+    { text: student.student_name ? pad(formatName(student.student_name).toUpperCase()) : '______________', font: dataFont, color: dataColor, underline: !!student.student_name },
     { text: ' (PIN No. ', font: 'Helvetica', color: baseColor },
-    { text: pad(pinNo), font: dataFont, color: dataColor, underline: true },
+    { text: student.admission_number ? pad(student.admission_number) : '__________', font: dataFont, color: dataColor, underline: !!student.admission_number },
     { text: ')', font: 'Helvetica', color: baseColor }
   ], pageWidth);
 
   // Line 2: S/o, D/o of Sri [Parent] is studying [Year] year [Sem] sem in [Course]
   drawCenteredLine(doc, startY + lineHeight, [
     { text: 'S/o, D/o of Sri ', font: 'Helvetica', color: baseColor },
-    { text: pad(parentName), font: dataFont, color: dataColor, underline: true },
+    { text: student.father_name ? pad(student.father_name.toUpperCase()) : '______________', font: dataFont, color: dataColor, underline: !!student.father_name },
     { text: ' is studying ', font: 'Helvetica', color: baseColor },
-    { text: pad(year), font: dataFont, color: dataColor, underline: true },
+    { text: year !== '__' ? year : '__', font: dataFont, color: dataColor, underline: year !== '__' },
     { text: ' year ', font: 'Helvetica', color: baseColor },
-    { text: pad(sem), font: dataFont, color: dataColor, underline: true },
+    { text: sem !== '__' ? sem : '__', font: dataFont, color: dataColor, underline: sem !== '__' },
     { text: ' sem in ', font: 'Helvetica', color: baseColor },
-    { text: course, font: dataFont, color: dataColor, underline: true }
+    { text: course !== '_________' ? course : '_________', font: dataFont, color: dataColor, underline: course !== '_________' }
   ], pageWidth);
 
   // Line 3: [Branch] Branch during the academic Year [AcadYear] in our college. This is being issued for the
   drawCenteredLine(doc, startY + lineHeight * 2, [
-    { text: pad(branch), font: dataFont, color: dataColor, underline: true },
-    { text: ' Branch during the academic Year ', font: 'Helvetica', color: baseColor },
-    { text: pad(academicYear), font: dataFont, color: dataColor, underline: true },
+    { text: student.branch ? pad(branch) : '________', font: dataFont, color: dataColor, underline: !!student.branch },
+    { text: '  Branch during the academic Year ', font: 'Helvetica', color: baseColor },
+    { text: academicYear.includes('_') ? academicYear : academicYear, font: dataFont, color: dataColor, underline: !academicYear.includes('_') },
     { text: ' in our college. This is being issued for the', font: 'Helvetica', color: baseColor }
   ], pageWidth);
 
   // Line 4: purpose of getting [Purpose] only.
   drawCenteredLine(doc, startY + lineHeight * 3, [
-    { text: 'purpose of getting ', font: 'Helvetica', color: baseColor },
-    { text: pad(purpose), font: dataFont, color: dataColor, underline: true },
-    { text: ' only.', font: 'Helvetica', color: baseColor }
+    { text: 'purpose of getting  ', font: 'Helvetica', color: baseColor },
+    { text: (requestData.purpose && requestData.purpose !== '__________________________________') ? pad(requestData.purpose) : '__________________', font: dataFont, color: dataColor, underline: !!(requestData.purpose && requestData.purpose !== '__________________________________') },
+    { text: '  only.', font: 'Helvetica', color: baseColor }
   ], pageWidth);
 
 
@@ -1024,8 +1027,281 @@ const generateStudyCertificate = async (student, request, collegeDetails) => {
   });
 };
 
+/**
+ * Generate Refund Application PDF
+ */
+const generateRefundApplication = async (student, request, collegeDetails) => {
+  const tempDir = os.tmpdir();
+  const fileName = `refund_application_${student.admission_number}_${Date.now()}.pdf`;
+  const filePath = path.join(tempDir, fileName);
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40
+  });
+
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  const pageWidth = doc.page.width;
+  const contentWidth = pageWidth - 80;
+  const leftMargin = 40;
+  const rightMargin = pageWidth - 40;
+
+  // --- Header ---
+  // Logo
+  const logoPath = path.join(__dirname, '../../frontend/public/logo.png');
+  const logoWidth = 80;
+  const logoHeight = 60; // Approx aspect ratio
+
+  if (fs.existsSync(logoPath)) {
+    doc.image(logoPath, leftMargin, 40, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
+  }
+
+  // College Name & Address
+  const headerTextLeft = leftMargin + logoWidth + 20;
+  const headerTextWidth = contentWidth - logoWidth - 20;
+
+  doc.font('Helvetica-Bold').fontSize(24).fillColor('#000000');
+  doc.text('Pydah Group of Institutions', headerTextLeft, 45, { align: 'center', width: headerTextWidth });
+
+  // S3 Label (Top Right)
+  doc.fontSize(16).text('S3', rightMargin - 40, 45);
+
+  // Gray Title Bar
+  const titleBarY = 110;
+  const titleBarHeight = 25;
+  doc.rect(leftMargin, titleBarY, contentWidth, titleBarHeight)
+    .fillColor('#808080')
+    .fill();
+
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#FFFFFF');
+  doc.text('APPLICATION FOR REFUND OF EXCESS FEES', leftMargin, titleBarY + 7, {
+    width: contentWidth,
+    align: 'center'
+  });
+
+  doc.fillColor('#000000');
+
+  // --- Parse Data ---
+  let requestData = request.request_data;
+  if (typeof requestData === 'string') {
+    try { requestData = JSON.parse(requestData); } catch (e) { requestData = {}; }
+  } else if (!requestData) {
+    requestData = {};
+  }
+
+  const today = new Date().toLocaleDateString('en-IN'); // DD/MM/YYYY
+
+  // Student Details
+  const studentName = (student.student_name || '').toUpperCase();
+  const pinNo = (student.admission_number || '').toUpperCase();
+  const course = (student.course || '').toUpperCase();
+  const branch = (student.branch || '').toUpperCase();
+  const year = student.current_year ? student.current_year.toString() : '';
+  const sem = student.current_semester ? student.current_semester.toString() : '';
+  const yearSem = (year && sem) ? `${year} Year & ${sem} Sem` : '';
+
+  // Form Details
+  const reason = requestData.reason || requestData.purpose || '___________________________________________________________________';
+  const excessAmount = requestData.excess_amount || '_________________';
+  const amountInWords = requestData.amount_in_words || '_________________________________________________________________';
+
+  // --- Top Block (2 columns) ---
+  const topBlockY = titleBarY + titleBarHeight + 20;
+  const col1Left = leftMargin;
+  const col2Left = leftMargin + contentWidth / 2;
+  const colWidth = contentWidth / 2 - 10;
+
+  const boxHeight = 100;
+
+  // Draw Box
+  doc.rect(leftMargin, topBlockY, contentWidth, boxHeight).stroke();
+  doc.moveTo(col2Left, topBlockY).lineTo(col2Left, topBlockY + boxHeight).stroke();
+
+  // Column 1 Content
+  let y = topBlockY + 10;
+  doc.font('Helvetica').fontSize(10);
+  doc.text('To, The Administrative Officer,', col1Left + 5, y);
+  y += 20;
+  // College name from DB or fallback
+  doc.text(`${collegeDetails.name || 'Pydah College of Engineering'}`, col1Left + 5, y);
+  doc.moveTo(col1Left + 5, y + 12).lineTo(col1Left + colWidth - 5, y + 12).stroke(); // Underline
+
+  y += 30;
+  doc.text('Date of Application:', col1Left + 5, y);
+  doc.text(today, col1Left + 100, y); // Pre-fill date
+
+  // Column 2 Content
+  y = topBlockY + 10;
+  doc.text('From Student Name:', col2Left + 5, y);
+  doc.font('Helvetica-Bold').text(studentName, col2Left + 105, y);
+  doc.moveTo(col2Left + 105, y + 12).lineTo(col2Left + colWidth - 5, y + 12).stroke(); // Underline
+
+  y += 20;
+  doc.font('Helvetica').text('Pin Number:', col2Left + 5, y);
+  doc.font('Helvetica-Bold').text(pinNo, col2Left + 65, y);
+  doc.moveTo(col2Left + 65, y + 12).lineTo(col2Left + colWidth - 5, y + 12).stroke();
+
+  y += 20;
+  doc.font('Helvetica').text('Course & Branch:', col2Left + 5, y);
+  doc.font('Helvetica-Bold').text(`${course} - ${branch}`, col2Left + 90, y);
+  doc.moveTo(col2Left + 90, y + 12).lineTo(col2Left + colWidth - 5, y + 12).stroke();
+
+  y += 20;
+  doc.font('Helvetica').text('Year & Sem:', col2Left + 5, y);
+  doc.font('Helvetica-Bold').text(yearSem, col2Left + 65, y);
+  doc.moveTo(col2Left + 65, y + 12).lineTo(col2Left + colWidth - 5, y + 12).stroke();
+
+  // --- Body ---
+  doc.font('Helvetica').fontSize(10);
+  let bodyY = topBlockY + boxHeight + 20;
+
+  doc.text('Sir,', leftMargin, bodyY);
+  bodyY += 20;
+
+  const lineHeight = 20;
+
+  // Line 1
+  doc.text('I have paid the excess fee through the following Cheques(s) / DD/ Online Transfer/Cash', leftMargin, bodyY);
+  bodyY += lineHeight;
+
+  // Line 2
+  /* 
+     We need to layout: "towards the reason: _____________ ..." 
+     Instead of simple continued text which can be tricky with exact widths, 
+     we can manually place text segments to control the "blank" line length.
+  */
+  const reasonLabel = 'towards the reason: ';
+  doc.text(reasonLabel, leftMargin, bodyY, { continued: true });
+
+  // Use a fixed width or calculated width for the underline to avoid it being "too long"
+  // If reason is empty/blank (preview), use a fixed length that fits neatly.
+  const reasonText = requestData.reason || requestData.purpose || '';
+  // If text exists, use it with padding. If not, use line.
+  const displayReason = reasonText ? `  ${reasonText}  ` : '________________________________________________________';
+
+  doc.font('Helvetica-Bold').text(displayReason, { underline: true });
+  doc.font('Helvetica'); // Reset
+  bodyY += lineHeight;
+
+  // Line 3
+  const excessLabel = 'to the college. In this regard kindly refund the excess paid amount of Rs. ';
+  doc.text(excessLabel, leftMargin, bodyY, { continued: true });
+
+  const excessText = requestData.excess_amount || '';
+  const displayExcess = excessText ? `  ${excessText}  ` : '__________________';
+
+  doc.font('Helvetica-Bold').text(displayExcess, { underline: true });
+  doc.font('Helvetica'); // Reset
+  bodyY += lineHeight;
+
+  // Line 4
+  const wordsLabel = '(In words) ';
+  doc.text(wordsLabel, leftMargin, bodyY, { continued: true });
+
+  const wordsText = requestData.amount_in_words || '';
+  const displayWords = wordsText ? `  ${wordsText}  ` : '________________________________________________________';
+
+  doc.font('Helvetica-Bold').text(displayWords, { underline: true });
+  doc.font('Helvetica'); // Reset
+  bodyY += lineHeight + 10;
+
+  // --- Table ---
+  const tableTop = bodyY;
+  const tableHeaders = ['Type of Fees', 'Receipt No.', 'Amount', 'Mode of Payment'];
+  const tableColWidths = [contentWidth * 0.25, contentWidth * 0.25, contentWidth * 0.25, contentWidth * 0.25];
+
+  // Header
+  let x = leftMargin;
+  doc.font('Helvetica-Bold').fontSize(10);
+  tableHeaders.forEach((header, i) => {
+    doc.rect(x, tableTop, tableColWidths[i], 20).stroke();
+    doc.text(header, x + 5, tableTop + 5);
+    x += tableColWidths[i];
+  });
+
+  // Rows (3 empty rows as per image)
+  let rowY = tableTop + 20;
+  for (let i = 0; i < 3; i++) {
+    x = leftMargin;
+    tableHeaders.forEach((header, j) => {
+      doc.rect(x, rowY, tableColWidths[j], 20).stroke();
+      x += tableColWidths[j];
+    });
+    rowY += 20;
+  }
+
+  bodyY = rowY + 10;
+
+  // --- Declaration ---
+  doc.font('Helvetica').fontSize(10);
+  doc.text('I accept to receive the excess amount in the form of cheque only. I further certify that I have neither received the refund so far nor have claimed it earlier.', leftMargin, bodyY, { width: contentWidth });
+
+  bodyY += 40;
+  doc.text('Student Signature', rightMargin - 100, bodyY);
+
+  // --- Office Use Box ---
+  const officeBoxTop = bodyY + 40;
+  const officeBoxHeight = 150;
+
+  // Check page range
+  if (officeBoxTop + officeBoxHeight > doc.page.height - 40) {
+    doc.addPage();
+    // Reset Y if new page... but let's assume it fits for now or let PDFKit handle flow if we weren't using absolute drawing.
+    // Since we are using absolute rects, we REALLY should check.
+    // But for simplicity, let's assume single page for now unless content pushes it.
+  }
+
+  // Black Header
+  doc.rect(leftMargin, officeBoxTop, contentWidth, 20).fillColor('black').fill();
+  doc.fillColor('white').font('Helvetica-Bold').text('OFFICE USE ONLY', leftMargin, officeBoxTop + 5, { width: contentWidth, align: 'center' });
+  doc.fillColor('black');
+
+  // Grid
+  const gridTop = officeBoxTop + 20;
+  const gridHeight = officeBoxHeight - 20;
+  const midX = leftMargin + contentWidth / 2;
+  const midY = gridTop + gridHeight / 2;
+
+  // Outer Box
+  doc.rect(leftMargin, gridTop, contentWidth, gridHeight).stroke();
+  // Vertical split
+  doc.moveTo(midX, gridTop).lineTo(midX, gridTop + gridHeight).stroke();
+  // Horizontal split
+  doc.moveTo(leftMargin, midY).lineTo(leftMargin + contentWidth, midY).stroke();
+
+  doc.font('Helvetica-Bold').fontSize(9);
+
+  // Top Left
+  doc.text("A.O Remark's", leftMargin + 5, gridTop + 5, { underline: true });
+
+  // Top Right
+  doc.text("Principal Remark's", midX + 5, gridTop + 5, { underline: true });
+
+  // Bottom Left
+  doc.text("Accountant Remark's:", leftMargin + 5, midY + 5, { underline: true });
+  doc.font('Helvetica').fontSize(8);
+  doc.text("Refund posted in ezschool on:", leftMargin + 5, midY + 45);
+  doc.text("Refund Cheque No & dated", leftMargin + 5, midY + 60);
+
+  // Bottom Right
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text("Authority Approval for release", midX + 5, midY + 5, { underline: true });
+
+  doc.fontSize(7).text('Form revised on 06/07/2021', leftMargin, doc.page.height - 30);
+
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
+};
+
 module.exports = {
   generateAttendanceReportPDF,
-  generateStudyCertificate
+  generateStudyCertificate,
+  generateRefundApplication
 };
 
