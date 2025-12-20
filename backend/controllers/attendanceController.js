@@ -1497,6 +1497,55 @@ exports.markAttendance = async (req, res) => {
       }
     }
 
+    // ============================================
+    // GLOBAL REPORT FOR SUPER ADMIN (sriram@pydah.edu.in)
+    // ============================================
+    // Check if ALL batches across the ENTIRE system are marked
+    const isGloballyFullyMarked = allAttendanceData.every(group => group.isFullyMarked);
+    console.log(`\n🌍 Checking Global Report status: ${isGloballyFullyMarked ? '✅ All batches marked globally' : '⏳ Waiting for global completion'}`);
+
+    if (isGloballyFullyMarked) {
+      const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
+      console.log(`   🚀 Triggering Global Consolidated Report for ${SUPER_ADMIN_EMAIL}`);
+
+      // Combine all students and attendance records from ALL groups
+      const globalStudents = [];
+      const globalAttendanceRecords = [];
+
+      for (const group of allAttendanceData) {
+        globalStudents.push(...group.students);
+        globalAttendanceRecords.push(...group.attendanceRecords);
+      }
+
+      try {
+        await sendAttendanceReportNotifications({
+          collegeId: null,
+          collegeName: 'All Colleges',
+          courseId: null,
+          courseName: 'All Courses',
+          branchId: null,
+          branchName: 'All Branches',
+          batch: 'All Batches',
+          year: 'All Years',
+          semester: 'All Semesters',
+          attendanceDate: normalizedDate,
+          students: globalStudents,
+          attendanceRecords: globalAttendanceRecords,
+          allBatchesData: allAttendanceData, // Pass all batches data for summary table
+          recipientUser: {
+            name: 'Sriram',
+            email: SUPER_ADMIN_EMAIL,
+            role: 'super_admin' // Dummy role, bypassed by email check in service
+          },
+          senderName: senderName // Pass sender name
+        });
+        console.log(`   📧 Global Report sent successfully to ${SUPER_ADMIN_EMAIL}`);
+        processedUsers.add(SUPER_ADMIN_EMAIL);
+      } catch (error) {
+        console.error(`   ❌ Error sending Global Report to ${SUPER_ADMIN_EMAIL}:`, error);
+      }
+    }
+
     // Log summary
     if (processedUsers.size > 0) {
       console.log(`\n📋 Summary: Reports sent to ${processedUsers.size} user(s)`);

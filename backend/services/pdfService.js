@@ -108,14 +108,26 @@ const generateAttendanceReportPDF = async ({
   // ============================================
   // HEADER SECTION: COLLEGE HEADER (Report Style)
   // ============================================
+  // Check if we have data from multiple colleges
+  // Extract unique colleges from allBatchesData if available
+  const uniqueColleges = allBatchesData
+    ? [...new Set(allBatchesData.map(b => b.college))].filter(Boolean)
+    : (collegeName ? [collegeName] : []);
+
+  const hasMultipleColleges = uniqueColleges.length > 1;
+  const isGlobalReport = hasMultipleColleges; // Alias for clarity
+
+  // ============================================
+  // HEADER SECTION: COLLEGE HEADER (Report Style)
+  // ============================================
   // Fetch college details from database
   let collegeDetails = {
-    name: collegeName || 'College Name',
-    affiliation: 'An Autonomous Institution',
+    name: collegeName || (isGlobalReport ? 'Pydah Group of Educational Institutions' : 'College Name'),
+    affiliation: isGlobalReport ? 'All Campuses' : 'An Autonomous Institution',
     location: 'Kakinada | Andhra Pradesh | INDIA'
   };
 
-  if (collegeName) {
+  if (!isGlobalReport && collegeName) {
     try {
       const [collegeRows] = await masterPool.query(
         'SELECT name, metadata FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
@@ -235,6 +247,10 @@ const generateAttendanceReportPDF = async ({
 
   // College Name (Large, Bold, Dark Gray)
   doc.fontSize(22).font('Helvetica-Bold').fillColor('#1F2937'); // Gray-800
+  // Adjust font size for long college names or global report title
+  if (collegeDetails.name.length > 30) {
+    doc.fontSize(18);
+  }
   doc.text(collegeDetails.name, collegeInfoLeft, headerTop + 10, {
     width: collegeInfoWidth,
     align: 'left'
@@ -251,7 +267,9 @@ const generateAttendanceReportPDF = async ({
   // Report Title (Medium, Bold, Orange)
   const reportMonth = new Date(attendanceDate).toLocaleDateString('en-IN', { month: 'long' });
   const reportYear = new Date(attendanceDate).getFullYear();
-  const reportTitle = `Attendance Summary Report - ${reportMonth} - ${reportYear}`;
+  const reportTitle = isGlobalReport
+    ? `Global Attendance Summary Report - ${reportMonth} - ${reportYear}`
+    : `Attendance Summary Report - ${reportMonth} - ${reportYear}`;
 
   doc.fontSize(14).font('Helvetica-Bold').fillColor('#FF6B35'); // Orange
   doc.text(reportTitle, collegeInfoLeft, headerTop + 55, {
@@ -314,33 +332,56 @@ const generateAttendanceReportPDF = async ({
   // Left column labels (bold)
   doc.font('Helvetica-Bold');
   doc.text('College:', leftCol, yPos);
-  if (!excludeCourse) {
+  if (!excludeCourse && !isGlobalReport) {
     doc.text('Course:', leftCol, yPos + lineHeight);
+  } else if (isGlobalReport) {
+    doc.text('Scope:', leftCol, yPos + lineHeight);
   }
-  doc.text('Branch:', leftCol, yPos + (lineHeight * (excludeCourse ? 1 : 2)));
-  doc.text('Year:', leftCol, yPos + (lineHeight * (excludeCourse ? 2 : 3)));
-  doc.text('Batch:', leftCol, yPos + (lineHeight * (excludeCourse ? 3 : 4)));
+
+  // Adjust line positions based on fields displayed
+  let currentYOffset = lineHeight * (isGlobalReport ? 2 : (excludeCourse ? 1 : 2));
+
+  if (!isGlobalReport) {
+    doc.text('Branch:', leftCol, yPos + currentYOffset);
+    currentYOffset += lineHeight;
+  }
+
+  doc.text('Year:', leftCol, yPos + currentYOffset);
+  currentYOffset += lineHeight;
+  doc.text('Batch:', leftCol, yPos + currentYOffset);
 
   // Left column values
   doc.font('Helvetica');
-  doc.text(collegeName || 'N/A', leftCol + 60, yPos, { width: 200, ellipsis: true });
-  if (!excludeCourse) {
+  const collegeDisplay = isGlobalReport ? 'All Colleges' : (collegeName || 'N/A');
+  doc.text(collegeDisplay, leftCol + 60, yPos, { width: 200, ellipsis: true });
+
+  if (!excludeCourse && !isGlobalReport) {
     doc.text(courseName || 'N/A', leftCol + 60, yPos + lineHeight, { width: 200, ellipsis: true });
+  } else if (isGlobalReport) {
+    doc.text('All Courses & Branches', leftCol + 60, yPos + lineHeight, { width: 200, ellipsis: true });
   }
-  // Branch name with proper truncation for long text to prevent alignment issues
-  const branchText = branchName || 'N/A';
-  const branchY = yPos + (lineHeight * (excludeCourse ? 1 : 2));
-  // Truncate branch name if too long to prevent overflow
-  const maxBranchLength = 50; // Characters before truncation
-  const truncatedBranchText = branchText.length > maxBranchLength
-    ? branchText.substring(0, maxBranchLength) + '...'
-    : branchText;
-  doc.text(truncatedBranchText, leftCol + 60, branchY, {
-    width: 200,
-    ellipsis: false // Already truncated manually
-  });
-  doc.text(year || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 2 : 3)), { width: 200, ellipsis: true });
-  doc.text(batch || 'N/A', leftCol + 60, yPos + (lineHeight * (excludeCourse ? 3 : 4)), { width: 200, ellipsis: true });
+
+  currentYOffset = lineHeight * (isGlobalReport ? 2 : (excludeCourse ? 1 : 2));
+
+  if (!isGlobalReport) {
+    // Branch name with proper truncation for long text to prevent alignment issues
+    const branchText = branchName || 'N/A';
+    const branchY = yPos + currentYOffset;
+    // Truncate branch name if too long to prevent overflow
+    const maxBranchLength = 50; // Characters before truncation
+    const truncatedBranchText = branchText.length > maxBranchLength
+      ? branchText.substring(0, maxBranchLength) + '...'
+      : branchText;
+    doc.text(truncatedBranchText, leftCol + 60, branchY, {
+      width: 200,
+      ellipsis: false // Already truncated manually
+    });
+    currentYOffset += lineHeight;
+  }
+
+  doc.text(year || 'N/A', leftCol + 60, yPos + currentYOffset, { width: 200, ellipsis: true });
+  currentYOffset += lineHeight;
+  doc.text(batch || 'N/A', leftCol + 60, yPos + currentYOffset, { width: 200, ellipsis: true });
 
   // Right column labels (bold)
   doc.font('Helvetica-Bold');
@@ -402,7 +443,11 @@ const generateAttendanceReportPDF = async ({
       .fill();
 
     doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF');
-    doc.text('Attendance Summary by Batch/Course/Branch/Year/Semester', leftMargin, tabularSectionTop + 8, {
+    const tableTitle = isGlobalReport
+      ? 'Global Attendance Summary by College/Course'
+      : 'Attendance Summary by Batch/Course/Branch/Year/Semester';
+
+    doc.text(tableTitle, leftMargin, tabularSectionTop + 8, {
       width: contentWidth,
       align: 'center'
     });
@@ -415,10 +460,24 @@ const generateAttendanceReportPDF = async ({
     const summaryTableTop = doc.y;
     const summaryTableLeft = leftMargin;
     const summaryTableWidth = contentWidth;
-    // Adjust column widths based on whether course is excluded
-    const summaryColWidths = excludeCourse
-      ? [70, 70, 55, 55, 60, 60, 60, 70] // Batch, Branch, Year, Sem, Total, Present, Absent, Att %
-      : [60, 80, 60, 50, 50, 50, 50, 50, 60]; // Batch, Course, Branch, Year, Sem, Total, Present, Absent, %
+
+    // Adjust column widths based on whether course is excluded AND if we have multiple colleges
+    let summaryColWidths;
+    let summaryHeaders;
+
+    if (isGlobalReport) {
+      // Global Report: Added College Column
+      // College, Course, Branch, Year, Sem, Tot, Pre, Abs, %
+      summaryColWidths = [75, 65, 60, 40, 40, 45, 45, 45, 60];
+      summaryHeaders = ['College', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Pres', 'Abs', 'Att %'];
+    } else if (excludeCourse) {
+      summaryColWidths = [70, 70, 55, 55, 60, 60, 60, 70]; // Batch, Branch, Year, Sem, Total, Present, Absent, Att %
+      summaryHeaders = ['Batch', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+    } else {
+      summaryColWidths = [60, 80, 60, 50, 50, 50, 50, 50, 60]; // Batch, Course, Branch, Year, Sem, Total, Present, Absent, %
+      summaryHeaders = ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+    }
+
     const summaryHeaderHeight = 25;
     const summaryRowHeight = 20;
 
@@ -429,10 +488,7 @@ const generateAttendanceReportPDF = async ({
       .stroke('#1E3A8A'); // Blue-900 border
 
     // Header text
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
-    const summaryHeaders = excludeCourse
-      ? ['Batch', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %']
-      : ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+    doc.fontSize(isGlobalReport ? 7 : 8).font('Helvetica-Bold').fillColor('#FFFFFF');
     let summaryXPos = summaryTableLeft + 3;
     summaryHeaders.forEach((header, idx) => {
       doc.text(header, summaryXPos, summaryTableTop + 7);
@@ -465,7 +521,7 @@ const generateAttendanceReportPDF = async ({
           .fill()
           .stroke('#1E3A8A');
         summaryXPos = summaryTableLeft + 3;
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
+        doc.fontSize(isGlobalReport ? 7 : 8).font('Helvetica-Bold').fillColor('#FFFFFF');
         summaryHeaders.forEach((header, idx) => {
           doc.text(header, summaryXPos, summaryCurrentY + 7);
           summaryXPos += summaryColWidths[idx];
@@ -491,56 +547,113 @@ const generateAttendanceReportPDF = async ({
       doc.fontSize(7).font('Helvetica').fillColor('#000000');
       summaryXPos = summaryTableLeft + 3;
 
-      // Batch
-      doc.text(String(group.batch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[0] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[0];
+      if (isGlobalReport) {
+        // Global Report Columns: College, Course, Branch, Year, Sem, Tot, Pre, Abs, %
 
-      // Course (only if not excluded)
-      if (!excludeCourse) {
-        doc.text(String(group.course || 'N/A').substring(0, 10), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[1] - 3, ellipsis: true });
+        // College - Truncate or map to abbreviation if needed
+        let collegeVal = group.college || 'N/A';
+        // Simple abbreviations map could be added here if needed
+        if (collegeVal.includes('College of Engineering')) collegeVal = collegeVal.replace('College of Engineering', 'COE');
+        if (collegeVal.includes('College of Engineering & Technology')) collegeVal = collegeVal.replace('College of Engineering & Technology', 'CET');
+        if (collegeVal.includes('Degree College')) collegeVal = collegeVal.replace('Degree College', 'Degree');
+
+        doc.text(collegeVal.substring(0, 20), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[0] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[0];
+
+        // Course
+        doc.text(String(group.course || 'N/A').substring(0, 15), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[1] - 3, ellipsis: true });
         summaryXPos += summaryColWidths[1];
+
+        // Branch
+        doc.text(String(group.branch || 'N/A').substring(0, 15), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[2] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[2];
+
+        // Year
+        doc.text(String(group.year || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[3] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[3];
+
+        // Semester
+        doc.text(String(group.semester || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[4] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[4];
+
+        // Total
+        const totalVal = group.total || group.statistics?.totalStudents || 0;
+        doc.text(String(totalVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[5] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[5];
+
+        // Present
+        doc.fillColor('#10B981'); // Green
+        const presVal = group.present || group.statistics?.presentCount || 0;
+        doc.text(String(presVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[6] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[6];
+
+        // Absent
+        doc.fillColor('#EF4444'); // Red
+        const absVal = group.absent || group.statistics?.absentCount || 0;
+        doc.text(String(absVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[7] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[7];
+
+        // %
+        doc.fillColor('#1E40AF'); // Blue
+        doc.font('Helvetica-Bold');
+        const attP = totalVal > 0 ? ((presVal / totalVal) * 100).toFixed(1) : '0.0';
+        doc.text(`${attP}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[8] - 3, ellipsis: true });
+
+      } else {
+        // Standard Report Logic
+
+        // Batch
+        doc.text(String(group.batch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[0] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[0];
+
+        // Course (only if not excluded)
+        if (!excludeCourse) {
+          doc.text(String(group.course || 'N/A').substring(0, 10), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[1] - 3, ellipsis: true });
+          summaryXPos += summaryColWidths[1];
+        }
+
+        // Branch
+        const branchColIdx = excludeCourse ? 1 : 2;
+        doc.text(String(group.branch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[branchColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[branchColIdx];
+
+        // Year
+        const yearColIdx = excludeCourse ? 2 : 3;
+        doc.text(String(group.year || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[yearColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[yearColIdx];
+
+        // Semester
+        const semColIdx = excludeCourse ? 3 : 4;
+        doc.text(String(group.semester || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[semColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[semColIdx];
+
+        // Total
+        const totalColIdx = excludeCourse ? 4 : 5;
+        doc.text(String(group.total || group.statistics?.totalStudents || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[totalColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[totalColIdx];
+
+        // Present
+        const presentColIdx = excludeCourse ? 5 : 6;
+        doc.fillColor('#10B981'); // Green
+        doc.text(String(group.present || group.statistics?.presentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[presentColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[presentColIdx];
+
+        // Absent
+        const absentColIdx = excludeCourse ? 6 : 7;
+        doc.fillColor('#EF4444'); // Red
+        doc.text(String(group.absent || group.statistics?.absentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[absentColIdx] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[absentColIdx];
+
+        // Attendance %
+        const attPercentColIdx = excludeCourse ? 7 : 8;
+        const totalForPercent = group.total || group.statistics?.totalStudents || 0;
+        const presentForPercent = group.present || group.statistics?.presentCount || 0;
+        const attPercent = totalForPercent > 0 ? ((presentForPercent / totalForPercent) * 100).toFixed(1) : '0.0';
+        doc.fillColor('#1E40AF'); // Blue
+        doc.font('Helvetica-Bold');
+        doc.text(`${attPercent}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[attPercentColIdx] - 3, ellipsis: true });
       }
 
-      // Branch
-      const branchColIdx = excludeCourse ? 1 : 2;
-      doc.text(String(group.branch || 'N/A').substring(0, 8), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[branchColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[branchColIdx];
-
-      // Year
-      const yearColIdx = excludeCourse ? 2 : 3;
-      doc.text(String(group.year || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[yearColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[yearColIdx];
-
-      // Semester
-      const semColIdx = excludeCourse ? 3 : 4;
-      doc.text(String(group.semester || 'N/A'), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[semColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[semColIdx];
-
-      // Total
-      const totalColIdx = excludeCourse ? 4 : 5;
-      doc.text(String(group.total || group.statistics?.totalStudents || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[totalColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[totalColIdx];
-
-      // Present
-      const presentColIdx = excludeCourse ? 5 : 6;
-      doc.fillColor('#10B981'); // Green
-      doc.text(String(group.present || group.statistics?.presentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[presentColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[presentColIdx];
-
-      // Absent
-      const absentColIdx = excludeCourse ? 6 : 7;
-      doc.fillColor('#EF4444'); // Red
-      doc.text(String(group.absent || group.statistics?.absentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[absentColIdx] - 3, ellipsis: true });
-      summaryXPos += summaryColWidths[absentColIdx];
-
-      // Attendance %
-      const attPercentColIdx = excludeCourse ? 7 : 8;
-      const totalForPercent = group.total || group.statistics?.totalStudents || 0;
-      const presentForPercent = group.present || group.statistics?.presentCount || 0;
-      const attPercent = totalForPercent > 0 ? ((presentForPercent / totalForPercent) * 100).toFixed(1) : '0.0';
-      doc.fillColor('#1E40AF'); // Blue
-      doc.font('Helvetica-Bold');
-      doc.text(`${attPercent}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[attPercentColIdx] - 3, ellipsis: true });
       doc.font('Helvetica');
       doc.fillColor('#000000'); // Reset to black
       doc.fillColor('#000000');

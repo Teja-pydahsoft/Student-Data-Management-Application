@@ -43,7 +43,7 @@ async function seedSuperAdmin() {
         'SELECT * FROM admins WHERE username = ? LIMIT 1',
         ['superadmin']
       );
-      
+
       if (admins && admins.length > 0) {
         existingAdmin = admins[0];
       }
@@ -59,7 +59,7 @@ async function seedSuperAdmin() {
 
     // Get admin details from environment or use defaults
     const name = process.env.SUPER_ADMIN_NAME || 'Super Admin';
-    const email = process.env.SUPER_ADMIN_EMAIL || 'admin@pydah.edu';
+    const email = process.env.SUPER_ADMIN_EMAIL || 'sriram@pydah.edu.in';
     const username = process.env.SUPER_ADMIN_USERNAME || 'superadmin';
     const password = process.env.SUPER_ADMIN_PASSWORD || 'Admin@123';
 

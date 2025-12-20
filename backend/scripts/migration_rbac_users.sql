@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS rbac_users (
 -- INSERT INTO rbac_users (name, email, username, password, role, permissions)
 -- VALUES (
 --   'Super Admin',
---   'admin@pydah.edu',
+--   'sriram@pydah.edu.in',
 --   'superadmin',
 --   '$2a$10$...', -- Hashed password
 --   'super_admin',
