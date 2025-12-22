@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { serviceService } from '../services/serviceService';
 import { toast } from 'react-hot-toast';
-import { Briefcase, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Briefcase, Plus, Trash2, Edit2, Check, X, LayoutTemplate } from 'lucide-react';
 
 const ServicesConfig = () => {
     const [services, setServices] = useState([]);
@@ -124,7 +124,8 @@ const ServicesConfig = () => {
         try {
             const blob = await serviceService.previewTemplate({
                 template_type: service.template_type,
-                service_name: service.name
+                service_name: service.name,
+                template_config: service.template_config
             });
             const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
             setPreviewUrl(url);
@@ -204,6 +205,15 @@ const ServicesConfig = () => {
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
                                                 </div>
                                             </button>
+                                            {service.template_type === 'dynamic' && (
+                                                <a
+                                                    href={`/services/design/${service.id}`}
+                                                    className="p-1.5 text-purple-600 hover:bg-purple-50 rounded"
+                                                    title="Design Certificate"
+                                                >
+                                                    <LayoutTemplate size={16} />
+                                                </a>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -272,6 +282,7 @@ const ServicesConfig = () => {
                                         <option value="refund_application">Refund Application</option>
                                         <option value="bonafide_certificate">Bonafide Certificate</option>
                                         <option value="bus_pass">Bus Pass Certificate</option>
+                                        <option value="dynamic">Dynamic Certificate (Custom)</option>
                                     </select>
                                     <button
                                         type="button"

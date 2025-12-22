@@ -23,233 +23,8 @@ import {
 import api from '../config/api';
 import toast from 'react-hot-toast';
 
-const MultiSelect = ({ label, options, selected, onChange, placeholder, disabled }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (containerRef.current && !containerRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const toggleOption = (value) => {
-        const safeSelected = Array.isArray(selected) ? selected : [];
-        const newSelected = safeSelected.includes(value)
-            ? safeSelected.filter(item => item !== value)
-            : [...safeSelected, value];
-        onChange(newSelected);
-    };
-
-    return (
-        <div className="relative" ref={containerRef}>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">{label}</label>
-            <button
-                type="button"
-                className={`w-full p-2 text-left border rounded-lg flex justify-between items-center text-sm ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:border-blue-400'}`}
-                onClick={() => !disabled && setIsOpen(!isOpen)}
-                disabled={disabled}
-            >
-                <span className={`truncate ${Array.isArray(selected) && selected.length === 0 ? 'text-gray-400' : 'text-gray-800'}`}>
-                    {Array.isArray(selected) && selected.length === 0 ? placeholder : `${Array.isArray(selected) ? selected.length : 0} selected`}
-                </span>
-                <ChevronDown size={14} className="text-gray-400" />
-            </button>
-
-            {isOpen && !disabled && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                    {options.length === 0 ? (
-                        <div className="p-3 text-sm text-gray-500 text-center">No options available</div>
-                    ) : (
-                        options.map(option => (
-                            <div
-                                key={option.value}
-                                className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer text-sm"
-                                onClick={() => toggleOption(option.value)}
-                            >
-                                <div className={`w-4 h-4 border rounded flex items-center justify-center ${selected.includes(option.value) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                                    {selected.includes(option.value) && <Check size={10} className="text-white" />}
-                                </div>
-                                <span className="text-gray-700">{option.label}</span>
-                            </div>
-                        ))
-                    )}
-                </div>
-            )}
-
-            {Array.isArray(selected) && selected.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                    {selected.slice(0, 5).map(val => (
-                        <span key={val} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-100 flex items-center gap-1">
-                            {options.find(o => o.value === val)?.label || val}
-                            <button type="button" onClick={() => toggleOption(val)} className="hover:text-blue-900"><X size={10} /></button>
-                        </span>
-                    ))}
-                    {selected.length > 5 && <span className="text-xs text-gray-500 py-0.5">+{selected.length - 5} more</span>}
-                </div>
-            )}
-        </div>
-    );
-};
-
-const TargetSelector = ({ formData, setFormData }) => {
-    const [colleges, setColleges] = useState([]);
-    const [batches, setBatches] = useState([]);
-    const [courses, setCourses] = useState([]);
-    const [branches, setBranches] = useState([]);
-    const [years, setYears] = useState([]);
-    const [semesters, setSemesters] = useState([]);
-
-    const [availableCourses, setAvailableCourses] = useState([]);
-    const [availableBranches, setAvailableBranches] = useState([]);
-    const [availableYears, setAvailableYears] = useState([]);
-    const [availableSemesters, setAvailableSemesters] = useState([]);
-    const [recipientCount, setRecipientCount] = useState(0);
-
-    useEffect(() => {
-        fetchMetadata();
-    }, []);
-
-    const fetchMetadata = async () => {
-        try {
-            const [colRes, batchRes, courRes, branchRes, yearRes, semRes] = await Promise.all([
-                api.get('/colleges'),
-                api.get('/announcements/batches').catch(() => ({ data: { success: false, data: [] } })),
-                api.get('/courses'),
-                api.get('/announcements/branches').catch(() => ({ data: { success: false, data: [] } })),
-                api.get('/announcements/years').catch(() => ({ data: { success: false, data: [] } })),
-                api.get('/announcements/semesters').catch(() => ({ data: { success: false, data: [] } }))
-            ]);
-
-            if (colRes.data.success) setColleges(colRes.data.data.map(c => ({ value: c.name, label: c.name, id: c.id })));
-            if (batchRes.data.success) setBatches(batchRes.data.data.map(b => ({ value: b.name, label: b.name, id: b.id })));
-            if (courRes.data.success) setCourses(courRes.data.data.map(c => ({ value: c.name, label: c.name, collegeId: c.college_id, id: c.id })));
-            if (branchRes.data.success) setBranches(branchRes.data.data.map(b => ({ value: b.name, label: b.name, courseId: b.course_id, id: b.id })));
-            if (yearRes.data.success) setYears(yearRes.data.data.map(y => ({ value: y.name, label: `${y.name} Year`, batchId: y.batch_id })));
-            if (semRes.data.success) setSemesters(semRes.data.data.map(s => ({ value: s.name, label: `Semester ${s.name}`, batchId: s.batch_id })));
-        } catch (error) {
-            console.error('Metadata fetch failed', error);
-        }
-    };
-
-    useEffect(() => {
-        if (formData.target_college.length === 0) {
-            setAvailableCourses(courses);
-        } else {
-            const selectedCollegeIds = colleges.filter(c => formData.target_college.includes(c.value)).map(c => c.id);
-            const filtered = courses.filter(c => selectedCollegeIds.includes(c.collegeId));
-            setAvailableCourses(filtered.length > 0 || selectedCollegeIds.length === 0 ? filtered : courses);
-        }
-    }, [formData.target_college, courses, colleges]);
-
-    useEffect(() => {
-        if (formData.target_course.length === 0) {
-            setAvailableBranches(branches);
-        } else {
-            const selectedCourseNames = formData.target_course;
-            const filtered = branches.filter(b => selectedCourseNames.includes(b.courseId));
-            setAvailableBranches(filtered.length > 0 ? filtered : branches);
-        }
-    }, [formData.target_course, courses, branches]);
-
-    useEffect(() => {
-        if (formData.target_batch.length === 0) {
-            const distinctYears = [...new Map(years.map(item => [item.value, item])).values()];
-            const distinctSems = [...new Map(semesters.map(item => [item.value, item])).values()];
-            setAvailableYears(distinctYears);
-            setAvailableSemesters(distinctSems);
-        } else {
-            const selectedBatches = formData.target_batch;
-            const filteredYears = years.filter(y => selectedBatches.includes(y.batchId));
-            setAvailableYears([...new Map(filteredYears.map(item => [item.value, item])).values()]);
-            const filteredSems = semesters.filter(s => selectedBatches.includes(s.batchId));
-            setAvailableSemesters([...new Map(filteredSems.map(item => [item.value, item])).values()]);
-        }
-    }, [formData.target_batch, years, semesters]);
-
-    useEffect(() => {
-        const calculateCount = async () => {
-            try {
-                const response = await api.post('/announcements/count', {
-                    target_college: formData.target_college,
-                    target_batch: formData.target_batch,
-                    target_course: formData.target_course,
-                    target_branch: formData.target_branch,
-                    target_year: formData.target_year,
-                    target_semester: formData.target_semester
-                });
-                if (response.data.success) setRecipientCount(response.data.count);
-            } catch (error) { console.error("Failed to calculate count", error); }
-        };
-        const timer = setTimeout(calculateCount, 500);
-        return () => clearTimeout(timer);
-    }, [formData]);
-
-    return (
-        <div className="space-y-4 bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
-            <div className="flex justify-between items-center">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-2">
-                    <Users size={16} /> Target Audience
-                </h3>
-                <div className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                    Est. Recipients: {recipientCount}
-                </div>
-            </div>
-            <p className="text-xs text-slate-500 mb-4">Leave fields empty to target everyone.</p>
-
-            <div className="space-y-4">
-                <MultiSelect
-                    label="Colleges"
-                    placeholder="All Colleges"
-                    options={colleges}
-                    selected={formData.target_college}
-                    onChange={vals => setFormData({ ...formData, target_college: vals })}
-                />
-                <MultiSelect
-                    label="Batches"
-                    placeholder="All Batches"
-                    options={batches}
-                    selected={formData.target_batch}
-                    onChange={vals => setFormData({ ...formData, target_batch: vals })}
-                />
-            </div>
-            <MultiSelect
-                label="Courses"
-                placeholder="All Courses"
-                options={availableCourses}
-                selected={formData.target_course}
-                onChange={vals => setFormData({ ...formData, target_course: vals })}
-            />
-            <MultiSelect
-                label="Branches"
-                placeholder="All Branches"
-                options={availableBranches}
-                selected={formData.target_branch}
-                onChange={vals => setFormData({ ...formData, target_branch: vals })}
-            />
-            <div className="grid grid-cols-2 gap-4">
-                <MultiSelect
-                    label="Years"
-                    placeholder="All Years"
-                    options={availableYears}
-                    selected={formData.target_year}
-                    onChange={vals => setFormData({ ...formData, target_year: vals })}
-                />
-                <MultiSelect
-                    label="Semesters"
-                    placeholder="All Semesters"
-                    options={availableSemesters}
-                    selected={formData.target_semester}
-                    onChange={vals => setFormData({ ...formData, target_semester: vals })}
-                />
-            </div>
-        </div>
-    );
-};
+import TargetSelector from '../components/TargetSelector';
+import EventCalendar from './admin/EventCalendar';
 
 const Announcements = () => {
     const [activeTab, setActiveTab] = useState('announcements');
@@ -463,36 +238,38 @@ const Announcements = () => {
 
     return (
         <div className="min-h-screen bg-gray-50/50 p-6 space-y-6 animate-fade-in relative">
-            <div className="flex justify-between items-end">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 heading-font">Announcements & Polls</h1>
-                    <p className="text-gray-500">Manage communication with students.</p>
+            {/* Tabs & Actions */}
+            <div className="flex justify-between items-center border-b border-gray-200 bg-white px-4 rounded-t-xl shadow-sm">
+                <div className="flex">
+                    <button
+                        onClick={() => { setActiveTab('announcements'); fetchAnnouncements(); }}
+                        className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'announcements' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Announcements
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('polls'); fetchPolls(); }}
+                        className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'polls' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Polls
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('calendar'); }}
+                        className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'calendar' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Event Calendar
+                    </button>
                 </div>
-                <button
-                    onClick={() => openCreateModal(activeTab)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
-                >
-                    <Plus size={20} />
-                    Create New
-                </button>
-            </div>
 
-            {/* Quick Stats or Filters can go here later */}
-
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 bg-white px-4 rounded-t-xl shadow-sm">
-                <button
-                    onClick={() => { setActiveTab('announcements'); fetchAnnouncements(); }}
-                    className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'announcements' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    Announcements
-                </button>
-                <button
-                    onClick={() => { setActiveTab('polls'); fetchPolls(); }}
-                    className={`px-6 py-4 font-medium text-sm transition-colors border-b-2 ${activeTab === 'polls' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    Polls
-                </button>
+                {activeTab !== 'calendar' && (
+                    <button
+                        onClick={() => openCreateModal(activeTab)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 text-sm shadow hover:shadow-md transition-all my-2"
+                    >
+                        <Plus size={16} />
+                        Create New
+                    </button>
+                )}
             </div>
 
             {/* List View */}
@@ -503,7 +280,7 @@ const Announcements = () => {
                     </div>
                 )}
 
-                {activeTab === 'announcements' ? (
+                {activeTab === 'announcements' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {announcements.map(ann => (
                             <div key={ann.id} className={`bg-white rounded-xl shadow-sm border p-4 group hover:shadow-md transition-all ${!ann.is_active ? 'opacity-75 grayscale' : ''}`}>
@@ -529,7 +306,9 @@ const Announcements = () => {
                             <div className="col-span-full text-center py-10 text-gray-500">No announcements found.</div>
                         )}
                     </div>
-                ) : (
+                )}
+
+                {activeTab === 'polls' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {polls.map(poll => (
                             <div key={poll.id} className={`bg-white rounded-xl shadow-sm border p-6 group hover:shadow-md transition-all ${!poll.is_active ? 'opacity-75' : ''}`}>
@@ -580,6 +359,12 @@ const Announcements = () => {
                         {polls.length === 0 && !loading && (
                             <div className="col-span-full text-center py-10 text-gray-500">No polls found.</div>
                         )}
+                    </div>
+                )}
+
+                {activeTab === 'calendar' && (
+                    <div className="-m-6">
+                        <EventCalendar isEmbedded={true} />
                     </div>
                 )}
             </div>

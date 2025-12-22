@@ -1412,9 +1412,155 @@ const generateRefundApplication = async (student, request, collegeDetails) => {
   });
 };
 
+/**
+ * Generate Dynamic Certificate based on JSON Config
+ */
+const generateDynamicCertificate = async (student, request, collegeDetails, config) => {
+  const tempDir = os.tmpdir();
+  const fileName = `dynamic_cert_${Date.now()}.pdf`;
+  const filePath = path.join(tempDir, fileName);
+
+  const doc = new PDFDocument({
+    size: config.size || 'A4',
+    layout: config.layout || 'portrait',
+    margin: 0 // We control positioning manually
+  });
+
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  // Prepare Data for Replacement
+  let requestData = request.request_data;
+  if (typeof requestData === 'string') {
+    try { requestData = JSON.parse(requestData); } catch (e) { requestData = {}; }
+  } else {
+    requestData = requestData || {};
+  }
+
+  const data = {
+    // Basic Fields
+    student_name: (student.student_name || '').toUpperCase(),
+    admission_number: (student.admission_number || '').toUpperCase(),
+    pin_no: (student.pin_no || '').toUpperCase(),
+    course: (student.course || '').toUpperCase(),
+    branch: (student.branch || '').toUpperCase(),
+    current_year: student.current_year ? student.current_year.toString() : '',
+    current_semester: student.current_semester ? student.current_semester.toString() : '',
+    dob: student.dob ? new Date(student.dob).toLocaleDateString('en-IN') : '',
+    email: student.email || '',
+    phone_number: student.phone_number || '',
+
+    // College Details
+    college_name: collegeDetails.name || 'Pydah Group of Institutions',
+    college_address: collegeDetails.address || '',
+    college_phone: collegeDetails.phone || '',
+    college_email: collegeDetails.email || '',
+
+    // Dates
+    date: new Date().toLocaleDateString('en-IN'),
+    current_date: new Date().toLocaleDateString('en-IN'),
+
+    // Request Specific
+    ...requestData,
+    ...student, // Fallback
+  };
+
+  // Helper to resolve variables
+  const replaceVariables = (text) => {
+    if (!text) return '';
+    return text.replace(/{{(.*?)}}/g, (match, p1) => {
+      const key = p1.trim();
+      return data[key] !== undefined ? data[key] : match;
+    });
+  };
+
+  // Render Elements
+  if (config.elements && Array.isArray(config.elements)) {
+    for (const el of config.elements) {
+      if (el.type === 'text') {
+        let fontName = el.font || 'Helvetica';
+        if (fontName === 'Bold') fontName = 'Helvetica-Bold';
+
+        doc.font(fontName)
+          .fontSize(el.fontSize || 12)
+          .fillColor(el.color || '#000000');
+
+        const content = replaceVariables(el.content);
+
+        const options = {
+          width: el.width,
+          align: el.align || 'left'
+        };
+
+        if (el.x !== undefined && el.y !== undefined) {
+          doc.text(content, el.x, el.y, options);
+        } else {
+          doc.text(content, options);
+        }
+      }
+      else if (el.type === 'image') {
+        try {
+          if (el.content && el.content.startsWith('data:image')) {
+            doc.image(el.content, el.x, el.y, { width: el.width, height: el.height });
+          } else if (el.content === 'logo') {
+            const logoPath = path.join(__dirname, '../../frontend/public/logo.png');
+            if (fs.existsSync(logoPath)) {
+              doc.image(logoPath, el.x, el.y, { width: el.width, height: el.height });
+            }
+          }
+        } catch (e) {
+          console.error("Image Render Error:", e);
+        }
+      }
+      else if (el.type === 'line') {
+        // Improve line handling to support both legacy x/y and explicit x1/y1
+        let x1 = el.x1 !== undefined ? el.x1 : el.x;
+        let y1 = el.y1 !== undefined ? el.y1 : el.y;
+        let x2 = el.x2 !== undefined ? el.x2 : (el.x + el.width);
+        let y2 = el.y2 !== undefined ? el.y2 : el.y; // Default horizontal if no y2
+
+        doc.moveTo(x1, y1)
+          .lineTo(x2, y2)
+          .strokeColor(el.color || '#000000')
+          .lineWidth(el.lineWidth || 1)
+          .stroke();
+      }
+      else if (el.type === 'rect') {
+        doc.rect(el.x, el.y, el.width, el.height);
+        if (el.fill && el.stroke) {
+          doc.lineWidth(el.lineWidth || 1).fillAndStroke(el.fill, el.color || '#000000');
+        } else if (el.fill) {
+          doc.fillColor(el.fill).fill();
+        } else {
+          doc.strokeColor(el.color || '#000000').lineWidth(el.lineWidth || 1).stroke();
+        }
+      }
+      else if (el.type === 'circle') {
+        // pdfkit circle takes center x, y and radius
+        doc.circle(el.x + el.radius, el.y + el.radius, el.radius);
+        if (el.fill && el.stroke) {
+          doc.lineWidth(el.lineWidth || 1).fillAndStroke(el.fill, el.color || '#000000');
+        } else if (el.fill) {
+          doc.fillColor(el.fill).fill();
+        } else {
+          doc.strokeColor(el.color || '#000000').lineWidth(el.lineWidth || 1).stroke();
+        }
+      }
+    }
+  }
+
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
+};
+
 module.exports = {
   generateAttendanceReportPDF,
   generateStudyCertificate,
-  generateRefundApplication
+  generateRefundApplication,
+  generateDynamicCertificate
 };
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import {
     Home,
+    CalendarCheck,
     User,
     LogOut,
     Menu,
@@ -28,9 +29,11 @@ const StudentLayout = ({ children }) => {
 
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
+        { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
+        { icon: CalendarCheck, label: 'Event Calendar', path: '/student/events' },
         { icon: CheckCircle, label: 'Attendance', path: '/student/attendance' },
         { icon: FileText, label: 'Sem Registration', path: '/student/semester-registration' },
-        { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
+
         { icon: Briefcase, label: 'Services', path: '/student/services' },
         { icon: User, label: 'Profile', path: '/student/profile' },
     ];

@@ -23,6 +23,7 @@ import TaskManagement from './pages/TaskManagement';
 import Announcements from './pages/Announcements';
 import ServicesConfig from './pages/ServicesConfig';
 import ServiceRequests from './pages/ServiceRequests';
+import CertificateDesigner from './pages/admin/CertificateDesigner';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -33,6 +34,10 @@ import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
 import StudentAttendance from './pages/student/Attendance';
 import StudentServices from './pages/student/Services';
+
+// Event Pages
+import EventCalendar from './pages/admin/EventCalendar';
+import StudentCalendar from './pages/student/StudentCalendar';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -113,7 +118,9 @@ function App() {
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="events" element={<EventCalendar />} />
           <Route path="services/config" element={<ServicesConfig />} />
+          <Route path="services/design/:serviceId" element={<CertificateDesigner />} />
           <Route path="services/requests" element={<ServiceRequests />} />
         </Route>
 
@@ -133,6 +140,7 @@ function App() {
           <Route path="raise-ticket" element={<RaiseTicket />} />
           <Route path="my-tickets" element={<MyTickets />} />
           <Route path="announcements" element={<StudentAnnouncements />} />
+          <Route path="events" element={<StudentCalendar />} />
           <Route path="attendance" element={<StudentAttendance />} />
           <Route path="services" element={<StudentServices />} />
         </Route>

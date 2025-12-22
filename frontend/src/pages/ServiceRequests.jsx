@@ -41,8 +41,7 @@ const ServiceRequests = () => {
                 }
                 await serviceService.updateRequestStatus(selectedRequest.id, {
                     status: 'ready_to_collect',
-                    collect_date: actionData.collect_date,
-                    admin_note: actionData.admin_note
+                    ...actionData
                 });
                 toast.success('Request marked as Ready to Collect');
             } else if (actionType === 'close') {
@@ -245,9 +244,64 @@ const ServiceRequests = () => {
             {/* Action Modal */}
             {selectedRequest && actionType === 'ready' && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-scale-in">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-scale-in max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4">Mark as Ready to Collect</h2>
                         <div className="space-y-4">
+                            {selectedRequest?.service_name?.toLowerCase().includes('transfer certificate') && (
+                                <>
+                                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-2">
+                                        <h3 className="text-sm font-bold text-blue-800 mb-2">TC Details Configuration</h3>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Reason for Leaving</label>
+                                                <select
+                                                    className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    value={actionData.reason || ''}
+                                                    onChange={e => setActionData({ ...actionData, reason: e.target.value })}
+                                                >
+                                                    <option value="">Select Reason...</option>
+                                                    <option value="Course Completed">Course Completed</option>
+                                                    <option value="Discontinued">Discontinued</option>
+                                                    <option value="Personal">Personal</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Conduct</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    value={actionData.conduct || 'Good'}
+                                                    onChange={e => setActionData({ ...actionData, conduct: e.target.value })}
+                                                    placeholder="e.g. Good"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Mole 1</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        value={actionData.mole_1 || ''}
+                                                        onChange={e => setActionData({ ...actionData, mole_1: e.target.value })}
+                                                        placeholder="Identification Mark 1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Mole 2</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        value={actionData.mole_2 || ''}
+                                                        onChange={e => setActionData({ ...actionData, mole_2: e.target.value })}
+                                                        placeholder="Identification Mark 2"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Collect Date</label>
                                 <input

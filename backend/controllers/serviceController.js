@@ -33,7 +33,7 @@ exports.getServices = async (req, res) => {
 
 exports.createService = async (req, res) => {
     try {
-        const { name, description, price, is_active, template_type } = req.body;
+        const { name, description, price, is_active, template_type, template_config } = req.body;
 
         // Basic validation
         if (!name || price === undefined) {
@@ -41,8 +41,8 @@ exports.createService = async (req, res) => {
         }
 
         const [result] = await masterPool.execute(
-            'INSERT INTO services (name, description, price, is_active, template_type) VALUES (?, ?, ?, ?, ?)',
-            [name, description, price, is_active !== undefined ? is_active : true, template_type || 'standard']
+            'INSERT INTO services (name, description, price, is_active, template_type, template_config) VALUES (?, ?, ?, ?, ?, ?)',
+            [name, description, price, is_active !== undefined ? is_active : true, template_type || 'standard', template_config ? JSON.stringify(template_config) : null]
         );
 
         res.status(201).json({
@@ -62,11 +62,11 @@ exports.createService = async (req, res) => {
 exports.updateService = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, price, is_active, template_type } = req.body;
+        const { name, description, price, is_active, template_type, template_config } = req.body;
 
         const [result] = await masterPool.execute(
-            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ?, template_type = ? WHERE id = ?',
-            [name, description, price, is_active, template_type || 'standard', id]
+            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ?, template_type = ?, template_config = ? WHERE id = ?',
+            [name, description, price, is_active, template_type || 'standard', template_config ? JSON.stringify(template_config) : null, id]
         );
 
         if (result.affectedRows === 0) {
@@ -202,7 +202,32 @@ exports.getServiceRequests = async (req, res) => {
 exports.updateRequestStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, collect_date, admin_note } = req.body;
+        const { status, collect_date, admin_note, ...otherUpdates } = req.body;
+
+        // Fetch current request data to merge JSON
+        const [existing] = await masterPool.execute('SELECT request_data FROM service_requests WHERE id = ?', [id]);
+
+        if (existing.length === 0) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        let currentData = existing[0].request_data;
+        // Parse if string
+        if (typeof currentData === 'string') {
+            try { currentData = JSON.parse(currentData); } catch (e) { currentData = {}; }
+        }
+
+        // Merge legitimate extra fields that shouldn't be top-level columns
+        // Allowed extra fields for TC or other certificates
+        const allowedExtras = ['reason', 'conduct', 'mole_1', 'mole_2', 'identification_marks'];
+        let hasDataUpdate = false;
+
+        allowedExtras.forEach(key => {
+            if (otherUpdates[key] !== undefined) {
+                currentData[key] = otherUpdates[key];
+                hasDataUpdate = true;
+            }
+        });
 
         let query = 'UPDATE service_requests SET status = ?';
         const params = [status];
@@ -217,14 +242,15 @@ exports.updateRequestStatus = async (req, res) => {
             params.push(admin_note);
         }
 
+        if (hasDataUpdate) {
+            query += ', request_data = ?';
+            params.push(JSON.stringify(currentData));
+        }
+
         query += ' WHERE id = ?';
         params.push(id);
 
         const [result] = await masterPool.execute(query, params);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Request not found' });
-        }
 
         res.json({ success: true, message: 'Request updated successfully' });
     } catch (error) {
@@ -318,14 +344,19 @@ exports.downloadCertificate = async (req, res) => {
         }
 
         // Generate PDF based on template type
-        let filePath;
         if (request.template_type === 'study_certificate' || request.service_name.toLowerCase().includes('study')) {
             filePath = await pdfService.generateStudyCertificate(request, request, collegeDetails); // passing request as student object because it contains joined fields
         } else if (request.template_type === 'refund_application' || request.service_name.toLowerCase().includes('refund')) {
             filePath = await pdfService.generateRefundApplication(request, request, collegeDetails);
+        } else if (request.template_type === 'dynamic' && request.template_config) {
+            let config = request.template_config;
+            if (typeof config === 'string') {
+                try { config = JSON.parse(config); } catch (e) { config = {}; }
+            }
+            filePath = await pdfService.generateDynamicCertificate(request, request, collegeDetails, config);
         } else {
             // Default or throw
-            return res.status(400).json({ success: false, message: 'Certificate template not implemented for this service' });
+            return res.status(400).json({ success: false, message: 'Certificate template not implemented or config missing for this service' });
         }
 
         // Send file as inline preview (for printing)
@@ -360,16 +391,29 @@ exports.previewTemplate = async (req, res) => {
 
         // Blank Student Data (for template structure preview)
         const blankStudent = {
-            student_name: '',
-            admission_number: '',
-            father_name: '',
-            current_year: '',
-            current_semester: '',
-            course: '',
-            branch: '',
-            student_mobile: '',
-            parent_mobile1: '',
-            academic_year: ''
+            student_name: '{{student_name}}',
+            admission_number: '{{admission_number}}',
+            father_name: '{{parent_name}}', // Mapping to parent_name as requested
+            current_year: '{{current_year}}',
+            current_semester: '{{current_semester}}',
+            course: '{{course}}',
+            branch: '{{branch}}',
+            student_mobile: '{{student_mobile}}',
+            parent_mobile1: '{{parent_mobile}}',
+            academic_year: '{{academic_year}}',
+            pin_no: '{{pin_no}}',
+            dob: '{{dob}}',
+            email: '{{email}}',
+            religion: '{{religion}}',
+            caste: '{{caste}}',
+            gender: '{{gender}}',
+            admission_date: '{{admission_date}}',
+            serial_no: '{{serial_no}}',
+            mole_1: '{{mole_1}}',
+            mole_2: '{{mole_2}}',
+            conduct: '{{conduct}}',
+            date_of_leaving: '{{date_of_leaving}}',
+            promoted: '{{promoted}}'
         };
 
         // Blank Request Data
@@ -384,21 +428,65 @@ exports.previewTemplate = async (req, res) => {
             admission_number: ''
         };
 
-        // Dummy College Details (Static for preview)
-        const dummyCollege = {
+        // Fetch Actual College Details
+        let collegeDetails = {
             name: 'Pydah College of Engineering',
             phone: '0884-2315333',
             website: 'www.pydah.edu.in'
         };
 
+        try {
+            // Check if user has specific college scope or is super admin
+            let collegeQuery = 'SELECT * FROM colleges WHERE is_active = 1 LIMIT 1';
+            let collegeParams = [];
+
+            // If user has a scope (assuming req.userScope or req.user.college is set maybe?)
+            // For now, let's fetch the first college as default for preview if super admin, 
+            // or if we can deduce college, use that.
+
+            // Simplified: Just get the first active college info to correct "Pydah College of Engineering" default
+
+            const [colleges] = await masterPool.execute('SELECT * FROM colleges WHERE is_active = 1');
+            if (colleges.length > 0) {
+                // Prefer "Pydah College of Engineering" or general one if multiple, otherwise first
+                const target = colleges.find(c => c.name.includes('Pydah College of Engineering')) || colleges[0];
+
+                collegeDetails.name = target.name;
+                if (target.metadata) {
+                    const meta = typeof target.metadata === 'string' ? JSON.parse(target.metadata) : target.metadata;
+                    collegeDetails = { ...collegeDetails, ...meta };
+                }
+            }
+        } catch (e) {
+            console.warn("Could not fetch college details for preview", e);
+        }
+
         let filePath;
         const type = template_type || '';
         const name = service_name || '';
 
-        if (type === 'study_certificate' || name.toLowerCase().includes('study')) {
-            filePath = await pdfService.generateStudyCertificate(blankStudent, blankRequest, dummyCollege);
+        // Check if dynamic
+        if (type === 'dynamic') {
+            // Use provided config from body if available
+            let config = req.body.template_config || {};
+            if (typeof config === 'string') {
+                try { config = JSON.parse(config); } catch (e) { config = {}; }
+            }
+            // If empty config, maybe try to fetch from service? No, preview usually is for what's in memory or db.
+            // For now, assuming config is passed or we render blank/basic.
+
+            filePath = await pdfService.generateDynamicCertificate(blankStudent, blankRequest, collegeDetails, config);
+        }
+        else if (type === 'study_certificate' || name.toLowerCase().includes('study')) {
+            filePath = await pdfService.generateStudyCertificate(blankStudent, blankRequest, collegeDetails);
         } else if (type === 'refund_application' || name.toLowerCase().includes('refund')) {
-            filePath = await pdfService.generateRefundApplication(blankStudent, blankRequest, dummyCollege);
+            filePath = await pdfService.generateRefundApplication(blankStudent, blankRequest, collegeDetails);
+        } else if (type === 'dynamic' && req.body.template_config) {
+            let config = req.body.template_config;
+            if (typeof config === 'string') {
+                try { config = JSON.parse(config); } catch (e) { config = {}; }
+            }
+            filePath = await pdfService.generateDynamicCertificate(blankStudent, blankRequest, collegeDetails, config);
         } else {
             return res.status(400).json({ success: false, message: 'Preview not available for this template type' });
         }

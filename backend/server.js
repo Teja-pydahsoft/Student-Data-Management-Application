@@ -127,6 +127,7 @@ app.use('/api/complaint-categories', complaintCategoryRoutes);
 app.use('/api/announcements', require('./routes/announcementRoutes'));
 app.use('/api/polls', require('./routes/pollRoutes'));
 app.use('/api/services', serviceRoutes);
+app.use('/api/events', require('./routes/eventRoutes'));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
