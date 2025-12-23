@@ -24,6 +24,7 @@ import Announcements from './pages/Announcements';
 import ServicesConfig from './pages/ServicesConfig';
 import ServiceRequests from './pages/ServiceRequests';
 import CertificateDesigner from './pages/admin/CertificateDesigner';
+import Profile from './pages/Profile';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -103,6 +104,7 @@ function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="forms" element={<Forms />} />
           <Route path="forms/new" element={<FormBuilder />} />
           <Route path="forms/edit/:formId" element={<FormBuilder />} />
