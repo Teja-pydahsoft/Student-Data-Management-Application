@@ -8,6 +8,7 @@ import {
     Menu,
     X,
     FileText,
+    CreditCard
     Ticket,
     Megaphone,
     Briefcase,
@@ -36,6 +37,7 @@ const StudentLayout = ({ children }) => {
 
         { icon: Briefcase, label: 'Services', path: '/student/services' },
         { icon: User, label: 'Profile', path: '/student/profile' },
+        { icon: CreditCard, label: 'Fee Management', path: '/student/fees' },
     ];
 
     return (

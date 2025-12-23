@@ -29,6 +29,7 @@ import CertificateDesigner from './pages/admin/CertificateDesigner';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
 import SemesterRegistration from './pages/student/SemesterRegistration';
+import StudentFeeManagement from './pages/student/FeeManagement';
 import RaiseTicket from './pages/student/RaiseTicket';
 import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
@@ -136,6 +137,7 @@ function App() {
           <Route index element={<Navigate to="/student/dashboard" replace />} />
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="profile" element={<StudentProfile />} />
+          <Route path="fees" element={<StudentFeeManagement />} />
           <Route path="semester-registration" element={<SemesterRegistration />} />
           <Route path="raise-ticket" element={<RaiseTicket />} />
           <Route path="my-tickets" element={<MyTickets />} />
