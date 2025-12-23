@@ -24,6 +24,13 @@ router.get(
 );
 
 router.post(
+    '/sms',
+    authMiddleware,
+    verifyPermission('announcements', 'create'),
+    announcementController.sendSMSAnnouncement
+);
+
+router.post(
     '/',
     authMiddleware,
     verifyPermission('announcements', 'create'),

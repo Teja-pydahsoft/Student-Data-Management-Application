@@ -75,7 +75,21 @@ const MultiSelect = ({ label, options, selected, onChange, placeholder, disabled
     );
 };
 
-const TargetSelector = ({ formData, setFormData }) => {
+const TargetSelector = ({ formData, setFormData, layout = 'column', hideTitle = false }) => {
+    // ... (state vars same as before) ...
+    // Note: I need to preserve the state variables in the replacement, but the tool requires me to provide the logic.
+    // I will target the Return statement specifically to avoid re-writing the whole state logic if possible.
+    // However, I need to update the props in the function definition.
+    // So I must replace the definition line and the return block.
+    // This tool call suggests replacing a chunk. I'll replace the top definition and the return block separately? No, I can't do multiple chunks easily with "replace_file_content" unless I use "multi_replace".
+    // I will use "replace_file_content" for the whole component function body if needed, or just the relevant parts if I can match them.
+    // Re-reading usage: "Use multi_replace_file_content... for multiple non-contiguous edits".
+    // I will use `multi_replace_file_content`.
+
+    // Wait, the prompt says "Use this tool ONLY when you are making a SINGLE CONTIGUOUS block of edits".
+    // I need to update the prop list at top vs the JSX at bottom. They are far apart.
+    // I should use `multi_replace_file_content`.
+
     const [colleges, setColleges] = useState([]);
     const [batches, setBatches] = useState([]);
     const [courses, setCourses] = useState([]);
@@ -153,6 +167,9 @@ const TargetSelector = ({ formData, setFormData }) => {
     useEffect(() => {
         const calculateCount = async () => {
             try {
+                // Skip count calculation if row layout as it is mainly for search filtering
+                if (layout === 'row') return;
+
                 const response = await api.post('/announcements/count', {
                     target_college: formData.target_college,
                     target_batch: formData.target_batch,
@@ -166,15 +183,67 @@ const TargetSelector = ({ formData, setFormData }) => {
         };
         const timer = setTimeout(calculateCount, 500);
         return () => clearTimeout(timer);
-    }, [formData]);
+    }, [formData, layout]);
 
+    if (layout === 'row') {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <MultiSelect
+                    label="College"
+                    placeholder="All"
+                    options={colleges}
+                    selected={formData.target_college}
+                    onChange={vals => setFormData({ ...formData, target_college: vals })}
+                />
+                <MultiSelect
+                    label="Batch"
+                    placeholder="All"
+                    options={batches}
+                    selected={formData.target_batch}
+                    onChange={vals => setFormData({ ...formData, target_batch: vals })}
+                />
+                <MultiSelect
+                    label="Course"
+                    placeholder="All"
+                    options={availableCourses}
+                    selected={formData.target_course}
+                    onChange={vals => setFormData({ ...formData, target_course: vals })}
+                />
+                <MultiSelect
+                    label="Branch"
+                    placeholder="All"
+                    options={availableBranches}
+                    selected={formData.target_branch}
+                    onChange={vals => setFormData({ ...formData, target_branch: vals })}
+                />
+                <MultiSelect
+                    label="Year"
+                    placeholder="All"
+                    options={availableYears}
+                    selected={formData.target_year}
+                    onChange={vals => setFormData({ ...formData, target_year: vals })}
+                />
+                <MultiSelect
+                    label="Semester"
+                    placeholder="All"
+                    options={availableSemesters}
+                    selected={formData.target_semester}
+                    onChange={vals => setFormData({ ...formData, target_semester: vals })}
+                />
+            </div>
+        );
+    }
+
+    // Default vertical layout
     return (
         <div className="space-y-4 bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
             <div className="flex justify-between items-center">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-2">
-                    <Users size={16} /> Target Audience
-                </h3>
-                <div className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                {!hideTitle && (
+                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-2">
+                        <Users size={16} /> Target Audience
+                    </h3>
+                )}
+                <div className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded-full ml-auto">
                     Est. Recipients: {recipientCount}
                 </div>
             </div>

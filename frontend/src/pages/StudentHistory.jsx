@@ -1,0 +1,386 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+    Search, User, Clock, Plus, Loader2, Filter,
+    ChevronDown, Eye, X, MessageSquare
+} from 'lucide-react';
+import api from '../config/api';
+import toast from 'react-hot-toast';
+import TargetSelector from '../components/TargetSelector';
+
+const StudentHistory = () => {
+    // Selection state
+    const [selectedStudent, setSelectedStudent] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Data State
+    const [students, setStudents] = useState([]);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+
+    // Filter state
+    const [filterData, setFilterData] = useState({
+        target_college: [],
+        target_course: [],
+        target_branch: [],
+        target_batch: [],
+        target_year: [],
+        target_semester: []
+    });
+
+    // Pagination (Client side for now limit 500)
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Fetch students when filters change
+    const fetchStudents = async () => {
+        const hasFilter = Object.values(filterData).some(val => val && val.length > 0);
+        // If no filter, maybe don't load or load empty? User logic implies "selection of batch... and load"
+        // Let's allow empty load (no students) until filter.
+        if (!hasFilter) {
+            setStudents([]);
+            return;
+        }
+
+        setLoadingStudents(true);
+        try {
+            const params = new URLSearchParams();
+            if (filterData.target_college?.length) params.append('college', filterData.target_college[0]);
+            if (filterData.target_course?.length) params.append('course', filterData.target_course[0]);
+            if (filterData.target_branch?.length) params.append('branch', filterData.target_branch[0]);
+            if (filterData.target_batch?.length) params.append('batch', filterData.target_batch[0]);
+            if (filterData.target_year?.length) params.append('year', filterData.target_year[0]);
+            if (filterData.target_semester?.length) params.append('semester', filterData.target_semester[0]);
+
+            const response = await api.get(`/student-history?${params.toString()}`);
+            if (response.data.success) {
+                setStudents(response.data.data);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to load students');
+        } finally {
+            setLoadingStudents(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchStudents();
+    }, [filterData]);
+
+    const handleViewStudent = (student) => {
+        setSelectedStudent(student);
+        setIsModalOpen(true);
+    };
+
+    const filteredStudents = useMemo(() => {
+        if (!searchTerm) return students;
+        const lowerSearch = searchTerm.toLowerCase();
+        return students.filter(s =>
+            s.student_name?.toLowerCase().includes(lowerSearch) ||
+            s.admission_number?.toLowerCase().includes(lowerSearch)
+        );
+    }, [students, searchTerm]);
+
+    return (
+        <div className="min-h-screen bg-gray-50 flex flex-col h-screen overflow-hidden">
+            {/* Header */}
+            <div className="bg-white border-b px-6 py-4 shadow-sm z-10 flex justify-between items-center">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800">Student History & Remarks</h1>
+                    <p className="text-sm text-gray-500">View detailed history and remarks for regular students</p>
+                </div>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="bg-white px-6 py-4 border-b shadow-sm">
+                <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+                    <div className="flex-1 w-full xl:w-auto">
+                        <TargetSelector
+                            formData={filterData}
+                            setFormData={setFilterData}
+                            layout="row"
+                        />
+                    </div>
+                    {/* Search Bar - Inline with filters */}
+                    <div className="relative w-full xl:w-64 shrink-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search in list..."
+                            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-hidden p-6 flex flex-col">
+                {/* Results Count */}
+                <div className="mb-4 flex justify-end items-center">
+                    <div className="text-sm text-gray-500">
+
+                        Showing {filteredStudents.length} students
+                    </div>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-xl shadow border overflow-hidden flex-1 flex flex-col">
+                    <div className="overflow-x-auto flex-1">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-gray-50 sticky top-0 z-10">
+                                <tr>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Student</th>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Admission No</th>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Course / Branch</th>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Year / Sem</th>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {loadingStudents ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center">
+                                            <div className="flex justify-center flex-col items-center gap-2">
+                                                <Loader2 className="animate-spin text-blue-500" size={24} />
+                                                <span className="text-gray-500">Loading students...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : filteredStudents.length > 0 ? (
+                                    filteredStudents.map((student) => (
+                                        <tr key={student.id} className="hover:bg-blue-50/50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-3">
+                                                    {student.student_photo ? (
+                                                        <img src={student.student_photo} alt="" className="w-9 h-9 rounded-full object-cover border" />
+                                                    ) : (
+                                                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                                            <User size={16} />
+                                                        </div>
+                                                    )}
+                                                    <span className="font-medium text-gray-900">{student.student_name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
+                                                {student.admission_number}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                {student.course} - {student.branch}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                {student.current_year} / {student.current_semester}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                <button
+                                                    onClick={() => handleViewStudent(student)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md text-sm font-medium transition-colors"
+                                                >
+                                                    <Eye size={16} /> View History
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                                            {Object.values(filterData).some(v => v.length)
+                                                ? 'No students found matching criteria'
+                                                : <div className="flex flex-col items-center"><Filter size={32} className="mb-2 opacity-50" />Select filters above to load students</div>
+                                            }
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {/* Student Profile & Remarks Modal */}
+            {isModalOpen && selectedStudent && (
+                <StudentHistoryModal
+                    student={selectedStudent}
+                    onClose={() => setIsModalOpen(false)}
+                />
+            )}
+        </div>
+    );
+};
+
+const StudentHistoryModal = ({ student, onClose }) => {
+    const [remarks, setRemarks] = useState([]);
+    const [loadingRemarks, setLoadingRemarks] = useState(false);
+    const [newRemark, setNewRemark] = useState('');
+    const [addingRemark, setAddingRemark] = useState(false);
+
+    useEffect(() => {
+        fetchRemarks();
+    }, [student]);
+
+    const fetchRemarks = async () => {
+        setLoadingRemarks(true);
+        try {
+            const response = await api.get(`/student-history/remarks/${student.admission_number}`);
+            if (response.data.success) {
+                setRemarks(response.data.data);
+            }
+        } catch (error) {
+            toast.error('Failed to load remarks');
+        } finally {
+            setLoadingRemarks(false);
+        }
+    };
+
+    const handleAddRemark = async (e) => {
+        e.preventDefault();
+        if (!newRemark.trim()) return;
+
+        setAddingRemark(true);
+        try {
+            const response = await api.post('/student-history/remarks', {
+                admission_number: student.admission_number,
+                remark: newRemark
+            });
+
+            if (response.data.success) {
+                toast.success('Remark added');
+                setNewRemark('');
+                fetchRemarks();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to add remark');
+        } finally {
+            setAddingRemark(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-scale-in">
+                {/* Modal Header */}
+                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                    <div className="flex items-center gap-4">
+                        {student.student_photo ? (
+                            <img src={student.student_photo} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-500">
+                                <User size={24} />
+                            </div>
+                        )}
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900">{student.student_name}</h2>
+                            <p className="text-sm text-gray-500">{student.admission_number} • {student.course} ({student.branch})</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                        <X size={24} className="text-gray-500" />
+                    </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                    <div className="space-y-6">
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white p-4 rounded-xl border shadow-sm text-sm">
+                            <div>
+                                <p className="text-gray-500 text-xs uppercase font-semibold">Batch</p>
+                                <p className="font-medium text-gray-900">{student.batch || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 text-xs uppercase font-semibold">Current Status</p>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Regular</span>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 text-xs uppercase font-semibold">Year / Semester</p>
+                                <p className="font-medium text-gray-900">{student.current_year} / {student.current_semester}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 text-xs uppercase font-semibold">College</p>
+                                <p className="font-medium text-gray-900 truncate" title={student.college}>{student.college}</p>
+                            </div>
+                        </div>
+
+                        {/* Remarks Section */}
+                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <MessageSquare className="text-blue-600" /> Remarks History
+                        </h3>
+
+                        {loadingRemarks ? (
+                            <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <RemarkSection title="Principal Remarks" category="Principal" remarks={remarks} icon="🎓" color="blue" />
+                                <RemarkSection title="AO Remarks" category="AO" remarks={remarks} icon="📋" color="purple" />
+                                <RemarkSection title="HOD Remarks" category="HOD" remarks={remarks} icon="👨‍🏫" color="amber" />
+                                <RemarkSection title="Accountant Remarks" category="Accountant" remarks={remarks} icon="💰" color="green" />
+                            </div>
+                        )}
+
+                        {/* Add Remark */}
+                        <div className="bg-white rounded-xl shadow-sm border p-4">
+                            <h4 className="font-semibold text-gray-800 mb-2">Add New Remark</h4>
+                            <form onSubmit={handleAddRemark} className="flex gap-4 items-start">
+                                <textarea
+                                    value={newRemark}
+                                    onChange={(e) => setNewRemark(e.target.value)}
+                                    placeholder="Type remark here..."
+                                    className="flex-1 min-h-[80px] p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={addingRemark || !newRemark.trim()}
+                                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors shrink-0"
+                                >
+                                    {addingRemark ? <Loader2 className="animate-spin" size={18} /> : <><Plus size={18} /> Add</>}
+                                </button>
+                            </form>
+                            <p className="text-xs text-gray-400 mt-2">
+                                Remark will be logged under your current role automatically.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const RemarkSection = ({ title, category, remarks, icon, color }) => {
+    const categoryRemarks = remarks.filter(r => r.remark_category === category);
+    const colorClasses = {
+        blue: 'bg-blue-50 border-blue-100 text-blue-800',
+        purple: 'bg-purple-50 border-purple-100 text-purple-800',
+        amber: 'bg-amber-50 border-amber-100 text-amber-800',
+        green: 'bg-green-50 border-green-100 text-green-800'
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col h-72">
+            <div className={`px-4 py-2.5 border-b font-bold flex items-center gap-2 text-sm ${colorClasses[color]}`}>
+                <span>{icon}</span> {title}
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {categoryRemarks.length > 0 ? (
+                    categoryRemarks.map(remark => (
+                        <div key={remark.id} className="bg-gray-50 p-3 rounded-lg border text-sm group">
+                            <p className="text-gray-800 whitespace-pre-wrap">{remark.remark}</p>
+                            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
+                                <span className="font-medium text-gray-500">{remark.created_by_name}</span>
+                                <span className="flex items-center gap-1">
+                                    <Clock size={10} />
+                                    {new Date(remark.created_at).toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="h-full flex items-center justify-center text-gray-400 text-xs italic">
+                        No remarks recorded
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default StudentHistory;

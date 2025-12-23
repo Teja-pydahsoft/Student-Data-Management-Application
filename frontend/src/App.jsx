@@ -21,6 +21,7 @@ import StudentPromotions from './pages/StudentPromotions';
 import TicketManagement from './pages/TicketManagement';
 import TaskManagement from './pages/TaskManagement';
 import Announcements from './pages/Announcements';
+import StudentHistory from './pages/StudentHistory';
 import ServicesConfig from './pages/ServicesConfig';
 import ServiceRequests from './pages/ServiceRequests';
 import CertificateDesigner from './pages/admin/CertificateDesigner';
@@ -121,6 +122,7 @@ function App() {
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="student-history" element={<StudentHistory />} />
           <Route path="events" element={<EventCalendar />} />
           <Route path="services/config" element={<ServicesConfig />} />
           <Route path="services/design/:serviceId" element={<CertificateDesigner />} />

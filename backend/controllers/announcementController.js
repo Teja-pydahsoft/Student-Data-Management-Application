@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 // const { uploadFile } = require('../services/s3Service');
+const smsService = require('../services/smsService');
 const fs = require('fs');
 
 // Helper to delete local file
@@ -357,5 +358,155 @@ exports.getSemesters = async (req, res) => {
     } catch (error) {
         console.error('Get semesters error:', error);
         res.status(500).json({ success: false, data: [] });
+    }
+};
+
+exports.sendSMSAnnouncement = async (req, res) => {
+    try {
+        const {
+            template_id,
+            template_content,
+            variable_mappings,
+            target_college,
+            target_batch,
+            target_course,
+            target_branch,
+            target_year,
+            target_semester
+        } = req.body;
+
+        if (!template_id || !template_content) {
+            return res.status(400).json({ success: false, message: 'Template ID and content are required' });
+        }
+
+        // 1. Fetch Recipients
+        let query = 'SELECT * FROM students WHERE student_status = "Regular"';
+        const params = [];
+
+        const parseParam = (val) => {
+            if (!val) return null;
+            if (Array.isArray(val)) return val.length ? val : null;
+            try {
+                const parsed = JSON.parse(val);
+                return parsed.length ? parsed : null;
+            } catch (e) { return null; }
+        };
+
+        const colleges = parseParam(target_college);
+        const batches = parseParam(target_batch);
+        const courses = parseParam(target_course);
+        const branches = parseParam(target_branch);
+        const years = parseParam(target_year);
+        const semesters = parseParam(target_semester);
+
+        if (colleges) { query += ' AND college IN (?)'; params.push(colleges); }
+        if (batches) { query += ' AND batch IN (?)'; params.push(batches); }
+        if (courses) { query += ' AND course IN (?)'; params.push(courses); }
+        if (branches) { query += ' AND branch IN (?)'; params.push(branches); }
+        if (years) { query += ' AND current_year IN (?)'; params.push(years); }
+        if (semesters) { query += ' AND current_semester IN (?)'; params.push(semesters); }
+
+        const [students] = await masterPool.query(query, params);
+
+        if (students.length === 0) {
+            return res.json({ success: true, message: 'No students found matching criteria', count: 0 });
+        }
+
+        // 2. Process and Send
+        let sentCount = 0;
+        let failedCount = 0;
+
+        // Process in chunks
+        const chunkSize = 50;
+        for (let i = 0; i < students.length; i += chunkSize) {
+            const chunk = students.slice(i, i + chunkSize);
+            await Promise.all(chunk.map(async (student) => {
+                try {
+                    // Resolve variables
+                    let message = template_content;
+                    if (Array.isArray(variable_mappings)) {
+                        let varIndex = 0;
+                        // Assuming frontend validates matching count
+                        message = message.replace(/\{#var#\}/g, () => {
+                            const mapping = variable_mappings[varIndex];
+                            varIndex++;
+
+                            if (!mapping) return '';
+
+                            if (mapping.type === 'static') {
+                                return mapping.value || '';
+                            } else if (mapping.type === 'field') {
+                                const key = mapping.value;
+                                if (key === 'current_date') {
+                                    return new Date().toLocaleDateString('en-IN');
+                                }
+                                if (key === 'login_link') {
+                                    return process.env.LOGIN_LINK || 'pydahgroup.com';
+                                }
+                                if (key === 'default_password') {
+                                    // Default Password: First 4 letters of name + Last 4 digits of student mobile
+                                    const namePart = (student.student_name || '').substring(0, 4);
+                                    const mobileStr = String(student.student_mobile || '');
+                                    const mobilePart = mobileStr.length >= 4 ? mobileStr.slice(-4) : mobileStr;
+                                    return namePart + mobilePart;
+                                }
+                                // Handle data stored in student_data JSON or direct columns
+                                const val = student[key] || (student.student_data && student.student_data[key]) || '';
+                                return String(val).trim();
+                            }
+                            return '';
+                        });
+                    }
+
+                    // Determine mobile number
+                    // Priority: Parent 1 > Parent 2 > Student
+                    // Actually, for "Announcements", parents are usually the target for school comms.
+                    // But maybe student too. 
+                    // Let's grab all available and unique them? Or just stick to Primary Parent?
+                    // User said "sms for the selected audiences". Usually implies parents/students.
+                    // I will check smsService behavior. It sends to resolved parent contact.
+                    // I'll stick to resolving parent contact primarily as per existing logic, or if missing, try student?
+
+                    let mobile = student.parent_mobile1 || student.parent_mobile2;
+                    if (!mobile && student.student_data) {
+                        mobile = student.student_data['Parent Mobile Number 1'] || student.student_data['Parent Mobile Number 2'];
+                    }
+                    if (!mobile) mobile = student.student_mobile;
+
+                    if (mobile) {
+                        const cleanMobile = String(mobile).replace(/[^0-9]/g, '');
+                        if (cleanMobile.length >= 10) {
+                            await smsService.sendSms({
+                                to: cleanMobile,
+                                message: message,
+                                templateId: template_id,
+                                peId: process.env.SMS_PE_ID,
+                                meta: { type: 'announcement', studentId: student.id }
+                            });
+                            sentCount++;
+                        } else {
+                            failedCount++;
+                        }
+                    } else {
+                        failedCount++;
+                    }
+
+                } catch (e) {
+                    console.error(`Failed to send SMS to student ${student.admission_number}:`, e);
+                    failedCount++;
+                }
+            }));
+        }
+
+        res.json({
+            success: true,
+            message: `SMS sending initiated. Sent: ${sentCount}, Failed/Skipped: ${failedCount}`,
+            sentCount,
+            failedCount
+        });
+
+    } catch (error) {
+        console.error('SMS Announcement Error:', error);
+        res.status(500).json({ success: false, message: 'Failed to process SMS announcement' });
     }
 };

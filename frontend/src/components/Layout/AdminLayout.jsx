@@ -44,7 +44,8 @@ const NAV_ITEMS = [
     permission: FRONTEND_MODULES.STUDENTS,
     subItems: [
       { path: '/students', label: 'Students Database', permission: FRONTEND_MODULES.STUDENTS },
-      { path: '/students/self-registration', label: 'Self Registration', permission: FRONTEND_MODULES.SUBMISSIONS }
+      { path: '/students/self-registration', label: 'Self Registration', permission: FRONTEND_MODULES.SUBMISSIONS },
+      { path: '/student-history', label: 'Student History', permission: FRONTEND_MODULES.STUDENTS }
     ]
   },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
