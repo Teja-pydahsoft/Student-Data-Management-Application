@@ -61,7 +61,7 @@ exports.unifiedLogin = async (req, res) => {
     const adminPromise = masterPool.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [username]);
 
     const rbacPromise = masterPool.query(
-      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, permissions, is_active
+      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, college_ids, course_ids, branch_ids, permissions, is_active
        FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
       [username, username]
     );
@@ -103,6 +103,7 @@ exports.unifiedLogin = async (req, res) => {
           const token = jwt.sign({
             id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
             collegeId: rbacUser.college_id, courseId: rbacUser.course_id, branchId: rbacUser.branch_id,
+            collegeIds: rbacUser.college_ids, courseIds: rbacUser.course_ids, branchIds: rbacUser.branch_ids,
             permissions: rbacUser.permissions
           }, process.env.JWT_SECRET, { expiresIn: '24h' });
           return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
@@ -125,6 +126,7 @@ exports.unifiedLogin = async (req, res) => {
         const token = jwt.sign({
           id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
           collegeId: rbacUser.college_id, courseId: rbacUser.course_id, branchId: rbacUser.branch_id,
+          collegeIds: rbacUser.college_ids, courseIds: rbacUser.course_ids, branchIds: rbacUser.branch_ids,
           permissions: rbacUser.permissions
         }, process.env.JWT_SECRET, { expiresIn: '24h' });
         return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
@@ -317,20 +319,107 @@ exports.verifyToken = async (req, res) => {
   } catch (error) {
     console.error('Token verification error:', error);
     res.status(500).json({
-      success: false,
       message: 'Server error during verification'
     });
   }
 };
 
+// Update Profile
+exports.updateProfile = async (req, res) => {
+  try {
+    const authUser = req.user;
+    if (!authUser || !Object.values(USER_ROLES).includes(authUser.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access'
+      });
+    }
+
+    const { name, email, phone, username } = req.body;
+
+    // Validate existence of required fields
+    if (!name || !email || !phone || !username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, Email, Phone and Username are required'
+      });
+    }
+
+    // Check for unique username/email/phone exclusions
+    // Check if any OTHER user has these details
+    const [existing] = await masterPool.query(
+      `SELECT id FROM rbac_users 
+       WHERE (username = ? OR email = ? OR phone = ?) 
+       AND id != ?`,
+      [username, email, phone, authUser.id]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username, Email or Phone already in use by another user'
+      });
+    }
+
+    // Update user
+    await masterPool.query(
+      `UPDATE rbac_users 
+       SET name = ?, email = ?, phone = ?, username = ?, updated_at = NOW() 
+       WHERE id = ?`,
+      [name, email, phone, username, authUser.id]
+    );
+
+    // Fetch updated user to return (excluding password)
+    const [updatedUsers] = await masterPool.query(
+      `SELECT 
+        u.id, u.name, u.username, u.email, u.phone, u.role, u.password,
+        c.name as collegeName,
+        co.name as courseName,
+        b.name as branchName,
+        u.permissions
+       FROM rbac_users u
+       LEFT JOIN colleges c ON u.college_id = c.id
+       LEFT JOIN courses co ON u.course_id = co.id
+       LEFT JOIN course_branches b ON u.branch_id = b.id
+       WHERE u.id = ?`,
+      [authUser.id]
+    );
+
+    const updatedUser = updatedUsers[0];
+    if (updatedUser) {
+      delete updatedUser.password;
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error('Update profile error details:', {
+      message: error.message,
+      sql: error.sql,
+      stack: error.stack
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Server error updating profile: ' + error.message
+    });
+  }
+};
+
+// Change password
 // Change password
 exports.changePassword = async (req, res) => {
   try {
     const authUser = req.user || req.admin;
-    if (!authUser || authUser.role !== 'admin') {
-      return res.status(403).json({
+
+    // Allow Admin, Staff, and RBAC users to change password
+    if (!authUser) {
+      return res.status(401).json({
         success: false,
-        message: 'Only administrators can change password via this endpoint'
+        message: 'Unauthorized'
       });
     }
 
@@ -343,42 +432,71 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Get admin
-    const [admins] = await masterPool.query(
-      'SELECT * FROM admins WHERE id = ? LIMIT 1',
-      [authUser.id]
-    );
-    if (!admins || admins.length === 0) {
-      return res.status(404).json({
+    // Validate password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({
         success: false,
-        message: 'Admin not found'
+        message: 'New password must be at least 6 characters'
       });
     }
 
-    const admin = admins[0];
+    // 1. Check if Admin (Legacy)
+    if (authUser.role === 'admin') {
+      const [admins] = await masterPool.query(
+        'SELECT * FROM admins WHERE id = ? LIMIT 1',
+        [authUser.id]
+      );
+      if (!admins || admins.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Verify current password
-    const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
+      const admin = admins[0];
+      const isValid = await bcrypt.compare(currentPassword, admin.password);
+      if (!isValid) return res.status(401).json({ success: false, message: 'Current password is incorrect' });
 
-    if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Current password is incorrect'
-      });
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await masterPool.query('UPDATE admins SET password = ? WHERE id = ?', [hashedPassword, authUser.id]);
+
+      return res.json({ success: true, message: 'Password changed successfully' });
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    // 2. Check if RBAC User
+    if (Object.values(USER_ROLES).includes(authUser.role)) {
+      const [users] = await masterPool.query(
+        'SELECT * FROM rbac_users WHERE id = ? LIMIT 1',
+        [authUser.id]
+      );
+      if (!users || users.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Update password
-    await masterPool.query(
-      'UPDATE admins SET password = ? WHERE id = ?',
-      [hashedPassword, authUser.id]
-    );
+      const user = users[0];
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) return res.status(401).json({ success: false, message: 'Current password is incorrect' });
 
-    res.json({
-      success: true,
-      message: 'Password changed successfully'
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await masterPool.query('UPDATE rbac_users SET password = ?, updated_at = NOW() WHERE id = ?', [hashedPassword, authUser.id]);
+
+      return res.json({ success: true, message: 'Password changed successfully' });
+    }
+
+    // 3. Check if Staff (Legacy)
+    if (authUser.role === 'staff') {
+      const [staff] = await masterPool.query(
+        'SELECT * FROM staff_users WHERE id = ? LIMIT 1',
+        [authUser.id]
+      );
+      if (!staff || staff.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
+
+      const user = staff[0];
+      const isValid = await bcrypt.compare(currentPassword, user.password_hash); // Note: staff uses password_hash column
+      if (!isValid) return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await masterPool.query('UPDATE staff_users SET password_hash = ? WHERE id = ?', [hashedPassword, authUser.id]);
+
+      return res.json({ success: true, message: 'Password changed successfully' });
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Password change not supported for this user type via this endpoint'
     });
 
   } catch (error) {
@@ -389,3 +507,4 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
+

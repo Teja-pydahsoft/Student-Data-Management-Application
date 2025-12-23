@@ -21,6 +21,7 @@ const Login = () => {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotMobile, setForgotMobile] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [userTypeReset, setUserTypeReset] = useState('student');
 
   const handleForgotSubmit = async (e) => {
     e.preventDefault();
@@ -28,7 +29,11 @@ const Login = () => {
 
     setForgotLoading(true);
     try {
-      const response = await api.post('/students/forgot-password', { mobileNumber: forgotMobile });
+      // Determine endpoint based on selection or context
+      const targetUserType = isStudentLogin ? 'student' : userTypeReset;
+      const endpoint = targetUserType === 'staff' ? '/auth/rbac/forgot-password' : '/students/forgot-password';
+
+      const response = await api.post(endpoint, { mobileNumber: forgotMobile });
       if (response.data.success) {
         toast.success(response.data.message);
         setShowForgotModal(false);
@@ -220,7 +225,33 @@ const Login = () => {
             </button>
 
             <h3 className="text-xl font-bold text-gray-900 mb-2">Reset Password</h3>
-            <p className="text-sm text-gray-500 mb-6">Enter your registered mobile number. We'll send you a new password via SMS.</p>
+            <p className="text-sm text-gray-500 mb-4">Enter your registered mobile number. We'll send you a new password via SMS.</p>
+
+            {/* User Type Selection */}
+            {!isStudentLogin && (
+              <div className="flex gap-4 mb-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="userTypeReset"
+                    checked={userTypeReset === 'student'}
+                    onChange={() => setUserTypeReset('student')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Student</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="userTypeReset"
+                    checked={userTypeReset === 'staff'}
+                    onChange={() => setUserTypeReset('staff')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Staff / Admin</span>
+                </label>
+              </div>
+            )}
 
             <form onSubmit={handleForgotSubmit}>
               <div className="mb-4">

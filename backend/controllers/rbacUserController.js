@@ -1584,3 +1584,170 @@ exports.getModules = async (req, res) => {
     });
   }
 };
+
+/**
+ * POST /api/rbac/forgot-password
+ * Reset password and send to mobile
+ */
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { mobileNumber } = req.body;
+
+    if (!mobileNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number is required'
+      });
+    }
+
+    // Find user by phone
+    const [users] = await masterPool.query(
+      'SELECT id, name, phone, username FROM rbac_users WHERE phone = ? AND is_active = 1',
+      [mobileNumber]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found with this mobile number'
+      });
+    }
+
+    const user = users[0];
+
+    // Generate new random password (8 chars)
+    const newPassword = crypto.randomBytes(4).toString('hex');
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password in DB
+    await masterPool.query(
+      'UPDATE rbac_users SET password = ?, updated_at = NOW() WHERE id = ?',
+      [hashedPassword, user.id]
+    );
+
+    // Send SMS using the same template as students
+    // Template: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#} - Pydah College"
+    const loginUrl = (process.env.STUDENT_PORTAL_URL || 'pydahsdms.vercel.app').replace(/\/+$/, '');
+    const message = `Hello ${user.name} your password has been updated. Username: ${user.username} New Password: ${newPassword} Login: ${loginUrl} - Pydah College`;
+
+    // Explicitly use the Password Reset Template ID
+    // 1707176526611076697 is the shared ID for password resets
+    const TEMPLATE_ID = process.env.PASSWORD_RESET_SMS_TEMPLATE_ID || '1707176526611076697';
+
+    const smsResult = await sendSms({
+      to: mobileNumber,
+      message: message,
+      templateId: TEMPLATE_ID
+    });
+
+    if (smsResult.success) {
+      return res.json({
+        success: true,
+        message: 'New password sent to your registered mobile number'
+      });
+    } else {
+      console.error(`Failed to send SMS to ${mobileNumber}:`, smsResult);
+      return res.status(500).json({
+        success: false,
+        message: 'Password reset but failed to send SMS. Please contact admin.'
+      });
+    }
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error processing request'
+    });
+  }
+};
+
+// Get Student Stats for Profile
+exports.getStudentStats = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+
+
+    // Use the scope attached by middleware (attachUserScope)
+    // This provides us with resolved NAMES (collegeNames, courseNames, branchNames)
+    const scope = req.userScope;
+
+    // console.log('DEBUG SCOPE:', JSON.stringify(scope, null, 2));
+
+    let collegeName = 'All Colleges';
+    let courseName = 'All Courses';
+    let branchName = 'All Branches';
+    let scopeText = 'Global (System Level)';
+    let query = 'SELECT COUNT(*) as count FROM students WHERE 1=1';
+    const params = [];
+
+    if (scope) {
+      if (scope.unrestricted) {
+        scopeText = 'Global (System Level)';
+      } else {
+        // Apply Filters using NAMES provided by middleware
+        // The students table uses 'college', 'course', 'branch' columns (names)
+
+        if (scope.collegeNames && scope.collegeNames.length > 0) {
+          query += ` AND college IN (${scope.collegeNames.map(() => '?').join(',')})`;
+          params.push(...scope.collegeNames);
+          collegeName = scope.collegeNames.join(', ');
+        }
+
+        if (scope.courseNames && scope.courseNames.length > 0) {
+          query += ` AND course IN (${scope.courseNames.map(() => '?').join(',')})`;
+          params.push(...scope.courseNames);
+          courseName = scope.courseNames.join(', ');
+        }
+
+        if (scope.branchNames && scope.branchNames.length > 0) {
+          query += ` AND branch IN (${scope.branchNames.map(() => '?').join(',')})`;
+          params.push(...scope.branchNames);
+          branchName = scope.branchNames.join(', ');
+        }
+
+        // Construct text
+        const parts = [];
+        if (scope.collegeNames?.length) parts.push(scope.collegeNames.length > 1 ? `Colleges: ${scope.collegeNames.length}` : scope.collegeNames[0]);
+        if (scope.courseNames?.length) parts.push(scope.courseNames.length > 1 ? `Courses: ${scope.courseNames.length}` : scope.courseNames[0]);
+        if (scope.branchNames?.length) parts.push(scope.branchNames.length > 1 ? `Branches: ${scope.branchNames.length}` : scope.branchNames[0]);
+
+        if (parts.length > 0) scopeText = parts.join(' > ');
+
+      }
+    } else {
+      // Fallback if middleware somehow didn't run (though it definitely should have)
+      // We can try to use the user object directly but better to rely on middleware
+      scopeText = 'Scope Unknown';
+    }
+
+    const [result] = await masterPool.query(query, params);
+
+    res.json({
+      success: true,
+      data: {
+        count: result[0].count,
+        scope: scopeText,
+        hierarchy: {
+          college: collegeName || 'All Colleges',
+          course: courseName || 'All Courses',
+          branch: branchName || 'All Branches'
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get student stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching stats: ' + error.message
+    });
+  }
+};
+

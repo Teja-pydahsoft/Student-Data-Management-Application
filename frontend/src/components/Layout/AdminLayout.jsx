@@ -392,6 +392,7 @@ const AdminLayout = () => {
           </nav>
 
           {/* User Info & Logout */}
+          {/* User Info & Logout */}
           <div className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
             <div
               className={`
@@ -413,6 +414,28 @@ const AdminLayout = () => {
                 </p>
               </div>
             </div>
+
+            {/* Profile Link */}
+            <Link
+              to="/profile"
+              onClick={() => {
+                if (window.innerWidth < 1024) setSidebarOpen(false);
+              }}
+              className={`w-full flex items-center rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors duration-200 touch-manipulation min-h-[44px] mb-2 ${sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
+                }`}
+              title={sidebarCollapsed ? 'Profile' : ''}
+            >
+              <Users size={20} className="flex-shrink-0" />
+              <span
+                className={`
+                  transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
+                  ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                `}
+              >
+                Profile
+              </span>
+            </Link>
+
             <button
               onClick={handleLogout}
               className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
@@ -434,12 +457,14 @@ const AdminLayout = () => {
       </aside>
 
       {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {
+        sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )
+      }
 
       {/* Main Content */}
       <main className={`min-h-screen bg-white transition-[margin-left] duration-300 ease-out ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
@@ -447,7 +472,7 @@ const AdminLayout = () => {
           <Outlet />
         </div>
       </main>
-    </div>
+    </div >
   );
 };
 
