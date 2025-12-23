@@ -8,7 +8,7 @@ import {
     Menu,
     X,
     FileText,
-    CreditCard
+    CreditCard,
     Ticket,
     Megaphone,
     Briefcase,
