@@ -6,7 +6,8 @@ import {
     LogOut,
     Menu,
     X,
-    FileText
+    FileText,
+    CreditCard
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ const StudentLayout = ({ children }) => {
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
         { icon: User, label: 'Profile', path: '/student/profile' },
+        { icon: CreditCard, label: 'Fee Management', path: '/student/fees' },
     ];
 
     return (

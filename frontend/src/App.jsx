@@ -23,6 +23,7 @@ import StudentPromotions from './pages/StudentPromotions';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
 import SemesterRegistration from './pages/student/SemesterRegistration';
+import StudentFeeManagement from './pages/student/FeeManagement';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -47,7 +48,7 @@ const ProtectedStudentRoute = ({ children }) => {
 function App() {
   return (
     <Router>
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 3000,
@@ -71,13 +72,13 @@ function App() {
           },
         }}
       />
-      
+
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/student/login" element={<Login />} />
         <Route path="/form/:formId" element={<PublicForm />} />
-        
+
         {/* Protected Admin Routes */}
         <Route
           path="/"
@@ -101,7 +102,7 @@ function App() {
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />
         </Route>
-        
+
         {/* Protected Student Routes */}
         <Route
           path="/student"
@@ -114,9 +115,10 @@ function App() {
           <Route index element={<Navigate to="/student/dashboard" replace />} />
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="profile" element={<StudentProfile />} />
+          <Route path="fees" element={<StudentFeeManagement />} />
           <Route path="semester-registration" element={<SemesterRegistration />} />
         </Route>
-        
+
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
