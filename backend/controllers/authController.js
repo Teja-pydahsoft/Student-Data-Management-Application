@@ -45,215 +45,146 @@ const buildRBACUserResponse = (rbacUser) => {
   };
 };
 
-// Admin or staff login
-exports.login = async (req, res) => {
+// Unified Login (Admin/Staff/Student)
+exports.unifiedLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Validate input
     if (!username || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username and password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
       });
     }
 
-    let adminAccount = null;
+    // Run all lookups in parallel for maximum speed
+    const adminPromise = masterPool.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [username]);
 
-    try {
-      const [admins] = await masterPool.query(
-        'SELECT * FROM admins WHERE username = ? LIMIT 1',
-        [username]
-      );
-
-      if (admins && admins.length > 0) {
-        adminAccount = admins[0];
-      }
-    } catch (error) {
-      console.error('Error fetching admin:', error);
-    }
-
-    if (adminAccount) {
-      const isValidPassword = await bcrypt.compare(password, adminAccount.password);
-
-      if (!isValidPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      // Check if this admin has been migrated to RBAC system
-      const [rbacAdmin] = await masterPool.query(
-        'SELECT * FROM rbac_users WHERE username = ? AND role = ? LIMIT 1',
-        [adminAccount.username, 'super_admin']
-      );
-
-      // If admin exists in RBAC, use RBAC login flow
-      if (rbacAdmin && rbacAdmin.length > 0) {
-        const rbacUser = rbacAdmin[0];
-        
-        if (!rbacUser.is_active) {
-          return res.status(403).json({
-            success: false,
-            message: 'Account is deactivated. Contact administrator.'
-          });
-        }
-
-        const { parsePermissions } = require('../constants/rbac');
-        const rbacResponse = buildRBACUserResponse(rbacUser);
-
-        const tokenPayload = {
-          id: rbacUser.id,
-          username: rbacUser.username,
-          role: rbacUser.role,
-          collegeId: rbacUser.college_id,
-          courseId: rbacUser.course_id,
-          branchId: rbacUser.branch_id,
-          permissions: rbacUser.permissions
-        };
-
-        const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
-
-        return res.json({
-          success: true,
-          message: 'Login successful',
-          token,
-          user: rbacResponse
-        });
-      }
-
-      // Legacy admin login (not yet migrated to RBAC)
-      const tokenPayload = {
-        id: adminAccount.id,
-        username: adminAccount.username,
-        role: 'admin',
-        modules: ALL_OPERATION_KEYS
-      };
-
-      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
-
-      return res.json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: buildAdminResponse(adminAccount)
-      });
-    }
-
-    // Attempt RBAC user login
-    const [rbacRows] = await masterPool.query(
-      `
-        SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, permissions, is_active
-        FROM rbac_users
-        WHERE username = ? OR email = ?
-        LIMIT 1
-      `,
+    const rbacPromise = masterPool.query(
+      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, permissions, is_active
+       FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
       [username, username]
     );
 
-    if (rbacRows && rbacRows.length > 0) {
-      const rbacUser = rbacRows[0];
-
-      if (!rbacUser.is_active) {
-        return res.status(403).json({
-          success: false,
-          message: 'Account is deactivated. Contact administrator.'
-        });
-      }
-
-      const validPassword = await bcrypt.compare(password, rbacUser.password);
-
-      if (!validPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      const rbacResponse = buildRBACUserResponse(rbacUser);
-
-      const tokenPayload = {
-        id: rbacUser.id,
-        username: rbacUser.username,
-        role: rbacUser.role,
-        collegeId: rbacUser.college_id,
-        courseId: rbacUser.course_id,
-        branchId: rbacUser.branch_id,
-        permissions: rbacUser.permissions
-      };
-
-      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
-
-      return res.json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: rbacResponse
-      });
-    }
-
-    // Attempt staff user login if RBAC user not found
-    const [staffRows] = await masterPool.query(
-      `
-        SELECT id, username, email, password_hash, assigned_modules, is_active
-        FROM staff_users
-        WHERE username = ?
-        LIMIT 1
-      `,
+    const staffPromise = masterPool.query(
+      'SELECT id, username, email, password_hash, assigned_modules, is_active FROM staff_users WHERE username = ? LIMIT 1',
       [username]
     );
 
-    if (!staffRows || staffRows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    const studentPromise = masterPool.query(
+      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+       FROM student_credentials sc
+       JOIN students s ON sc.student_id = s.id
+       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
+      [username, username, username]
+    );
+
+    const [
+      [admins],
+      [rbacRows],
+      [staffRows],
+      [credentials]
+    ] = await Promise.all([adminPromise, rbacPromise, staffPromise, studentPromise]);
+
+    // --- 1. Check Admin ---
+    if (admins && admins.length > 0) {
+      const adminAccount = admins[0];
+      if (await bcrypt.compare(password, adminAccount.password)) {
+        // Check if upgraded to RBAC
+        const [rbacAdmin] = await masterPool.query(
+          'SELECT * FROM rbac_users WHERE username = ? AND role = ? LIMIT 1',
+          [adminAccount.username, 'super_admin']
+        );
+
+        if (rbacAdmin && rbacAdmin.length > 0) {
+          const rbacUser = rbacAdmin[0];
+          if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
+          const rbacResponse = buildRBACUserResponse(rbacUser);
+          const token = jwt.sign({
+            id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
+            collegeId: rbacUser.college_id, courseId: rbacUser.course_id, branchId: rbacUser.branch_id,
+            permissions: rbacUser.permissions
+          }, process.env.JWT_SECRET, { expiresIn: '24h' });
+          return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
+        }
+
+        const token = jwt.sign({
+          id: adminAccount.id, username: adminAccount.username, role: 'admin', modules: ALL_OPERATION_KEYS
+        }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        return res.json({ success: true, message: 'Login successful', token, user: buildAdminResponse(adminAccount) });
+      }
     }
 
-    const staffUser = staffRows[0];
+    // --- 2. Check RBAC User ---
+    if (rbacRows && rbacRows.length > 0) {
+      const rbacUser = rbacRows[0];
+      if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
 
-    if (!staffUser.is_active) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account is deactivated. Contact administrator.'
-      });
+      if (await bcrypt.compare(password, rbacUser.password)) {
+        const rbacResponse = buildRBACUserResponse(rbacUser);
+        const token = jwt.sign({
+          id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
+          collegeId: rbacUser.college_id, courseId: rbacUser.course_id, branchId: rbacUser.branch_id,
+          permissions: rbacUser.permissions
+        }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        return res.json({ success: true, message: 'Login successful', token, user: rbacResponse });
+      }
     }
 
-    const validStaffPassword = await bcrypt.compare(password, staffUser.password_hash);
+    // --- 3. Check Staff User ---
+    if (staffRows && staffRows.length > 0) {
+      const staffUser = staffRows[0];
+      if (!staffUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
 
-    if (!validStaffPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+      if (await bcrypt.compare(password, staffUser.password_hash)) {
+        const staffResponse = buildStaffResponse(staffUser);
+        const token = jwt.sign({
+          id: staffUser.id, username: staffUser.username, role: 'staff', modules: staffResponse.modules
+        }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        return res.json({ success: true, message: 'Login successful', token, user: staffResponse });
+      }
     }
 
-    const staffResponse = buildStaffResponse(staffUser);
+    // --- 4. Check Student User ---
+    if (credentials && credentials.length > 0) {
+      const studentValid = credentials[0];
+      // Note: Student creation script might set password_hash.
+      if (!studentValid.password_hash) {
+        return res.status(401).json({ success: false, message: 'Account not initialized.' });
+      }
 
-    const tokenPayload = {
-      id: staffUser.id,
-      username: staffUser.username,
-      role: 'staff',
-      modules: staffResponse.modules
-    };
+      if (await bcrypt.compare(password, studentValid.password_hash)) {
+        const token = jwt.sign({
+          id: studentValid.student_id, admissionNumber: studentValid.admission_number, role: 'student'
+        }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
-    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '24h' });
+        const user = {
+          admission_number: studentValid.admission_number,
+          username: studentValid.username,
+          name: studentValid.student_name,
+          current_year: studentValid.current_year,
+          current_semester: studentValid.current_semester,
+          course: studentValid.course,
+          branch: studentValid.branch,
+          college: studentValid.college,
+          student_photo: studentValid.student_photo,
+          role: 'student'
+        };
+        return res.json({ success: true, message: 'Login successful', token, user });
+      }
+    }
 
-    return res.json({
-      success: true,
-      message: 'Login successful',
-      token,
-      user: staffResponse
-    });
+    // --- 5. Failed All ---
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during login' 
-    });
+    console.error('Unified login error:', error);
+    res.status(500).json({ success: false, message: 'Server error during login' });
   }
 };
+
+// Legacy Login (Admin Only - kept for backward compatibility if needed, else replace)
+exports.login = exports.unifiedLogin;
 
 // Verify token
 exports.verifyToken = async (req, res) => {
@@ -332,14 +263,50 @@ exports.verifyToken = async (req, res) => {
       });
     }
 
+    if (authUser.role === 'student') {
+      const [students] = await masterPool.query(
+        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+         FROM students s
+         LEFT JOIN student_credentials sc ON sc.student_id = s.id
+         WHERE s.id = ?`,
+        [authUser.id]
+      );
+
+      if (!students || students.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+
+      const studentValid = students[0];
+      const user = {
+        admission_number: studentValid.admission_number,
+        username: studentValid.username,
+        name: studentValid.student_name,
+        current_year: studentValid.current_year,
+        current_semester: studentValid.current_semester,
+        course: studentValid.course,
+        branch: studentValid.branch,
+        college: studentValid.college,
+        student_photo: studentValid.student_photo,
+        role: 'student'
+      };
+
+      return res.json({
+        success: true,
+        user
+      });
+    }
+
     const [admins] = await masterPool.query(
       'SELECT id, username, email FROM admins WHERE id = ? LIMIT 1',
       [authUser.id]
     );
     if (!admins || admins.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Admin not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
       });
     }
 
@@ -349,9 +316,9 @@ exports.verifyToken = async (req, res) => {
     });
   } catch (error) {
     console.error('Token verification error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during verification' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error during verification'
     });
   }
 };
@@ -370,9 +337,9 @@ exports.changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Current and new password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Current and new password are required'
       });
     }
 
@@ -382,9 +349,9 @@ exports.changePassword = async (req, res) => {
       [authUser.id]
     );
     if (!admins || admins.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Admin not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
       });
     }
 
@@ -392,11 +359,11 @@ exports.changePassword = async (req, res) => {
 
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
-    
+
     if (!isValidPassword) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Current password is incorrect' 
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
       });
     }
 
@@ -416,9 +383,9 @@ exports.changePassword = async (req, res) => {
 
   } catch (error) {
     console.error('Change password error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during password change' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error during password change'
     });
   }
 };

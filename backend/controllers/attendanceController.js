@@ -37,7 +37,7 @@ const textToHtml = (text) => {
 // Helper function to resolve parent email
 const resolveParentEmail = (student) => {
   if (!student) return '';
-  
+
   const data = student.student_data || {};
   return (
     student.parent_email ||
@@ -88,200 +88,146 @@ exports.getFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
-    
-    // Build WHERE clause based on applied filters - only regular students
-    const params = [];
-    let whereClause = `WHERE 1=1 AND student_status = 'Regular'`;
-    if (EXCLUDED_COURSES.length > 0) {
-      whereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      params.push(...EXCLUDED_COURSES);
-    }
-    
-    // Apply user scope filtering first
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
-      if (scopeCondition) {
-        whereClause += ` AND ${scopeCondition}`;
-        params.push(...scopeParams);
+
+    // Helper to build WHERE clause parts (User Scope + Excluded Courses)
+    const buildBaseWhere = () => {
+      let clause = `WHERE 1=1 AND student_status = 'Regular'`;
+      const params = [];
+
+      if (EXCLUDED_COURSES.length > 0) {
+        clause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+        params.push(...EXCLUDED_COURSES);
       }
-    }
-    
-    if (college) {
-      whereClause += ' AND college = ?';
-      params.push(college);
-    }
-    if (course) {
-      whereClause += ' AND course = ?';
-      params.push(course);
-    }
-    if (branch) {
-      whereClause += ' AND branch = ?';
-      params.push(branch);
-    }
-    if (batch) {
-      whereClause += ' AND batch = ?';
-      params.push(batch);
-    }
-    if (year) {
-      whereClause += ' AND current_year = ?';
-      params.push(parseInt(year, 10));
-    }
-    if (semester) {
-      whereClause += ' AND current_semester = ?';
-      params.push(parseInt(semester, 10));
-    }
-    
-    // Fetch distinct values for each filter, applying cascading filters
-    const [batchRows] = await masterPool.query(
-      `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
-      params
-    );
-    
-    // For years and semesters, build separate WHERE clauses that exclude year/semester filters
-    // so they cascade properly based on batch/course/branch
-    const yearParams = [];
-    let yearWhereClause = `WHERE 1=1 AND student_status = 'Regular'`;
-    if (EXCLUDED_COURSES.length > 0) {
-      yearWhereClause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      yearParams.push(...EXCLUDED_COURSES);
-    }
-    
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
-      if (scopeCondition) {
-        yearWhereClause += ` AND ${scopeCondition}`;
-        yearParams.push(...scopeParams);
+
+      // Apply user scope filtering
+      if (req.userScope) {
+        const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+        if (scopeCondition) {
+          clause += ` AND ${scopeCondition}`;
+          params.push(...scopeParams);
+        }
       }
-    }
-    
-    if (college) {
-      yearWhereClause += ' AND college = ?';
-      yearParams.push(college);
-    }
-    if (course) {
-      yearWhereClause += ' AND course = ?';
-      yearParams.push(course);
-    }
-    if (branch) {
-      yearWhereClause += ' AND branch = ?';
-      yearParams.push(branch);
-    }
+
+      if (college) {
+        clause += ' AND college = ?';
+        params.push(college);
+      }
+
+      return { clause, params };
+    };
+
+    // Level 0: Scope + College (For Batches)
+    const level0 = buildBaseWhere();
+
+    // Level 1: + Batch (For Courses)
+    const level1 = { clause: level0.clause, params: [...level0.params] };
     if (batch) {
-      yearWhereClause += ' AND batch = ?';
-      yearParams.push(batch);
+      level1.clause += ' AND batch = ?';
+      level1.params.push(batch);
     }
-    // Note: year and semester are NOT included in the WHERE clause for years/semesters queries
-    
-    const [yearRows] = await masterPool.query(
-      `SELECT DISTINCT current_year AS currentYear FROM students ${yearWhereClause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
-      yearParams
+
+    // Level 2: + Course (For Branches)
+    const level2 = { clause: level1.clause, params: [...level1.params] };
+    if (course) {
+      level2.clause += ' AND course = ?';
+      level2.params.push(course);
+    }
+
+    // Level 3: + Branch (For Years/Semesters)
+    const level3 = { clause: level2.clause, params: [...level2.params] };
+    if (branch) {
+      level3.clause += ' AND branch = ?';
+      level3.params.push(branch);
+    }
+
+    // --- Queries ---
+
+    // 1. Batches (Use Level 0 - Independent of other filters except college/scope)
+    const [batchRowsRes] = await masterPool.query(
+      `SELECT DISTINCT batch FROM students ${level0.clause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+      level0.params
     );
-    
-    // For semesters, use the same WHERE clause as years
-    const [semesterRows] = await masterPool.query(
-      `SELECT DISTINCT current_semester AS currentSemester FROM students ${yearWhereClause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
-      yearParams
-    );
-    
-    // For courses, if college is selected, filter courses by college
-    let courseRows;
+
+    // 2. Courses (Use Level 1 - Depend on Batch)
+    let courseRowsRes;
     if (college) {
-      // Get college ID from college name
       const [collegeRows] = await masterPool.query(
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
-        // Get courses for this college from courses table (these are the valid courses for this college)
         const [collegeCourses] = await masterPool.query(
           'SELECT name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
           [collegeId]
         );
         const validCourseNames = collegeCourses.map(c => c.name);
-        
+
         if (validCourseNames.length > 0) {
-          // Get distinct courses from students that match:
-          // 1. The current filters (college, batch, year, semester, etc.)
-          // 2. AND are in the list of valid courses for this college
           const placeholders = validCourseNames.map(() => '?').join(',');
-          const courseWhereClause = `${whereClause} AND course IN (${placeholders})`;
-          const courseParams = [...params, ...validCourseNames];
-          [courseRows] = await masterPool.query(
+          const courseWhereClause = `${level1.clause} AND course IN (${placeholders})`;
+          const courseQueryParams = [...level1.params, ...validCourseNames];
+          [courseRowsRes] = await masterPool.query(
             `SELECT DISTINCT course FROM students ${courseWhereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
-            courseParams
+            courseQueryParams
           );
         } else {
-          // No courses configured for this college
-          courseRows = [];
+          courseRowsRes = [];
         }
       } else {
-        // College not found, return empty courses
-        courseRows = [];
+        courseRowsRes = [];
       }
     } else {
-      // No college filter, get all courses from students
-      [courseRows] = await masterPool.query(
-        `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
-        params
+      [courseRowsRes] = await masterPool.query(
+        `SELECT DISTINCT course FROM students ${level1.clause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+        level1.params
       );
     }
-    
-    // For branches, if college is selected, filter branches by college and valid courses
-    let branchRows;
+
+    // 3. Branches (Use Level 2 - Depend on Batch + Course)
+    let branchRowsRes;
     if (college) {
-      // Get college ID from college name
       const [collegeRows] = await masterPool.query(
         'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
         [college]
       );
-      
+
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
-        // Get courses for this college from courses table
         const [collegeCourses] = await masterPool.query(
           'SELECT id, name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
           [collegeId]
         );
         const validCourseNames = collegeCourses.map(c => c.name);
         const validCourseIds = collegeCourses.map(c => c.id);
-        
+
         if (validCourseNames.length > 0) {
-          // If course is also selected, filter branches for that specific course
           if (course) {
-            // Get course ID for the selected course
             const selectedCourse = collegeCourses.find(c => c.name === course);
             if (selectedCourse) {
-              // Get branches for this specific course from course_branches table
               const [courseBranches] = await masterPool.query(
                 'SELECT name FROM course_branches WHERE course_id = ? AND is_active = 1 ORDER BY name ASC',
                 [selectedCourse.id]
               );
               const validBranchNames = courseBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
-                // Get distinct branches from students that match:
-                // 1. The current filters (college, course, batch, year, semester, etc.)
-                // 2. AND are in the list of valid branches for this course
                 const placeholders = validBranchNames.map(() => '?').join(',');
-                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
-                const branchParams = [...params, ...validBranchNames];
-                [branchRows] = await masterPool.query(
+                const branchWhereClause = `${level2.clause} AND branch IN (${placeholders})`;
+                const branchQueryParams = [...level2.params, ...validBranchNames];
+                [branchRowsRes] = await masterPool.query(
                   `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-                  branchParams
+                  branchQueryParams
                 );
               } else {
-                branchRows = [];
+                branchRowsRes = [];
               }
             } else {
-              // Selected course doesn't belong to this college
-              branchRows = [];
+              branchRowsRes = [];
             }
           } else {
-            // No course selected, get all branches for all courses in this college
-            // Get all branches for all courses in this college
+            // No specific course selected, check branches for ALL valid courses
             if (validCourseIds.length > 0) {
               const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
               const [allBranches] = await masterPool.query(
@@ -289,46 +235,54 @@ exports.getFilterOptions = async (req, res) => {
                 validCourseIds
               );
               const validBranchNames = allBranches.map(b => b.name);
-              
+
               if (validBranchNames.length > 0) {
                 const placeholders = validBranchNames.map(() => '?').join(',');
-                const branchWhereClause = `${whereClause} AND branch IN (${placeholders})`;
-                const branchParams = [...params, ...validBranchNames];
-                [branchRows] = await masterPool.query(
+                const branchWhereClause = `${level2.clause} AND branch IN (${placeholders})`;
+                const branchQueryParams = [...level2.params, ...validBranchNames];
+                [branchRowsRes] = await masterPool.query(
                   `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-                  branchParams
+                  branchQueryParams
                 );
               } else {
-                branchRows = [];
+                branchRowsRes = [];
               }
             } else {
-              branchRows = [];
+              branchRowsRes = [];
             }
           }
         } else {
-          // No courses configured for this college
-          branchRows = [];
+          branchRowsRes = [];
         }
       } else {
-        // College not found, return empty branches
-        branchRows = [];
+        branchRowsRes = [];
       }
     } else {
-      // No college filter, get all branches from students
-      [branchRows] = await masterPool.query(
-        `SELECT DISTINCT branch FROM students ${whereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-        params
+      [branchRowsRes] = await masterPool.query(
+        `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+        level2.params
       );
     }
+
+    // 4. Years and Semesters (Use Level 3 - Depend on Batch + Course + Branch)
+    const [yearRows] = await masterPool.query(
+      `SELECT DISTINCT current_year AS currentYear FROM students ${level3.clause} AND current_year IS NOT NULL AND current_year <> 0 ORDER BY current_year ASC`,
+      level3.params
+    );
+
+    const [semesterRows] = await masterPool.query(
+      `SELECT DISTINCT current_semester AS currentSemester FROM students ${level3.clause} AND current_semester IS NOT NULL AND current_semester <> 0 ORDER BY current_semester ASC`,
+      level3.params
+    );
 
     res.json({
       success: true,
       data: {
-        batches: batchRows.map((row) => row.batch),
+        batches: batchRowsRes.map((row) => row.batch),
         years: yearRows.map((row) => row.currentYear),
         semesters: semesterRows.map((row) => row.currentSemester),
-        courses: courseRows.map((row) => row.course),
-        branches: branchRows.map((row) => row.branch)
+        courses: courseRowsRes.map((row) => row.course),
+        branches: branchRowsRes.map((row) => row.branch)
       }
     });
   } catch (error) {
@@ -391,9 +345,12 @@ exports.getAttendance = async (req, res) => {
         s.branch,
         s.current_year,
         s.current_semester,
+        s.registration_status,
+        s.fee_status,
         s.student_data,
         ar.id AS attendance_record_id,
         ar.status AS attendance_status,
+        ar.holiday_reason,
         COALESCE(ar.sms_sent, 0) AS sms_sent
       FROM students s
       LEFT JOIN attendance_records ar
@@ -404,21 +361,14 @@ exports.getAttendance = async (req, res) => {
 
     const params = [attendanceDate];
 
-    // Filter for regular students only
+    // Optimize: Order WHERE conditions to use composite index effectively
+    // Start with indexed columns in order: student_status, course, batch, current_year, current_semester
     query += ` AND s.student_status = 'Regular'`;
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      params.push(...EXCLUDED_COURSES);
-    }
 
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        query += ` AND ${scopeCondition}`;
-        params.push(...scopeParams);
-      }
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      query += ' AND s.course = ?';
+      params.push(course);
     }
 
     if (batch) {
@@ -442,27 +392,41 @@ exports.getAttendance = async (req, res) => {
       }
     }
 
-    if (course) {
-      query += ' AND s.course = ?';
-      params.push(course);
-    }
-
     if (branch) {
       query += ' AND s.branch = ?';
       params.push(branch);
     }
 
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      params.push(...EXCLUDED_COURSES);
+    }
+
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        query += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
+
     if (studentName) {
       const keyword = `%${studentName}%`;
+      // Optimize: Check indexed columns first (student_name, pin_no) for better performance
+      // JSON extraction is expensive, so we prioritize fixed columns
       query += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       params.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
@@ -470,12 +434,15 @@ exports.getAttendance = async (req, res) => {
 
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
+      // Optimize: Check indexed columns first (parent_mobile1, parent_mobile2) for better performance
       query += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       params.push(mobileLike, mobileLike, mobileLike, mobileLike);
@@ -490,32 +457,23 @@ exports.getAttendance = async (req, res) => {
       FROM students s
       WHERE 1=1
     `;
-    
+
     const countParams = [];
-    
-    // Apply same filters to count query
+
+    // Optimize: Order WHERE conditions to use composite index effectively
     countQuery += ` AND s.student_status = 'Regular'`;
-    
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      countParams.push(...EXCLUDED_COURSES);
+
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      countQuery += ' AND s.course = ?';
+      countParams.push(course);
     }
-    
-    // Apply user scope filtering
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        countQuery += ` AND ${scopeCondition}`;
-        countParams.push(...scopeParams);
-      }
-    }
-    
+
     if (batch) {
       countQuery += ' AND s.batch = ?';
       countParams.push(batch);
     }
-    
+
     if (currentYear) {
       const parsedYear = parseInt(currentYear, 10);
       if (!Number.isNaN(parsedYear)) {
@@ -523,7 +481,7 @@ exports.getAttendance = async (req, res) => {
         countParams.push(parsedYear);
       }
     }
-    
+
     if (currentSemester) {
       const parsedSemester = parseInt(currentSemester, 10);
       if (!Number.isNaN(parsedSemester)) {
@@ -531,41 +489,57 @@ exports.getAttendance = async (req, res) => {
         countParams.push(parsedSemester);
       }
     }
-    
-    if (course) {
-      countQuery += ' AND s.course = ?';
-      countParams.push(course);
-    }
-    
+
     if (branch) {
       countQuery += ' AND s.branch = ?';
       countParams.push(branch);
     }
-    
+
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      countParams.push(...EXCLUDED_COURSES);
+    }
+
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        countQuery += ` AND ${scopeCondition}`;
+        countParams.push(...scopeParams);
+      }
+    }
+
     if (studentName) {
       const keyword = `%${studentName}%`;
+      // Optimize: Check indexed columns first for better performance
       countQuery += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       countParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
     }
-    
+
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
+      // Optimize: Check indexed columns first for better performance
       countQuery += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       countParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
@@ -577,35 +551,37 @@ exports.getAttendance = async (req, res) => {
     // Get total count with all filters applied
     const [countRows] = await masterPool.query(countQuery, countParams);
     const total = countRows?.[0]?.total || 0;
-    // Get statistics for all students (not just current page) - use same query structure
-    // Build WHERE clause for statistics (same filters as main query)
-    let statsWhereClause = 'WHERE 1=1 AND s.student_status = \'Regular\'';
-    const statsParams = [];
-    
-    // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      statsWhereClause += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      statsParams.push(...EXCLUDED_COURSES);
-    }
-    
-    // Apply same filters to stats query
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
-      if (scopeCondition) {
-        statsWhereClause += ` AND ${scopeCondition}`;
-        statsParams.push(...scopeParams);
-      }
+
+    // Optimize: Combine all statistics queries into a single query using conditional aggregation
+    // This reduces database round trips from 3 queries to 1
+    let statsQuery = `
+      SELECT 
+        COUNT(DISTINCT CASE WHEN ar.status = 'present' THEN s.id END) AS present_count,
+        COUNT(DISTINCT CASE WHEN ar.status = 'absent' THEN s.id END) AS absent_count,
+        COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) AS marked_count
+      FROM students s
+      LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
+      WHERE 1=1 AND s.student_status = 'Regular'
+    `;
+
+    const statsParams = [attendanceDate];
+
+    // Optimize: Order WHERE conditions to use composite index effectively
+    // Apply indexed filters first (these use the composite index)
+    if (course) {
+      statsQuery += ' AND s.course = ?';
+      statsParams.push(course);
     }
 
     if (batch) {
-      statsWhereClause += ' AND s.batch = ?';
+      statsQuery += ' AND s.batch = ?';
       statsParams.push(batch);
     }
 
     if (currentYear) {
       const parsedYear = parseInt(currentYear, 10);
       if (!Number.isNaN(parsedYear)) {
-        statsWhereClause += ' AND s.current_year = ?';
+        statsQuery += ' AND s.current_year = ?';
         statsParams.push(parsedYear);
       }
     }
@@ -613,32 +589,45 @@ exports.getAttendance = async (req, res) => {
     if (currentSemester) {
       const parsedSemester = parseInt(currentSemester, 10);
       if (!Number.isNaN(parsedSemester)) {
-        statsWhereClause += ' AND s.current_semester = ?';
+        statsQuery += ' AND s.current_semester = ?';
         statsParams.push(parsedSemester);
       }
     }
 
-    if (course) {
-      statsWhereClause += ' AND s.course = ?';
-      statsParams.push(course);
+    if (branch) {
+      statsQuery += ' AND s.branch = ?';
+      statsParams.push(branch);
     }
 
-    if (branch) {
-      statsWhereClause += ' AND s.branch = ?';
-      statsParams.push(branch);
+    // Exclude certain courses (after course filter to use index)
+    if (EXCLUDED_COURSES.length > 0) {
+      statsQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
+      statsParams.push(...EXCLUDED_COURSES);
+    }
+
+    // Apply user scope filtering (after indexed filters)
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+      if (scopeCondition) {
+        statsQuery += ` AND ${scopeCondition}`;
+        statsParams.push(...scopeParams);
+      }
     }
 
     if (studentName) {
       const keyword = `%${studentName}%`;
-      statsWhereClause += `
+      // Optimize: Check indexed columns first for better performance
+      statsQuery += `
         AND (
           s.student_name LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
           OR s.pin_no LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
+          ))
         )
       `;
       statsParams.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
@@ -646,51 +635,29 @@ exports.getAttendance = async (req, res) => {
 
     if (parentMobile) {
       const mobileLike = `%${parentMobile}%`;
-      statsWhereClause += `
+      // Optimize: Check indexed columns first for better performance
+      statsQuery += `
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          OR (s.student_data IS NOT NULL AND (
+            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
+            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
+          ))
         )
       `;
       statsParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
     }
 
-    // Use separate queries for accurate counting
-    // Get present count
-    const presentQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'present'
-      ${statsWhereClause}
-    `;
-    
-    // Get absent count
-    const absentQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ? AND ar.status = 'absent'
-      ${statsWhereClause}
-    `;
-    
-    // Get marked count (any status)
-    const markedQuery = `
-      SELECT COUNT(DISTINCT s.id) AS count
-      FROM students s
-      INNER JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
-      ${statsWhereClause}
-    `;
-    
-    const [presentRows] = await masterPool.query(presentQuery, [attendanceDate, ...statsParams]);
-    const [absentRows] = await masterPool.query(absentQuery, [attendanceDate, ...statsParams]);
-    const [markedRows] = await masterPool.query(markedQuery, [attendanceDate, ...statsParams]);
-    
-    const presentCount = parseInt(presentRows[0]?.count || 0, 10);
-    const absentCount = parseInt(absentRows[0]?.count || 0, 10);
-    const markedCount = parseInt(markedRows[0]?.count || 0, 10);
+    // Execute single optimized stats query
+    const [statsRows] = await masterPool.query(statsQuery, statsParams);
+    const statsRow = statsRows[0] || {};
+
+    const presentCount = parseInt(statsRow.present_count || 0, 10);
+    const absentCount = parseInt(statsRow.absent_count || 0, 10);
+    const markedCount = parseInt(statsRow.marked_count || 0, 10);
     const unmarkedCount = Math.max(0, total - markedCount);
-    
+
     const statistics = {
       total: total,
       present: presentCount,
@@ -742,6 +709,16 @@ exports.getAttendance = async (req, res) => {
         studentData.pin_no ||
         null;
 
+      const resolvedRegistrationStatus =
+        (row.registration_status && String(row.registration_status).trim().length > 0)
+          ? row.registration_status
+          : (studentData.registration_status || studentData['Registration Status'] || null);
+
+      const resolvedFeeStatus =
+        (row.fee_status && String(row.fee_status).trim().length > 0)
+          ? row.fee_status
+          : (studentData.fee_status || studentData['Fee Status'] || null);
+
       return {
         id: row.id,
         admissionNumber: row.admission_number || studentData['Admission Number'] || studentData.admission_number || null,
@@ -756,8 +733,8 @@ exports.getAttendance = async (req, res) => {
         currentYear: row.current_year || studentData['Current Academic Year'] || null,
         currentSemester: row.current_semester || studentData['Current Semester'] || null,
         attendanceStatus: row.attendance_status || null,
-        registration_status: studentData.registration_status || null,
-        fee_status: studentData.fee_status || null,
+        registration_status: resolvedRegistrationStatus,
+        fee_status: resolvedFeeStatus,
         smsSent: row.sms_sent === 1 || row.sms_sent === true
       };
     });
@@ -789,7 +766,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
   try {
     const attendanceDate = getDateOnlyString(req.query.date || req.body.date);
     const countOnly = req.query.countOnly === 'true' || req.body.countOnly === true;
-    
+
     if (!attendanceDate) {
       return res.status(400).json({
         success: false,
@@ -890,7 +867,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
       params.push(mobileLike, mobileLike, mobileLike, mobileLike, mobileLike, mobileLike);
     }
 
-    const whereClause = whereConditions.length > 0 
+    const whereClause = whereConditions.length > 0
       ? `WHERE ${whereConditions.join(' AND ')}`
       : 'WHERE 1=1';
 
@@ -902,7 +879,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
       ${whereClause}
       AND ar.attendance_date = ?
     `;
-    
+
     params.push(attendanceDate);
 
     if (countOnly) {
@@ -911,7 +888,7 @@ exports.deleteAttendanceForDate = async (req, res) => {
         `SELECT COUNT(*) AS count ${queryBase}`,
         params
       );
-      
+
       return res.json({
         success: true,
         message: `Found ${countResult[0].count} attendance record(s) matching filters`,
@@ -988,7 +965,7 @@ exports.markAttendance = async (req, res) => {
     if (isHolidayDate && normalizedRecords.some((r) => r.status !== 'holiday')) {
       return res.status(400).json({
         success: false,
-        message: 'On holidays, only holiday status can be recorded'
+        message: 'On no class work days, only no class work status can be recorded'
       });
     }
   } catch (error) {
@@ -1094,20 +1071,44 @@ exports.markAttendance = async (req, res) => {
           UPDATE attendance_records
           SET status = ?, marked_by = ?`;
         let updateParams = [record.status, adminId];
-        
+
         // Add holiday_reason if status is holiday and reason is provided
         if (record.status === 'holiday' && record.holidayReason) {
           updateQuery += `, holiday_reason = ?`;
           updateParams.push(record.holidayReason);
+          console.log('Backend: Updating holiday reason for student', {
+            studentId: record.studentId,
+            holidayReason: record.holidayReason,
+            updateQuery: updateQuery
+          });
         } else if (record.status !== 'holiday') {
           // Clear holiday_reason if status is not holiday
           updateQuery += `, holiday_reason = NULL`;
+          console.log('Backend: Clearing holiday reason for student', {
+            studentId: record.studentId,
+            status: record.status
+          });
         }
-        
+
         updateQuery += `, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
         updateParams.push(existing.id);
-        
+
         await connection.query(updateQuery, updateParams);
+
+        // Debug: Verify holiday reason was actually updated
+        if (record.status === 'holiday' && record.holidayReason) {
+          const [verifyUpdateResult] = await connection.query(
+            'SELECT holiday_reason FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+            [record.studentId, normalizedDate]
+          );
+          console.log('Backend: Verified holiday reason update in DB:', {
+            studentId: record.studentId,
+            date: normalizedDate,
+            savedHolidayReason: record.holidayReason,
+            dbHolidayReason: verifyUpdateResult[0]?.holiday_reason,
+            match: verifyUpdateResult[0]?.holiday_reason === record.holidayReason
+          });
+        }
 
         updatedCount += 1;
 
@@ -1127,16 +1128,36 @@ exports.markAttendance = async (req, res) => {
           record.status,
           adminId
         ];
-        
+
         // Add holiday_reason if status is holiday and reason is provided
         if (record.status === 'holiday' && record.holidayReason) {
           insertQuery += `, holiday_reason`;
           insertParams.push(record.holidayReason);
+          console.log('Backend: Inserting holiday reason for student', {
+            studentId: record.studentId,
+            holidayReason: record.holidayReason,
+            insertQuery: insertQuery
+          });
         }
-        
+
         insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
-        
+
         await connection.query(insertQuery, insertParams);
+
+        // Debug: Verify holiday reason was actually saved
+        if (record.status === 'holiday' && record.holidayReason) {
+          const [verifyResult] = await connection.query(
+            'SELECT holiday_reason FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+            [record.studentId, normalizedDate]
+          );
+          console.log('Backend: Verified holiday reason in DB:', {
+            studentId: record.studentId,
+            date: normalizedDate,
+            savedHolidayReason: record.holidayReason,
+            dbHolidayReason: verifyResult[0]?.holiday_reason,
+            match: verifyResult[0]?.holiday_reason === record.holidayReason
+          });
+        }
 
         insertedCount += 1;
 
@@ -1159,14 +1180,14 @@ exports.markAttendance = async (req, res) => {
     const notificationResults = [];
     console.log(`\n========== NOTIFICATION DISPATCH LOG (${normalizedDate}) ==========`);
     console.log(`Total absent students to notify: ${smsQueue.length}`);
-    
+
     // Get connection again for updating SMS status
     const updateConnection = await masterPool.getConnection();
-    
+
     for (const payload of smsQueue) {
       const student = payload.student;
       const studentData = student.student_data || {};
-      
+
       // Extract student details for logging and response
       const studentDetails = {
         studentId: student.id,
@@ -1178,9 +1199,9 @@ exports.markAttendance = async (req, res) => {
         branch: student.branch || studentData['Branch'] || studentData['branch'] || '',
         year: student.current_year || studentData['Current Academic Year'] || '',
         semester: student.current_semester || studentData['Current Semester'] || '',
-        parentMobile: student.parent_mobile1 || student.parent_mobile2 || 
-                      studentData['Parent Mobile Number 1'] || studentData['Parent Phone Number 1'] || 
-                      studentData['Parent Mobile Number'] || '',
+        parentMobile: student.parent_mobile1 || student.parent_mobile2 ||
+          studentData['Parent Mobile Number 1'] || studentData['Parent Phone Number 1'] ||
+          studentData['Parent Mobile Number'] || '',
         parentEmail: resolveParentEmail(student)
       };
 
@@ -1194,7 +1215,7 @@ exports.markAttendance = async (req, res) => {
 
       // Check if notifications are enabled
       const isEnabled = notificationSettings?.enabled !== false;
-      
+
       if (isEnabled) {
         // Send SMS if enabled
         if (notificationSettings?.smsEnabled !== false && studentDetails.parentMobile) {
@@ -1207,7 +1228,7 @@ exports.markAttendance = async (req, res) => {
             result.smsError = smsResult?.reason || null;
             result.sentTo = smsResult?.sentTo || studentDetails.parentMobile;
             result.apiResponse = smsResult?.data || null;
-            
+
             // Update SMS status in database if SMS was sent successfully
             if (result.smsSent) {
               try {
@@ -1239,18 +1260,18 @@ exports.markAttendance = async (req, res) => {
 
       notificationResults.push(result);
     }
-    
+
     // Release update connection
     if (updateConnection) {
       updateConnection.release();
     }
-    
+
     // Summary log
     const smsSuccessCount = notificationResults.filter(r => r.smsSent).length;
     const emailSuccessCount = notificationResults.filter(r => r.emailSent).length;
     const smsFailedCount = notificationResults.filter(r => !r.smsSent && r.smsError && r.smsError !== 'notifications_disabled').length;
     const emailFailedCount = notificationResults.filter(r => !r.emailSent && r.emailError && r.emailError !== 'notifications_disabled').length;
-    
+
     console.log(`\n========== NOTIFICATION DISPATCH SUMMARY ==========`);
     console.log(`📱 SMS: ✅ ${smsSuccessCount} sent, ❌ ${smsFailedCount} failed`);
     console.log(`📧 Email: ✅ ${emailSuccessCount} sent, ❌ ${emailFailedCount} failed`);
@@ -1261,7 +1282,7 @@ exports.markAttendance = async (req, res) => {
     // ============================================
     // Get all attendance data for the date
     const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
-    
+
     // Get all active Principals and HODs with their access scopes
     const { getAllNotificationUsers, filterAttendanceByUserScope, areAllBatchesMarkedForUserScope } = require('../services/getUserScopeAttendance');
     const { principals, hods } = await getAllNotificationUsers();
@@ -1476,6 +1497,55 @@ exports.markAttendance = async (req, res) => {
       }
     }
 
+    // ============================================
+    // GLOBAL REPORT FOR SUPER ADMIN (sriram@pydah.edu.in)
+    // ============================================
+    // Check if ALL batches across the ENTIRE system are marked
+    const isGloballyFullyMarked = allAttendanceData.every(group => group.isFullyMarked);
+    console.log(`\n🌍 Checking Global Report status: ${isGloballyFullyMarked ? '✅ All batches marked globally' : '⏳ Waiting for global completion'}`);
+
+    if (isGloballyFullyMarked) {
+      const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
+      console.log(`   🚀 Triggering Global Consolidated Report for ${SUPER_ADMIN_EMAIL}`);
+
+      // Combine all students and attendance records from ALL groups
+      const globalStudents = [];
+      const globalAttendanceRecords = [];
+
+      for (const group of allAttendanceData) {
+        globalStudents.push(...group.students);
+        globalAttendanceRecords.push(...group.attendanceRecords);
+      }
+
+      try {
+        await sendAttendanceReportNotifications({
+          collegeId: null,
+          collegeName: 'All Colleges',
+          courseId: null,
+          courseName: 'All Courses',
+          branchId: null,
+          branchName: 'All Branches',
+          batch: 'All Batches',
+          year: 'All Years',
+          semester: 'All Semesters',
+          attendanceDate: normalizedDate,
+          students: globalStudents,
+          attendanceRecords: globalAttendanceRecords,
+          allBatchesData: allAttendanceData, // Pass all batches data for summary table
+          recipientUser: {
+            name: 'Sriram',
+            email: SUPER_ADMIN_EMAIL,
+            role: 'super_admin' // Dummy role, bypassed by email check in service
+          },
+          senderName: senderName // Pass sender name
+        });
+        console.log(`   📧 Global Report sent successfully to ${SUPER_ADMIN_EMAIL}`);
+        processedUsers.add(SUPER_ADMIN_EMAIL);
+      } catch (error) {
+        console.error(`   ❌ Error sending Global Report to ${SUPER_ADMIN_EMAIL}:`, error);
+      }
+    }
+
     // Log summary
     if (processedUsers.size > 0) {
       console.log(`\n📋 Summary: Reports sent to ${processedUsers.size} user(s)`);
@@ -1489,14 +1559,14 @@ exports.markAttendance = async (req, res) => {
     // Check if all batches are marked for each college/course combination
     // If all batches are marked (pending = 0), automatically send day-end report
     console.log(`\n📊 Checking college/course combinations for automatic day-end reports...`);
-    
+
     // Group attendance data by college/course
     const groupsByCollegeCourse = new Map();
     for (const group of allAttendanceData) {
       const college = group.college || 'Unknown';
       const course = group.course || 'Unknown';
       const key = `${college}|${course}`;
-      
+
       if (!groupsByCollegeCourse.has(key)) {
         groupsByCollegeCourse.set(key, {
           college,
@@ -1504,7 +1574,7 @@ exports.markAttendance = async (req, res) => {
           groups: []
         });
       }
-      
+
       groupsByCollegeCourse.get(key).groups.push(group);
     }
 
@@ -1514,17 +1584,17 @@ exports.markAttendance = async (req, res) => {
     // Check each college/course combination
     for (const [key, collegeCourseData] of groupsByCollegeCourse) {
       const { college, course, groups } = collegeCourseData;
-      
+
       // Check if all batches for this college/course are marked (pending = 0)
       const allBatchesMarked = groups.every(group => group.isFullyMarked);
       const totalGroups = groups.length;
       const markedGroups = groups.filter(g => g.isFullyMarked).length;
-      
+
       console.log(`\n   📋 ${college} - ${course}: ${markedGroups}/${totalGroups} batches marked`);
-      
+
       if (allBatchesMarked && totalGroups > 0) {
         console.log(`   ✅ All batches marked for ${college} - ${course}. Sending day-end report...`);
-        
+
         // Combine all students and attendance records for this college/course
         const allStudents = [];
         const allAttendanceRecords = [];
@@ -1539,25 +1609,25 @@ exports.markAttendance = async (req, res) => {
         // Find relevant principals and HODs for this college/course
         const relevantPrincipals = principals.filter(principal => {
           // Check if principal has access to this college
-          const hasCollegeAccess = principal.collegeNames.length === 0 || 
-                                   principal.collegeNames.includes(college);
-          
+          const hasCollegeAccess = principal.collegeNames.length === 0 ||
+            principal.collegeNames.includes(college);
+
           // Check if principal has access to this course
-          const hasCourseAccess = principal.allCourses || 
-                                  principal.courseNames.includes(course);
-          
+          const hasCourseAccess = principal.allCourses ||
+            principal.courseNames.includes(course);
+
           return hasCollegeAccess && hasCourseAccess;
         });
 
         const relevantHODs = hods.filter(hod => {
           // Check if HOD has access to this college
-          const hasCollegeAccess = hod.collegeNames.length === 0 || 
-                                   hod.collegeNames.includes(college);
-          
+          const hasCollegeAccess = hod.collegeNames.length === 0 ||
+            hod.collegeNames.includes(college);
+
           // Check if HOD has access to this course
-          const hasCourseAccess = hod.allCourses || 
-                                  hod.courseNames.includes(course);
-          
+          const hasCourseAccess = hod.allCourses ||
+            hod.courseNames.includes(course);
+
           return hasCollegeAccess && hasCourseAccess;
         });
 
@@ -1701,7 +1771,7 @@ exports.markAttendance = async (req, res) => {
       const email = key.split('|')[0];
       uniqueDayEndUsers.add(email);
     }
-    
+
     if (dayEndProcessedUsers.size > 0) {
       console.log(`\n📋 Day-End Report Summary: ${dayEndReportResults.length} report(s) sent to ${uniqueDayEndUsers.size} unique user(s) for completed college/course combinations`);
     } else {
@@ -1746,7 +1816,7 @@ exports.markAttendance = async (req, res) => {
 exports.sendDayEndReports = async (req, res) => {
   try {
     const { date } = req.body;
-    
+
     if (!date) {
       return res.status(400).json({
         success: false,
@@ -1756,14 +1826,14 @@ exports.sendDayEndReports = async (req, res) => {
 
     // Normalize date
     const normalizedDate = getDateOnlyString(date);
-    
+
     if (!normalizedDate) {
       return res.status(400).json({
         success: false,
         message: 'Invalid date format'
       });
     }
-    
+
     // Get sender information
     const sender = req.user || req.admin;
     if (!sender) {
@@ -1775,18 +1845,18 @@ exports.sendDayEndReports = async (req, res) => {
 
     const senderName = sender.name || sender.username || 'System';
     const senderEmail = sender.email || '';
-    
+
     console.log(`\n📧 Manual Day-End Report Request for ${normalizedDate}`);
     console.log(`   Sender: ${senderName} (${senderEmail})`);
 
     // Get all attendance data for the date
     const allAttendanceData = await getAllAttendanceForDate(normalizedDate);
-    
+
     // Filter attendance data by sender's scope first
     let filteredAttendanceData = allAttendanceData;
     if (req.userScope && !req.userScope.unrestricted) {
       const { filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
-      
+
       // Convert req.userScope to the format needed for filterAttendanceByUserScope
       const senderScope = {
         collegeNames: req.userScope.collegeNames || [],
@@ -1796,10 +1866,10 @@ exports.sendDayEndReports = async (req, res) => {
         allBranches: req.userScope.allBranches || false,
         role: sender.role
       };
-      
+
       filteredAttendanceData = filterAttendanceByUserScope(allAttendanceData, senderScope);
       console.log(`   📊 Filtered by sender scope: ${filteredAttendanceData.length}/${allAttendanceData.length} groups`);
-      
+
       if (filteredAttendanceData.length === 0) {
         return res.json({
           success: true,
@@ -1814,7 +1884,7 @@ exports.sendDayEndReports = async (req, res) => {
         });
       }
     }
-    
+
     // Get all active Principals and HODs with their access scopes
     const { getAllNotificationUsers, filterAttendanceByUserScope } = require('../services/getUserScopeAttendance');
     const { principals, hods } = await getAllNotificationUsers();
@@ -1833,7 +1903,7 @@ exports.sendDayEndReports = async (req, res) => {
       const college = group.college || 'Unknown';
       const course = group.course || 'Unknown';
       const key = `${college}|${course}`;
-      
+
       if (!groupsByCollegeCourse.has(key)) {
         groupsByCollegeCourse.set(key, {
           college,
@@ -1841,7 +1911,7 @@ exports.sendDayEndReports = async (req, res) => {
           groups: []
         });
       }
-      
+
       groupsByCollegeCourse.get(key).groups.push(group);
     }
 
@@ -2052,7 +2122,7 @@ exports.sendDayEndReports = async (req, res) => {
       } else {
         courseName = `${actualCourses.length} Courses`;
       }
-      
+
       // Determine branch name from actual branches in the data
       let branchName;
       if (actualBranches.length === 0) {
@@ -2146,18 +2216,18 @@ exports.sendDayEndReports = async (req, res) => {
 exports.retrySms = async (req, res) => {
   try {
     const { studentId, admissionNumber, attendanceDate, parentMobile } = req.body;
-    
+
     if (!studentId && !admissionNumber) {
       return res.status(400).json({
         success: false,
         message: 'Student ID or admission number is required'
       });
     }
-    
+
     // Get student details
     let query = 'SELECT * FROM students WHERE ';
     let params = [];
-    
+
     if (studentId) {
       query += 'id = ?';
       params.push(studentId);
@@ -2165,29 +2235,29 @@ exports.retrySms = async (req, res) => {
       query += 'admission_number = ?';
       params.push(admissionNumber);
     }
-    
+
     const [students] = await masterPool.query(query, params);
-    
+
     if (students.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
     }
-    
+
     const student = {
       ...students[0],
       student_data: parseStudentData(students[0].student_data)
     };
-    
+
     // Resolve parent mobile
-    const resolvedMobile = parentMobile || 
-      student.parent_mobile1 || 
-      student.parent_mobile2 || 
+    const resolvedMobile = parentMobile ||
+      student.parent_mobile1 ||
+      student.parent_mobile2 ||
       student.student_data?.['Parent Mobile Number 1'] ||
       student.student_data?.['Parent Phone Number 1'] ||
       student.student_data?.['Parent Mobile Number'];
-    
+
     if (!resolvedMobile) {
       return res.json({
         success: false,
@@ -2199,9 +2269,9 @@ exports.retrySms = async (req, res) => {
         }
       });
     }
-    
+
     console.log(`[SMS RETRY] Retrying notification for student ${student.admission_number}`);
-    
+
     // Get notification settings
     let notificationSettings = null;
     try {
@@ -2209,7 +2279,7 @@ exports.retrySms = async (req, res) => {
     } catch (error) {
       console.warn('Failed to load attendance notification settings:', error);
     }
-    
+
     // Send SMS
     const normalizedDate = attendanceDate || getDateOnlyString();
     const result = await sendAbsenceNotification({
@@ -2220,7 +2290,7 @@ exports.retrySms = async (req, res) => {
       attendanceDate: normalizedDate,
       notificationSettings
     });
-    
+
     // Update SMS status in database if SMS was sent successfully
     if (result?.success) {
       try {
@@ -2237,7 +2307,7 @@ exports.retrySms = async (req, res) => {
         console.warn(`Could not update sms_sent for student ${student.id}:`, updateError.message);
       }
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -2246,7 +2316,7 @@ exports.retrySms = async (req, res) => {
         sentTo: resolvedMobile
       }
     });
-    
+
   } catch (error) {
     console.error('SMS retry error:', error);
     res.status(500).json({
@@ -2359,6 +2429,11 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
     params.push(status);
   }
 
+  if (filters.college) {
+    conditions.push(`${prefix}college = ?`);
+    params.push(filters.college);
+  }
+
   if (filters.batch) {
     conditions.push(`${prefix}batch = ?`);
     params.push(filters.batch);
@@ -2416,13 +2491,13 @@ exports.getAttendanceSummary = async (req, res) => {
       course: normalizeTextFilter(req.query.course),
       branch: normalizeTextFilter(req.query.branch),
       year: parseOptionalInteger(req.query.year),
-    semester: parseOptionalInteger(req.query.semester),
-    studentStatus: 'Regular' // Day-end summary should only consider regular students
+      semester: parseOptionalInteger(req.query.semester),
+      studentStatus: 'Regular' // Day-end summary should only consider regular students
     };
 
     // Build filter conditions
     const countFilter = buildWhereClause(filters, 's');
-    
+
     // Apply user scope filtering
     let scopeCondition = '';
     let scopeParams = [];
@@ -2490,7 +2565,9 @@ exports.getAttendanceSummary = async (req, res) => {
           COUNT(*) AS total_students,
           SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
-          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -2501,6 +2578,9 @@ exports.getAttendanceSummary = async (req, res) => {
       `,
       [todayKey, ...countFilter.params, ...scopeParams]
     );
+
+
+
 
     let todayHolidayInfo = null;
     let weeklyHolidayInfo = { dates: new Set(), details: new Map() };
@@ -2621,7 +2701,9 @@ exports.getAttendanceSummary = async (req, res) => {
             presentToday: present,
             absentToday: absent,
             holidayToday: holiday,
-            
+            holidayReasons: row.holiday_reasons || null,
+            lastUpdated: row.last_updated || null,
+
             markedToday: marked,
             pendingToday: Math.max(0, total - marked)
           };
@@ -2721,7 +2803,7 @@ exports.getStudentAttendanceHistory = async (req, res) => {
 
         if (courseRows.length > 0) {
           const courseId = courseRows[0].id;
-          
+
           // Get the current academic year (try to find active semester)
           const [semesterRows] = await masterPool.query(
             `
@@ -2775,7 +2857,7 @@ exports.getStudentAttendanceHistory = async (req, res) => {
       // Use semester dates, but limit to current date if semester hasn't ended
       const effectiveEndDate = semesterEndDate > referenceDate ? referenceDate : semesterEndDate;
       const effectiveStartDate = semesterStartDate < referenceDate ? semesterStartDate : referenceDate;
-      
+
       // For weekly: last 7 days from reference date, but within semester
       weekStart = new Date(referenceDate);
       weekStart.setDate(referenceDate.getDate() - 6);
@@ -2881,6 +2963,42 @@ exports.getStudentAttendanceHistory = async (req, res) => {
         series: semesterSeries.series,
         holidays: semesterSeries.series.filter((entry) => entry.isHoliday)
       };
+    } else {
+      // Fallback: If no semester dates found, use the calculated range (e.g., monthStart or weekStart) to ensure Dashboard displays data
+      // We'll use monthStart as a reasonable default for "current view"
+      const fallbackStart = monthStart < weekStart ? monthStart : weekStart;
+      const fallbackEnd = referenceDate;
+      const fallbackEndKey = formatDateKey(fallbackEnd);
+      const fallbackStartKey = formatDateKey(fallbackStart);
+
+      const fallbackRows = historyRows.filter((row) => {
+        const rowDate = new Date(row.attendance_date);
+        return rowDate >= fallbackStart && rowDate <= fallbackEnd;
+      });
+
+      // Get holidays for fallback range
+      let fallbackHolidayInfo = { dates: new Set(), details: new Map() };
+      try {
+        fallbackHolidayInfo = await getNonWorkingDaysForRange(fallbackStartKey, fallbackEndKey);
+      } catch (error) {
+        console.warn('Failed to fetch fallback holiday range:', error.message || error);
+      }
+
+      const fallbackSeries = buildStudentSeries(
+        fallbackRows,
+        fallbackStart,
+        fallbackEnd,
+        fallbackHolidayInfo
+      );
+
+      semesterAttendance = {
+        startDate: fallbackStartKey,
+        endDate: fallbackEndKey,
+        totals: fallbackSeries.totals,
+        series: fallbackSeries.series,
+        holidays: fallbackSeries.series.filter((entry) => entry.isHoliday),
+        isFallback: true
+      };
     }
 
     res.json({
@@ -2941,7 +3059,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
 
     // Get all student IDs
     const studentIds = studentRows.map((row) => row.id);
-    
+
     // Now get attendance records for these students in the date range
     let attendanceRows = [];
     if (studentIds.length > 0) {
@@ -3016,7 +3134,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
 
       const key = `${batch}|${course}|${branch}|${year}|${semester}`;
       const group = groupMap.get(key);
-      
+
       if (group && row.attendance_date) {
         // Normalize date to ensure consistent format matching
         const normalizedDate = getDateOnlyString(row.attendance_date);
@@ -3120,9 +3238,9 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
       allRows.push(['Report Period', `${from} to ${to}`]);
       allRows.push(['']);
       allRows.push(['Total Working Days', totalWorkingDays]);
-      allRows.push(['Total Holidays', reportData.totalHolidays]);
-      allRows.push(['Total Public Holidays', publicHolidaysList.length]);
-      allRows.push(['Total Institute Holidays', instituteHolidaysList.length]);
+      allRows.push(['Total No Class Work Days', reportData.totalHolidays]);
+      allRows.push(['Total Public No Class Work Days', publicHolidaysList.length]);
+      allRows.push(['Total Institute No Class Work Days', instituteHolidaysList.length]);
       allRows.push(['Total Groups', aggregatedData.length]);
       allRows.push(['Total Students', totals.studentCount]);
       allRows.push(['Total Present Records', totals.present]);
@@ -3176,9 +3294,9 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
       allRows.push(['']);
 
       // Holidays Section
-      allRows.push(['Holidays List']);
+      allRows.push(['No Class Work Days List']);
       allRows.push(['']);
-      const holidaysHeader = ['Date', 'Month', 'Year', 'Holiday Name', 'Type'];
+      const holidaysHeader = ['Date', 'Month', 'Year', 'Reason', 'Type'];
       allRows.push(holidaysHeader);
 
       publicHolidaysList.forEach((holiday) => {
@@ -3187,7 +3305,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
           holiday.month,
           holiday.year,
           holiday.name,
-          'Public Holiday'
+          'Public No Class Work'
         ]);
       });
 
@@ -3197,7 +3315,7 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
           holiday.month,
           holiday.year,
           holiday.name,
-          'Institute Holiday'
+          'Institute No Class Work'
         ]);
       });
 
@@ -3289,10 +3407,10 @@ exports.downloadAttendanceReport = async (req, res) => {
     let holidayInfo = { dates: new Set(), details: new Map() };
     let publicHolidaysList = [];
     let instituteHolidaysList = [];
-    
+
     try {
       holidayInfo = await getNonWorkingDaysForRange(from, to);
-      
+
       // Get public holidays for the date range
       const fromYear = new Date(from).getFullYear();
       const toYear = new Date(to).getFullYear();
@@ -3300,13 +3418,13 @@ exports.downloadAttendanceReport = async (req, res) => {
       for (let y = fromYear; y <= toYear; y++) {
         years.push(y);
       }
-      
+
       const allPublicHolidays = [];
       for (const year of years) {
         const { holidays } = await getPublicHolidaysForYear(year);
         allPublicHolidays.push(...(holidays || []));
       }
-      
+
       publicHolidaysList = allPublicHolidays
         .filter((h) => h.date >= from && h.date <= to)
         .map((h) => ({
@@ -3316,7 +3434,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           year: new Date(h.date).getFullYear()
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
-      
+
       // Get institute holidays
       const customHolidays = await listCustomHolidays({ startDate: from, endDate: to });
       instituteHolidaysList = customHolidays.map((h) => ({
@@ -3394,7 +3512,7 @@ exports.downloadAttendanceReport = async (req, res) => {
     // Now get attendance records for these students in the date range
     const studentIds = studentRows.map((row) => row.id);
     let attendanceRows = [];
-    
+
     if (studentIds.length > 0) {
       let attendanceQuery = `
         SELECT
@@ -3406,7 +3524,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           AND ar.attendance_date BETWEEN ? AND ?
         ORDER BY ar.student_id, ar.attendance_date
       `;
-      
+
       const attendanceParams = [...studentIds, from, to];
       [attendanceRows] = await masterPool.query(attendanceQuery, attendanceParams);
     }
@@ -3555,7 +3673,7 @@ exports.downloadAttendanceReport = async (req, res) => {
         ['Total Students', reportData.statistics.totalStudents],
         ['Total Present', reportData.statistics.totalPresent],
         ['Total Absent', reportData.statistics.totalAbsent],
-        ['Total Holidays', reportData.statistics.totalHolidays],
+        ['Total No Class Work Days', reportData.statistics.totalHolidays],
         ['Total Unmarked', reportData.statistics.totalUnmarked],
         ['Working Days', reportData.statistics.workingDays],
         [''],
@@ -3598,7 +3716,7 @@ exports.downloadAttendanceReport = async (req, res) => {
           ...reportData.dates.map((date) => {
             const isHoliday = holidayInfo.dates.has(date);
             if (isHoliday) {
-              return 'Holiday';
+              return 'No Class Work';
             }
             const status = student.attendance.get(date);
             if (status === 'present') return 'Present';
@@ -3640,5 +3758,334 @@ exports.downloadAttendanceReport = async (req, res) => {
       message: 'Server error while generating attendance report'
     });
   }
+};
+
+// Download day-end report in PDF or Excel format
+exports.downloadDayEndReport = async (req, res) => {
+  try {
+    const {
+      date,
+      format,
+      batch,
+      course,
+      branch,
+      college,
+      year,
+      semester,
+      student_status,
+      studentStatus
+    } = req.query;
+
+    const statusFilter = student_status || studentStatus || 'Regular';
+    const normalizedFormat = (format || 'xlsx').toLowerCase();
+    const attendanceDate = getDateOnlyString(date || new Date());
+
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    if (normalizedFormat !== 'pdf' && normalizedFormat !== 'xlsx') {
+      return res.status(400).json({
+        success: false,
+        message: 'Format must be either pdf or xlsx'
+      });
+    }
+
+    const filters = {
+      batch: normalizeTextFilter(batch),
+      course: normalizeTextFilter(course),
+      branch: normalizeTextFilter(branch),
+      college: normalizeTextFilter(college),
+      year: parseOptionalInteger(year),
+      semester: parseOptionalInteger(semester),
+      studentStatus: statusFilter
+    };
+
+    // Build filter conditions
+    const countFilter = buildWhereClause(filters, 's');
+
+    // Apply user scope filtering
+    let scopeCondition = '';
+    let scopeParams = [];
+    if (req.userScope) {
+      const { scopeCondition: scopeCond, params: scopeP } = getScopeConditionString(req.userScope, 's');
+      if (scopeCond) {
+        scopeCondition = ` AND ${scopeCond}`;
+        scopeParams = scopeP;
+      }
+    }
+
+    // Get grouped summary data (same query as getAttendanceSummary)
+    const [groupedRows] = await masterPool.query(
+      `
+        SELECT 
+          s.college AS college,
+          s.batch AS batch,
+          s.course AS course,
+          s.branch AS branch,
+          s.current_year AS year,
+          s.current_semester AS semester,
+          COUNT(*) AS total_students,
+          SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+          SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+          SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
+          GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
+        FROM students s
+        LEFT JOIN attendance_records ar 
+          ON ar.student_id = s.id 
+          AND ar.attendance_date = ?
+        WHERE 1=1${countFilter.clause}${scopeCondition}
+        GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+        ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
+      `,
+      [attendanceDate, ...countFilter.params, ...scopeParams]
+    );
+
+    // Transform grouped data to match frontend format
+    const groupedData = groupedRows.map((row) => {
+      const present = Number(row.present) || 0;
+      const absent = Number(row.absent) || 0;
+      const holiday = Number(row.holiday) || 0;
+      const total = Number(row.total_students) || 0;
+      const marked = present + absent + holiday;
+      return {
+        college: row.college || '—',
+        batch: row.batch || '—',
+        course: row.course || '—',
+        branch: row.branch || '—',
+        year: row.year || '—',
+        semester: row.semester || '—',
+        totalStudents: total,
+        presentToday: present,
+        absentToday: absent,
+        holidayToday: holiday,
+        markedToday: marked,
+        pendingToday: Math.max(0, total - marked),
+        lastUpdated: row.last_updated || null
+      };
+    });
+
+    // Get total statistics
+    const [countRows] = await masterPool.query(
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${scopeCondition}`,
+      [...countFilter.params, ...scopeParams]
+    );
+    const totalStudents = countRows[0]?.totalStudents || 0;
+
+    const [dailyRows] = await masterPool.query(
+      `
+        SELECT ar.status, COUNT(*) AS count
+        FROM attendance_records ar
+        INNER JOIN students s ON s.id = ar.student_id
+        WHERE ar.attendance_date = ?${countFilter.clause}${scopeCondition}
+        GROUP BY ar.status
+      `,
+      [attendanceDate, ...countFilter.params, ...scopeParams]
+    );
+
+    const presentToday = Number(dailyRows.find(r => r.status === 'present')?.count || 0);
+    const absentToday = Number(dailyRows.find(r => r.status === 'absent')?.count || 0);
+    const holidayToday = Number(dailyRows.find(r => r.status === 'holiday')?.count || 0);
+    const markedToday = presentToday + absentToday + holidayToday;
+    const unmarkedToday = Math.max(0, totalStudents - markedToday);
+
+    if (normalizedFormat === 'pdf') {
+      // Generate PDF
+      const PDFDocument = require('pdfkit');
+      const fs = require('fs');
+      const os = require('os');
+      const path = require('path');
+
+      const tempDir = os.tmpdir();
+      const fileName = `day_end_report_${Date.now()}.pdf`;
+      const filePath = path.join(tempDir, fileName);
+
+      const doc = new PDFDocument({ size: 'A4', margin: 40 });
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Header
+      doc.fontSize(18).font('Helvetica-Bold').text('Day End Attendance Report', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(12).font('Helvetica').text(`Date: ${attendanceDate}`, { align: 'center' });
+      doc.moveDown(1);
+
+      // Summary statistics
+      doc.fontSize(14).font('Helvetica-Bold').text('Summary', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Total Students: ${totalStudents}`);
+      doc.text(`Marked Today: ${markedToday}`);
+      doc.text(`Present: ${presentToday} | Absent: ${absentToday} | No Class Work: ${holidayToday}`);
+      doc.text(`Unmarked: ${unmarkedToday}`);
+      doc.moveDown(1);
+
+      // Filters
+      const filterTexts = [];
+      if (filters.batch) filterTexts.push(`Batch: ${filters.batch}`);
+      if (filters.course) filterTexts.push(`Course: ${filters.course}`);
+      if (filters.branch) filterTexts.push(`Branch: ${filters.branch}`);
+      if (filters.year) filterTexts.push(`Year: ${filters.year}`);
+      if (filters.semester) filterTexts.push(`Semester: ${filters.semester}`);
+      if (filterTexts.length > 0) {
+        doc.fontSize(10).font('Helvetica').text(`Filters: ${filterTexts.join(', ')}`);
+        doc.moveDown(1);
+      }
+
+      // Table
+      doc.fontSize(12).font('Helvetica-Bold').text('Grouped Summary', { underline: true });
+      doc.moveDown(0.5);
+
+      // Table headers
+      const startX = 40;
+      let currentY = doc.y;
+      const rowHeight = 20;
+      // Adjusted widths to fit "Time Stamp"
+      const colWidths = [50, 40, 50, 40, 25, 25, 35, 35, 35, 35, 35, 35, 60];
+      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Present', 'Absent', 'Marked', 'Pending', 'No Class', 'Time Stamp'];
+
+      doc.fontSize(7).font('Helvetica-Bold');
+      let x = startX;
+      headers.forEach((header, i) => {
+        doc.text(header, x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
+        x += colWidths[i];
+      });
+      currentY += rowHeight;
+      doc.moveTo(startX, currentY).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), currentY).stroke();
+      currentY += 5;
+
+      // Table rows
+      doc.fontSize(7).font('Helvetica');
+      groupedData.forEach((row) => {
+        if (currentY > doc.page.height - 60) {
+          doc.addPage();
+          currentY = 40;
+        }
+
+        x = startX;
+        const timeStamp = row.lastUpdated
+          ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+          : '—';
+
+        const values = [
+          row.college, row.batch, row.course, row.branch,
+          String(row.year), String(row.semester),
+          String(row.totalStudents), String(row.presentToday),
+          String(row.absentToday), String(row.markedToday),
+          String(row.pendingToday), String(row.holidayToday),
+          timeStamp
+        ];
+
+        values.forEach((value, i) => {
+          doc.text(String(value || '—'), x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
+          x += colWidths[i];
+        });
+        currentY += rowHeight;
+      });
+
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      const fileBuffer = fs.readFileSync(filePath);
+      fs.unlinkSync(filePath); // Clean up temp file
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.pdf"`);
+      res.send(fileBuffer);
+    } else {
+      // Generate Excel
+      const XLSX = require('xlsx');
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Summary sheet
+      const summaryData = [
+        ['Day End Attendance Report'],
+        ['Date', attendanceDate],
+        [''],
+        ['Summary'],
+        ['Total Students', totalStudents],
+        ['Marked Today', markedToday],
+        ['Present', presentToday],
+        ['Absent', absentToday],
+        ['No Class Work', holidayToday],
+        ['Unmarked', unmarkedToday],
+        [''],
+        ['Filters'],
+        ...(filters.batch ? [['Batch', filters.batch]] : []),
+        ...(filters.course ? [['Course', filters.course]] : []),
+        ...(filters.branch ? [['Branch', filters.branch]] : []),
+        ...(filters.year ? [['Year', filters.year]] : []),
+        ...(filters.semester ? [['Semester', filters.semester]] : [])
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+      // Grouped data sheet
+      const tableData = [
+        ['College', 'Batch', 'Course', 'Branch', 'Year', 'Semester', 'Students', 'Present', 'Absent', 'Marked', 'Pending', 'No Class Work', 'Time Stamp'],
+        ...groupedData.map(row => [
+          row.college, row.batch, row.course, row.branch,
+          row.year, row.semester,
+          row.totalStudents, row.presentToday, row.absentToday,
+          row.markedToday, row.pendingToday, row.holidayToday,
+          row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'
+        ])
+      ];
+      const tableSheet = XLSX.utils.aoa_to_sheet(tableData);
+
+      // Set column widths
+      tableSheet['!cols'] = [
+        { wch: 15 }, // College
+        { wch: 12 }, // Batch
+        { wch: 20 }, // Course
+        { wch: 15 }, // Branch
+        { wch: 8 },  // Year
+        { wch: 8 },  // Semester
+        { wch: 10 }, // Students
+        { wch: 10 }, // Present
+        { wch: 10 }, // Absent
+        { wch: 10 }, // Marked
+        { wch: 10 }, // Pending
+        { wch: 12 }, // No Class Work
+        { wch: 15 }  // Time Stamp
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, tableSheet, 'Grouped Summary');
+
+      // Generate buffer
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.xlsx"`);
+      res.send(buffer);
+    }
+  } catch (error) {
+    console.error('Failed to download day-end report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while generating day-end report'
+    });
+  }
+};
+
+// Wrapper for logged-in student to get their own history
+exports.getStudentAttendance = async (req, res) => {
+  // Ensure user is authorized as student (or has ID)
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  // Inject ID into params for the shared function
+  req.params.studentId = req.user.id;
+  return exports.getStudentAttendanceHistory(req, res);
 };
 

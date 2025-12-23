@@ -12,6 +12,8 @@ router.get('/filters', attachUserScope, attendanceController.getFilterOptions);
 router.get('/summary', attachUserScope, attendanceController.getAttendanceSummary);
 router.get('/student/:studentId/history', attachUserScope, attendanceController.getStudentAttendanceHistory);
 router.get('/download', attachUserScope, attendanceController.downloadAttendanceReport);
+router.get('/day-end-download', attachUserScope, attendanceController.downloadDayEndReport);
+router.get('/student', attendanceController.getStudentAttendance);
 router.get('/', attachUserScope, attendanceController.getAttendance);
 router.post('/', attachUserScope, attendanceController.markAttendance);
 router.delete('/', attachUserScope, attendanceController.deleteAttendanceForDate);

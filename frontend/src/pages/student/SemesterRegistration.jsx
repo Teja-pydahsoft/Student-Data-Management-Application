@@ -9,7 +9,12 @@ import {
     Loader2,
     Smartphone,
     BookOpen,
-    RefreshCw
+    RefreshCw,
+    FileText,
+    Zap,
+    AlertCircle,
+    X,
+    Award
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -18,9 +23,10 @@ import api from '../../config/api';
 const SemesterRegistration = () => {
     const { user } = useAuthStore();
     const navigate = useNavigate();
-    const [currentStep, setCurrentStep] = useState(1);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(false); // Action loading
     const [initialLoading, setInitialLoading] = useState(true);
+    const [studentData, setStudentData] = useState(null);
+    const [activeStepId, setActiveStepId] = useState(null); // For Modal
 
     // Step 1 State: Verification
     const [verificationState, setVerificationState] = useState({
@@ -34,54 +40,47 @@ const SemesterRegistration = () => {
         parentVerified: false
     });
 
-    const [studentData, setStudentData] = useState(null);
-
-    // Fetch student details (reusable)
+    // Fetch student details
     const fetchStudentDetails = async () => {
         try {
             if (!user?.admission_number) return;
-
+            // setInitialLoading(true); // Don't full reload UI on refresh
             const response = await api.get(`/students/${user.admission_number}`);
 
             if (response.data.success) {
                 const student = response.data.data;
+                const sData = student.student_data || {};
+
                 setStudentData(student);
                 setVerificationState(prev => ({
                     ...prev,
                     studentMobile: student.student_mobile || '',
-                    parentMobile: student.parent_mobile1 || student.parent_mobile2 || ''
+                    parentMobile: student.parent_mobile1 || student.parent_mobile2 || '',
+                    studentVerified: !!sData.is_student_mobile_verified,
+                    parentVerified: !!sData.is_parent_mobile_verified
                 }));
             }
         } catch (error) {
             console.error('Error fetching student details:', error);
-            toast.error('Failed to load student contact details');
+            toast.error('Failed to load student details');
         } finally {
             setInitialLoading(false);
         }
     };
 
-    // Initial fetch on mount
     useEffect(() => {
         fetchStudentDetails();
-        // Refetch if user changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
-    // Refetch when landing on Fee Status or Confirmation steps to reflect latest updates
-    useEffect(() => {
-        if (currentStep === 3 || currentStep === 6) {
-            fetchStudentDetails();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentStep]);
+    // ------------ LOGIC HANDLERS ------------
 
     const handleSendOTP = async (type) => {
         const mobile = type === 'student' ? verificationState.studentMobile : verificationState.parentMobile;
-
         if (!mobile || mobile.length < 10) {
-            toast.error(`Invalid ${type} mobile number found. Please contact admin.`);
+            toast.error(`Invalid ${type} mobile number`);
             return;
         }
-
         setLoading(true);
         try {
             const response = await api.post('/students/otp/send', {
@@ -89,21 +88,18 @@ const SemesterRegistration = () => {
                 mobileNumber: mobile,
                 year: studentData?.current_year || 'N/A',
                 semester: studentData?.current_semester || 'N/A',
-                type: type.charAt(0).toUpperCase() + type.slice(1) // 'Student' or 'Parent'
+                type: type.charAt(0).toUpperCase() + type.slice(1)
             });
-
             if (response.data.success) {
-                if (type === 'student') {
-                    setVerificationState(prev => ({ ...prev, studentOtpSent: true }));
-                } else {
-                    setVerificationState(prev => ({ ...prev, parentOtpSent: true }));
-                }
-                toast.success(`OTP sent to ${mobile.replace(/\d(?=\d{4})/g, "*")}`);
+                setVerificationState(prev => ({
+                    ...prev,
+                    [type === 'student' ? 'studentOtpSent' : 'parentOtpSent']: true
+                }));
+                toast.success(`OTP sent to ${mobile.slice(-4).padStart(10, '*')}`);
             } else {
                 toast.error(response.data.message || 'Failed to send OTP');
             }
         } catch (error) {
-            console.error('Send OTP error:', error);
             toast.error(error.response?.data?.message || 'Failed to send OTP');
         } finally {
             setLoading(false);
@@ -115,7 +111,7 @@ const SemesterRegistration = () => {
         const mobile = type === 'student' ? verificationState.studentMobile : verificationState.parentMobile;
 
         if (!otp || otp.length !== 6) {
-            toast.error('Please enter a valid 6-digit OTP');
+            toast.error('Enter valid 6-digit OTP');
             return;
         }
 
@@ -124,645 +120,422 @@ const SemesterRegistration = () => {
             const response = await api.post('/students/otp/verify', {
                 admissionNumber: user.admission_number,
                 mobileNumber: mobile,
-                otp: otp
+                otp: otp,
+                type: type // 'student' or 'parent'
             });
-
             if (response.data.success) {
-                if (type === 'student') {
-                    setVerificationState(prev => ({ ...prev, studentVerified: true }));
-                } else {
-                    setVerificationState(prev => ({ ...prev, parentVerified: true }));
-                }
-                toast.success(`${type === 'student' ? 'Student' : 'Parent'} mobile verified successfully!`);
+                setVerificationState(prev => ({
+                    ...prev,
+                    [type === 'student' ? 'studentVerified' : 'parentVerified']: true
+                }));
+                toast.success('Mobile verified successfully!');
             } else {
                 toast.error(response.data.message || 'Invalid OTP');
             }
         } catch (error) {
-            console.error('Verify OTP error:', error);
             toast.error(error.response?.data?.message || 'Verification failed');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleNextStep = () => {
-        setCurrentStep(prev => prev + 1);
+    // ------------ STATUS CHECKERS ------------
+
+    const getStepStatus = (id) => {
+        if (!studentData) return 'pending';
+
+        switch (id) {
+            case 1: // Verification
+                return (verificationState.studentVerified && verificationState.parentVerified) ? 'completed' : 'pending';
+            case 2: // Certificates
+                return (studentData.certificates_status || '').toLowerCase().includes('verified') ? 'completed' : 'pending';
+            case 3: // Fee
+                const feeRaw = (studentData.fee_status || '').toLowerCase().replace(/\s+/g, '_');
+                return ['completed', 'no_due', 'nodue', 'partially_completed', 'partial', 'permitted'].some(s => feeRaw.includes(s))
+                    ? 'completed' : 'pending';
+            case 4: // Promotion
+                // Assume automatic promotion status check logic or just showing it counts as "checked"
+                // Ideally, we consider it "completed" if data exists.
+                return (studentData.current_year && studentData.current_semester) ? 'completed' : 'pending';
+            case 5: // Scholarship
+                // Just viewing is enough? Or specific status? For now, if status is present, it's "reviewed"
+                return (studentData.scholar_status) ? 'completed' : 'pending'; // Changed to always show status
+            case 6: // Confirmation
+                // Always pending until finalized
+                return 'pending';
+            default: return 'pending';
+        }
     };
 
+    const isStepCompleted = (id) => getStepStatus(id) === 'completed';
+
+    const canFinalize = () => {
+        // Requirements to finalize: 
+        // 1. Verification done
+        // 2. Certificates verified
+        // 3. Fee cleared/permitted
+        return isStepCompleted(1) && isStepCompleted(2) && isStepCompleted(3);
+    };
+
+    const handleFinalize = async () => {
+        if (!canFinalize()) {
+            toast.error('Please complete all required steps (Verification, Certificates, Fees) before finalizing.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const response = await api.put(`/students/${user.admission_number}/registration-status`, {
+                registration_status: 'completed'
+            });
+            if (response.data?.success) {
+                toast.success('Registration finalized!');
+                navigate('/student/dashboard');
+            } else {
+                throw new Error(response.data?.message);
+            }
+        } catch (error) {
+            // Fallback generic update
+            try {
+                await api.put(`/students/${user.admission_number}`, {
+                    studentData: { 'Registration Status': 'completed', registration_status: 'completed' }
+                });
+                toast.success('Registration finalized!');
+                navigate('/student/dashboard');
+            } catch (err) {
+                toast.error('Failed to finalize registration');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ------------ DATA & CONFIG ------------
+
     const steps = [
-        { id: 1, title: 'Verification', icon: ShieldCheck },
-        { id: 2, title: 'Certificates', icon: FileText },
-        { id: 3, title: 'Fee Status', icon: BookOpen },
-        { id: 4, title: 'Promotion Status', icon: CheckCircle },
-        { id: 5, title: 'Scholarship', icon: FileText },
-        { id: 6, title: 'Confirmation', icon: CheckCircle }
+        {
+            id: 1,
+            title: 'Verification',
+            description: 'Verify student and parent mobile numbers.',
+            icon: ShieldCheck,
+            color: 'blue'
+        },
+        {
+            id: 2,
+            title: 'Certificates',
+            description: 'Check certificate verification status.',
+            icon: FileText,
+            color: 'purple'
+        },
+        {
+            id: 3,
+            title: 'Fee Status',
+            description: 'View fee payment status.',
+            icon: BookOpen,
+            color: 'green'
+        },
+        {
+            id: 4,
+            title: 'Promotion',
+            description: 'Check academic promotion eligibility.',
+            icon: Zap,
+            color: 'orange'
+        },
+        {
+            id: 5,
+            title: 'Scholarship',
+            description: 'View scholarship application status.',
+            icon: Award,
+            color: 'indigo'
+        }
     ];
-
-    // Placeholder icons
-    function BookOpen() { return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
-    function FileText() { return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> }
-
 
     if (initialLoading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center justify-center min-h-[500px]">
                 <Loader2 className="animate-spin text-blue-600" size={32} />
             </div>
         );
     }
 
-    // If registration is already completed, show a completion banner instead of steps
-    const registrationRawSource = (studentData?.registration_status)
-        || (studentData?.student_data ? (studentData.student_data['Registration Status'] || studentData.student_data.registration_status) : '')
-        || '';
-    const registrationRaw = String(registrationRawSource).trim().toLowerCase();
-    const registrationCompleted = registrationRaw === 'completed' || registrationRaw.includes('complete');
-
-    if (registrationCompleted) {
+    // Already Completed View
+    const regStatus = (studentData?.registration_status || '').toLowerCase();
+    if (regStatus === 'completed') {
         return (
-            <div className="max-w-4xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-gray-900 heading-font">Semester Registration</h1>
-                    <p className="text-gray-500">Your registration for the current semester is complete.</p>
-                </div>
-                <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
-                    <div className="relative z-10">
-                        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2"><CheckCircle /> Registration Completed</h2>
-                        <p className="text-emerald-100 mb-6 max-w-lg">
-                            Great job! You have successfully completed semester registration. You can view your dashboard or profile anytime.
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => navigate('/student/dashboard')}
-                                className="bg-white text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors shadow-sm cursor-pointer"
-                            >
-                                Go to Dashboard
-                            </button>
-                            <button
-                                onClick={() => navigate('/student/profile')}
-                                className="bg-white/90 text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-white transition-colors shadow-sm cursor-pointer"
-                            >
-                                View Profile
-                            </button>
+            <div className="max-w-4xl mx-auto py-10 animate-fade-in">
+                <div className="bg-gradient-to-br from-green-500 to-emerald-700 rounded-3xl p-10 text-white shadow-xl relative overflow-hidden">
+                    <div className="relative z-10 text-center">
+                        <div className="mx-auto w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-6 backdrop-blur-sm">
+                            <CheckCircle size={40} className="text-white" />
                         </div>
+                        <h1 className="text-3xl font-bold mb-4">You're All Set!</h1>
+                        <p className="text-emerald-100 text-lg mb-8 max-w-xl mx-auto">
+                            Your semester registration is complete. You can access your dashboard and courses now.
+                        </p>
+                        <button
+                            onClick={() => navigate('/student/dashboard')}
+                            className="bg-white text-green-700 px-8 py-3 rounded-xl font-bold hover:bg-green-50 transition-colors shadow-lg"
+                        >
+                            Go to Dashboard
+                        </button>
                     </div>
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                    {/* Decor elements */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -ml-16 -mb-16"></div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20">
             {/* Header */}
-            <div className="mb-8">
+            <div>
                 <h1 className="text-2xl font-bold text-gray-900 heading-font">Semester Registration</h1>
-                <p className="text-gray-500">Complete the following steps to register for your next semester.</p>
+                <p className="text-gray-500 mt-1">Complete the steps below to register for the upcoming semester.</p>
             </div>
 
-            {/* Stepper */}
-            <div className="mb-8">
-                <div className="flex items-center justify-between relative">
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 -z-10"></div>
-                    {steps.map((step) => (
-                        <div key={step.id} className="flex flex-col items-center bg-gray-50 px-2">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${currentStep >= step.id
-                                ? 'bg-blue-600 border-blue-600 text-white'
-                                : 'bg-white border-gray-300 text-gray-400'
-                                }`}>
-                                <step.icon size={20} />
+            {/* Steps Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {steps.map(step => {
+                    const isComplete = isStepCompleted(step.id);
+                    const Icon = step.icon;
+
+                    return (
+                        <div
+                            key={step.id}
+                            onClick={() => setActiveStepId(step.id)}
+                            className={`
+                                relative bg-white rounded-2xl p-6 border-l-4 transition-all cursor-pointer hover:shadow-lg group shadow-sm
+                                ${isComplete
+                                    ? 'border-l-green-500 border-gray-100 bg-green-50/10'
+                                    : 'border-l-red-500 border-red-50 bg-white hover:bg-red-50/10'}
+                            `}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`p-3 rounded-xl ${isComplete ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                    <Icon size={24} />
+                                </div>
+                                {isComplete ? (
+                                    <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                        <CheckCircle size={12} />
+                                        DONE
+                                    </div>
+                                ) : (
+                                    <div className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse">
+                                        <AlertCircle size={12} />
+                                        PENDING
+                                    </div>
+                                )}
                             </div>
-                            <span className={`text-xs mt-2 font-medium ${currentStep >= step.id ? 'text-blue-600' : 'text-gray-400'}`}>
+
+                            <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
                                 {step.title}
-                            </span>
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                                {step.description}
+                            </p>
+
+                            <div className="mt-4 flex items-center text-blue-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                View Details <ArrowRight size={16} className="ml-1" />
+                            </div>
                         </div>
-                    ))}
+                    );
+                })}
+            </div>
+
+            {/* Final Action Bar */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg z-30 lg:pl-64">
+                <div className="max-w-6xl mx-auto flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Ready to finish?</p>
+                        <p className="text-xs text-gray-500">Ensure all required steps are marked as DONE.</p>
+                    </div>
+                    <button
+                        onClick={handleFinalize}
+                        disabled={!canFinalize() || loading}
+                        className={`
+                            px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all
+                            ${canFinalize()
+                                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+                        `}
+                    >
+                        {loading && <Loader2 className="animate-spin" size={18} />}
+                        Finalize Registration
+                    </button>
                 </div>
             </div>
 
-            {/* Step Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-
-                {/* Step 1: Verification */}
-                {currentStep === 1 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <ShieldCheck className="text-blue-600" />
-                            Step 1: Verify Information
-                        </h2>
-
-                        <div className="space-y-8">
-                            {/* Student Mobile Verification */}
-                            <div className="border border-gray-200 rounded-lg p-6">
-                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Student Verification</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">Registered Student Mobile</label>
-                                        <div className="relative">
-                                            <Smartphone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                                            <input
-                                                type="text"
-                                                value={verificationState.studentMobile}
-                                                readOnly
-                                                className="w-full pl-10 pr-4 py-2 border border-gray-200 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed"
-                                                placeholder="Loading data..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        {!verificationState.studentOtpSent ? (
-                                            <button
-                                                onClick={() => handleSendOTP('student')}
-                                                disabled={loading || !verificationState.studentMobile || verificationState.studentVerified}
-                                                className={`w-full py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${verificationState.studentVerified
-                                                    ? 'bg-green-100 text-green-700 cursor-default'
-                                                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
-                                                    }`}
-                                            >
-                                                {verificationState.studentVerified ? (
-                                                    <><CheckCircle size={18} /> Verified</>
-                                                ) : (
-                                                    <>{loading ? <Loader2 className="animate-spin" size={18} /> : 'Send OTP'}</>
-                                                )}
-                                            </button>
-                                        ) : !verificationState.studentVerified ? (
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    maxLength={6}
-                                                    value={verificationState.studentOtp}
-                                                    onChange={(e) => setVerificationState(prev => ({ ...prev, studentOtp: e.target.value }))}
-                                                    className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-center tracking-widest"
-                                                    placeholder="OTP"
-                                                />
-                                                <button
-                                                    onClick={() => handleVerifyOTP('student')}
-                                                    disabled={loading}
-                                                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
-                                                >
-                                                    {loading ? <Loader2 className="animate-spin" size={18} /> : 'Verify'}
-                                                </button>
-                                                <button
-                                                    onClick={() => setVerificationState(prev => ({ ...prev, studentOtpSent: false, studentOtp: '' }))}
-                                                    className="px-2 text-gray-500 hover:text-gray-700"
-                                                >
-                                                    Resend
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="w-full py-2 bg-green-100 text-green-700 rounded-lg font-medium flex items-center justify-center gap-2">
-                                                <CheckCircle size={18} /> Verified
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Parent Mobile Verification */}
-                            <div className="border border-gray-200 rounded-lg p-6">
-                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Parent Verification</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">Registered Parent Mobile</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                                            <input
-                                                type="text"
-                                                value={verificationState.parentMobile}
-                                                readOnly
-                                                className="w-full pl-10 pr-4 py-2 border border-gray-200 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed"
-                                                placeholder="Loading data..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        {!verificationState.parentOtpSent ? (
-                                            <button
-                                                onClick={() => handleSendOTP('parent')}
-                                                disabled={loading || !verificationState.parentMobile || verificationState.parentVerified}
-                                                className={`w-full py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${verificationState.parentVerified
-                                                    ? 'bg-green-100 text-green-700 cursor-default'
-                                                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
-                                                    }`}
-                                            >
-                                                {verificationState.parentVerified ? (
-                                                    <><CheckCircle size={18} /> Verified</>
-                                                ) : (
-                                                    <>{loading ? <Loader2 className="animate-spin" size={18} /> : 'Send OTP'}</>
-                                                )}
-                                            </button>
-                                        ) : !verificationState.parentVerified ? (
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    maxLength={6}
-                                                    value={verificationState.parentOtp}
-                                                    onChange={(e) => setVerificationState(prev => ({ ...prev, parentOtp: e.target.value }))}
-                                                    className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-center tracking-widest"
-                                                    placeholder="OTP"
-                                                />
-                                                <button
-                                                    onClick={() => handleVerifyOTP('parent')}
-                                                    disabled={loading}
-                                                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
-                                                >
-                                                    {loading ? <Loader2 className="animate-spin" size={18} /> : 'Verify'}
-                                                </button>
-                                                <button
-                                                    onClick={() => setVerificationState(prev => ({ ...prev, parentOtpSent: false, parentOtp: '' }))}
-                                                    className="px-2 text-gray-500 hover:text-gray-700"
-                                                >
-                                                    Resend
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="w-full py-2 bg-green-100 text-green-700 rounded-lg font-medium flex items-center justify-center gap-2">
-                                                <CheckCircle size={18} /> Verified
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+            {/* Modal Overlay */}
+            {activeStepId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                                {React.createElement(steps.find(s => s.id === activeStepId).icon, { className: 'text-blue-600' })}
+                                {steps.find(s => s.id === activeStepId).title}
+                            </h2>
                             <button
-                                onClick={handleNextStep}
-                                disabled={!verificationState.studentVerified || !verificationState.parentVerified}
-                                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all cursor-pointer ${verificationState.studentVerified && verificationState.parentVerified
-                                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
-                                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    }`}
+                                onClick={() => setActiveStepId(null)}
+                                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
                             >
-                                Next Step
-                                <ArrowRight size={20} />
+                                <X size={24} />
                             </button>
                         </div>
-                    </div>
-                )}
 
-                {/* Step 2: Certificates */}
-                {currentStep === 2 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <FileText className="text-blue-600" />
-                            Step 2: Certificate Verification
-                        </h2>
+                        {/* Modal Content - Scrollable */}
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {/* Content based on Step ID */}
 
-                        <div className="space-y-6">
-                            <div className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Status Check</h3>
-
-                                {loading ? (
-                                    <div className="flex items-center gap-2 text-gray-500">
-                                        <Loader2 className="animate-spin" size={18} /> Checking status...
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <div className={`flex items-center gap-2 text-lg font-medium mb-4 ${(studentData?.certificates_status || 'Pending').toLowerCase().includes('verified')
-                                            ? 'text-green-700'
-                                            : 'text-yellow-700'
-                                            }`}>
-                                            {(studentData?.certificates_status || 'Pending').toLowerCase().includes('verified')
-                                                ? <CheckCircle size={24} />
-                                                : <div className="p-1 bg-yellow-100 rounded-full"><ShieldCheck size={20} /></div>
-                                            }
-                                            Certificate Status: {studentData?.certificates_status || 'Pending'}
+                            {/* STEP 1: VERIFICATION */}
+                            {activeStepId === 1 && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Student Mobile</label>
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <Smartphone size={18} className="text-gray-400" />
+                                                <span className="font-mono text-gray-700">{verificationState.studentMobile || 'Not Found'}</span>
+                                            </div>
+                                            {!verificationState.studentVerified ? (
+                                                verificationState.studentOtpSent ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            className="w-full p-2 border rounded text-center font-mono"
+                                                            placeholder="OTP"
+                                                            maxLength={6}
+                                                            value={verificationState.studentOtp}
+                                                            onChange={e => setVerificationState({ ...verificationState, studentOtp: e.target.value })}
+                                                        />
+                                                        <button onClick={() => handleVerifyOTP('student')} className="bg-green-600 text-white px-3 rounded hover:bg-green-700">Verify</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => handleSendOTP('student')} disabled={loading} className="w-full py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium text-sm">Send OTP</button>
+                                                )
+                                            ) : (
+                                                <div className="w-full py-2 bg-green-100 text-green-700 rounded-lg flex items-center justify-center gap-2 font-medium text-sm"><CheckCircle size={16} /> Verified</div>
+                                            )}
                                         </div>
 
-                                        {!(studentData?.certificates_status || 'Pending').toLowerCase().includes('verified') && (
-                                            <div className="bg-white p-5 rounded-lg border border-yellow-200">
-                                                <p className="text-gray-800 font-medium mb-3">Action Required:</p>
-                                                <p className="text-gray-600 text-sm mb-3">
-                                                    Your certificates have not been verified yet. Please submit the following original documents to the administration office for verification:
-                                                </p>
-                                                <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700 font-medium">
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> SSC / 10th Class Certificate
-                                                    </li>
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> Intermediate / Diploma Certificate
-                                                    </li>
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> Transfer Certificate (TC)
-                                                    </li>
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> Study Certificates (VI to X)
-                                                    </li>
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> Aadhar Card
-                                                    </li>
-                                                    <li className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div> Passport Size Photos
-                                                    </li>
-                                                </ul>
-                                                <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded border border-blue-100">
-                                                    Note: You can proceed with course selection, but your registration will be provisional until certificates are verified.
-                                                </div>
+                                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Parent Mobile</label>
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <Phone size={18} className="text-gray-400" />
+                                                <span className="font-mono text-gray-700">{verificationState.parentMobile || 'Not Found'}</span>
                                             </div>
-                                        )}
-
-                                        {(studentData?.certificates_status || '').toLowerCase().includes('verified') && (
-                                            <div className="bg-green-50 p-4 rounded-lg border border-green-200 text-green-800 text-sm">
-                                                All required certificates have been verified. You may proceed.
-                                            </div>
-                                        )}
+                                            {!verificationState.parentVerified ? (
+                                                verificationState.parentOtpSent ? (
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            className="w-full p-2 border rounded text-center font-mono"
+                                                            placeholder="OTP"
+                                                            maxLength={6}
+                                                            value={verificationState.parentOtp}
+                                                            onChange={e => setVerificationState({ ...verificationState, parentOtp: e.target.value })}
+                                                        />
+                                                        <button onClick={() => handleVerifyOTP('parent')} className="bg-green-600 text-white px-3 rounded hover:bg-green-700">Verify</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => handleSendOTP('parent')} disabled={loading} className="w-full py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium text-sm">Send OTP</button>
+                                                )
+                                            ) : (
+                                                <div className="w-full py-2 bg-green-100 text-green-700 rounded-lg flex items-center justify-center gap-2 font-medium text-sm"><CheckCircle size={16} /> Verified</div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
-
-                                <div className="flex justify-between pt-4">
-                                    <button
-                                        onClick={() => setCurrentStep(1)}
-                                        className="px-6 py-2 text-gray-600 font-medium hover:text-gray-900"
-                                    >
-                                        Back
-                                    </button>
-                                    <button
-                                        onClick={handleNextStep}
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2 transition-transform active:scale-95"
-                                    >
-                                        Next Step <ArrowRight size={18} />
-                                    </button>
+                                    <p className="text-xs text-center text-gray-400">Both verifications are required to proceed.</p>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                            )}
 
-                {currentStep === 3 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <BookOpen />
-                            Fee Status
-                            <button
-                                onClick={fetchStudentDetails}
-                                className="ml-3 inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-gray-200 hover:bg-gray-100 text-gray-700"
-                                title="Refresh fee status"
-                            >
-                                <RefreshCw size={14} /> Refresh
-                            </button>
-                        </h2>
+                            {/* STEP 2: CERTIFICATES */}
+                            {activeStepId === 2 && (
+                                <div className="text-center">
+                                    <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-full text-lg font-bold mb-6 ${isStepCompleted(2) ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                        {isStepCompleted(2) ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
+                                        Status: {studentData?.certificates_status || 'Pending'}
+                                    </div>
+                                    {!isStepCompleted(2) && (
+                                        <div className="bg-yellow-50 text-yellow-800 p-6 rounded-xl text-left border border-yellow-100">
+                                            <h4 className="font-bold mb-3 flex items-center gap-2"><AlertCircle size={18} /> Action Required</h4>
+                                            <p className="mb-4 text-sm">Please submit the original copies of the following documents to the administration office:</p>
+                                            <ul className="list-disc list-inside space-y-2 text-sm ml-2">
+                                                <li>SSC / 10th Class Certificate</li>
+                                                <li>Intermediate / Diploma Certificate</li>
+                                                <li>Aadhar Card & Photos</li>
+                                                <li>Study Certificates</li>
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="border rounded-xl p-6 bg-gray-50">
-                                <p className="text-sm text-gray-500">Current Fee Status</p>
-                                {(() => {
-                                    const rawSource = studentData?.fee_status
-                                        || (studentData?.student_data ? (studentData.student_data['Fee Status'] || studentData.student_data.fee_status) : '')
-                                        || '';
-                                    const raw = String(rawSource).trim().toLowerCase();
+                            {/* STEP 3: FEE STATUS */}
+                            {activeStepId === 3 && (
+                                <div>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="font-bold text-gray-700">Current Fee Status</h3>
+                                        <button onClick={fetchStudentDetails} className="text-blue-600 text-sm hover:underline flex items-center gap-1"><RefreshCw size={14} /> Refresh</button>
+                                    </div>
 
-                                    const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
-                                    const isPartial = raw === 'partially_completed' || raw.includes('partial');
-                                    const isPending = raw === 'pending' || raw.includes('pending') || raw === '';
-
-                                    const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
-                                    const cls = label === 'Completed'
-                                        ? 'bg-green-100 text-green-800'
-                                        : label === 'Partially Completed'
-                                            ? 'bg-yellow-100 text-yellow-800'
-                                            : 'bg-red-100 text-red-800';
-
-                                    return (
-                                        <span className={`inline-flex items-center mt-2 px-3 py-1 rounded-full text-sm font-medium ${cls}`}>
-                                            {label}
+                                    <div className={`p-6 rounded-xl border text-center ${isStepCompleted(3) ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                                        <span className={`text-2xl font-bold ${isStepCompleted(3) ? 'text-green-700' : 'text-red-700'} capitalize`}>
+                                            {studentData?.fee_status ? studentData.fee_status.replace(/_/g, ' ') : 'Pending'}
                                         </span>
-                                    );
-                                })()}
-
-                                <div className="mt-4 text-xs text-gray-600">
-                                    <p>
-                                        - <span className="font-semibold">Pending</span>: No fee payments recorded.
-                                    </p>
-                                    <p>
-                                        - <span className="font-semibold">Partially Completed</span>: Some payments done, remaining due.
-                                    </p>
-                                    <p>
-                                        - <span className="font-semibold">Completed</span>: All required fees cleared.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="border rounded-xl p-6 bg-white">
-                                <p className="text-sm text-gray-500">Your Details</p>
-                                <div className="mt-2 text-sm text-gray-800">
-                                    <p><span className="text-gray-500">Name:</span> {studentData?.student_name || '-'}</p>
-                                    <p><span className="text-gray-500">Admission No:</span> {studentData?.admission_number || studentData?.admission_no || '-'}</p>
-                                    <p><span className="text-gray-500">Course:</span> {studentData?.course || '-'}</p>
-                                    <p><span className="text-gray-500">Branch:</span> {studentData?.branch || '-'}</p>
-                                </div>
-                                <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded border border-blue-100">
-                                    For detailed fee breakdown, please contact administration.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex justify-between">
-                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
-                            {(() => {
-                                const raw = (studentData?.fee_status || '').toLowerCase();
-                                const canProceed = raw === 'completed' || raw === 'partially_completed' || raw === 'partial' || raw === 'partially';
-                                return (
-                                    <button
-                                        onClick={() => setCurrentStep(currentStep + 1)}
-                                        disabled={!canProceed}
-                                        className={`px-4 py-2 rounded-lg ${canProceed ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                                    >
-                                        Next
-                                    </button>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                )}
-
-                {currentStep === 4 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <CheckCircle className="text-green-600" />
-                            Promotion Status
-                        </h2>
-
-                        {(() => {
-                            const currentYear = Number(studentData?.current_year || 1);
-                            const currentSem = Number(studentData?.current_semester || 1);
-                            const MAX_YEARS = 4; // fallback when course config is unavailable
-                            const SEMS_PER_YEAR = 2; // fallback default
-
-                            let nextYear = currentYear;
-                            let nextSem = currentSem;
-                            let completed = false;
-
-                            if (currentSem < SEMS_PER_YEAR) {
-                                nextSem = currentSem + 1;
-                            } else if (currentYear < MAX_YEARS) {
-                                nextYear = currentYear + 1;
-                                nextSem = 1;
-                            } else {
-                                completed = true;
-                            }
-
-                            const badgeCls = completed ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800';
-                            const badgeText = completed ? 'Course Completed' : 'Eligible to Promote';
-
-                            return (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="border rounded-xl p-6 bg-gray-50">
-                                        <p className="text-sm text-gray-500">Current Stage</p>
-                                        <p className="mt-1 text-lg font-semibold text-gray-800">Year {currentYear}, Semester {currentSem}</p>
-                                        <span className={`inline-flex items-center mt-3 px-3 py-1 rounded-full text-sm font-medium ${badgeCls}`}>{badgeText}</span>
-                                    </div>
-                                    <div className="border rounded-xl p-6 bg-white">
-                                        <p className="text-sm text-gray-500">Next Stage</p>
-                                        <p className="mt-1 text-lg font-semibold text-gray-800">
-                                            {completed ? '—' : `Year ${nextYear}, Semester ${nextSem}`}
+                                        <p className="text-gray-500 text-sm mt-2">
+                                            {isStepCompleted(3) ? 'You are cleared for registration.' : 'Please clear your dues to proceed.'}
                                         </p>
-                                        <div className="mt-3 text-xs text-gray-600">
-                                            Promotion eligibility may consider fee completion and academic policies.
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* STEP 4: PROMOTION */}
+                            {activeStepId === 4 && (
+                                <div className="space-y-4">
+                                    <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                                        <p className="text-sm text-gray-500 uppercase tracking-wider font-bold">Current Academic Stand</p>
+                                        <div className="mt-2 flex items-baseline gap-2">
+                                            <span className="text-3xl font-bold text-gray-900">Year {studentData?.current_year || 1}</span>
+                                            <span className="text-xl text-gray-600">Semester {studentData?.current_semester || 1}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 flex items-start gap-3">
+                                        <Zap className="text-blue-600 mt-1 flex-shrink-0" />
+                                        <div>
+                                            <h4 className="font-bold text-blue-900">Promotion Eligibility</h4>
+                                            <p className="text-blue-800 text-sm mt-1">Based on your academic records and fee status, you are eligible for the next semester registration.</p>
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        })()}
+                            )}
 
-                        <div className="mt-8 flex justify-between">
-                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
-                            <button onClick={() => setCurrentStep(currentStep + 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Next</button>
-                        </div>
-                    </div>
-                )}
-
-                {currentStep === 5 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                            <FileText />
-                            Scholarship
-                        </h2>
-
-                        <div className="border rounded-xl p-6 bg-gray-50">
-                            <p className="text-sm text-gray-500">Current Scholarship Status</p>
-                            {(() => {
-                                const raw = (studentData?.scholar_status || '').toLowerCase();
-                                const label = raw === 'approved' || raw === 'accepted'
-                                    ? 'Approved'
-                                    : raw === 'rejected'
-                                        ? 'Rejected'
-                                        : raw === 'pending'
-                                            ? 'Pending'
-                                            : (studentData?.scholar_status ? String(studentData.scholar_status) : 'Not Applied');
-                                const cls = label === 'Approved'
-                                    ? 'bg-green-100 text-green-800'
-                                    : label === 'Rejected'
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-yellow-100 text-yellow-800';
-                                return (
-                                    <span className={`inline-flex items-center mt-2 px-3 py-1 rounded-full text-sm font-medium ${cls}`}>
-                                        {label}
-                                    </span>
-                                );
-                            })()}
-
-                            <div className="mt-4 text-xs text-gray-600">
-                                For scholarship applications or updates, please reach out to administration.
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex justify-between">
-                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg">Back</button>
-                            <button onClick={() => setCurrentStep(currentStep + 1)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Next</button>
-                        </div>
-                    </div>
-                )}
-
-                {currentStep === 6 && (
-                    <div className="p-8">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6">Confirmation</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="border rounded-xl p-6 bg-gray-50">
-                                <p className="text-sm text-gray-500">Overview</p>
-                                <ul className="mt-2 text-sm text-gray-800 space-y-2">
-                                    <li><span className="text-gray-500">Verification:</span> {(verificationState.studentVerified && verificationState.parentVerified) ? 'Completed' : 'Pending'}</li>
-                                    <li><span className="text-gray-500">Certificates:</span> {(studentData?.certificates_status || '').toLowerCase().includes('verified') ? 'Verified' : (studentData?.certificates_status || 'Pending')}</li>
-                                    <li><span className="text-gray-500">Fee:</span> {studentData?.fee_status || 'Pending'}</li>
-                                    <li><span className="text-gray-500">Promotion:</span> {(studentData?.current_year && studentData?.current_semester) ? `Year ${studentData.current_year}, Semester ${studentData.current_semester}` : '-'}</li>
-                                    <li><span className="text-gray-500">Scholarship:</span> {studentData?.scholar_status || 'Not Applied'}</li>
-                                </ul>
-                                <div className="mt-3 text-xs text-gray-600">Ensure fee is completed or partially completed to finalize.</div>
-                            </div>
-                            <div className="border rounded-xl p-6 bg-white">
-                                <p className="text-sm text-gray-500">Your Details</p>
-                                <div className="mt-2 text-sm text-gray-800">
-                                    <p><span className="text-gray-500">Name:</span> {studentData?.student_name || '-'}</p>
-                                    <p><span className="text-gray-500">Admission No:</span> {studentData?.admission_number || studentData?.admission_no || '-'}</p>
-                                    <p><span className="text-gray-500">Course:</span> {studentData?.course || '-'}</p>
-                                    <p><span className="text-gray-500">Branch:</span> {studentData?.branch || '-'}</p>
+                            {/* STEP 5: SCHOLARSHIP */}
+                            {activeStepId === 5 && (
+                                <div className="text-center py-8">
+                                    <Award size={48} className="text-indigo-200 mx-auto mb-4" />
+                                    <h3 className="text-lg font-bold text-gray-900">Scholarship Status</h3>
+                                    <p className="text-2xl font-bold text-indigo-600 my-4 capitalize">{studentData?.scholar_status || 'Not Applied'}</p>
+                                    <p className="text-gray-500 text-sm">If you believe this is incorrect, please contact the admin office.</p>
                                 </div>
-                            </div>
+                            )}
+
                         </div>
 
-                        <div className="mt-8 flex justify-between items-center">
-                            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Back</button>
-                            {(() => {
-                                const feeRaw = (studentData?.fee_status || '').toLowerCase();
-                                const canFinalize = feeRaw === 'completed' || feeRaw === 'partially_completed' || feeRaw === 'partial' || feeRaw === 'partially';
-                                const handleFinalize = async () => {
-                                    if (!canFinalize) {
-                                        toast.error('Complete or partially complete fees to finalize');
-                                        return;
-                                    }
-                                    try {
-                                        const response = await api.put(`/students/${user.admission_number}/registration-status`, {
-                                            registration_status: 'completed'
-                                        });
-                                        if (response.data?.success) {
-                                            toast.success('Semester registration finalized. Redirecting to dashboard…');
-                                            setStudentData((prev) => ({ ...prev, registration_status: 'completed' }));
-                                            // Navigate to student dashboard after successful finalize
-                                            navigate('/student/dashboard');
-                                        } else {
-                                            throw new Error(response.data?.message || 'Failed to finalize');
-                                        }
-                                    } catch (error) {
-                                        // Fallback: update via generic student update (JSON student_data)
-                                        try {
-                                            const fallback = await api.put(`/students/${user.admission_number}`, {
-                                                studentData: {
-                                                    'Registration Status': 'completed',
-                                                    registration_status: 'completed'
-                                                }
-                                            });
-                                            if (fallback.data?.success) {
-                                                toast.success('Semester registration finalized. Redirecting to dashboard…');
-                                                setStudentData((prev) => ({ ...prev, registration_status: 'completed' }));
-                                                // Navigate to student dashboard after successful finalize
-                                                navigate('/student/dashboard');
-                                            } else {
-                                                toast.error(fallback.data?.message || (error.response?.data?.message || 'Finalize failed'));
-                                            }
-                                        } catch (fallbackError) {
-                                            toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Finalize failed'));
-                                        }
-                                    }
-                                };
-                                return (
-                                    <button
-                                        onClick={handleFinalize}
-                                        disabled={!canFinalize}
-                                        className={`px-6 py-3 rounded-lg font-semibold ${canFinalize ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                                    >
-                                        Finalize Registration
-                                    </button>
-                                );
-                            })()}
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                            <button
+                                onClick={() => setActiveStepId(null)}
+                                className="px-6 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                            >
+                                Done
+                            </button>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default SemesterRegistration;
-

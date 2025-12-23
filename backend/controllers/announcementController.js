@@ -1,0 +1,361 @@
+const { masterPool } = require('../config/database');
+// const { uploadFile } = require('../services/s3Service');
+const fs = require('fs');
+
+// Helper to delete local file
+const deleteLocalFile = (path) => {
+    if (path && fs.existsSync(path)) {
+        fs.unlinkSync(path);
+    }
+};
+
+exports.createAnnouncement = async (req, res) => {
+    let localFilePath = null;
+    try {
+        const {
+            title,
+            content,
+            target_college,
+            target_batch,
+            target_course,
+            target_branch,
+            target_year,
+            target_semester
+        } = req.body;
+
+        const createdBy = req.user?.id || 1;
+
+        let imageUrl = null;
+
+        // Handle Image Upload
+        if (req.file) {
+            localFilePath = req.file.path;
+            const fileData = fs.readFileSync(localFilePath);
+            const base64Image = fileData.toString('base64');
+            const mimeType = req.file.mimetype;
+            imageUrl = `data:${mimeType};base64,${base64Image}`;
+        }
+
+        const [result] = await masterPool.query(
+            `INSERT INTO announcements 
+            (title, content, image_url, target_college, target_batch, target_course, target_branch, target_year, target_semester, created_by) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                title,
+                content,
+                imageUrl,
+                target_college || null,
+                target_batch || null,
+                target_course || null,
+                target_branch || null,
+                target_year || null,
+                target_semester || null,
+                createdBy
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Announcement created successfully',
+            data: { id: result.insertId, title, imageUrl }
+        });
+
+    } catch (error) {
+        console.error('Create announcement error:', error);
+        res.status(500).json({ success: false, message: 'Failed to create announcement' });
+    } finally {
+        if (localFilePath) deleteLocalFile(localFilePath);
+    }
+};
+
+exports.getAnnouncements = async (req, res) => {
+    try {
+        // Admin View: Get all or filter
+        const { college, course, branch } = req.query;
+        let query = `
+            SELECT 
+                a.*, 
+                u.username as created_by_name 
+            FROM announcements a
+            LEFT JOIN admins u ON a.created_by = u.id
+            WHERE 1=1
+        `;
+        const params = [];
+
+        if (college) {
+            query += ' AND (a.target_college = ? OR a.target_college IS NULL)';
+            params.push(college);
+        }
+        // Additional filters can be added here
+
+        query += ' ORDER BY a.created_at DESC';
+
+        const [rows] = await masterPool.query(query, params);
+
+        res.json({
+            success: true,
+            data: rows
+        });
+    } catch (error) {
+        console.error('Get announcements error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch announcements' });
+    }
+};
+
+
+exports.getStudentAnnouncements = async (req, res) => {
+    try {
+        const { admission_number, admissionNumber } = req.user;
+        const studentAdmNum = admission_number || admissionNumber;
+        // Debug log removed
+
+        const [studentRows] = await masterPool.query(
+            'SELECT college, course, branch, batch, current_year, current_semester, student_status FROM students WHERE admission_number = ? OR admission_no = ?',
+            [studentAdmNum, studentAdmNum]
+        );
+
+        if (studentRows.length === 0) {
+            console.error(`Student not found for admission number: ${studentAdmNum}`);
+            return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+
+        const student = studentRows[0];
+
+        // "Regular Only" Constraint: Check student_status
+        // DB stores 'Regular' (Title Case)
+        if (!student.student_status || student.student_status !== 'Regular') {
+            // console.log(`Student ${studentAdmNum} status is '${student.student_status}', not 'Regular'. returning empty.`);
+            return res.json({ success: true, data: [] });
+        }
+
+        // Match Logic:
+        // Use JSON_CONTAINS to check if student's attribute exists in the target array
+        // Schema uses TEXT columns for targets, storing JSON strings e.g., '["CSE","ECE"]'
+
+        const query = `
+            SELECT * FROM announcements
+            WHERE is_active = 1
+            AND (target_college IS NULL OR JSON_CONTAINS(target_college, JSON_QUOTE(?)))
+            AND (target_batch IS NULL OR JSON_CONTAINS(target_batch, JSON_QUOTE(?)))
+            AND (target_course IS NULL OR JSON_CONTAINS(target_course, JSON_QUOTE(?)))
+            AND (target_branch IS NULL OR JSON_CONTAINS(target_branch, JSON_QUOTE(?)))
+            AND (target_year IS NULL OR JSON_CONTAINS(target_year, JSON_QUOTE(?)))
+            AND (target_semester IS NULL OR JSON_CONTAINS(target_semester, JSON_QUOTE(?)))
+            ORDER BY created_at DESC
+        `;
+
+        const params = [
+            student.college || '',
+            student.batch || '',
+            student.course || '',
+            student.branch || '',
+            String(student.current_year || ''),
+            String(student.current_semester || '')
+        ];
+
+        const [rows] = await masterPool.query(query, params);
+
+        res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (error) {
+        console.error('Get student announcements error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch announcements' });
+    }
+};
+
+exports.calculateRecipientCount = async (req, res) => {
+    try {
+        const { target_college, target_batch, target_course, target_branch, target_year, target_semester } = req.body;
+
+        // Build dynamic query
+        // Force "Regular" status only
+        let query = 'SELECT COUNT(*) as count FROM students WHERE student_status = "Regular"';
+        const params = [];
+
+        // Parse JSON arrays if they come as strings, or use directly if array
+        const parseParam = (val) => {
+            if (!val) return null;
+            if (Array.isArray(val)) return val.length ? val : null;
+            try {
+                const parsed = JSON.parse(val);
+                return parsed.length ? parsed : null;
+            } catch (e) { return null; }
+        };
+
+        const colleges = parseParam(target_college);
+        const batches = parseParam(target_batch);
+        const courses = parseParam(target_course);
+        const branches = parseParam(target_branch);
+        const years = parseParam(target_year);
+        const semesters = parseParam(target_semester);
+
+        if (colleges) { query += ' AND college IN (?)'; params.push(colleges); }
+        if (batches) { query += ' AND batch IN (?)'; params.push(batches); }
+        if (courses) {
+            // Map course names to filtering if needed, assumes column 'course' holds names
+            query += ' AND course IN (?)'; params.push(courses);
+        }
+        if (branches) { query += ' AND branch IN (?)'; params.push(branches); }
+        if (years) { query += ' AND current_year IN (?)'; params.push(years); }
+        if (semesters) { query += ' AND current_semester IN (?)'; params.push(semesters); }
+
+        const [rows] = await masterPool.query(query, params);
+        res.json({ success: true, count: rows[0].count });
+
+    } catch (error) {
+        console.error('Count calculation error:', error);
+        res.status(500).json({ success: false, count: 0 });
+    }
+};
+
+exports.updateAnnouncement = async (req, res) => {
+    let localFilePath = null;
+    try {
+        const { id } = req.params;
+        const {
+            title,
+            content,
+            target_college,
+            target_batch,
+            target_course,
+            target_branch,
+            target_year,
+            target_semester,
+            existing_image_url
+        } = req.body;
+
+        let imageUrl = existing_image_url; // Default to keeping existing
+
+        if (req.file) {
+            localFilePath = req.file.path;
+            const fileData = fs.readFileSync(localFilePath);
+            const base64Image = fileData.toString('base64');
+            const mimeType = req.file.mimetype;
+            imageUrl = `data:${mimeType};base64,${base64Image}`;
+        }
+
+        const ensureJson = (val) => {
+            if (!val) return null;
+            if (typeof val === 'string') return val; // Already stringified
+            return JSON.stringify(val); // Array -> String
+        };
+
+        await masterPool.query(
+            `UPDATE announcements SET 
+                title = ?, 
+                content = ?, 
+                image_url = ?, 
+                target_college = ?, 
+                target_batch = ?, 
+                target_course = ?, 
+                target_branch = ?, 
+                target_year = ?, 
+                target_semester = ? 
+            WHERE id = ?`,
+            [
+                title,
+                content,
+                imageUrl,
+                target_college || null,
+                target_batch || null,
+                target_course || null,
+                target_branch || null,
+                target_year || null,
+                target_semester || null,
+                id
+            ]
+        );
+
+        res.json({ success: true, message: 'Announcement updated' });
+
+    } catch (error) {
+        console.error('Update announcement error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update announcement' });
+    } finally {
+        if (localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
+    }
+};
+
+exports.toggleStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { is_active } = req.body;
+
+        await masterPool.query(
+            'UPDATE announcements SET is_active = ? WHERE id = ?',
+            [is_active, id]
+        );
+
+        res.json({ success: true, message: 'Status updated' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to update status' });
+    }
+};
+
+exports.deleteAnnouncement = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await masterPool.query('DELETE FROM announcements WHERE id = ?', [id]);
+        res.json({ success: true, message: 'Announcement deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to delete announcement' });
+    }
+};
+
+// Metadata functions
+exports.getBranches = async (req, res) => {
+    try {
+        const [rows] = await masterPool.query('SELECT DISTINCT branch, course FROM students WHERE branch IS NOT NULL AND branch != "" ORDER BY branch');
+        // Return structured data: { name: 'BranchName', course_id: 'CourseName' } 
+        // Note: Students table stores course NAME in 'course' column usually.
+        // We'll map course name to "courseId" for frontend filtering simulation basically
+        // Or better yet, just return the name and let frontend filter by string matching?
+        // Frontend expects { value, label, courseId }.
+        // We'll assume 'course' column holds the Course Name.
+        const branches = rows.map(r => ({
+            name: r.branch,
+            course_id: r.course // Using course name as ID for filtering since frontend logic uses strings/ids
+        }));
+        res.json({ success: true, data: branches });
+    } catch (error) {
+        console.error('Get branches error:', error);
+        res.status(500).json({ success: false, data: [] });
+    }
+};
+
+exports.getBatches = async (req, res) => {
+    try {
+        const [rows] = await masterPool.query('SELECT DISTINCT batch FROM students WHERE batch IS NOT NULL AND batch != "" ORDER BY batch DESC');
+        const batches = rows.map(r => ({ name: r.batch }));
+        res.json({ success: true, data: batches });
+    } catch (error) {
+        console.error('Get batches error:', error);
+        res.status(500).json({ success: false, data: [] });
+    }
+};
+
+exports.getYears = async (req, res) => {
+    try {
+        // Return year associated with batch to allow filtering
+        const [rows] = await masterPool.query('SELECT DISTINCT current_year, batch FROM students WHERE current_year IS NOT NULL ORDER BY current_year');
+        const years = rows.map(r => ({ name: String(r.current_year), batch_id: r.batch }));
+        res.json({ success: true, data: years });
+    } catch (error) {
+        console.error('Get years error:', error);
+        res.status(500).json({ success: false, data: [] });
+    }
+};
+
+exports.getSemesters = async (req, res) => {
+    try {
+        const [rows] = await masterPool.query('SELECT DISTINCT current_semester, batch FROM students WHERE current_semester IS NOT NULL ORDER BY current_semester');
+        const semesters = rows.map(r => ({ name: String(r.current_semester), batch_id: r.batch }));
+        res.json({ success: true, data: semesters });
+    } catch (error) {
+        console.error('Get semesters error:', error);
+        res.status(500).json({ success: false, data: [] });
+    }
+};

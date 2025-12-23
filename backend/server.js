@@ -24,6 +24,9 @@ const academicYearRoutes = require('./routes/academicYearRoutes');
 const semesterRoutes = require('./routes/semesterRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const feeRoutes = require('./routes/feeRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
+const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
+const serviceRoutes = require('./routes/serviceRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,7 +52,7 @@ app.use(compression({
 app.use(cors({
   origin: true, // Allow all origins in development
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -119,6 +122,12 @@ app.use('/api/academic-years', academicYearRoutes);
 app.use('/api/semesters', semesterRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/fees', feeRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/complaint-categories', complaintCategoryRoutes);
+app.use('/api/announcements', require('./routes/announcementRoutes'));
+app.use('/api/polls', require('./routes/pollRoutes'));
+app.use('/api/services', serviceRoutes);
+app.use('/api/events', require('./routes/eventRoutes'));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);
@@ -136,6 +145,8 @@ app.use('/academic-years', academicYearRoutes);
 app.use('/semesters', semesterRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/fees', feeRoutes);
+app.use('/tickets', ticketRoutes);
+app.use('/complaint-categories', complaintCategoryRoutes);
 
 // Root API endpoint
 app.get('/api', (req, res) => {
@@ -215,18 +226,18 @@ app.get('/api/debug/health', async (req, res) => {
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Route not found' 
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
   });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({ 
-    success: false, 
-    message: err.message || 'Internal server error' 
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error'
   });
 });
 
@@ -239,8 +250,8 @@ const startServer = async () => {
     const AWS_REGION = process.env.AWS_REGION || 'not set';
     const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || 'not set';
     const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'not set';
-    const accessKeyDisplay = AWS_ACCESS_KEY_ID !== 'not set' && AWS_ACCESS_KEY_ID.length > 8 
-      ? AWS_ACCESS_KEY_ID.substring(0, 8) + '...' 
+    const accessKeyDisplay = AWS_ACCESS_KEY_ID !== 'not set' && AWS_ACCESS_KEY_ID.length > 8
+      ? AWS_ACCESS_KEY_ID.substring(0, 8) + '...'
       : AWS_ACCESS_KEY_ID;
 
     console.log('☁️  S3 Service Configuration:');
@@ -279,7 +290,7 @@ const startServer = async () => {
       try {
         const s3Service = require('./services/s3Service');
         const s3Connected = await s3Service.testConnection();
-        
+
         if (s3Connected) {
           console.log('✅ S3 bucket connection: SUCCESS');
         } else {

@@ -20,6 +20,12 @@ const { getNotificationSetting } = require('./settingsController');
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
 
+// DLT SMS Template IDs for user credentials and password reset
+const USER_CREATION_SMS_TEMPLATE_ID =
+  process.env.USER_CREATION_SMS_TEMPLATE_ID || '1707176525577028276';
+const PASSWORD_RESET_SMS_TEMPLATE_ID =
+  process.env.PASSWORD_RESET_SMS_TEMPLATE_ID || '1707176526611076697';
+
 // Helper function to replace template variables
 const replaceTemplateVariables = (template, variables) => {
   let result = template;
@@ -228,7 +234,7 @@ exports.getUsers = async (req, res) => {
       const collegeIds = parseScopeData(row.college_ids);
       const courseIds = parseScopeData(row.course_ids);
       const branchIds = parseScopeData(row.branch_ids);
-      
+
       let collegeNames = [];
       let courseNames = [];
       let branchNames = [];
@@ -449,21 +455,21 @@ exports.createUser = async (req, res) => {
     }
 
     // Normalize IDs to arrays
-    const normalizedCollegeIds = collegeIds && collegeIds.length > 0 
-      ? collegeIds 
+    const normalizedCollegeIds = collegeIds && collegeIds.length > 0
+      ? collegeIds
       : (collegeId ? [collegeId] : []);
-    const normalizedCourseIds = courseIds && courseIds.length > 0 
-      ? courseIds 
+    const normalizedCourseIds = courseIds && courseIds.length > 0
+      ? courseIds
       : (courseId ? [courseId] : []);
-    const normalizedBranchIds = branchIds && branchIds.length > 0 
-      ? branchIds 
+    const normalizedBranchIds = branchIds && branchIds.length > 0
+      ? branchIds
       : (branchId ? [branchId] : []);
 
     // Validate role requirements
     const roleValidation = validateRoleRequirements(
-      role, 
-      normalizedCollegeIds, 
-      normalizedCourseIds, 
+      role,
+      normalizedCollegeIds,
+      normalizedCourseIds,
       normalizedBranchIds,
       allCourses,
       allBranches
@@ -496,7 +502,7 @@ exports.createUser = async (req, res) => {
           const creatorCollegeIds = parseScopeData(userRows[0].college_ids);
           const creatorCollegeId = userRows[0].college_id;
           const allowedColleges = creatorCollegeIds.length > 0 ? creatorCollegeIds : (creatorCollegeId ? [creatorCollegeId] : []);
-          
+
           const isValidScope = normalizedCollegeIds.every(id => allowedColleges.includes(id));
           if (!isValidScope) {
             return res.status(403).json({
@@ -516,7 +522,7 @@ exports.createUser = async (req, res) => {
           const creatorBranchIds = parseScopeData(userRows[0].branch_ids);
           const creatorBranchId = userRows[0].branch_id;
           const allowedBranches = creatorBranchIds.length > 0 ? creatorBranchIds : (creatorBranchId ? [creatorBranchId] : []);
-          
+
           const isValidScope = normalizedBranchIds.every(id => allowedBranches.includes(id));
           if (!isValidScope) {
             return res.status(403).json({
@@ -546,7 +552,7 @@ exports.createUser = async (req, res) => {
 
     // Parse and validate permissions
     let userPermissions = permissions || createDefaultPermissions();
-    
+
     // Super admin gets all permissions
     if (role === USER_ROLES.SUPER_ADMIN) {
       userPermissions = createSuperAdminPermissions();
@@ -625,15 +631,15 @@ exports.createUser = async (req, res) => {
     let smsSent = false;
     let emailError = null;
     let smsError = null;
-    
+
     if (sendCredentials) {
       try {
         // Get notification settings
         const notificationSettings = await getNotificationSetting('user_creation');
-        
+
         if (notificationSettings && notificationSettings.enabled) {
           // Use production URL directly
-          const appUrl = 'https://pydahsdms.vercel.app';
+          const appUrl = 'pydahsdms.vercel.app';
           const variables = {
             name: name.trim(),
             username: username.trim(),
@@ -653,22 +659,22 @@ exports.createUser = async (req, res) => {
                 );
                 const emailBody = replaceTemplateVariables(notificationSettings.emailTemplate, variables);
                 const logoUrl = 'https://static.wixstatic.com/media/bfee2e_7d499a9b2c40442e85bb0fa99e7d5d37~mv2.png/v1/fill/w_162,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/logo1.png';
-                
+
                 // Parse email body to extract and format credentials
                 let formattedBody = emailBody;
                 const hasCredentials = /(?:Username|Password|Role)/i.test(emailBody);
-                
+
                 // If credentials are found, format them in a styled table
                 if (hasCredentials) {
                   const usernameMatch = emailBody.match(/(?:Username|username):\s*([^\n\r]+)/i);
                   const passwordMatch = emailBody.match(/(?:Password|password):\s*([^\n\r]+)/i);
                   const roleMatch = emailBody.match(/(?:Role|role):\s*([^\n\r]+)/i);
-                  
+
                   // Extract credential values from variables if not found in template
                   const usernameValue = usernameMatch ? usernameMatch[1].trim() : variables.username;
                   const passwordValue = passwordMatch ? passwordMatch[1].trim() : variables.password;
                   const roleValue = roleMatch ? roleMatch[1].trim() : variables.role;
-                  
+
                   // Remove credential lines from body
                   formattedBody = emailBody
                     .replace(/(?:Username|username):\s*[^\n\r]+\n?/gi, '')
@@ -676,7 +682,7 @@ exports.createUser = async (req, res) => {
                     .replace(/(?:Role|role):\s*[^\n\r]+\n?/gi, '')
                     .replace(/\n{3,}/g, '\n\n') // Clean up multiple newlines
                     .trim();
-                  
+
                   // Create credentials table HTML
                   const credentialsTable = `
                     <div class="credentials-box">
@@ -687,7 +693,7 @@ exports.createUser = async (req, res) => {
                       </table>
                     </div>
                   `;
-                  
+
                   // Insert credentials table before login URL or at the end
                   if (formattedBody.includes('Login URL') || formattedBody.includes('loginUrl') || formattedBody.includes('{{loginUrl}}')) {
                     formattedBody = formattedBody.replace(/(Login URL|loginUrl|{{loginUrl}})[^\n\r]*/i, credentialsTable + '\n\n$&');
@@ -695,7 +701,7 @@ exports.createUser = async (req, res) => {
                     formattedBody = formattedBody + '\n\n' + credentialsTable;
                   }
                 }
-                
+
                 const htmlContent = `
                   <!DOCTYPE html>
                   <html>
@@ -818,7 +824,7 @@ exports.createUser = async (req, res) => {
                   </body>
                   </html>
                 `;
-                
+
                 const emailResult = await sendBrevoEmail({
                   to: email.trim().toLowerCase(),
                   toName: name.trim(),
@@ -862,7 +868,8 @@ exports.createUser = async (req, res) => {
                 : `Hello ${variables.name} your account has been created. Username: ${variables.username} Password: ${variables.password}. Login: ${variables.loginUrl} - Pydah College`;
               const smsResult = await sendSms({
                 to: phone.trim(),
-                message: smsMessage
+                message: smsMessage,
+                templateId: USER_CREATION_SMS_TEMPLATE_ID
               });
               smsSent = smsResult.success;
               if (!smsResult.success) {
@@ -1105,7 +1112,7 @@ exports.updateUser = async (req, res) => {
       const branchIdsJson = JSON.stringify(Array.isArray(branchIds) ? branchIds : []);
       updates.push('branch_ids = CAST(? AS JSON)');
       params.push(branchIdsJson);
-      
+
       // Also update the single branch_id for backward compatibility
       if (Array.isArray(branchIds) && branchIds.length > 0) {
         updates.push('branch_id = ?');
@@ -1114,7 +1121,7 @@ exports.updateUser = async (req, res) => {
         // Clear branch_id when branchIds is empty or not an array
         updates.push('branch_id = NULL');
       }
-      
+
       console.log(`[Update User] Updating branchIds: ${branchIdsJson}, branch_id: ${Array.isArray(branchIds) && branchIds.length > 0 ? branchIds[0] : 'NULL'}`);
     }
 
@@ -1127,7 +1134,7 @@ exports.updateUser = async (req, res) => {
     if (allBranches !== undefined) {
       updates.push('all_branches = ?');
       params.push(allBranches ? 1 : 0);
-      
+
       // When allBranches is true, ensure branch_ids and branch_id are cleared
       // (branch_ids will be handled by branchIds check above if provided)
       if (allBranches && branchIds === undefined) {
@@ -1135,14 +1142,14 @@ exports.updateUser = async (req, res) => {
         updates.push('branch_ids = CAST(? AS JSON)');
         params.push(JSON.stringify([]));
         // Clear branch_id if not already cleared
-        const hasBranchIdUpdate = updates.some(u => 
+        const hasBranchIdUpdate = updates.some(u =>
           u.includes('branch_id = NULL') || u.includes('branch_id = ?')
         );
         if (!hasBranchIdUpdate) {
           updates.push('branch_id = NULL');
         }
       }
-      
+
       console.log(`[Update User] Updating allBranches: ${allBranches}, branchIds provided: ${branchIds !== undefined}`);
     }
 
@@ -1170,7 +1177,7 @@ exports.updateUser = async (req, res) => {
     const updateQuery = `UPDATE rbac_users SET ${updates.join(', ')} WHERE id = ?`;
     console.log(`[Update User] Executing update query for user ${id}:`, updateQuery);
     console.log(`[Update User] Update params (excluding id):`, params.slice(0, -1));
-    
+
     const [updateResult] = await masterPool.query(updateQuery, params);
     console.log(`[Update User] Update result - affected rows: ${updateResult.affectedRows}`);
 
@@ -1399,10 +1406,10 @@ exports.resetPassword = async (req, res) => {
     try {
       // Get notification settings for password update
       const notificationSettings = await getNotificationSetting('password_update');
-      
+
       if (notificationSettings && notificationSettings.enabled) {
         // Use production URL directly
-        const appUrl = 'https://pydahsdms.vercel.app';
+        const appUrl = 'pydahsdms.vercel.app';
         const variables = {
           name: user.name,
           username: user.username,
@@ -1445,7 +1452,8 @@ exports.resetPassword = async (req, res) => {
               : `Hello ${variables.name} your password has been updated. Username: ${variables.username} New Password: ${variables.password} Login: ${variables.loginUrl} - Pydah College`;
             const smsResult = await sendSms({
               to: user.phone.trim(),
-              message: smsMessage
+              message: smsMessage,
+              templateId: PASSWORD_RESET_SMS_TEMPLATE_ID
             });
             smsSent = smsResult.success;
             if (!smsResult.success) {
@@ -1492,7 +1500,7 @@ exports.resetPassword = async (req, res) => {
     const notifications = [];
     if (emailSent) notifications.push('email');
     if (smsSent) notifications.push('SMS');
-    
+
     let successMessage = 'Password reset successfully';
     if (notifications.length > 0) {
       successMessage += ` and credentials sent via ${notifications.join(' and ')}!`;
@@ -1527,7 +1535,7 @@ exports.resetPassword = async (req, res) => {
 exports.getAvailableRoles = async (req, res) => {
   try {
     const user = req.user || req.admin;
-    
+
     // Convert legacy 'admin' role to 'super_admin' for hierarchy lookup
     const effectiveRole = user.role === 'admin' ? USER_ROLES.SUPER_ADMIN : user.role;
     const availableRoles = ROLE_HIERARCHY[effectiveRole] || [];
@@ -1556,7 +1564,7 @@ exports.getAvailableRoles = async (req, res) => {
 exports.getModules = async (req, res) => {
   try {
     const { MODULE_LABELS, MODULE_PERMISSIONS } = require('../constants/rbac');
-    
+
     const modules = ALL_MODULES.map(module => ({
       key: module,
       label: MODULE_LABELS[module] || module,

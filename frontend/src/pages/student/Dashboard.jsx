@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, MapPin } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
+import { serviceService } from '../../services/serviceService';
 import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -11,43 +12,154 @@ const Dashboard = () => {
     const [studentData, setStudentData] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Fetch full student data
+    // Additional Data States
+    const [attendanceHistory, setAttendanceHistory] = useState(null);
+    const [polls, setPolls] = useState([]);
+    const [announcements, setAnnouncements] = useState([]);
+    const [serviceRequests, setServiceRequests] = useState([]);
+
+    // UI States
+    const [showAnnouncement, setShowAnnouncement] = useState(false);
+    const [currentAnnouncement, setCurrentAnnouncement] = useState(null);
+
+    // Initial Data Fetch
     useEffect(() => {
-        const fetchStudentDetails = async () => {
+        const fetchAllData = async () => {
             try {
                 if (!user?.admission_number) return;
 
-                const response = await api.get(`/students/${user.admission_number}`);
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes] = await Promise.allSettled([
+                    api.get(`/students/${user.admission_number}`),
+                    api.get('/announcements/student'),
+                    api.get('/polls/student'),
+                    api.get('/attendance/student'),
+                    serviceService.getRequests()
+                ]);
 
-                if (response.data.success) {
-                    setStudentData(response.data.data);
+                // Handle Profile
+                if (profileRes.status === 'fulfilled' && profileRes.value.data.success) {
+                    setStudentData(profileRes.value.data.data);
                 }
+
+                // Handle Announcements
+                if (announcementsRes.status === 'fulfilled' && announcementsRes.value.data.success) {
+                    const allAnnouncements = announcementsRes.value.data.data;
+                    setAnnouncements(allAnnouncements);
+
+                    // Show latest unseen announcement popup
+                    const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
+                    const unseen = allAnnouncements.filter(a => !seenIds.includes(a.id));
+                    if (unseen.length > 0) {
+                        setCurrentAnnouncement(unseen[0]);
+                        setShowAnnouncement(true);
+                    }
+                }
+
+                // Handle Polls
+                if (pollsRes.status === 'fulfilled' && pollsRes.value.data.success) {
+                    setPolls(pollsRes.value.data.data);
+                }
+
+                // Handle Attendance
+                if (attendanceRes.status === 'fulfilled' && attendanceRes.value.data.success) {
+                    setAttendanceHistory(attendanceRes.value.data.data);
+                }
+
+                // Handle Services
+                if (servicesRes.status === 'fulfilled' && servicesRes.value.data) {
+                    setServiceRequests(servicesRes.value.data);
+                }
+
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
-                // Don't toast error here to avoid spamming if profile also fetches
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchStudentDetails();
+        fetchAllData();
     }, [user]);
 
-    // Use fetched data or fallback to auth user
+    // Derived Attendance Stats
+    const attendanceStats = useMemo(() => {
+        if (!attendanceHistory?.semester?.series) return null;
+
+        const series = attendanceHistory.semester.series;
+        let present = 0;
+        let absent = 0;
+        let activeDays = 0; // Working days (excluding holidays)
+
+        // Find Today's status from history if available
+        const todayStr = new Date().toISOString().split('T')[0];
+        let todayStatus = 'not marked';
+
+        const todayEntry = series.find(d => d.date.startsWith(todayStr));
+        if (todayEntry) {
+            todayStatus = todayEntry.status === 'present' ? 'present' :
+                todayEntry.status === 'absent' ? 'absent' :
+                    todayEntry.isHoliday ? 'holiday' : 'not marked';
+        }
+
+        series.forEach(day => {
+            if (!day.isHoliday) {
+                activeDays++;
+                if (day.status === 'present') present++;
+                else if (day.status === 'absent') absent++;
+            }
+        });
+
+        const percentage = activeDays > 0 ? ((present / activeDays) * 100).toFixed(1) : '0.0';
+
+        return {
+            todayStatus,
+            present,
+            absent,
+            percentage
+        };
+    }, [attendanceHistory]);
+
+
+    // Combined Feed (Announcements + Active Polls)
+    const feedItems = useMemo(() => {
+        const items = [];
+
+        polls.forEach(poll => {
+            items.push({
+                type: 'poll',
+                date: new Date(poll.created_at),
+                data: poll
+            });
+        });
+
+        announcements.forEach(ann => {
+            items.push({
+                type: 'announcement',
+                date: new Date(ann.created_at),
+                data: ann
+            });
+        });
+
+        return items.sort((a, b) => b.date - a.date);
+    }, [polls, announcements]);
+
+
+    // Helpers
     const displayData = studentData || user;
     const get = (path, fallback = 'N/A') => displayData?.[path] || fallback;
 
-    // Normalize status helpers
     const normalizeFeeStatus = () => {
         const rawSource = displayData?.fee_status
             || (displayData?.student_data ? (displayData.student_data['Fee Status'] || displayData.student_data.fee_status) : '')
             || '';
         const raw = String(rawSource).trim().toLowerCase();
-        const isCompleted = raw === 'completed' || raw.includes('complete') || raw.includes('paid');
-        const isPartial = raw === 'partially_completed' || raw.includes('partial');
-        const label = isCompleted ? 'Completed' : isPartial ? 'Partially Completed' : 'Pending';
-        return label;
+        const normalized = raw.replace(/\s+/g, '_');
+        const isCompleted = normalized === 'completed' || normalized === 'no_due' || normalized === 'nodue' || raw.includes('complete') || raw.includes('paid');
+        const isPartial = normalized === 'partially_completed' || normalized === 'permitted' || raw.includes('partial');
+        if (isCompleted) return 'Completed';
+        if (isPartial) return 'Partially Completed';
+        return 'Pending';
     };
+
     const normalizeRegistrationStatus = () => {
         const rawSource = displayData?.registration_status
             || (displayData?.student_data ? (displayData.student_data['Registration Status'] || displayData.student_data.registration_status) : '')
@@ -60,11 +172,54 @@ const Dashboard = () => {
     const registrationLabel = normalizeRegistrationStatus();
     const isRegistrationCompleted = registrationLabel === 'Completed' && feeStatusLabel === 'Completed';
 
-    // Attendance overview removed: avoid showing any placeholder or false stats
+    const closeAnnouncement = () => {
+        if (currentAnnouncement) {
+            const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
+            if (!seenIds.includes(currentAnnouncement.id)) {
+                seenIds.push(currentAnnouncement.id);
+                localStorage.setItem('seen_announcements', JSON.stringify(seenIds));
+            }
+        }
+        setShowAnnouncement(false);
+    };
+
+    const getStatusColor = (status) => {
+        switch (status) {
+            case 'completed': return 'bg-green-100 text-green-700';
+            case 'ready_to_collect': return 'bg-purple-100 text-purple-700';
+            case 'pending': return 'bg-yellow-100 text-yellow-700';
+            default: return 'bg-gray-100 text-gray-700';
+        }
+    };
 
     return (
-        <div className="space-y-8 animate-fade-in">
-            {/* Welcome Section */}
+        <div className="space-y-8 animate-fade-in relative z-0 pb-12">
+            {/* Announcement Popup */}
+            {showAnnouncement && currentAnnouncement && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                        {currentAnnouncement.image_url && (
+                            <div className="h-48 w-full bg-gray-100">
+                                <img src={currentAnnouncement.image_url} alt="Announcement" className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                        <div className="p-6">
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">{currentAnnouncement.title}</h3>
+                            <p className="text-gray-600 mb-6 text-sm leading-relaxed max-h-60 overflow-y-auto">
+                                {currentAnnouncement.content}
+                            </p>
+                            <button
+                                onClick={closeAnnouncement}
+                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors cursor-pointer"
+                            >
+                                Close & Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Welcome Header */}
             <div>
                 <h1 className="text-3xl font-bold text-gray-900 heading-font">
                     Welcome back, {displayData?.student_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'} 👋
@@ -74,47 +229,266 @@ const Dashboard = () => {
                 </p>
             </div>
 
-            {/* Quick Actions Card / Completed Banner */}
-            {isRegistrationCompleted ? (
-                <div className="bg-green-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
-                    <div className="relative z-10">
-                        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                            <CheckCircle className="text-white" /> Registration Completed
-                        </h2>
-                        <p className="text-green-100 mb-6 max-w-lg">
-                            Your semester registration is complete. You can view your profile or return later to make changes if fees update.
-                        </p>
-                        <button
-                            onClick={() => navigate('/student/profile')}
-                            className="bg-white text-green-700 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition-colors shadow-sm cursor-pointer"
-                        >
-                            Go to Profile
-                        </button>
+            {/* Top Stats Row: Attendance & Registration */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${isRegistrationCompleted ? 'lg:grid-cols-3' : ''} gap-6`}>
+                {/* Today's Status */}
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-full">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Today's Attendance</h3>
+                    <div className="flex items-center gap-4">
+                        {(() => {
+                            // Priority: Calculated entry from history > displayData.today_attendance_status
+                            let status = (attendanceStats?.todayStatus || displayData.today_attendance_status || 'not marked').toLowerCase();
+
+                            // Safe fallback
+                            if (status === 'not marked yet') status = 'not marked';
+
+                            let colorClass = 'bg-gray-100 text-gray-600';
+                            let icon = <Clock size={24} className="text-gray-400" />;
+                            let label = 'Not Marked Yet';
+
+                            if (status === 'present') {
+                                colorClass = 'bg-green-100 text-green-700';
+                                icon = <CheckCircle size={24} />;
+                                label = 'Present';
+                            } else if (status === 'absent') {
+                                colorClass = 'bg-red-100 text-red-700';
+                                icon = <MapPin size={24} />;
+                                label = 'Absent';
+                            } else if (status === 'holiday' || status === 'no class work') {
+                                colorClass = 'bg-amber-100 text-amber-700';
+                                icon = <BookOpen size={24} />;
+                                label = status === 'holiday' ? 'Holiday' : 'No Class Work';
+                            }
+
+                            return (
+                                <>
+                                    <div className={`p-3 rounded-full ${colorClass}`}>
+                                        {icon}
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-gray-900">{label}</p>
+                                        <p className="text-xs text-gray-500">
+                                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
-                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
                 </div>
-            ) : (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg overflow-hidden relative">
-                    <div className="relative z-10">
-                        <h2 className="text-2xl font-bold mb-2">Semester Registration Open</h2>
-                        <p className="text-blue-100 mb-6 max-w-lg">
-                            {feeStatusLabel === 'Pending' ? 'Fees are pending. Complete or partially complete fees to proceed.' : 'Registration is open. You may proceed.'}
-                        </p>
-                        <button
-                            onClick={() => navigate('/student/semester-registration')}
-                            className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-sm cursor-pointer"
-                        >
-                            Register Now
-                        </button>
+
+                {/* Semester Summary */}
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-full">
+                    <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Semester Overview</h3>
+                        <Link to="/student/attendance" className="text-xs text-blue-600 hover:underline font-medium">View History</Link>
+                    </div>
+                    {attendanceStats ? (
+                        <div className="flex items-end gap-2">
+                            <div>
+                                <p className="text-4xl font-bold text-indigo-700">{attendanceStats.percentage}%</p>
+                                <p className="text-xs text-gray-500 mt-1">Overall Semester</p>
+                            </div>
+                            <div className="flex-1 flex justify-end gap-3 text-right">
+                                <div>
+                                    <p className="text-sm font-bold text-green-600">{attendanceStats.present}</p>
+                                    <p className="text-[10px] uppercase text-gray-400 font-bold">Present</p>
+                                </div>
+                                <div className="w-px bg-gray-200 h-8"></div>
+                                <div>
+                                    <p className="text-sm font-bold text-red-500">{attendanceStats.absent}</p>
+                                    <p className="text-[10px] uppercase text-gray-400 font-bold">Absent</p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center h-16 text-gray-400 text-sm">
+                            Loading stats...
+                        </div>
+                    )}
+                </div>
+
+                {/* Registration Status Card (Only if Completed) */}
+                {isRegistrationCompleted && (
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden h-full">
+                        <div className="flex items-center justify-between mb-4 z-10">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Registration</h3>
+                            <div className="p-1.5 bg-green-100 text-green-600 rounded-lg">
+                                <CheckCircle size={18} />
+                            </div>
+                        </div>
+
+                        <div className="z-10">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-2xl font-bold text-gray-900">Completed</span>
+                            </div>
+                            <p className="text-xs text-gray-500">You are all set for this semester.</p>
+                        </div>
+
+                        <div className="absolute top-0 right-0 -mt-2 -mr-2 w-20 h-20 bg-green-50 rounded-full blur-xl opacity-60 pointer-events-none"></div>
+                        <div className="absolute bottom-0 right-10 w-16 h-16 bg-blue-50 rounded-full blur-xl opacity-40 pointer-events-none"></div>
+                    </div>
+                )}
+            </div>
+
+            {/* Registration Pending Banner (Only if NOT Completed) */}
+            {!isRegistrationCompleted && (
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg shadow-blue-200 overflow-hidden relative">
+                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div>
+                            <h2 className="text-2xl font-bold mb-2">Semester Registration Open</h2>
+                            <p className="text-blue-100 max-w-lg">
+                                {feeStatusLabel === 'Pending' ? 'Fees are pending. Complete fee payment to proceed with registration.' : 'Registration is open. Please complete your registration.'}
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => navigate('/student/semester-registration')}
+                                className="bg-white text-blue-600 px-6 py-3 rounded-lg font-bold hover:bg-blue-50 transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+                            >
+                                Register Now
+                            </button>
+                        </div>
                     </div>
                     <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Center: Feed (50% Width on Large) */}
+                <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <span role="img" aria-label="feed">📰</span>
+                            </div>
+                            Recent Updates & Polls
+                        </h3>
+                        {/* Link to all announcements maybe? */}
+                    </div>
 
-                {/* Profile Quick Details */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
+                    <div className="space-y-4 flex-1">
+                        {loading ? (
+                            <div className="text-center py-8 text-gray-500">Loading updates...</div>
+                        ) : feedItems.length > 0 ? (
+                            feedItems.slice(0, 5).map((item, index) => {
+                                if (item.type === 'poll') {
+                                    const poll = item.data;
+                                    return (
+                                        <div key={`poll-${poll.id}`} className="p-5 rounded-xl bg-purple-50 border border-purple-100 hover:border-purple-200 transition-colors relative">
+                                            <div className="absolute top-4 right-4 text-purple-200">
+                                                <Vote size={48} className="opacity-20" />
+                                            </div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wide">Active Poll</span>
+                                                <span className="text-xs text-gray-500">{new Date(poll.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                            <h4 className="font-bold text-gray-900 mb-2">{poll.question}</h4>
+                                            <p className="text-sm text-gray-600 mb-4">{poll.total_votes} students have voted</p>
+
+                                            {/* Show Vote Status or Action */}
+                                            {poll.has_voted ? (
+                                                <div className="flex items-center gap-2 text-sm text-purple-700 font-medium bg-purple-100 px-3 py-2 rounded-lg inline-flex">
+                                                    <CheckCircle size={16} /> Voted
+                                                </div>
+                                            ) : (
+                                                <Link
+                                                    to="/student/announcements"
+                                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 inline-block"
+                                                >
+                                                    Participate Now
+                                                </Link>
+                                            )}
+                                        </div>
+                                    );
+                                } else {
+                                    const ann = item.data;
+                                    return (
+                                        <div key={`ann-${ann.id}`} className="p-5 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 transition-colors group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-base">{ann.title}</h4>
+                                                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100 whitespace-nowrap">
+                                                    {new Date(ann.created_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
+                                                {ann.content}
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    setCurrentAnnouncement(ann);
+                                                    setShowAnnouncement(true);
+                                                }}
+                                                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                            >
+                                                Read More &rarr;
+                                            </button>
+                                        </div>
+                                    );
+                                }
+                            })
+                        ) : (
+                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                <p className="text-gray-500 text-sm">No new updates</p>
+                            </div>
+                        )}
+
+                        <div className="text-center pt-2">
+                            <Link to="/student/announcements" className="text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">
+                                View All Announcements & Polls
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Services Widget (25% Width on Large) */}
+                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                <FileText size={20} />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900">Services</h3>
+                        </div>
+                        <Link to="/student/services" className="text-blue-600 hover:bg-blue-50 p-1 rounded">
+                            <ArrowRight size={16} />
+                        </Link>
+                    </div>
+
+                    {/* Active Requests List */}
+                    {serviceRequests.length > 0 ? (
+                        <div className="flex-1 space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                            {serviceRequests.map(req => (
+                                <div key={req.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-medium text-xs text-gray-900 line-clamp-1">{req.service_name}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${getStatusColor(req.status)}`}>
+                                            {req.status === 'ready_to_collect' ? 'Ready' : req.status.replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-400">{new Date(req.request_date).toLocaleDateString()}</div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-lg mb-4">
+                            <p className="text-sm">No active requests</p>
+                        </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                        Apply for Study or Custodian Certificates online.
+                    </p>
+                    <Link
+                        to="/student/services"
+                        className="w-full py-2.5 bg-gray-900 text-white text-center font-medium rounded-lg hover:bg-gray-800 transition shadow-sm text-sm"
+                    >
+                        New Request
+                    </Link>
+                </div>
+
+                {/* Profile Details (Sidebar) (25% Width on Large) */}
+                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                             <User size={24} />
@@ -125,7 +499,7 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    <div className="space-y-4 mb-6 flex-1">
+                    <div className="space-y-4 mb-6">
                         <div className="flex items-center gap-3 text-sm">
                             <User size={16} className="text-gray-400" />
                             <span className="text-gray-700 truncate">{get('student_name', user?.name)}</span>
@@ -148,15 +522,13 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    <div className="mt-auto">
-                        <Link
-                            to="/student/profile"
-                            className="flex items-center justify-between w-full p-4 rounded-lg border border-gray-200 hover:border-purple-200 hover:bg-purple-50 transition-colors group"
-                        >
-                            <span className="font-medium text-gray-700 group-hover:text-purple-700">View Full Profile</span>
-                            <CheckCircle size={18} className="text-gray-400 group-hover:text-purple-600" />
-                        </Link>
-                    </div>
+                    <Link
+                        to="/student/profile"
+                        className="flex items-center justify-between w-full p-4 rounded-lg border border-gray-200 hover:border-purple-200 hover:bg-purple-50 transition-colors group cursor-pointer"
+                    >
+                        <span className="font-medium text-gray-700 group-hover:text-purple-700">View Full Profile</span>
+                        <CheckCircle size={18} className="text-gray-400 group-hover:text-purple-600" />
+                    </Link>
                 </div>
             </div>
         </div>
@@ -164,4 +536,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

@@ -36,6 +36,7 @@ import { SkeletonTable, SkeletonAttendanceTable } from '../components/SkeletonLo
 import HolidayCalendarModal from '../components/Attendance/HolidayCalendarModal';
 import useAuthStore from '../store/authStore';
 import { isFullAccessRole } from '../constants/rbac';
+import { useInvalidateStudents } from '../hooks/useStudents';
 
 const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
 
@@ -107,22 +108,22 @@ const getMonthKeyFromDate = (dateString) => {
 };
 
 const Attendance = () => {
-const StatPill = ({ label, value, color }) => {
-  const colorMap = {
-    gray: 'bg-gray-50 border-gray-200 text-gray-900',
-    green: 'bg-green-50 border-green-100 text-green-800',
-    blue: 'bg-blue-50 border-blue-100 text-blue-800',
-    red: 'bg-red-50 border-red-100 text-red-800',
-    amber: 'bg-amber-50 border-amber-100 text-amber-800'
+  const StatPill = ({ label, value, color }) => {
+    const colorMap = {
+      gray: 'bg-gray-50 border-gray-200 text-gray-900',
+      green: 'bg-green-50 border-green-100 text-green-800',
+      blue: 'bg-blue-50 border-blue-100 text-blue-800',
+      red: 'bg-red-50 border-red-100 text-red-800',
+      amber: 'bg-amber-50 border-amber-100 text-amber-800'
+    };
+    const safeValue = Number.isFinite(value) ? value : Number(value) || 0;
+    return (
+      <div className={`border rounded-lg p-3 ${colorMap[color] || colorMap.gray}`}>
+        <p className="text-xs text-gray-600">{label}</p>
+        <p className="text-lg font-bold">{safeValue}</p>
+      </div>
+    );
   };
-  const safeValue = Number.isFinite(value) ? value : Number(value) || 0;
-  return (
-    <div className={`border rounded-lg p-3 ${colorMap[color] || colorMap.gray}`}>
-      <p className="text-xs text-gray-600">{label}</p>
-      <p className="text-lg font-bold">{safeValue}</p>
-    </div>
-  );
-};
 
   const [attendanceDate, setAttendanceDate] = useState(() => formatDateInput(new Date()));
   const [filters, setFilters] = useState({
@@ -148,12 +149,18 @@ const StatPill = ({ label, value, color }) => {
   ]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const invalidateStudents = useInvalidateStudents();
   const [saving, setSaving] = useState(false);
   const [statusMap, setStatusMap] = useState({});
   const [initialStatusMap, setInitialStatusMap] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalStudents, setTotalStudents] = useState(0);
+  // Infinite scroll state for filtered results
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadedPages, setLoadedPages] = useState(1);
+  const scrollObserverRef = useRef(null);
   const [attendanceStatistics, setAttendanceStatistics] = useState({
     total: 0,
     present: 0,
@@ -170,16 +177,34 @@ const StatPill = ({ label, value, color }) => {
   const [retryingSmsFor, setRetryingSmsFor] = useState(null); // Track which student SMS is being retried
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const attendanceCache = useRef(new Map());
-  const CACHE_TTL_MS = 90 * 1000; // 90 seconds cache for faster re-renders
+  const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache for faster re-renders
   const pendingRequestRef = useRef(null);
-const filterOptionsCacheRef = useRef(new Map());
-const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
+  const searchEffectInitialized = useRef(false);
+  const filterOptionsCacheRef = useRef(new Map());
+  const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [dayEndReportOpen, setDayEndReportOpen] = useState(false);
   const [dayEndReportLoading, setDayEndReportLoading] = useState(false);
   const [dayEndReportData, setDayEndReportData] = useState(null);
   const [dayEndGrouped, setDayEndGrouped] = useState([]);
   const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
   const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
+  const [dayEndFilters, setDayEndFilters] = useState({
+    college: '',
+    batch: '',
+    course: '',
+    branch: '',
+    year: '',
+    semester: ''
+  });
+  const [dayEndFilterOptions, setDayEndFilterOptions] = useState({
+    colleges: [],
+    batches: [],
+    courses: [],
+    branches: [],
+    years: [],
+    semesters: [],
+    allData: [] // Store all data for cascading filters
+  });
   const [sendingReports, setSendingReports] = useState(false);
   const [markHolidayLoading, setMarkHolidayLoading] = useState(false);
   const [holidayReasonModalOpen, setHolidayReasonModalOpen] = useState(false);
@@ -192,11 +217,100 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [deleteCount, setDeleteCount] = useState(0);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [gettingDeleteCount, setGettingDeleteCount] = useState(false);
+
+  // Prevent background scrolling when day end report popup is open
+  const dayEndStatsRef = useRef(null);
+  const [statsSectionHeight, setStatsSectionHeight] = useState(180);
+
+  useEffect(() => {
+    if (dayEndReportOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      // Disable body scrolling
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+
+      // Measure stats section height after render
+      const measureHeight = () => {
+        if (dayEndStatsRef.current) {
+          const height = dayEndStatsRef.current.offsetHeight;
+          setStatsSectionHeight(height);
+        }
+      };
+
+      // Measure immediately and after a short delay to account for dynamic content
+      measureHeight();
+      const timeoutId = setTimeout(measureHeight, 100);
+
+      return () => {
+        clearTimeout(timeoutId);
+        // Re-enable body scrolling when popup closes
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [dayEndReportOpen]);
+
+  // Filter branches based on selected college and course
+  const filteredBranches = useMemo(() => {
+    if (!dayEndFilterOptions.allData || dayEndFilterOptions.allData.length === 0) {
+      return dayEndFilterOptions.branches || [];
+    }
+
+    let filteredData = dayEndFilterOptions.allData;
+
+    // Filter by college if selected
+    if (dayEndFilters.college) {
+      filteredData = filteredData.filter(item => item.college === dayEndFilters.college);
+    }
+
+    // Filter by course if selected
+    if (dayEndFilters.course) {
+      filteredData = filteredData.filter(item => item.course === dayEndFilters.course);
+    }
+
+    // Extract unique branches from filtered data
+    const branches = [...new Set(filteredData.map(item => item.branch).filter(Boolean))].sort();
+    return branches;
+  }, [dayEndFilterOptions.allData, dayEndFilters.college, dayEndFilters.course]);
+
+  // Filter courses based on selected college
+  const filteredCourses = useMemo(() => {
+    if (!dayEndFilterOptions.allData || dayEndFilterOptions.allData.length === 0) {
+      return dayEndFilterOptions.courses || [];
+    }
+
+    let filteredData = dayEndFilterOptions.allData;
+
+    // Filter by college if selected
+    if (dayEndFilters.college) {
+      filteredData = filteredData.filter(item => item.college === dayEndFilters.college);
+    }
+
+    // Extract unique courses from filtered data
+    const courses = [...new Set(filteredData.map(item => item.course).filter(Boolean))].sort();
+    return courses;
+  }, [dayEndFilterOptions.allData, dayEndFilters.college]);
+
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
     rows = rows.filter((row) => {
-      if (dayEndPreviewFilter === 'marked') return (row.markedToday || 0) > 0;
-      if (dayEndPreviewFilter === 'unmarked') return (row.pendingToday || 0) > 0;
+      if (dayEndPreviewFilter === 'marked' && (row.markedToday || 0) === 0) return false;
+      if (dayEndPreviewFilter === 'unmarked' && (row.pendingToday || 0) === 0) return false;
+
+      if (dayEndFilters.college && row.college !== dayEndFilters.college) return false;
+      if (dayEndFilters.batch && row.batch !== dayEndFilters.batch) return false;
+      if (dayEndFilters.course && row.course !== dayEndFilters.course) return false;
+      if (dayEndFilters.branch && row.branch !== dayEndFilters.branch) return false;
+      if (dayEndFilters.year && String(row.year) !== String(dayEndFilters.year)) return false;
+      if (dayEndFilters.semester && String(row.semester) !== String(dayEndFilters.semester)) return false;
+
       return true;
     });
 
@@ -209,7 +323,37 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       rows.sort((a, b) => (a.course || '').localeCompare(b.course || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
     }
     return rows;
-  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy]);
+  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy, dayEndFilters]);
+
+  // Calculate filtered stats based on table header selections
+  const filteredStats = useMemo(() => {
+    const filteredRows = dayEndGroupedDisplay;
+    const totalStudents = filteredRows.reduce((sum, row) => sum + (row.totalStudents || 0), 0);
+    const markedToday = filteredRows.reduce((sum, row) => sum + (row.markedToday || 0), 0);
+    const absentToday = filteredRows.reduce((sum, row) => sum + (row.absentToday || 0), 0);
+    const presentToday = filteredRows.reduce((sum, row) => sum + (row.presentToday || 0), 0);
+    const holidayToday = filteredRows.reduce((sum, row) => sum + (row.holidayToday || 0), 0);
+    const unmarkedToday = filteredRows.reduce((sum, row) => sum + (row.pendingToday || 0), 0);
+
+    // Get holiday reasons from filtered rows
+    const holidayReasons = [...new Set(filteredRows
+      .filter(row => row.holidayReasons)
+      .map(row => row.holidayReasons)
+      .join(', ')
+      .split(', ')
+      .filter(Boolean)
+    )].join(', ');
+
+    return {
+      totalStudents,
+      markedToday,
+      absentToday,
+      presentToday,
+      holidayToday,
+      unmarkedToday,
+      holidayReason: holidayReasons || null
+    };
+  }, [dayEndGroupedDisplay]);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -239,7 +383,6 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const [showReportModal, setShowReportModal] = useState(false);
   const [attendanceReport, setAttendanceReport] = useState(null);
   const calendarCacheRef = useRef(new Map());
-  const searchEffectInitialized = useRef(false);
 
   const user = useAuthStore((state) => state.user);
   const isAdmin = isFullAccessRole(user?.role);
@@ -272,13 +415,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     const loadingSetter = applyToHeader
       ? setCalendarLoading
       : applyToModal
-      ? setCalendarViewLoading
-      : null;
+        ? setCalendarViewLoading
+        : null;
     const errorSetter = applyToHeader
       ? setCalendarError
       : applyToModal
-      ? setCalendarViewError
-      : null;
+        ? setCalendarViewError
+        : null;
 
     if (loadingSetter) loadingSetter(true);
     if (errorSetter) errorSetter(null);
@@ -399,20 +542,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     // Allow saving if there are students, even if no changes detected
     // This ensures attendance can be saved even when all students are present
     if (students.length === 0) return false;
-    
+
     // Check if there are any changes
     const hasStatusChanges = students.some((student) => {
       const current = effectiveStatus(student.id);
       const initial = initialStatusMap[student.id] || 'present';
       return current !== initial;
     });
-    
+
     // Also check if there are students that need to be saved (not yet marked)
     // A student needs to be saved if they don't have an initial status (not yet marked in DB)
     const hasUnmarkedStudents = students.some((student) => {
       return initialStatusMap[student.id] === undefined;
     });
-    
+
     return hasStatusChanges || hasUnmarkedStudents;
   }, [students, statusMap, initialStatusMap]);
 
@@ -515,19 +658,19 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     const combined = [
       ...(Array.isArray(calendarInfo.publicHolidays)
         ? calendarInfo.publicHolidays.map((holiday) => ({
-            date: holiday.date,
-            label: holiday.localName || holiday.name,
-            type: 'public',
-            details: holiday
-          }))
+          date: holiday.date,
+          label: holiday.localName || holiday.name,
+          type: 'public',
+          details: holiday
+        }))
         : []),
       ...(Array.isArray(calendarInfo.customHolidays)
         ? calendarInfo.customHolidays.map((holiday) => ({
-            date: holiday.date,
-            label: holiday.title || 'Institute Holiday',
-            type: 'custom',
-            details: holiday
-          }))
+          date: holiday.date,
+          label: holiday.title || 'Institute Holiday',
+          type: 'custom',
+          details: holiday
+        }))
         : [])
     ].filter((entry) => entry.date >= todayKey);
 
@@ -559,8 +702,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const editingLockReason = nonWorkingDayDetails.isNonWorkingDay
     ? 'Attendance is disabled on holidays.'
     : !isToday
-    ? 'Attendance can only be recorded for today.'
-    : null;
+      ? 'Attendance can only be recorded for today.'
+      : null;
 
   // Show holiday alert when date is a holiday (show every time page loads on a holiday)
   useEffect(() => {
@@ -571,22 +714,22 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
     // Check multiple sources for holiday status
     // Priority: selectedDateHolidayInfo (from attendance API) > nonWorkingDayDetails > calendarInfo
-    const isHoliday = 
+    const isHoliday =
       selectedDateHolidayInfo?.isNonWorkingDay ||
       !!selectedDateHolidayInfo?.customHoliday ||
       !!selectedDateHolidayInfo?.publicHoliday ||
-      nonWorkingDayDetails.isNonWorkingDay || 
+      nonWorkingDayDetails.isNonWorkingDay ||
       selectedDateIsSunday ||
       !!customHolidayForDate ||
       publicHolidayMatches.length > 0;
 
     // Show alert if it's a holiday and attendance data has loaded
     // Don't wait for calendar data if we have holiday info from attendance API
-    const hasHolidayInfoFromAPI = !!selectedDateHolidayInfo?.isNonWorkingDay || 
-                                   !!selectedDateHolidayInfo?.customHoliday ||
-                                   !!selectedDateHolidayInfo?.publicHoliday;
+    const hasHolidayInfoFromAPI = !!selectedDateHolidayInfo?.isNonWorkingDay ||
+      !!selectedDateHolidayInfo?.customHoliday ||
+      !!selectedDateHolidayInfo?.publicHoliday;
     const calendarReady = hasHolidayInfoFromAPI || calendarMonthLoaded || calendarInfo.month === calendarMonthKey;
-    
+
     if (isHoliday && !loading && calendarReady) {
       // Small delay to ensure UI is ready
       const timer = setTimeout(() => {
@@ -595,19 +738,19 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           setHolidayAlertShown(true);
         }
       }, 800);
-      
+
       return () => clearTimeout(timer);
     } else {
       setShowHolidayAlert(false);
     }
   }, [
-    isAdmin, 
-    nonWorkingDayDetails.isNonWorkingDay, 
+    isAdmin,
+    nonWorkingDayDetails.isNonWorkingDay,
     selectedDateHolidayInfo,
     selectedDateIsSunday,
     customHolidayForDate,
     publicHolidayMatches,
-    attendanceDate, 
+    attendanceDate,
     holidayAlertShown,
     loading,
     calendarMonthLoaded,
@@ -644,7 +787,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     try {
       // Use override filters if provided, otherwise use current filters
       const filtersToUse = filtersOverride || filters;
-      
+
       const cacheKey = JSON.stringify({
         batch: filtersToUse.batch,
         course: filtersToUse.course,
@@ -665,12 +808,12 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filtersToUse.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', filtersToUse.course);
       if (filtersToUse.branch && excludeField !== 'branch') params.append('branch', filtersToUse.branch);
       // Note: year and semester are not included so they cascade properly
-      
+
       const [filtersResponse, coursesResponse] = await Promise.all([
         api.get(`/attendance/filters?${params.toString()}`),
         api.get('/courses', { params: { includeInactive: false } })
       ]);
-      
+
       if (filtersResponse.data?.success) {
         const data = filtersResponse.data.data || {};
         const nextOptions = {
@@ -692,7 +835,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (coursesResponse.data?.success) {
         setCoursesWithBranches(coursesResponse.data.data || []);
       }
-      
+
       // Keep cache bounded
       if (filterOptionsCacheRef.current.size > 30) {
         const firstKey = filterOptionsCacheRef.current.keys().next().value;
@@ -731,10 +874,26 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     setSelectedDateHolidayInfo(cacheEntry.holidayInfo || null);
   };
 
+  // Helper function to extract holiday reason from grouped data
+  const extractHolidayReason = (groupedData) => {
+    if (!Array.isArray(groupedData) || groupedData.length === 0) {
+      return null;
+    }
+
+    // Find the first non-null holiday reason
+    for (const item of groupedData) {
+      if (item.holidayReasons && item.holidayReasons.trim()) {
+        return item.holidayReasons.trim();
+      }
+    }
+
+    return null;
+  };
+
   const handleDayEndReport = async () => {
     // If modal is already open, just return (prevent multiple opens)
     if (dayEndReportOpen) return;
-    
+
     setDayEndReportLoading(true);
     try {
       const params = {
@@ -768,6 +927,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const markedToday = presentToday + absentToday + holidayToday;
       const unmarkedToday = Math.max(0, totalStudents - markedToday);
 
+      const groupedData = summary.groupedSummary || [];
+      setDayEndGrouped(groupedData);
+
       setDayEndReportData({
         totalStudents,
         presentToday,
@@ -776,9 +938,29 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         markedToday,
         unmarkedToday,
         filtersSnapshot: { ...filters },
-        date: attendanceDate
+        date: attendanceDate,
+        holidayReason: extractHolidayReason(groupedData)
       });
-      setDayEndGrouped(summary.groupedSummary || []);
+
+      // Extract unique filter options from the data
+      const colleges = [...new Set(groupedData.map(item => item.college).filter(Boolean))].sort();
+      const batches = [...new Set(groupedData.map(item => item.batch).filter(Boolean))].sort();
+      const courses = [...new Set(groupedData.map(item => item.course).filter(Boolean))].sort();
+      // Branches will be filtered dynamically based on college and course selections
+      const branches = [...new Set(groupedData.map(item => item.branch).filter(Boolean))].sort();
+      // Backend returns 'year' and 'semester', not 'currentYear' and 'currentSemester'
+      const years = [...new Set(groupedData.map(item => item.year || item.currentYear).filter(Boolean))].sort();
+      const semesters = [...new Set(groupedData.map(item => item.semester || item.currentSemester).filter(Boolean))].sort();
+
+      setDayEndFilterOptions({
+        colleges,
+        batches,
+        courses,
+        branches,
+        years,
+        semesters,
+        allData: groupedData // Store all data for cascading filters
+      });
       setDayEndReportOpen(true);
     } catch (error) {
       console.error('Day-end report error:', error);
@@ -791,17 +973,19 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   const handleDayEndDownload = async (format = 'xlsx') => {
     try {
       const params = new URLSearchParams();
-      params.append('fromDate', attendanceDate);
-      params.append('toDate', attendanceDate);
+      params.append('date', attendanceDate);
       params.append('format', format);
       params.append('student_status', 'Regular');
-      if (filters.batch) params.append('batch', filters.batch);
-      if (filters.course) params.append('course', filters.course);
-      if (filters.branch) params.append('branch', filters.branch);
-      if (filters.currentYear) params.append('year', filters.currentYear);
-      if (filters.currentSemester) params.append('semester', filters.currentSemester);
+      params.append('include_holiday_reason', 'true'); // Include holiday reasons in download
+      // Use dayEndFilters instead of filters for table header selections
+      if (dayEndFilters.college) params.append('college', dayEndFilters.college);
+      if (dayEndFilters.batch) params.append('batch', dayEndFilters.batch);
+      if (dayEndFilters.course) params.append('course', dayEndFilters.course);
+      if (dayEndFilters.branch) params.append('branch', dayEndFilters.branch);
+      if (dayEndFilters.year) params.append('year', dayEndFilters.year);
+      if (dayEndFilters.semester) params.append('semester', dayEndFilters.semester);
 
-      const response = await api.get(`/attendance/download?${params.toString()}`, {
+      const response = await api.get(`/attendance/day-end-download?${params.toString()}`, {
         responseType: 'blob'
       });
 
@@ -813,12 +997,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `attendance_report_${attendanceDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      const fileName = `day_end_report_${attendanceDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.download = fileName;
       link.click();
       window.URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${format.toUpperCase()} report`);
     } catch (error) {
       console.error('Download report error:', error);
-      toast.error('Unable to download report');
+      toast.error(error.response?.data?.message || 'Unable to download report');
     }
   };
 
@@ -860,17 +1046,51 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       toast.error('Select year and semester to mark no class work');
       return;
     }
-    const records = students
-      .filter((s) => Number.isInteger(s.id))
-      .map((s) => ({ studentId: s.id, status: 'holiday' }));
-    if (records.length === 0) {
-      toast.error('No students found to mark as holiday');
-      return;
+
+    // Fetch ALL students matching the filters from backend (not just loaded ones)
+    // This ensures we mark all students, not just the 50 currently loaded
+    setMarkHolidayLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('date', attendanceDate);
+
+      // Add all filter parameters
+      if (filters.batch) params.append('batch', filters.batch);
+      if (filters.course) params.append('course', filters.course);
+      if (filters.branch) params.append('branch', filters.branch);
+      if (filters.currentYear) params.append('currentYear', filters.currentYear);
+      if (filters.currentSemester) params.append('currentSemester', filters.currentSemester);
+
+      // Use a very large limit to get all students matching the filters
+      params.append('limit', '10000');
+      params.append('offset', '0');
+
+      const response = await api.get(`/attendance?${params.toString()}`);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Failed to fetch students');
+      }
+
+      const allFilteredStudents = response.data.data?.students || [];
+      const records = allFilteredStudents
+        .filter((s) => Number.isInteger(s.id))
+        .map((s) => ({ studentId: s.id, status: 'holiday' }));
+
+      if (records.length === 0) {
+        toast.error('No students found to mark as holiday');
+        setMarkHolidayLoading(false);
+        return;
+      }
+
+      // Show modal to enter holiday reason
+      setPendingHolidayRecords(records);
+      setHolidayReason('');
+      setHolidayReasonModalOpen(true);
+    } catch (error) {
+      console.error('Failed to fetch students for holiday marking:', error);
+      toast.error(error.response?.data?.message || 'Unable to fetch students');
+    } finally {
+      setMarkHolidayLoading(false);
     }
-    // Show modal to enter holiday reason
-    setPendingHolidayRecords(records);
-    setHolidayReason('');
-    setHolidayReasonModalOpen(true);
   };
 
   const handleConfirmHolidayMarking = async () => {
@@ -885,10 +1105,28 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         ...r,
         holidayReason: holidayReason.trim()
       }));
+
+      // Debug: Log what we're sending to backend
+      console.log('Sending holiday records to backend:', {
+        attendanceDate,
+        recordsCount: records.length,
+        sampleRecord: records[0],
+        holidayReason: holidayReason.trim(),
+        allRecords: records
+      });
+
       await api.post('/attendance', {
         attendanceDate,
         records
       });
+
+      // Debug: Log the response from backend after marking
+      console.log('Backend response after marking holidays:', {
+        success: true,
+        recordsSaved: records.length,
+        holidayReasonSent: holidayReason.trim()
+      });
+
       toast.success('Marked as no class work for selected filters');
       await loadAttendance();
       setHolidayReason('');
@@ -959,18 +1197,25 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     }
   };
 
-  const loadAttendance = async (pageOverride = null) => {
-    setLoading(true);
-    setSelectedDateHolidayInfo(null);
-    // Clear statistics and total students when loading starts to show loading state
-    setAttendanceStatistics({
-      total: 0,
-      present: 0,
-      absent: 0,
-      marked: 0,
-      unmarked: 0
-    });
-    setTotalStudents(0); // Clear total students count to show loading state
+  const loadAttendance = async (pageOverride = null, append = false) => {
+    // If appending (infinite scroll), use loadingMore instead of loading
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setSelectedDateHolidayInfo(null);
+      // Clear statistics and total students when loading starts to show loading state
+      setAttendanceStatistics({
+        total: 0,
+        present: 0,
+        absent: 0,
+        marked: 0,
+        unmarked: 0
+      });
+      setTotalStudents(0); // Clear total students count to show loading state
+      setLoadedPages(1); // Reset loaded pages when starting fresh
+    }
+
     try {
       // Cancel any in-flight attendance request to avoid queueing when filters change rapidly
       if (pendingRequestRef.current) {
@@ -981,7 +1226,23 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       const controller = new AbortController();
       pendingRequestRef.current = controller;
 
-      const pageToUse = pageOverride !== null ? pageOverride : currentPage;
+      // Check if filters are applied (excluding search filters like studentName and parentMobile)
+      const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+
+      // When filters are applied, use infinite scroll with 50 students per page
+      // When no filters, use pagination normally
+      let pageToUse;
+      if (hasFilters) {
+        if (append) {
+          // When appending, load the next page
+          pageToUse = loadedPages + 1;
+        } else {
+          // When starting fresh, reset to page 1
+          pageToUse = 1;
+        }
+      } else {
+        pageToUse = pageOverride !== null ? pageOverride : currentPage;
+      }
       const cacheKey = buildCacheKey(pageToUse);
 
       // Check cache and use it immediately if fresh, otherwise continue with fetch
@@ -1010,16 +1271,15 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
-      // Check if any filters are applied (batch, course, branch, year, semester)
-      // If filters are applied, load ALL students without pagination
-      const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
-      
+      // When filters are applied, use infinite scroll with 50 students per page
+      // When no filters, use pagination normally
       if (hasFilters) {
-        // Load all students when filters are applied - use a very large limit
-        params.append('limit', '10000'); // Large enough to get all students
-        params.append('offset', '0');
+        // Use 50 students per page for infinite scroll when filters are applied
+        const filterPageSize = 50;
+        params.append('limit', filterPageSize.toString());
+        params.append('offset', ((pageToUse - 1) * filterPageSize).toString());
       } else {
-        // Use pagination when no filters are applied
+        // When no filters, use pagination for better performance
         params.append('limit', pageSize.toString());
         params.append('offset', ((pageToUse - 1) * pageSize).toString());
       }
@@ -1029,17 +1289,95 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         throw new Error(response.data?.message || 'Failed to fetch attendance');
       }
 
+      // Debug: Log what we received from backend
+      console.log('Received attendance data from backend:', {
+        success: response.data?.success,
+        totalStudents: response.data?.data?.students?.length,
+        sampleStudents: response.data?.data?.students?.slice(0, 3).map(s => ({
+          id: s.id,
+          name: s.name,
+          attendanceStatus: s.attendance_status,
+          holidayReason: s.holiday_reason,
+          attendanceRecordId: s.attendance_record_id,
+          allFields: Object.keys(s)
+        })),
+        fullResponse: response.data
+      });
+
       const fetchedStudents = (response.data.data?.students || []).map((student) => {
+        // Parse student_data if present to derive statuses
+        let parsedData = {};
+        if (student.student_data) {
+          try {
+            parsedData =
+              typeof student.student_data === 'string'
+                ? JSON.parse(student.student_data || '{}')
+                : student.student_data || {};
+          } catch (_e) {
+            parsedData = {};
+          }
+        }
+
+        const regRaw =
+          student.registration_status ||
+          parsedData['Registration Status'] ||
+          student.registrationStatus ||
+          parsedData.registration_status ||
+          parsedData['Registration Status'] ||
+          '';
+        const registration_status = regRaw && typeof regRaw === 'string'
+          ? regRaw.trim()
+          : regRaw;
+
         // If student has attendanceStatus, use it; otherwise default to 'present' for display
         const status = student.attendanceStatus ? student.attendanceStatus.toLowerCase() : 'present';
+
+        // Enhanced holiday reason mapping - ensure we get it from multiple possible sources
+        let holidayReason = student.holiday_reason || null;
+
+        // If no holiday_reason from main query, try to get it from student_data as fallback
+        if (!holidayReason && parsedData && parsedData.holiday_reason) {
+          holidayReason = parsedData.holiday_reason;
+        }
+
+        // Debug: Log holiday data for investigation
+        if (student.attendanceStatus === 'holiday' || student.holiday_reason || holidayReason) {
+          console.log('Holiday Data Debug:', {
+            studentId: student.id,
+            studentName: student.name,
+            attendanceStatus: student.attendanceStatus,
+            holiday_reason: student.holiday_reason,
+            holidayReason: holidayReason,
+            parsedDataHoliday: parsedData.holiday_reason,
+            originalStudent: student,
+            mappedStatus: status,
+            hasHolidayReason: !!holidayReason,
+            allStudentFields: Object.keys(student)
+          });
+        }
+
         return {
           ...student,
+          registration_status,
           attendanceStatus: status,
+          holidayReason: holidayReason,
           // Normalize admission number field for downstream handlers
           admissionNumber: student.admissionNumber || student.admission_number || student.admissionNo || null,
           // Keep track of whether student was actually marked in DB
           hasAttendanceRecord: !!student.attendanceStatus
         };
+      });
+
+      // Debug: Log the final mapped students
+      console.log('Final mapped students:', {
+        totalMapped: fetchedStudents.length,
+        holidayStudents: fetchedStudents.filter(s => s.attendanceStatus === 'holiday').map(s => ({
+          id: s.id,
+          name: s.name,
+          attendanceStatus: s.attendanceStatus,
+          holidayReason: s.holidayReason,
+          hasHolidayReason: !!s.holidayReason
+        }))
       });
 
       const statusSnapshot = {};
@@ -1075,7 +1413,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
       // Get statistics from API response (based on total students, not just current page)
       const statistics = response.data?.data?.statistics;
-      
+
       // If statistics not provided, calculate defaults
       let finalStatistics;
       if (!statistics) {
@@ -1096,21 +1434,42 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         };
       }
 
-      setStudents(fetchedStudents);
-      setStatusMap(statusSnapshot);
-      setInitialStatusMap({ ...statusSnapshot });
+      // Handle appending for infinite scroll vs replacing
+      if (append && hasFilters) {
+        // Append new students to existing list
+        setStudents(prevStudents => {
+          // Avoid duplicates by checking IDs
+          const existingIds = new Set(prevStudents.map(s => s.id));
+          const newStudents = fetchedStudents.filter(s => !existingIds.has(s.id));
+          const updatedStudents = [...prevStudents, ...newStudents];
+          // Update hasMore based on whether we got a full page and if there are more to load
+          setHasMore(fetchedStudents.length === 50 && updatedStudents.length < total);
+          return updatedStudents;
+        });
+        // Merge status maps
+        setStatusMap(prev => ({ ...prev, ...statusSnapshot }));
+        setInitialStatusMap(prev => ({ ...prev, ...statusSnapshot }));
+        setSmsStatusMap(prev => ({ ...prev, ...newSmsStatusMap }));
+        setLoadedPages(pageToUse);
+      } else {
+        // Replace students (initial load or no filters)
+        setStudents(fetchedStudents);
+        setStatusMap(statusSnapshot);
+        setInitialStatusMap({ ...statusSnapshot });
+        setSmsStatusMap(newSmsStatusMap);
+        if (hasFilters) {
+          setLoadedPages(1);
+          // Check if there are more pages to load
+          setHasMore(fetchedStudents.length === 50 && fetchedStudents.length < total);
+        }
+      }
+
       setTotalStudents(total);
       setAttendanceStatistics(finalStatistics);
-      
-      // When filters are applied, reset to page 1 since we're loading all students
-      // Reuse hasFilters variable declared earlier in the function
-      if (hasFilters) {
-        setCurrentPage(1);
-      } else {
-        setCurrentPage(pageToUse);
-      }
+
+      // Always set current page to the page we just loaded
+      setCurrentPage(pageToUse);
       setSmsResults([]);
-      setSmsStatusMap(newSmsStatusMap); // Populate SMS status from API response
       setLastUpdatedAt(null); // Clear last updated when loading new data
 
       if (response.data?.data?.holiday) {
@@ -1133,12 +1492,12 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         const firstKey = attendanceCache.current.keys().next().value;
         attendanceCache.current.delete(firstKey);
       }
-      
+
       // Reset pending filter when loading new data if no pending students
       if (pendingFilter !== 'all' && finalStatistics.unmarked === 0) {
         setPendingFilter('all');
       }
-      
+
       // Return statistics so we can check if all batches are marked after save
       return finalStatistics;
     } catch (error) {
@@ -1147,26 +1506,34 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         return;
       }
       console.error('Attendance fetch failed:', error);
-      toast.error(error.response?.data?.message || 'Unable to load attendance');
-      setStudents([]);
-      setStatusMap({});
-      setInitialStatusMap({});
-      setTotalStudents(0);
-      setSelectedDateHolidayInfo(null);
-      // Keep statistics cleared on error to show loading state
-      setAttendanceStatistics({
-        total: 0,
-        present: 0,
-        absent: 0,
-        marked: 0,
-        unmarked: 0
-      });
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        toast.error(error.response?.data?.message || 'Unable to load attendance');
+        setStudents([]);
+        setStatusMap({});
+        setInitialStatusMap({});
+        setTotalStudents(0);
+        setSelectedDateHolidayInfo(null);
+        // Keep statistics cleared on error to show loading state
+        setAttendanceStatistics({
+          total: 0,
+          present: 0,
+          absent: 0,
+          marked: 0,
+          unmarked: 0
+        });
+      }
     } finally {
       // Only clear loading if this is the latest request
       pendingRequestRef.current = null;
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
-    
+
     // Return default statistics if function completes without returning
     return {
       total: 0,
@@ -1176,6 +1543,46 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       unmarked: 0
     };
   };
+
+  // Load more students for infinite scroll
+  const loadMoreStudents = async () => {
+    const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+    if (!hasFilters || loadingMore || !hasMore) {
+      return;
+    }
+    await loadAttendance(null, true);
+  };
+
+  // Set up Intersection Observer for infinite scroll when filters are applied
+  useEffect(() => {
+    const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+
+    if (!hasFilters || !scrollObserverRef.current) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && hasMore && !loadingMore) {
+          loadMoreStudents();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '100px', // Start loading 100px before reaching the bottom
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(scrollObserverRef.current);
+
+    return () => {
+      if (scrollObserverRef.current) {
+        observer.unobserve(scrollObserverRef.current);
+      }
+    };
+  }, [filters.batch, filters.course, filters.branch, filters.currentYear, filters.currentSemester, hasMore, loadingMore, students.length]);
 
   useEffect(() => {
     if (!calendarMonthKey) return;
@@ -1196,9 +1603,16 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
   useEffect(() => {
     const initializeAttendance = async () => {
-      await loadFilterOptions();
+      // Load filter options and attendance in parallel for faster initial load
+      // This reduces the time to first meaningful paint
+      const [filterOptionsResult] = await Promise.allSettled([
+        loadFilterOptions()
+      ]);
+
       filtersLoadedRef.current = true;
-      // Load attendance immediately after filters are loaded
+
+      // Load attendance immediately, even if filter options are still loading
+      // This ensures data appears as quickly as possible
       setCurrentPage(1);
       loadAttendance(1);
     };
@@ -1214,12 +1628,21 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.batch, filters.course, filters.branch]);
 
-  // Load attendance immediately when filters change (only after initial load)
+  // Load attendance with debouncing when filters change (only after initial load)
+  // This prevents excessive API calls when filters change rapidly
   useEffect(() => {
-    if (filtersLoadedRef.current) {
-      setCurrentPage(1);
+    if (!filtersLoadedRef.current) return;
+
+    setCurrentPage(1);
+    setLoadedPages(1); // Reset loaded pages when filters change
+    setHasMore(false); // Reset hasMore when filters change
+
+    // Debounce filter changes to avoid excessive API calls
+    const debounceTimer = setTimeout(() => {
       loadAttendance(1);
-    }
+    }, 300); // 300ms debounce for filter changes
+
+    return () => clearTimeout(debounceTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     attendanceDate,
@@ -1252,12 +1675,12 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         ...prev,
         [field]: value || '' // Clear filter if empty value
       };
-      
+
       // Remove empty filters
       if (!newFilters[field] || newFilters[field] === '') {
         delete newFilters[field];
       }
-      
+
       // Clear dependent filters when parent filter changes
       if (field === 'course') {
         // When course changes, clear branch
@@ -1270,7 +1693,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         // When year changes, clear semester
         delete newFilters.currentSemester;
       }
-      
+
       return newFilters;
     });
   };
@@ -1293,7 +1716,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     setColumnOrder((prev) => {
       const index = prev.indexOf(columnKey);
       if (index === -1) return prev;
-      
+
       const newOrder = [...prev];
       if (direction === 'left' && index > 0) {
         [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
@@ -1367,11 +1790,11 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   // Sort students based on sortConfig
   const sortedStudents = useMemo(() => {
     if (!sortConfig.field) return filteredStudents;
-    
+
     return [...students].sort((a, b) => {
       let aValue, bValue;
       let isNumeric = false; // Flag to determine if we should sort numerically
-      
+
       switch (sortConfig.field) {
         case 'student':
           // Name: string sorting (alphabetical)
@@ -1386,13 +1809,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           const bPin = String(b.pinNumber || '');
           const aSeries = extractPinSeries(aPin);
           const bSeries = extractPinSeries(bPin);
-          
+
           // If series are different, sort by series first
           if (aSeries !== bSeries) {
             const seriesComparison = aSeries.localeCompare(bSeries);
             return sortConfig.direction === 'asc' ? seriesComparison : -seriesComparison;
           }
-          
+
           // Same series, sort by numeric part
           aValue = extractPinNumeric(aPin);
           bValue = extractPinNumeric(bPin);
@@ -1453,14 +1876,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         default:
           return 0;
       }
-      
+
       // Handle numeric sorting
       if (isNumeric) {
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       }
-      
+
       // Handle string sorting
       const comparison = String(aValue).localeCompare(String(bValue));
       return sortConfig.direction === 'asc' ? comparison : -comparison;
@@ -1630,8 +2053,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         if (selectedDateHolidayInfo?.publicHoliday) {
           reasons.push(
             selectedDateHolidayInfo.publicHoliday.localName ||
-              selectedDateHolidayInfo.publicHoliday.name ||
-              'Public holiday'
+            selectedDateHolidayInfo.publicHoliday.name ||
+            'Public holiday'
           );
         }
         reasons.push(
@@ -1682,8 +2105,8 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         if (selectedDateHolidayInfo?.publicHoliday) {
           reasons.push(
             selectedDateHolidayInfo.publicHoliday.localName ||
-              selectedDateHolidayInfo.publicHoliday.name ||
-              'Public holiday'
+            selectedDateHolidayInfo.publicHoliday.name ||
+            'Public holiday'
           );
         }
 
@@ -1692,13 +2115,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         setSelectedDateHolidayInfo(
           isStillHoliday
             ? {
-                date,
-                isNonWorkingDay: true,
-                isSunday: selectedDateIsSunday,
-                publicHoliday: selectedDateHolidayInfo?.publicHoliday || null,
-                customHoliday: null,
-                reasons
-              }
+              date,
+              isNonWorkingDay: true,
+              isSunday: selectedDateIsSunday,
+              publicHoliday: selectedDateHolidayInfo?.publicHoliday || null,
+              customHoliday: null,
+              reasons
+            }
             : null
         );
       }
@@ -1749,7 +2172,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
     }
 
     const report = prepareAttendanceReport();
-    
+
     // Check if there are any changes or unmarked students
     const hasChanges = students.some((student) => {
       const current = effectiveStatus(student.id);
@@ -1779,7 +2202,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
       .map((student) => {
         const current = effectiveStatus(student.id);
         const initial = initialStatusMap[student.id];
-        
+
         // Save if:
         // 1. Status has changed from initial, OR
         // 2. Student doesn't have an initial status (not yet marked in database)
@@ -1793,9 +2216,9 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           status: current,
           studentName: student.studentName,
           parentMobile: student.parentMobile1 || student.parentMobile2,
-        batch: student.batch,
-        course: student.course,
-        branch: student.branch,
+          batch: student.batch,
+          course: student.course,
+          branch: student.branch,
           currentYear: student.currentYear,
           currentSemester: student.currentSemester
         };
@@ -1828,9 +2251,20 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         }))
       );
 
+      // Invalidate cache for current date to ensure fresh data after save
+      const cacheKey = buildCacheKey(currentPage);
+      attendanceCache.current.delete(cacheKey);
+      // Also invalidate all cache entries for this date to ensure consistency
+      const dateCacheKey = JSON.stringify({ attendanceDate, page: null });
+      for (const key of attendanceCache.current.keys()) {
+        if (key.includes(attendanceDate)) {
+          attendanceCache.current.delete(key);
+        }
+      }
+
       // Reload attendance to get updated statistics
       const updatedStats = await loadAttendance(currentPage);
-      
+
       // Check if all batches are marked - if unmarked count is 0, show day-end report popup
       if (updatedStats && updatedStats.unmarked === 0 && updatedStats.total > 0 && !allBatchesMarkedModalOpen) {
         // Show day-end report popup after a short delay to let the user see the success message
@@ -1842,7 +2276,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
       const results = response.data.data?.smsResults || [];
       setSmsResults(results);
-      
+
       // Build SMS status map for quick lookup
       const newSmsStatusMap = {};
       results.forEach(result => {
@@ -1857,7 +2291,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         };
       });
       setSmsStatusMap(newSmsStatusMap);
-      
+
       setSmsCurrentPage(1);
       if (results.length > 0) {
         setSmsModalOpen(true);
@@ -1890,7 +2324,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
   // Retry SMS for a specific student
   const handleRetrySms = async (student) => {
     if (!student || retryingSmsFor) return;
-    
+
     setRetryingSmsFor(student.id);
     try {
       const response = await api.post('/attendance/retry-sms', {
@@ -1899,10 +2333,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
         attendanceDate: attendanceDate,
         parentMobile: student.parentMobile1 || student.parentMobile2
       });
-      
+
       if (response.data?.success) {
         const result = response.data.data;
-        
+
         // Update SMS status map
         setSmsStatusMap(prev => ({
           ...prev,
@@ -1916,14 +2350,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             admissionNumber: student.admissionNumber
           }
         }));
-        
+
         // Update smsResults array
-        setSmsResults(prev => prev.map(r => 
-          r.studentId === student.id 
+        setSmsResults(prev => prev.map(r =>
+          r.studentId === student.id
             ? { ...r, ...result }
             : r
         ));
-        
+
         if (result.success) {
           toast.success(`SMS ${result.mocked ? 'simulated' : 'sent'} to ${result.sentTo || student.parentMobile1}`);
         } else {
@@ -2166,7 +2600,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             <Filter size={16} className="text-gray-600 flex-shrink-0" />
             <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
           </div>
-          
+
           {/* Dropdown Filters - Grid Layout */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
             <select
@@ -2196,13 +2630,13 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
             >
               <option value="">All Courses</option>
-               {filterOptions.courses
-                 .filter((courseOption) => !EXCLUDED_COURSES.has(courseOption))
-                 .map((courseOption) => (
-                   <option key={courseOption} value={courseOption}>
-                     {courseOption}
-                   </option>
-                 ))}
+              {filterOptions.courses
+                .filter((courseOption) => !EXCLUDED_COURSES.has(courseOption))
+                .map((courseOption) => (
+                  <option key={courseOption} value={courseOption}>
+                    {courseOption}
+                  </option>
+                ))}
             </select>
             <select
               value={filters.branch || ''}
@@ -2262,7 +2696,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               </button>
             </div>
           </div>
-          
+
           {/* Search Inputs - Full Width on Mobile */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             <div className="relative">
@@ -2286,7 +2720,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               />
             </div>
           </div>
-          
+
           {/* Action Buttons and Results Count */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 pt-2 border-t border-gray-100">
             <button
@@ -2306,7 +2740,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-sm font-semibold text-white bg-amber-600 rounded-md hover:bg-amber-700 active:bg-amber-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 >
                   {markHolidayLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
-                  Mark Holiday (Year {filters.currentYear}, Sem {filters.currentSemester})
+                  Mark No Class Work (Year {filters.currentYear}, Sem {filters.currentSemester})
                 </button>
               )}
               <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
@@ -2328,203 +2762,322 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
 
       {/* Day End Report Modal */}
       {dayEndReportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-          <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
-            <div className="px-5 py-4 flex items-center justify-between border-b border-gray-200">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setDayEndReportOpen(false);
+            }
+          }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div className="bg-white w-full max-w-[95vw] max-h-[90vh] rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
+            {/* Sticky Header */}
+            <div className="px-5 py-4 flex items-start justify-between border-b border-gray-200 shrink-0 bg-white sticky top-0 z-10">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Day End Report</h3>
                 <p className="text-xs text-gray-500">{dayEndReportData?.date || attendanceDate}</p>
-              </div>
-              <button
-                onClick={() => setDayEndReportOpen(false)}
-                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4 overflow-y-auto">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3">
-                <StatPill label="Total Students" value={dayEndReportData?.totalStudents ?? 0} color="gray" />
-                <StatPill label="Marked Today" value={dayEndReportData?.markedToday ?? 0} color="green" />
-                <StatPill label="Absent Today" value={dayEndReportData?.absentToday ?? 0} color="red" />
-                <StatPill label="Present Today" value={dayEndReportData?.presentToday ?? 0} color="blue" />
-                <StatPill label="Holiday Today" value={dayEndReportData?.holidayToday ?? 0} color="green" />
-                <StatPill label="Unmarked Today" value={dayEndReportData?.unmarkedToday ?? 0} color="amber" />
-              </div>
-              <div className="text-xs text-gray-600 space-y-1">
-                <p className="font-semibold text-gray-800">Filters</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {dayEndReportData?.filtersSnapshot?.batch && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                      Batch: {dayEndReportData.filtersSnapshot.batch}
-                    </span>
-                  )}
-                  {dayEndReportData?.filtersSnapshot?.course && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                      Course: {dayEndReportData.filtersSnapshot.course}
-                    </span>
-                  )}
-                  {dayEndReportData?.filtersSnapshot?.branch && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                      Branch: {dayEndReportData.filtersSnapshot.branch}
-                    </span>
-                  )}
-                  {dayEndReportData?.filtersSnapshot?.currentYear && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                      Year: {dayEndReportData.filtersSnapshot.currentYear}
-                    </span>
-                  )}
-                  {dayEndReportData?.filtersSnapshot?.currentSemester && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
-                      Sem: {dayEndReportData.filtersSnapshot.currentSemester}
-                    </span>
-                  )}
-                  {!dayEndReportData?.filtersSnapshot?.batch &&
-                    !dayEndReportData?.filtersSnapshot?.course &&
-                    !dayEndReportData?.filtersSnapshot?.branch &&
-                    !dayEndReportData?.filtersSnapshot?.currentYear &&
-                    !dayEndReportData?.filtersSnapshot?.currentSemester && (
-                      <span className="text-gray-500">No filters applied (all students)</span>
-                    )}
+
+                {/* Filter Toggles */}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs font-medium text-gray-500">Show:</span>
+                  <div className="inline-flex rounded-md shadow-sm" role="group">
+                    <button
+                      type="button"
+                      onClick={() => setDayEndPreviewFilter('all')}
+                      className={`px-3 py-1 text-xs font-medium rounded-l-md ${dayEndPreviewFilter === 'all'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDayEndPreviewFilter('marked')}
+                      className={`px-3 py-1 text-xs font-medium ${dayEndPreviewFilter === 'marked'
+                        ? 'bg-green-100 text-green-700 border border-green-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border-t border-b border-gray-300'
+                        }`}
+                    >
+                      Marked
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDayEndPreviewFilter('unmarked')}
+                      className={`px-3 py-1 text-xs font-medium rounded-r-md ${dayEndPreviewFilter === 'unmarked'
+                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        }`}
+                    >
+                      Unmarked
+                    </button>
+                  </div>
                 </div>
               </div>
-              {dayEndGrouped.length > 0 && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
-                    <span>Preview</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setDayEndPreviewFilter('all')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'all'
-                            ? 'bg-indigo-100 border-indigo-200 text-indigo-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        All
-                      </button>
-                      <button
-                        onClick={() => setDayEndPreviewFilter('marked')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'marked'
-                            ? 'bg-green-100 border-green-200 text-green-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Marked
-                      </button>
-                      <button
-                        onClick={() => setDayEndPreviewFilter('unmarked')}
-                        className={`px-2 py-0.5 rounded border text-[11px] ${
-                          dayEndPreviewFilter === 'unmarked'
-                            ? 'bg-amber-100 border-amber-200 text-amber-700'
-                            : 'bg-white border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        Unmarked
-                      </button>
-                    </div>
-                    <div className="ml-auto flex items-center gap-1 text-[11px] font-normal">
-                      <span className="text-gray-600">Sort</span>
-                      <select
-                        value={dayEndSortBy}
-                        onChange={(e) => setDayEndSortBy(e.target.value)}
-                        className="border border-gray-300 rounded px-2 py-1 text-[11px] bg-white"
-                      >
-                        <option value="none">None</option>
-                        <option value="yearSem">Year / Sem</option>
-                        <option value="branch">Branch</option>
-                        <option value="course">Course</option>
-                      </select>
-                    </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDayEndReportOpen(false)}
+                  className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="p-5">
+                {/* Sticky Stats Section */}
+                <div
+                  ref={dayEndStatsRef}
+                  className="sticky top-0 bg-white z-10 pb-4 border-b border-gray-200 -mx-5 px-5"
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 mb-4">
+                    <StatPill label="Total Students" value={filteredStats.totalStudents} color="gray" />
+                    <StatPill label="Marked Today" value={filteredStats.markedToday} color="green" />
+                    <StatPill label="Absent Today" value={filteredStats.absentToday} color="red" />
+                    <StatPill label="Present Today" value={filteredStats.presentToday} color="blue" />
+                    <StatPill
+                      label={filteredStats.holidayReason ? `Holiday: ${filteredStats.holidayReason.length > 20 ? filteredStats.holidayReason.substring(0, 20) + '...' : filteredStats.holidayReason}` : 'No Class Work Today'}
+                      value={filteredStats.holidayToday}
+                      color="green"
+                      title={filteredStats.holidayReason}
+                    />
+                    <StatPill label="Unmarked Today" value={filteredStats.unmarkedToday} color="amber" />
                   </div>
-                  <div className="overflow-x-auto max-h-[50vh]">
-                    <table className="min-w-full text-xs">
-                      <thead className="bg-gray-100 text-gray-700 uppercase">
+                  {/* Table Header - Replaces Filters Section */}
+                  <div className="overflow-x-auto -mx-5 px-5">
+                    <table className="w-full border-collapse table-fixed">
+                      <colgroup>
+                        <col style={{ width: '180px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '120px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '60px' }} />
+                        <col style={{ width: '60px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '150px' }} />
+                        <col style={{ width: '100px' }} />
+                      </colgroup>
+                      <thead className="bg-gray-50 sticky" style={{ position: 'sticky', top: `${statsSectionHeight}px`, zIndex: 20 }}>
                         <tr>
-                          <th className="px-3 py-2 text-left">College</th>
-                          <th className="px-3 py-2 text-left">Batch</th>
-                          <th className="px-3 py-2 text-left">Course</th>
-                          <th className="px-3 py-2 text-left">Branch</th>
-                          <th className="px-3 py-2 text-center">Year</th>
-                          <th className="px-3 py-2 text-center">Sem</th>
-                          <th className="px-3 py-2 text-right">Students</th>
-                          <th className="px-3 py-2 text-right">Marked</th>
-                          <th className="px-3 py-2 text-right">Pending</th>
-                          <th className="px-3 py-2 text-right">Absent</th>
-                          <th className="px-3 py-2 text-right">Holiday</th>
-                          <th className="px-3 py-2 text-right">Present</th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.college}
+                              onChange={(e) => {
+                                setDayEndFilters(prev => ({ ...prev, college: e.target.value, course: '', branch: '' }));
+                              }}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs truncate"
+                            >
+                              <option value="">COLLEGE</option>
+                              {dayEndFilterOptions.colleges.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.batch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, batch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BATCH</option>
+                              {dayEndFilterOptions.batches.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.course}
+                              onChange={(e) => {
+                                setDayEndFilters(prev => ({ ...prev, course: e.target.value, branch: '' }));
+                              }}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">COURSE</option>
+                              {filteredCourses.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.branch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, branch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BRANCH</option>
+                              {filteredBranches.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-1 py-2 text-center align-top">
+                            <select
+                              value={dayEndFilters.year}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, year: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">YEAR</option>
+                              {dayEndFilterOptions.years.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-1 py-2 text-center align-top">
+                            <select
+                              value={dayEndFilters.semester}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, semester: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">SEM</option>
+                              {dayEndFilterOptions.semesters.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Students</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Present</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Absent</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Marked</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Pending</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">No Class Work</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Time Stamp</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {dayEndGroupedDisplay
-                          .filter((row) => {
-                            if (dayEndPreviewFilter === 'marked') return (row.markedToday || 0) > 0;
-                            if (dayEndPreviewFilter === 'unmarked') return (row.pendingToday || 0) > 0;
-                            return true;
-                          })
-                          .map((row, idx) => (
-                          <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white">
-                            <td className="px-3 py-2 text-gray-800">{row.college || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.batch || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.course || '—'}</td>
-                            <td className="px-3 py-2 text-gray-800">{row.branch || '—'}</td>
-                            <td className="px-3 py-2 text-center text-gray-800">{row.year || '—'}</td>
-                            <td className="px-3 py-2 text-center text-gray-800">{row.semester || '—'}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-gray-900">{row.totalStudents ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-green-700 font-semibold">{row.markedToday ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-amber-700 font-semibold">{row.pendingToday ?? 0}</td>
-                          <td className="px-3 py-2 text-right text-red-700 font-semibold">{row.absentToday ?? 0}</td>
-                            <td className="px-3 py-2 text-right text-green-700 font-semibold">
-                              {row.holidayToday ?? 0}
-                              {row.holidayReasons && (
-                                <div className="text-[10px] text-gray-600 mt-1 font-normal italic">
-                                  {row.holidayReasons}
-                                </div>
-                              )}
-                            </td>
-                          <td className="px-3 py-2 text-right text-blue-700 font-semibold">{row.presentToday ?? 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
                     </table>
                   </div>
                 </div>
-              )}
-              <div className="flex justify-end">
-                <div className="flex items-center gap-2 mr-auto">
-                  <button
-                    onClick={() => handleDayEndDownload('xlsx')}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
-                  >
-                    <Download size={12} />
-                    Excel
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSendDayEndReports}
-                    disabled={sendingReports}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {sendingReports ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Mail size={14} />
-                        Send Reports
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setDayEndReportOpen(false)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    Close
-                  </button>
+                <>
+                  {dayEndGroupedDisplay.length > 0 ? (
+                    <div className="-mx-5">
+                      <div className="overflow-x-auto px-5">
+                        <table className="w-full divide-y divide-gray-200 border-collapse table-fixed">
+                          <colgroup>
+                            <col style={{ width: '180px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '120px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '60px' }} />
+                            <col style={{ width: '60px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '150px' }} />
+                            <col style={{ width: '100px' }} />
+                          </colgroup>
+                          <tbody className="divide-y divide-gray-100">
+                            {dayEndGroupedDisplay.map((row, idx) => (
+                              <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white hover:bg-gray-50">
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.college || ''}>
+                                  {row.college || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.batch || ''}>
+                                  {row.batch || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.course || ''}>
+                                  {row.course || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.branch || ''}>
+                                  {row.branch || '—'}
+                                </td>
+                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
+                                  {row.year || '—'}
+                                </td>
+                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
+                                  {row.semester || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
+                                  {row.totalStudents ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
+                                  {row.presentToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
+                                  {row.absentToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                  {row.markedToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
+                                  {row.pendingToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                  <div className="flex flex-col items-end">
+                                    <span>{row.holidayToday ?? 0}</span>
+                                    {row.holidayReasons && (
+                                      <span className="text-xs text-gray-600 font-normal truncate max-w-full" title={row.holidayReasons}>
+                                        {row.holidayReasons.length > 20 ? `${row.holidayReasons.substring(0, 20)}...` : row.holidayReasons}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-2 py-2 text-right text-gray-600 text-xs">
+                                  {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No records found matching the current filters
+                    </div>
+                  )}
+                </>
+                {/* Fixed Download Buttons at Bottom */}
+                <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-3 flex items-center justify-between mt-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDayEndDownload('pdf')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={14} />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => handleDayEndDownload('xlsx')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={14} />
+                      Excel
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSendDayEndReports}
+                      disabled={sendingReports}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-xs"
+                    >
+                      {sendingReports ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail size={14} />
+                          Send Reports
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setDayEndReportOpen(false)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2691,7 +3244,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
             </div>
           </div>
         </div>
-        <div 
+        <div
           className={`bg-white border ${pendingCount > 0 && !loading ? 'border-amber-300' : 'border-gray-200'} rounded-xl shadow-sm p-4 ${pendingCount > 0 && !loading ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
           onClick={() => {
             if (pendingCount > 0 && !loading) {
@@ -2763,11 +3316,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
               type="button"
               onClick={handleSave}
               disabled={!hasChanges || saving || editingLocked}
-              className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold transition-colors touch-manipulation min-h-[44px] ${
-                hasChanges && !saving && !editingLocked
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              }`}
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold transition-colors touch-manipulation min-h-[44px] ${hasChanges && !saving && !editingLocked
+                ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
             >
               {saving ? (
                 <>
@@ -2797,11 +3349,11 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           <div className="py-12 flex flex-col items-center gap-3 text-gray-500">
             <AlertTriangle size={32} />
             <p>
-              {pendingFilter === 'pending' 
-                ? 'No pending students found. All students are marked.' 
+              {pendingFilter === 'pending'
+                ? 'No pending students found. All students are marked.'
                 : pendingFilter === 'marked'
-                ? 'No marked students found.'
-                : 'No students found for the selected filters.'}
+                  ? 'No marked students found.'
+                  : 'No students found for the selected filters.'}
             </p>
             {pendingFilter !== 'all' && (
               <button
@@ -2814,209 +3366,233 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
           </div>
         ) : (
           <>
-          {/* Desktop Table View */}
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  {columnOrder.map((columnKey) => {
-                    const columnConfig = {
-                      student: { label: 'Student', sortable: true },
-                      pin: { label: 'PIN', sortable: true },
-                      registrationStatus: { label: 'Registration Status', sortable: true },
-                      batch: { label: 'Batch', sortable: true },
-                      course: { label: 'Course', sortable: true },
-                      branch: { label: 'Branch', sortable: true },
-                      year: { label: 'Year', sortable: true },
-                      semester: { label: 'Semester', sortable: true },
-                      parentContact: { label: 'Parent Contact', sortable: true },
-                      attendance: { label: 'Attendance', sortable: true },
-                      smsStatus: { label: 'SMS Status', sortable: false },
-                      insights: { label: 'Insights', sortable: false, align: 'right' }
-                    };
-                    const config = columnConfig[columnKey];
-                    if (!config) return null;
-                    
-                    return (
-                      <th key={columnKey} className={`px-4 py-3 ${config.align === 'right' ? 'text-right' : ''}`}>
-                        <div className={`flex items-center gap-2 ${config.align === 'right' ? 'justify-end' : ''}`}>
-                          <div className={`flex items-center gap-1 ${config.align === 'right' ? '' : 'flex-1'}`}>
-                            {config.sortable ? (
-                              <button
-                                onClick={() => handleSort(columnKey)}
-                                className="flex items-center gap-1 hover:text-gray-900 transition-colors"
-                              >
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    {columnOrder.map((columnKey) => {
+                      const columnConfig = {
+                        student: { label: 'Student', sortable: true },
+                        pin: { label: 'PIN', sortable: true },
+                        registrationStatus: { label: 'Registration Status', sortable: true },
+                        batch: { label: 'Batch', sortable: true },
+                        course: { label: 'Course', sortable: true },
+                        branch: { label: 'Branch', sortable: true },
+                        year: { label: 'Year', sortable: true },
+                        semester: { label: 'Semester', sortable: true },
+                        parentContact: { label: 'Parent Contact', sortable: true },
+                        attendance: { label: 'Attendance', sortable: true },
+                        smsStatus: { label: 'SMS Status', sortable: false },
+                        insights: { label: 'Insights', sortable: false, align: 'right' }
+                      };
+                      const config = columnConfig[columnKey];
+                      if (!config) return null;
+
+                      return (
+                        <th key={columnKey} className={`px-4 py-3 ${config.align === 'right' ? 'text-right' : ''}`}>
+                          <div className={`flex items-center gap-2 ${config.align === 'right' ? 'justify-end' : ''}`}>
+                            <div className={`flex items-center gap-1 ${config.align === 'right' ? '' : 'flex-1'}`}>
+                              {config.sortable ? (
+                                <button
+                                  onClick={() => handleSort(columnKey)}
+                                  className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                                >
+                                  <span>{config.label}</span>
+                                  {sortConfig.field === columnKey && (
+                                    <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                                  )}
+                                </button>
+                              ) : (
                                 <span>{config.label}</span>
-                                {sortConfig.field === columnKey && (
-                                  <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
-                                )}
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                onClick={() => moveColumn(columnKey, 'left')}
+                                disabled={columnOrder.indexOf(columnKey) === 0}
+                                className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move left"
+                              >
+                                <ChevronLeft size={12} />
                               </button>
-                            ) : (
-                              <span>{config.label}</span>
-                            )}
+                              <button
+                                onClick={() => moveColumn(columnKey, 'right')}
+                                disabled={columnOrder.indexOf(columnKey) === columnOrder.length - 1}
+                                className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Move right"
+                              >
+                                <ChevronRight size={12} />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex flex-col gap-0.5">
-                            <button
-                              onClick={() => moveColumn(columnKey, 'left')}
-                              disabled={columnOrder.indexOf(columnKey) === 0}
-                              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Move left"
-                            >
-                              <ChevronLeft size={12} />
-                            </button>
-                            <button
-                              onClick={() => moveColumn(columnKey, 'right')}
-                              disabled={columnOrder.indexOf(columnKey) === columnOrder.length - 1}
-                              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Move right"
-                            >
-                              <ChevronRight size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {sortedStudents.map((student) => {
-                  const status = effectiveStatus(student.id);
-                  const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
-                  return (
-                    <tr 
-                      key={student.id} 
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleStudentClick(student)}
-                    >
-                      {columnOrder.map((columnKey) => {
-                        if (columnKey === 'student') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-3">
-                                {renderPhoto(student)}
-                                <div className="font-semibold text-gray-900">
-                                  {student.studentName || 'Unknown Student'}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {sortedStudents.map((student) => {
+                    const status = effectiveStatus(student.id);
+                    const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
+                    return (
+                      <tr
+                        key={student.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => handleStudentClick(student)}
+                      >
+                        {columnOrder.map((columnKey) => {
+                          if (columnKey === 'student') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-3">
+                                  {renderPhoto(student)}
+                                  <div className="font-semibold text-gray-900">
+                                    {student.studentName || 'Unknown Student'}
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'pin') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.pinNumber || 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'registrationStatus') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {(() => {
-                                const raw = (student.registration_status || '').toLowerCase();
-                                const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
-                                const label = isCompleted ? 'Completed' : 'Pending';
-                                const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-                                const handleDoubleClick = async () => {
-                                  const admissionNumber = student.admissionNumber || student.admission_number;
-                                  if (!admissionNumber) {
-                                    toast.error('Missing admission number for update');
-                                    return;
-                                  }
-                                  const targetStatus = isCompleted ? 'pending' : 'completed';
-                                  try {
-                                    const response = await api.put(`/students/${admissionNumber}/registration-status`, {
-                                      registration_status: targetStatus
-                                    });
-                                    if (response.data?.success) {
-                                      setStudents((prev) => prev.map((s) =>
-                                        s.id === student.id ? { ...s, registration_status: targetStatus } : s
-                                      ));
-                                      toast.success(`Registration marked as ${targetStatus}`);
-                                    } else {
-                                      throw new Error(response.data?.message || 'Failed to update status');
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'pin') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.pinNumber || 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'registrationStatus') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {(() => {
+                                  const raw = (student.registration_status || '').toLowerCase();
+                                  const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
+                                  const label = isCompleted ? 'Completed' : 'Pending';
+                                  const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                                  const handleDoubleClick = async () => {
+                                    const admissionNumber = student.admissionNumber || student.admission_number;
+                                    if (!admissionNumber) {
+                                      toast.error('Missing admission number for update');
+                                      return;
                                     }
-                                  } catch (error) {
-                                    // Fallback to generic student update (JSON student_data)
+                                    const targetStatus = isCompleted ? 'pending' : 'completed';
                                     try {
-                                      const fallback = await api.put(`/students/${admissionNumber}`, {
-                                        studentData: {
-                                          'Registration Status': targetStatus,
-                                          registration_status: targetStatus
-                                        }
+                                      const response = await api.put(`/students/${admissionNumber}/registration-status`, {
+                                        registration_status: targetStatus
                                       });
-                                      if (fallback.data?.success) {
+                                      if (response.data?.success) {
                                         setStudents((prev) => prev.map((s) =>
                                           s.id === student.id ? { ...s, registration_status: targetStatus } : s
                                         ));
+
+                                        // Update cache if it exists for current view
+                                        const cacheKey = buildCacheKey(currentPage);
+                                        const cached = attendanceCache.current.get(cacheKey);
+                                        if (cached && cached.students) {
+                                          cached.students = cached.students.map((s) =>
+                                            s.id === student.id ? { ...s, registration_status: targetStatus } : s
+                                          );
+                                          attendanceCache.current.set(cacheKey, cached);
+                                        }
+
                                         toast.success(`Registration marked as ${targetStatus}`);
+                                        invalidateStudents();
                                       } else {
-                                        toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
+                                        throw new Error(response.data?.message || 'Failed to update status');
                                       }
-                                    } catch (fallbackError) {
-                                      toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Update failed'));
+                                    } catch (error) {
+                                      // Fallback to generic student update (JSON student_data)
+                                      try {
+                                        const fallback = await api.put(`/students/${admissionNumber}`, {
+                                          studentData: {
+                                            'Registration Status': targetStatus,
+                                            registration_status: targetStatus
+                                          }
+                                        });
+                                        if (fallback.data?.success) {
+                                          setStudents((prev) => prev.map((s) =>
+                                            s.id === student.id ? { ...s, registration_status: targetStatus } : s
+                                          ));
+
+                                          // Update cache if it exists for current view
+                                          const cacheKey = buildCacheKey(currentPage);
+                                          const cached = attendanceCache.current.get(cacheKey);
+                                          if (cached && cached.students) {
+                                            cached.students = cached.students.map((s) =>
+                                              s.id === student.id ? { ...s, registration_status: targetStatus } : s
+                                            );
+                                            attendanceCache.current.set(cacheKey, cached);
+                                          }
+
+                                          toast.success(`Registration marked as ${targetStatus}`);
+                                          invalidateStudents();
+                                        } else {
+                                          toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
+                                        }
+                                      } catch (fallbackError) {
+                                        toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Update failed'));
+                                      }
                                     }
-                                  }
-                                };
-                                return (
-                                  <span
-                                    onDoubleClick={handleDoubleClick}
-                                    title={!isCompleted ? 'Double-click to mark as completed' : undefined}
-                                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls} select-none cursor-pointer`}
-                                  >
-                                    {label}
-                                  </span>
-                                );
-                              })()}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'batch') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.batch || 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'course') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.course || 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'branch') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.branch || 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'year') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'semester') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'parentContact') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              <div>{parentContact}</div>
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'attendance') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              {/* Attendance status logic:
+                                  };
+                                  return (
+                                    <span
+                                      onDoubleClick={handleDoubleClick}
+                                      title={!isCompleted ? 'Double-click to mark as completed' : undefined}
+                                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls} select-none cursor-pointer`}
+                                    >
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'batch') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.batch || 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'course') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.course || 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'branch') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.branch || 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'year') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'semester') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'parentContact') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                <div>{parentContact}</div>
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'attendance') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                {/* Attendance status logic:
                             - hasDbRecord: student.attendanceStatus is not null (record exists in DB for this date)
                             - statusChanged: current status differs from initial loaded status
                             - justSaved: attendance was saved in this session
@@ -3025,123 +3601,152 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                             1. There's a DB record AND status hasn't been changed locally
                             2. OR attendance was just saved in this session
                         */}
-                        {(() => {
-                          const hasDbRecord = student.attendanceStatus !== null;
-                          const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
-                          const justSaved = lastUpdatedAt !== null;
-                          
-                          // Show marked state if saved or has existing record that wasn't changed
-                          const isHoliday = status === 'holiday';
-                          const showMarked = justSaved || (hasDbRecord && !statusChanged);
-                          
-                          if (showMarked && !statusChanged) {
-                            return (
-                              <div className="flex items-center gap-3">
-                                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                                  isHoliday
-                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                    : status === 'present' 
-                                    ? 'bg-green-100 text-green-700 border border-green-200' 
-                                    : 'bg-red-100 text-red-700 border border-red-200'
-                                }`}>
-                                  {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
-                                  {isHoliday
-                                    ? 'No Class Work (Marked)'
-                                    : status === 'present'
-                                    ? 'Present (Marked)'
-                                    : 'Absent (Marked)'}
-                                </div>
-                                {/* Still allow changing even if marked */}
-                                {!isHoliday && (
-                                  <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={status === 'absent'}
-                                      onChange={(e) => {
-                                        if (editingLocked) {
-                                          toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                          return;
-                                        }
-                                        handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                      }}
-                                      disabled={editingLocked}
-                                      className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    />
-                                    <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                      Change
-                                    </span>
-                                  </label>
-                                )}
-                              </div>
+                                {(() => {
+                                  const hasDbRecord = student.attendanceStatus !== null;
+                                  const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+                                  const justSaved = lastUpdatedAt !== null;
+
+                                  // Show marked state if saved or has existing record that wasn't changed
+                                  const isHoliday = status === 'holiday';
+                                  const showMarked = justSaved || (hasDbRecord && !statusChanged);
+
+                                  if (showMarked && !statusChanged) {
+                                    return (
+                                      <div className="flex items-center gap-3">
+                                        <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${isHoliday
+                                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                          : status === 'present'
+                                            ? 'bg-green-100 text-green-700 border border-green-200'
+                                            : 'bg-red-100 text-red-700 border border-red-200'
+                                          }`}>
+                                          {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
+                                          <div className="flex flex-col items-start text-left leading-tight">
+                                            <span>{isHoliday ? 'No Class Work (Marked)' : status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}</span>
+                                            {isHoliday && student.holidayReason && (
+                                              <span className="text-[10px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Still allow changing even if marked */}
+                                        {!isHoliday && (
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={status === 'absent'}
+                                              onChange={(e) => {
+                                                if (editingLocked) {
+                                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                                  return;
+                                                }
+                                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                              }}
+                                              disabled={editingLocked}
+                                              className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            />
+                                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                              Change
+                                            </span>
+                                          </label>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+
+                                  // Not marked yet - show toggle controls
+                                  return (
+                                    <div className="flex items-center gap-3">
+                                      <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'holiday'
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                        : status === 'present'
+                                          ? 'bg-green-50 text-green-600 border border-green-100'
+                                          : 'bg-red-50 text-red-600 border border-red-100'
+                                        }`}>
+                                        {status === 'holiday' ? (
+                                          <>
+                                            <AlertTriangle size={16} />
+                                            <div className="flex flex-col items-start text-left leading-tight">
+                                              <span>No Class Work</span>
+                                              {student.holidayReason && (
+                                                <span className="text-[10px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
+                                              )}
+                                            </div>
+                                          </>
+                                        ) : status === 'present' ? (
+                                          <>
+                                            <Check size={16} />
+                                            Present
+                                          </>
+                                        ) : (
+                                          <>
+                                            <X size={16} />
+                                            Absent
+                                          </>
+                                        )}
+                                      </div>
+                                      {status !== 'holiday' && (
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={status === 'absent'}
+                                            onChange={(e) => {
+                                              if (editingLocked) {
+                                                toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                                return;
+                                              }
+                                              handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                            }}
+                                            disabled={editingLocked}
+                                            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                          />
+                                          <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                            Mark as Absent
+                                          </span>
+                                        </label>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </td>
                             );
                           }
-                          
-                          // Not marked yet - show toggle controls
-                          return (
-                            <div className="flex items-center gap-3">
-                              <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                                status === 'holiday'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                  : status === 'present' 
-                                  ? 'bg-green-50 text-green-600 border border-green-100' 
-                                  : 'bg-red-50 text-red-600 border border-red-100'
-                              }`}>
-                                {status === 'holiday' ? (
-                                  <>
-                                    <AlertTriangle size={16} />
-                                    Holiday
-                                  </>
-                                ) : status === 'present' ? (
-                                  <>
-                                    <Check size={16} />
-                                    Present
-                                  </>
-                                ) : (
-                                  <>
-                                    <X size={16} />
-                                    Absent
-                                  </>
-                                )}
-                              </div>
-                              {status !== 'holiday' && (
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={status === 'absent'}
-                                    onChange={(e) => {
-                                      if (editingLocked) {
-                                        toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                        return;
-                                      }
-                                      handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                    }}
-                                    disabled={editingLocked}
-                                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                  <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                    Mark as Absent
-                                  </span>
-                                </label>
-                              )}
-                            </div>
-                          );
-                        })()}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'smsStatus') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              {(() => {
-                                const smsStatus = smsStatusMap[student.id];
-                                if (!smsStatus) {
-                                  if (status === 'absent') {
-                                    return (
+                          if (columnKey === 'smsStatus') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                {(() => {
+                                  const smsStatus = smsStatusMap[student.id];
+                                  if (!smsStatus) {
+                                    if (status === 'absent') {
+                                      return (
+                                        <button
+                                          onClick={() => handleRetrySms(student)}
+                                          disabled={retryingSmsFor === student.id}
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
+                                          title="Click to send SMS notification"
+                                        >
+                                          {retryingSmsFor === student.id ? (
+                                            <>
+                                              <RefreshCw size={12} className="animate-spin" />
+                                              Sending...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <AlertTriangle size={12} />
+                                              Pending - Send
+                                            </>
+                                          )}
+                                        </button>
+                                      );
+                                    }
+                                    return <span className="text-xs text-gray-400">-</span>;
+                                  }
+
+                                  if (smsStatus.success) {
+                                    return smsStatus.mocked ? (
                                       <button
                                         onClick={() => handleRetrySms(student)}
                                         disabled={retryingSmsFor === student.id}
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
-                                        title="Click to send SMS notification"
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
+                                        title="Test mode - Click to send again"
                                       >
                                         {retryingSmsFor === student.id ? (
                                           <>
@@ -3150,309 +3755,300 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                                           </>
                                         ) : (
                                           <>
-                                            <AlertTriangle size={12} />
-                                            Pending - Send
+                                            <RefreshCw size={12} />
+                                            Test - Send Again
+                                          </>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleRetrySms(student)}
+                                        disabled={retryingSmsFor === student.id}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
+                                        title="SMS sent - Click to send again"
+                                      >
+                                        {retryingSmsFor === student.id ? (
+                                          <>
+                                            <RefreshCw size={12} className="animate-spin" />
+                                            Sending...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Check size={12} />
+                                            Sent - Send Again
                                           </>
                                         )}
                                       </button>
                                     );
                                   }
-                                  return <span className="text-xs text-gray-400">-</span>;
-                                }
-                                
-                                if (smsStatus.success) {
-                                  return smsStatus.mocked ? (
-                                    <button
-                                      onClick={() => handleRetrySms(student)}
-                                      disabled={retryingSmsFor === student.id}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
-                                      title="Test mode - Click to send again"
-                                    >
-                                      {retryingSmsFor === student.id ? (
-                                        <>
-                                          <RefreshCw size={12} className="animate-spin" />
-                                          Sending...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <RefreshCw size={12} />
-                                          Test - Send Again
-                                        </>
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleRetrySms(student)}
-                                      disabled={retryingSmsFor === student.id}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
-                                      title="SMS sent - Click to send again"
-                                    >
-                                      {retryingSmsFor === student.id ? (
-                                        <>
-                                          <RefreshCw size={12} className="animate-spin" />
-                                          Sending...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Check size={12} />
-                                          Sent - Send Again
-                                        </>
-                                      )}
-                                    </button>
-                                  );
-                                }
-                                
-                                if (smsStatus.skipped) {
+
+                                  if (smsStatus.skipped) {
+                                    return (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
+                                        <AlertTriangle size={12} />
+                                        {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                                      </span>
+                                    );
+                                  }
+
                                   return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
-                                      <AlertTriangle size={12} />
-                                      {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
-                                    </span>
+                                    <button
+                                      onClick={() => handleRetrySms(student)}
+                                      disabled={retryingSmsFor === student.id}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
+                                      title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
+                                    >
+                                      {retryingSmsFor === student.id ? (
+                                        <>
+                                          <RefreshCw size={12} className="animate-spin" />
+                                          Retrying...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <X size={12} />
+                                          Failed - Retry
+                                        </>
+                                      )}
+                                    </button>
                                   );
-                                }
-                                
-                                return (
+                                })()}
+                              </td>
+                            );
+                          }
+                          if (columnKey === 'insights') {
+                            return (
+                              <td key={columnKey} className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-end">
                                   <button
-                                    onClick={() => handleRetrySms(student)}
-                                    disabled={retryingSmsFor === student.id}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
-                                    title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStudentClick(student);
+                                    }}
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
                                   >
-                                    {retryingSmsFor === student.id ? (
-                                      <>
-                                        <RefreshCw size={12} className="animate-spin" />
-                                        Retrying...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <X size={12} />
-                                        Failed - Retry
-                                      </>
-                                    )}
+                                    <BarChart3 size={16} />
+                                    View Report
                                   </button>
-                                );
-                              })()}
-                            </td>
-                          );
-                        }
-                        if (columnKey === 'insights') {
-                          return (
-                            <td key={columnKey} className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStudentClick(student);
-                                  }}
-                                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-                                >
-                                  <BarChart3 size={16} />
-                                  View Report
-                                </button>
-                              </div>
-                            </td>
-                          );
-                        }
-                        return null;
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          
-          {/* Mobile Card View */}
-          <div className="lg:hidden space-y-3 p-3 sm:p-4">
-            {sortedStudents.map((student) => {
-              const status = effectiveStatus(student.id);
-              const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
-              const hasDbRecord = student.attendanceStatus !== null;
-              const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
-              const justSaved = lastUpdatedAt !== null;
-              const showMarked = justSaved || (hasDbRecord && !statusChanged);
-              
-              return (
-                <div
-                  key={student.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="p-4 space-y-3">
-                    {/* Header with Photo and Name */}
-                    <div className="flex items-start gap-3" onClick={() => handleStudentClick(student)}>
-                      {renderPhoto(student)}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{student.pinNumber || 'N/A'}</p>
+                                </div>
+                              </td>
+                            );
+                          }
+                          return null;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-3 p-3 sm:p-4">
+              {sortedStudents.map((student) => {
+                const status = effectiveStatus(student.id);
+                const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
+                const hasDbRecord = student.attendanceStatus !== null;
+                const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+                const justSaved = lastUpdatedAt !== null;
+                const showMarked = justSaved || (hasDbRecord && !statusChanged);
+
+                return (
+                  <div
+                    key={student.id}
+                    className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="p-4 space-y-3">
+                      {/* Header with Photo and Name */}
+                      <div className="flex items-start gap-3" onClick={() => handleStudentClick(student)}>
+                        {renderPhoto(student)}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{student.pinNumber || 'N/A'}</p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Key Information */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                      <div>
-                        <p className="text-xs text-gray-500">Batch</p>
-                        <p className="text-sm font-medium text-gray-900">{student.batch || 'N/A'}</p>
+
+                      {/* Key Information */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                        <div>
+                          <p className="text-xs text-gray-500">Batch</p>
+                          <p className="text-sm font-medium text-gray-900">{student.batch || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Course</p>
+                          <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Branch</p>
+                          <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Year/Sem</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {student.currentYear ? `Y${student.currentYear}` : 'N/A'}/{student.currentSemester ? `S${student.currentSemester}` : 'N/A'}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-xs text-gray-500">Parent Contact</p>
+                          <p className="text-sm font-medium text-gray-900">{parentContact}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Course</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Branch</p>
-                        <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Year/Sem</p>
-                        <p className="text-sm font-medium text-gray-900">
-                          {student.currentYear ? `Y${student.currentYear}` : 'N/A'}/{student.currentSemester ? `S${student.currentSemester}` : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-xs text-gray-500">Parent Contact</p>
-                        <p className="text-sm font-medium text-gray-900">{parentContact}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Attendance Status */}
-                    <div className="pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                      {showMarked && !statusChanged ? (
-                        <div className="flex flex-col gap-2">
-                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                            status === 'present' 
-                              ? 'bg-green-100 text-green-700 border border-green-200' 
+
+                      {/* Attendance Status */}
+                      <div className="pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                        {showMarked && !statusChanged ? (
+                          <div className="flex flex-col gap-2">
+                            <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
+                              ? 'bg-green-100 text-green-700 border border-green-200'
                               : 'bg-red-100 text-red-700 border border-red-200'
-                          }`}>
-                            {status === 'present' ? <Check size={16} /> : <X size={16} />}
-                            {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                              }`}>
+                              {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                              {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                              <input
+                                type="checkbox"
+                                checked={status === 'absent'}
+                                onChange={(e) => {
+                                  if (editingLocked) {
+                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                    return;
+                                  }
+                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                }}
+                                disabled={editingLocked}
+                                className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                              />
+                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                Change Status
+                              </span>
+                            </label>
                           </div>
-                          <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
-                            <input
-                              type="checkbox"
-                              checked={status === 'absent'}
-                              onChange={(e) => {
-                                if (editingLocked) {
-                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                  return;
-                                }
-                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                              }}
-                              disabled={editingLocked}
-                              className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
-                            />
-                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                              Change Status
-                            </span>
-                          </label>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${
-                            status === 'present' 
-                              ? 'bg-green-50 text-green-600 border border-green-100' 
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
+                              ? 'bg-green-50 text-green-600 border border-green-100'
                               : 'bg-red-50 text-red-600 border border-red-100'
-                          }`}>
-                            {status === 'present' ? <Check size={16} /> : <X size={16} />}
-                            {status === 'present' ? 'Present' : 'Absent'}
+                              }`}>
+                              {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                              {status === 'present' ? 'Present' : 'Absent'}
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                              <input
+                                type="checkbox"
+                                checked={status === 'absent'}
+                                onChange={(e) => {
+                                  if (editingLocked) {
+                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                    return;
+                                  }
+                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                }}
+                                disabled={editingLocked}
+                                className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                              />
+                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                Mark as Absent
+                              </span>
+                            </label>
                           </div>
-                          <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
-                            <input
-                              type="checkbox"
-                              checked={status === 'absent'}
-                              onChange={(e) => {
-                                if (editingLocked) {
-                                  toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                  return;
-                                }
-                                handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                              }}
-                              disabled={editingLocked}
-                              className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
-                            />
-                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                              Mark as Absent
-                            </span>
-                          </label>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      {/* Action Button */}
+                      <button
+                        onClick={() => handleStudentClick(student)}
+                        className="w-full mt-2 py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm min-h-[44px]"
+                      >
+                        View Report
+                      </button>
                     </div>
-                    
-                    {/* Action Button */}
-                    <button
-                      onClick={() => handleStudentClick(student)}
-                      className="w-full mt-2 py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm min-h-[44px]"
-                    >
-                      View Report
-                    </button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
-            <div className="text-sm text-gray-600">
-              {totalStudents === 0
-                ? 'No students to display'
-                : (() => {
+                );
+              })}
+            </div>
+
+            {/* Infinite scroll observer and loading indicator */}
+            {(() => {
+              const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+              if (hasFilters && hasMore) {
+                return (
+                  <div ref={scrollObserverRef} className="py-4 flex justify-center">
+                    {loadingMore && (
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Loader2 size={20} className="animate-spin" />
+                        <span className="text-sm">Loading more students...</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
+              <div className="text-sm text-gray-600">
+                {totalStudents === 0
+                  ? 'No students to display'
+                  : (() => {
                     // Check if filters are applied
                     const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
                     if (hasFilters) {
-                      // When filters are applied, show all students loaded
-                      return `Showing all ${totalStudents.toLocaleString()} student${totalStudents !== 1 ? 's' : ''}`;
+                      // When filters are applied, show loaded vs total students
+                      return `Showing ${students.length.toLocaleString()} of ${totalStudents.toLocaleString()} student${totalStudents !== 1 ? 's' : ''}`;
                     } else {
                       // When no filters, show pagination info
                       return `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`;
                     }
                   })()}
-            </div>
-            {(() => {
-              // Check if filters are applied - hide pagination controls when filters are active
-              const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
-              if (hasFilters) {
-                return null; // Don't show pagination controls when filters are applied
-              }
-              return (
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-                  <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                    <span className="hidden sm:inline">Rows per page</span>
-                    <span className="sm:hidden">Per page</span>
-                    <select
-                      value={pageSize}
-                      onChange={handlePageSizeChange}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
-                      disabled={loading}
-                    >
-                      {pageSizeOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                      type="button"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={isFirstPage || loading || totalStudents === 0}
-                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-xs sm:text-sm text-gray-600 px-2 text-center whitespace-nowrap">
-                      Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={isLastPage || loading || totalStudents === 0}
-                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
-                    >
-                      Next
-                    </button>
+              </div>
+              {(() => {
+                // Check if filters are applied - hide pagination controls when filters are active
+                const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+                if (hasFilters) {
+                  return null; // Don't show pagination controls when filters are applied
+                }
+                return (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                    <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                      <span className="hidden sm:inline">Rows per page</span>
+                      <span className="sm:hidden">Per page</span>
+                      <select
+                        value={pageSize}
+                        onChange={handlePageSizeChange}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
+                        disabled={loading}
+                      >
+                        {pageSizeOptions.map(option => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={isFirstPage || loading || totalStudents === 0}
+                        className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-xs sm:text-sm text-gray-600 px-2 text-center whitespace-nowrap">
+                        Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={isLastPage || loading || totalStudents === 0}
+                        className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
+                );
+              })()}
             </div>
-              );
-            })()}
-          </div>
           </>
         )}
       </section>
@@ -3528,7 +4124,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                 </button>
               </div>
             </div>
-            
+
             {/* Summary Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
@@ -3568,7 +4164,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                 </div>
               </div>
             </div>
-            
+
             {/* Detailed Table with Scroll */}
             <div className="flex-1 overflow-auto">
               <table className="w-full text-sm">
@@ -3590,47 +4186,47 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   {smsResults
                     .slice((smsCurrentPage - 1) * smsPageSize, smsCurrentPage * smsPageSize)
                     .map((result, index) => (
-                    <tr key={result.studentId || index} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-900">{result.studentName || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.pinNumber || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.admissionNumber || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 max-w-[150px] truncate" title={result.college}>{result.college || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.course || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.branch || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.year || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600">{result.semester || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 font-mono text-xs">{result.sentTo || result.parentMobile || '-'}</td>
-                      <td className="px-3 py-2">
-                        {result.success ? (
-                          result.mocked ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                              <RefreshCw size={12} />
-                              Test Mode
+                      <tr key={result.studentId || index} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{result.studentName || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.pinNumber || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.admissionNumber || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600 max-w-[150px] truncate" title={result.college}>{result.college || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.course || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.branch || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.year || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{result.semester || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600 font-mono text-xs">{result.sentTo || result.parentMobile || '-'}</td>
+                        <td className="px-3 py-2">
+                          {result.success ? (
+                            result.mocked ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                <RefreshCw size={12} />
+                                Test Mode
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                <Check size={12} />
+                                Sent
+                              </span>
+                            )
+                          ) : result.skipped ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={result.reason}>
+                              <AlertTriangle size={12} />
+                              {result.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                              <Check size={12} />
-                              Sent
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title={result.reason || result.details}>
+                              <X size={12} />
+                              Failed
                             </span>
-                          )
-                        ) : result.skipped ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={result.reason}>
-                            <AlertTriangle size={12} />
-                            {result.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title={result.reason || result.details}>
-                            <X size={12} />
-                            Failed
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
-            
+
             {/* Pagination Footer */}
             {smsResults.length > smsPageSize && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
@@ -3688,7 +4284,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                       )}
                     </div>
                   )}
-                  
+
                   {/* Public Holiday Section */}
                   {(() => {
                     const publicHolidays = [];
@@ -3701,7 +4297,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     if (selectedDateHolidayInfo?.publicHoliday) {
                       publicHolidays.push(selectedDateHolidayInfo.publicHoliday);
                     }
-                    
+
                     return publicHolidays.length > 0 ? (
                       <div className="space-y-2">
                         {publicHolidays.map((holiday, index) => (
@@ -3897,11 +4493,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                   type="button"
                   onClick={() => selectedStudent && handleDownloadReport(selectedStudent)}
                   disabled={!selectedStudent || downloadingStudentId === selectedStudent?.id}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${
-                    downloadingStudentId === selectedStudent?.id
-                      ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${downloadingStudentId === selectedStudent?.id
+                    ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                    }`}
                 >
                   {downloadingStudentId === selectedStudent?.id ? (
                     <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -4147,7 +4742,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     const date = new Date(entry.date);
                     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                     const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                    
+
                     if (!monthlyData[monthKey]) {
                       monthlyData[monthKey] = {
                         monthName,
@@ -4158,7 +4753,7 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                         total: 0
                       };
                     }
-                    
+
                     if (entry.isHoliday) {
                       monthlyData[monthKey].holidays++;
                     } else if (entry.status === 'present') {
@@ -4184,10 +4779,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {months.map((month) => {
                           const totalWorkingDays = month.total - month.holidays;
-                          const percentage = totalWorkingDays > 0 
-                            ? ((month.present / totalWorkingDays) * 100).toFixed(1) 
+                          const percentage = totalWorkingDays > 0
+                            ? ((month.present / totalWorkingDays) * 100).toFixed(1)
                             : '0.0';
-                          
+
                           return (
                             <div
                               key={month.key}
@@ -4215,11 +4810,10 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                               <div className="pt-3 border-t border-gray-200">
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs text-gray-600">Attendance:</span>
-                                  <span className={`text-sm font-bold ${
-                                    parseFloat(percentage) >= 75 ? 'text-green-600' :
+                                  <span className={`text-sm font-bold ${parseFloat(percentage) >= 75 ? 'text-green-600' :
                                     parseFloat(percentage) >= 50 ? 'text-yellow-600' :
-                                    'text-red-600'
-                                  }`}>
+                                      'text-red-600'
+                                    }`}>
                                     {percentage}%
                                   </span>
                                 </div>
@@ -4241,15 +4835,14 @@ const FILTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache for filter options
                     {historyData.weekly?.series?.map((entry) => (
                       <div
                         key={entry.date}
-                        className={`rounded-xl border px-3 py-2 text-center ${
-                          entry.status === 'present'
-                            ? 'border-green-200 bg-green-50 text-green-700'
-                            : entry.status === 'absent'
+                        className={`rounded-xl border px-3 py-2 text-center ${entry.status === 'present'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : entry.status === 'absent'
                             ? 'border-red-200 bg-red-50 text-red-600'
                             : entry.status === 'holiday'
-                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border-gray-200 bg-gray-50 text-gray-600'
-                        }`}
+                              ? 'border-amber-200 bg-amber-50 text-amber-700'
+                              : 'border-gray-200 bg-gray-50 text-gray-600'
+                          }`}
                       >
                         <p className="text-xs font-semibold">{entry.date}</p>
                         <p className="text-xs capitalize">

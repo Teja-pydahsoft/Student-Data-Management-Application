@@ -2,6 +2,12 @@ const { masterPool } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const { sendSms } = require('../services/smsService');
 
+// DLT SMS Template IDs for student credentials
+const STUDENT_CREATION_SMS_TEMPLATE_ID =
+  process.env.STUDENT_CREATION_SMS_TEMPLATE_ID || '1707176525577028276';
+const STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID =
+  process.env.STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID || '1707176526611076697';
+
 /**
  * Generate and store student login credentials
  * Username: PIN number OR mobile number (prefer PIN)
@@ -12,9 +18,10 @@ const { sendSms } = require('../services/smsService');
  * @param {string} pinNo - Student PIN number (optional)
  * @param {string} studentName - Student name
  * @param {string} studentMobile - Student mobile number
+ * @param {boolean} isPasswordReset - Whether this is a password reset (default: false for account creation)
  * @returns {Promise<{success: boolean, username?: string, error?: string}>}
  */
-async function generateStudentCredentials(studentId, admissionNumber, pinNo, studentName, studentMobile) {
+async function generateStudentCredentials(studentId, admissionNumber, pinNo, studentName, studentMobile, isPasswordReset = false) {
   try {
     // Validate required fields
     if (!studentMobile || studentMobile.trim() === '') {
@@ -36,28 +43,12 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
       return { success: false, error: 'No PIN or mobile number available' };
     }
 
-    // Generate password: first 4 letters of student name + last 4 digits of mobile
-    const mobileNumber = studentMobile.replace(/\D/g, ''); // Remove non-digits
-    
-    if (mobileNumber.length < 4) {
-      return { success: false, error: 'Mobile number too short' };
+    // Generate random alphanumeric password (8 characters)
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let plainPassword = '';
+    for (let i = 0; i < 8; i++) {
+      plainPassword += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-
-    // Get first 4 letters (uppercase, remove spaces and special chars)
-    const firstFourLetters = studentName
-      .replace(/[^a-zA-Z]/g, '') // Remove non-letters
-      .substring(0, 4)
-      .toUpperCase();
-
-    if (firstFourLetters.length < 4) {
-      return { success: false, error: 'Not enough letters in student name' };
-    }
-
-    // Get last 4 digits of mobile number
-    const lastFourDigits = mobileNumber.substring(mobileNumber.length - 4);
-
-    // Combine to create password
-    const plainPassword = firstFourLetters + lastFourDigits;
 
     // Hash password
     const passwordHash = await bcrypt.hash(plainPassword, 10);
@@ -68,24 +59,52 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
       VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         password_hash = VALUES(password_hash),
+        username = VALUES(username),
         updated_at = CURRENT_TIMESTAMP
     `, [studentId, admissionNumber, username, passwordHash]);
 
     // Send SMS notification with login credentials
     try {
-      // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
-      const loginUrl = process.env.STUDENT_PORTAL_URL || 'https://pydahsdms.vercel.app/';
-      const smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl} - Pydah College`;
-      
-      await sendSms({
+      // Remove trailing slash from URL to match DLT template format exactly
+      let loginUrl = (process.env.STUDENT_PORTAL_URL || 'pydahsdms.vercel.app').trim();
+      loginUrl = loginUrl.replace(/\/+$/, ''); // Remove trailing slashes
+
+      let smsMessage;
+      let templateId;
+
+      if (isPasswordReset) {
+        // DLT Template 2: "Hello {#var#} your password has been updated. Username: {#var#} New Password: {#var#} Login: {#var#} - Pydah College"
+        // Format: Login: {URL}- Pydah College (removed space to match DLT template)
+        smsMessage = `Hello ${studentName || 'Student'} your password has been updated. Username: ${username} New Password: ${plainPassword} Login: ${loginUrl} - Pydah College`;
+        templateId = STUDENT_PASSWORD_RESET_SMS_TEMPLATE_ID;
+      } else {
+        // DLT Template 1: "Hello {#var#} your account has been created. Username: {#var#} Password: {#var#}. Login: {#var#}- Pydah College"
+        // Format: Login: {URL}- Pydah College (removed space to match DLT template)
+        smsMessage = `Hello ${studentName || 'Student'} your account has been created. Username: ${username} Password: ${plainPassword}. Login: ${loginUrl} - Pydah College`;
+        templateId = STUDENT_CREATION_SMS_TEMPLATE_ID;
+      }
+
+      // Log the exact message being sent for debugging
+      console.log(`[SMS Template] Sending ${isPasswordReset ? 'password reset' : 'account creation'} SMS to ${studentMobile.replace(/\D/g, '')}`);
+      console.log(`[SMS Template] Template ID: ${templateId}`);
+      console.log(`[SMS Template] Message: "${smsMessage}"`);
+      console.log(`[SMS Template] Message length: ${smsMessage.length} characters`);
+
+      const smsResult = await sendSms({
         to: studentMobile.replace(/\D/g, ''), // Ensure only digits
         message: smsMessage,
+        templateId: templateId,
         meta: {
           student: { admissionNumber },
-          type: 'password_credentials'
+          type: isPasswordReset ? 'password_reset' : 'account_creation'
         }
       });
-      console.log(`✅ SMS sent with credentials to ${studentMobile} for student ${admissionNumber}`);
+
+      if (smsResult.success) {
+        console.log(`✅ SMS sent successfully to ${studentMobile.replace(/\D/g, '')} for student ${admissionNumber} (${isPasswordReset ? 'password reset' : 'account creation'})`);
+      } else {
+        console.error(`❌ SMS failed to send: ${smsResult.reason || 'Unknown error'}`, smsResult);
+      }
     } catch (smsError) {
       console.error('Error sending SMS with credentials (non-fatal):', smsError);
       // Don't fail credential generation if SMS fails
@@ -105,7 +124,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
  * @param {string} admissionNumber - Student admission number
  * @returns {Promise<{success: boolean, username?: string, error?: string}>}
  */
-async function generateCredentialsByAdmissionNumber(admissionNumber) {
+async function generateCredentialsByAdmissionNumber(admissionNumber, isPasswordReset = false) {
   try {
     const [students] = await masterPool.query(`
       SELECT id, admission_number, pin_no, student_name, student_mobile
@@ -124,7 +143,8 @@ async function generateCredentialsByAdmissionNumber(admissionNumber) {
       student.admission_number,
       student.pin_no,
       student.student_name,
-      student.student_mobile
+      student.student_mobile,
+      isPasswordReset
     );
   } catch (error) {
     console.error('Error generating credentials by admission number:', error);

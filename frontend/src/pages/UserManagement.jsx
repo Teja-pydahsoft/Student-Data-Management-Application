@@ -80,14 +80,14 @@ const initialFormState = {
 };
 
 // Selection Modal Component
-const SelectionModal = ({ 
-  isOpen, 
-  onClose, 
-  title, 
+const SelectionModal = ({
+  isOpen,
+  onClose,
+  title,
   icon: Icon,
-  options, 
-  selectedIds, 
-  onChange, 
+  options,
+  selectedIds,
+  onChange,
   loading,
   searchPlaceholder = "Search...",
   colorScheme = "blue",
@@ -100,31 +100,31 @@ const SelectionModal = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   const colors = {
-    blue: { 
-      bg: 'bg-blue-600', 
-      light: 'bg-blue-50', 
-      text: 'text-blue-600', 
+    blue: {
+      bg: 'bg-blue-600',
+      light: 'bg-blue-50',
+      text: 'text-blue-600',
       border: 'border-blue-200',
       gradient: 'from-blue-600 to-indigo-600'
     },
-    green: { 
-      bg: 'bg-emerald-600', 
-      light: 'bg-emerald-50', 
-      text: 'text-emerald-600', 
+    green: {
+      bg: 'bg-emerald-600',
+      light: 'bg-emerald-50',
+      text: 'text-emerald-600',
       border: 'border-emerald-200',
       gradient: 'from-emerald-600 to-teal-600'
     },
-    orange: { 
-      bg: 'bg-orange-600', 
-      light: 'bg-orange-50', 
-      text: 'text-orange-600', 
+    orange: {
+      bg: 'bg-orange-600',
+      light: 'bg-orange-50',
+      text: 'text-orange-600',
       border: 'border-orange-200',
       gradient: 'from-orange-600 to-amber-600'
     }
   };
   const c = colors[colorScheme] || colors.blue;
 
-  const filteredOptions = options.filter(opt => 
+  const filteredOptions = options.filter(opt =>
     (opt[displayKey] || opt.name).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -174,7 +174,7 @@ const SelectionModal = ({
                 </p>
               </div>
             </div>
-            <button 
+            <button
               type="button"
               onClick={onClose}
               className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
@@ -197,14 +197,14 @@ const SelectionModal = ({
               />
             </div>
             <div className="flex gap-2 sm:gap-3">
-              <button 
+              <button
                 type="button"
                 onClick={selectAll}
                 className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-semibold ${c.light} ${c.text} hover:opacity-80 active:opacity-90 transition-all touch-manipulation min-h-[44px]`}
               >
                 Select All
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={clearAll}
                 className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300 transition-all touch-manipulation min-h-[44px]"
@@ -215,17 +215,15 @@ const SelectionModal = ({
           </div>
 
           {allOption && onAllChange && (
-            <div 
+            <div
               onClick={handleAllOptionChange}
-              className={`flex items-center gap-3 mt-3 p-4 rounded-xl cursor-pointer transition-all border-2 ${
-                allSelected 
-                  ? `${c.light} ${c.border} ${c.text}` 
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}
+              className={`flex items-center gap-3 mt-3 p-4 rounded-xl cursor-pointer transition-all border-2 ${allSelected
+                ? `${c.light} ${c.border} ${c.text}`
+                : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
             >
-              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                allSelected ? `${c.bg} border-transparent` : 'border-slate-300'
-              }`}>
+              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${allSelected ? `${c.bg} border-transparent` : 'border-slate-300'
+                }`}>
                 {allSelected && <Check size={14} className="text-white" />}
               </div>
               <div className="flex-1">
@@ -255,18 +253,16 @@ const SelectionModal = ({
               {filteredOptions.map(option => {
                 const isSelected = selectedIds.includes(option.id);
                 return (
-                  <div 
+                  <div
                     key={option.id}
                     onClick={(e) => !allSelected && handleToggle(option.id, e)}
-                    className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-all border-2 ${
-                      isSelected 
-                        ? `${c.light} ${c.border}` 
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    } ${allSelected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-all border-2 ${isSelected
+                      ? `${c.light} ${c.border}`
+                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      } ${allSelected ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      isSelected ? `${c.bg} border-transparent` : 'border-slate-300'
-                    }`}>
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? `${c.bg} border-transparent` : 'border-slate-300'
+                      }`}>
                       {isSelected && <Check size={14} className="text-white" />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -322,22 +318,22 @@ const UserManagement = () => {
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('create');
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Selection modal states
   const [showCollegeModal, setShowCollegeModal] = useState(false);
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
-  
+
   // Reset password modal states
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
-  
+
   // Delete user modal states
   const [deleteUserModal, setDeleteUserModal] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
-  
+
   // Edit scope modal states
   const [showEditCollegeModal, setShowEditCollegeModal] = useState(false);
   const [showEditCourseModal, setShowEditCourseModal] = useState(false);
@@ -347,11 +343,16 @@ const UserManagement = () => {
   const [loadingEditCourses, setLoadingEditCourses] = useState(false);
   const [loadingEditBranches, setLoadingEditBranches] = useState(false);
 
+  // Module access modal state
+  const [showModuleAccessModal, setShowModuleAccessModal] = useState(false);
+  const [moduleAccessUser, setModuleAccessUser] = useState(null);
+  const [selectedModuleKey, setSelectedModuleKey] = useState(null);
+
   const hasUserManagementAccess = useMemo(() => {
     if (isFullAccessRole(user?.role)) return true;
     if (user?.permissions) {
       const perm = user.permissions[BACKEND_MODULES.USER_MANAGEMENT];
-      return perm && (perm.read || perm.write);
+      return perm && (perm.view || perm.control);
     }
     return false;
   }, [user]);
@@ -415,10 +416,10 @@ const UserManagement = () => {
     try {
       const branchPromises = courseIds.map(id => api.get(`/courses/${id}/branches?includeInactive=false`));
       const responses = await Promise.all(branchPromises);
-      
+
       const courseMap = {};
       coursesList.forEach(c => { courseMap[c.id] = c.name; });
-      
+
       const allBranches = responses.flatMap((response, idx) =>
         (response.data?.data || []).map(branch => ({
           ...branch,
@@ -427,7 +428,7 @@ const UserManagement = () => {
           displayName: `${branch.name} (${courseMap[courseIds[idx]] || 'Course'})`
         }))
       );
-      
+
       // Deduplicate branches by name and course
       const uniqueBranchesMap = new Map();
       allBranches.forEach(branch => {
@@ -436,7 +437,7 @@ const UserManagement = () => {
           uniqueBranchesMap.set(key, branch);
         }
       });
-      
+
       const uniqueBranches = Array.from(uniqueBranchesMap.values());
       setBranches(uniqueBranches);
     } catch (error) {
@@ -491,10 +492,10 @@ const UserManagement = () => {
     try {
       const branchPromises = courseIds.map(id => api.get(`/courses/${id}/branches?includeInactive=false`));
       const responses = await Promise.all(branchPromises);
-      
+
       const courseMap = {};
       coursesList.forEach(c => { courseMap[c.id] = c.name; });
-      
+
       const allBranches = responses.flatMap((response, idx) =>
         (response.data?.data || []).map(branch => ({
           ...branch,
@@ -503,7 +504,7 @@ const UserManagement = () => {
           displayName: `${branch.name} (${courseMap[courseIds[idx]] || 'Course'})`
         }))
       );
-      
+
       const uniqueBranchesMap = new Map();
       allBranches.forEach(branch => {
         const key = `${branch.name}-${branch.courseId}`;
@@ -511,7 +512,7 @@ const UserManagement = () => {
           uniqueBranchesMap.set(key, branch);
         }
       });
-      
+
       const uniqueBranches = Array.from(uniqueBranchesMap.values());
       setEditBranches(uniqueBranches);
     } catch (error) {
@@ -595,7 +596,7 @@ const UserManagement = () => {
   const toggleModuleAllPermissions = (moduleKey, grant) => {
     const modulePerms = MODULE_PERMISSIONS[moduleKey];
     if (!modulePerms) return;
-    
+
     setEditForm(prev => {
       const newPerms = {};
       modulePerms.permissions.forEach(perm => {
@@ -721,10 +722,10 @@ const UserManagement = () => {
       permissions: userData.permissions || {},
       isActive: userData.isActive
     });
-    
+
     const collegeIds = userData.collegeIds || (userData.collegeId ? [userData.collegeId] : []);
     const courseIds = userData.courseIds || (userData.courseId ? [userData.courseId] : []);
-    
+
     // Load courses and branches for edit modal
     if (collegeIds.length > 0) {
       await loadEditCourses(collegeIds);
@@ -739,8 +740,8 @@ const UserManagement = () => {
 
   // Handle edit form college change
   const handleEditCollegeChange = async (newCollegeIds) => {
-    setEditForm(prev => ({ 
-      ...prev, 
+    setEditForm(prev => ({
+      ...prev,
       collegeIds: newCollegeIds,
       courseIds: [],
       branchIds: [],
@@ -756,8 +757,8 @@ const UserManagement = () => {
 
   // Handle edit form course change
   const handleEditCourseChange = async (newCourseIds) => {
-    setEditForm(prev => ({ 
-      ...prev, 
+    setEditForm(prev => ({
+      ...prev,
       courseIds: newCourseIds,
       branchIds: [],
       allBranches: false
@@ -858,7 +859,7 @@ const UserManagement = () => {
 
   const handlePermanentDelete = async () => {
     if (!deleteUserModal) return;
-    
+
     setDeletingUser(true);
     try {
       const response = await api.delete(`/rbac/users/${deleteUserModal.id}/permanent`);
@@ -910,13 +911,13 @@ const UserManagement = () => {
   };
 
   const activeUsersCount = useMemo(() => users.filter(u => u.isActive).length, [users]);
-  
+
   // Filter out super_admin from the list (only one super admin exists)
   const filteredUsers = useMemo(() => {
     let filtered = users.filter(u => u.role !== 'super_admin');
     if (userSearchTerm) {
       const term = userSearchTerm.toLowerCase();
-      filtered = filtered.filter(u => 
+      filtered = filtered.filter(u =>
         u.name?.toLowerCase().includes(term) ||
         u.email?.toLowerCase().includes(term) ||
         u.username?.toLowerCase().includes(term) ||
@@ -989,11 +990,10 @@ const UserManagement = () => {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('create')}
-            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${
-              activeTab === 'create'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
-            }`}
+            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${activeTab === 'create'
+              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+              }`}
           >
             <UserPlus size={16} />
             <span className="hidden sm:inline">Create User</span>
@@ -1001,11 +1001,10 @@ const UserManagement = () => {
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${
-              activeTab === 'users'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
-            }`}
+            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs sm:text-sm transition-all touch-manipulation min-h-[44px] flex-1 sm:flex-none ${activeTab === 'users'
+              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+              }`}
           >
             <UsersIcon size={16} />
             <span className="hidden sm:inline">All Users ({filteredUsers.length})</span>
@@ -1158,14 +1157,13 @@ const UserManagement = () => {
                   {FIXED_ROLES.map(role => {
                     const isSelected = form.role === role.value;
                     return (
-                      <div 
+                      <div
                         key={role.value}
                         onClick={() => handleFormChange('role', role.value)}
-                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border-2 ${
-                          isSelected 
-                            ? `${ROLE_COLORS[role.value]} border-current` 
-                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border-2 ${isSelected
+                          ? `${ROLE_COLORS[role.value]} border-current`
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
                       >
                         <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm flex-shrink-0`}>
                           <ShieldCheck size={14} className="text-white" />
@@ -1352,11 +1350,10 @@ const UserManagement = () => {
               <button
                 type="submit"
                 disabled={creatingUser || !form.name || !form.email || !form.username || !form.role || !form.password || form.collegeIds.length === 0}
-                className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all touch-manipulation min-h-[44px] ${
-                  creatingUser || !form.name || !form.email || !form.username || !form.role || !form.password || form.collegeIds.length === 0
-                    ? 'bg-slate-300 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
-                }`}
+                className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all touch-manipulation min-h-[44px] ${creatingUser || !form.name || !form.email || !form.username || !form.role || !form.password || form.collegeIds.length === 0
+                  ? 'bg-slate-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
+                  }`}
               >
                 {creatingUser ? (
                   <>
@@ -1411,50 +1408,179 @@ const UserManagement = () => {
               </div>
             ) : (
               <>
-              {/* Desktop Table View */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Scope</th>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Module Access</th>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                      <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredUsers.map((userData) => {
-                      const permStatus = countPermissions(userData);
-                      const hasModuleAccess = hasPermissions(userData);
-                      return (
-                        <tr key={userData.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ROLE_AVATAR_COLORS[userData.role] || 'from-slate-400 to-slate-600'} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                                {userData.name?.charAt(0)?.toUpperCase()}
+                {/* Desktop Table View */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Scope</th>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Module Access</th>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                        <th className="px-4 lg:px-5 py-3 lg:py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredUsers.map((userData) => {
+                        const permStatus = countPermissions(userData);
+                        const hasModuleAccess = hasPermissions(userData);
+                        return (
+                          <tr key={userData.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ROLE_AVATAR_COLORS[userData.role] || 'from-slate-400 to-slate-600'} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
+                                  {userData.name?.charAt(0)?.toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-slate-800">{userData.name}</div>
+                                  <div className="text-xs text-slate-500">{userData.email}</div>
+                                </div>
                               </div>
-                              <div>
-                                <div className="font-semibold text-slate-800">{userData.name}</div>
-                                <div className="text-xs text-slate-500">{userData.email}</div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                <ShieldCheck size={12} />
+                                {ROLE_LABELS[userData.role] || userData.role}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="space-y-1.5 text-xs">
+                                {userData.collegeNames?.length > 0 && (
+                                  <div className="flex items-center gap-1.5 text-slate-600">
+                                    <Building2 size={13} className="text-blue-500 flex-shrink-0" />
+                                    <span className="truncate max-w-[150px]">
+                                      {userData.collegeNames.map(c => c.name).join(', ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {userData.allCourses ? (
+                                  <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[11px] font-medium">
+                                    All Courses
+                                  </span>
+                                ) : userData.courseNames?.length > 0 && (
+                                  <div className="flex items-center gap-1.5 text-slate-600">
+                                    <GraduationCap size={13} className="text-emerald-500 flex-shrink-0" />
+                                    <span className="truncate max-w-[150px]">
+                                      {userData.courseNames.map(c => c.name).join(', ')}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setModuleAccessUser(userData);
+                                  setSelectedModuleKey(null);
+                                  setShowModuleAccessModal(true);
+                                }}
+                                className={`w-full max-w-[180px] inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${hasModuleAccess
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                  }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {hasModuleAccess ? (
+                                    <CheckCircle2 size={12} />
+                                  ) : (
+                                    <AlertCircle size={12} />
+                                  )}
+                                  <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
+                                </span>
+                                <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
+                                  {permStatus.granted}/{permStatus.total}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="px-5 py-4">
+                              {userData.isActive ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
+                                  <CheckCircle2 size={12} />
+                                  Active
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">
+                                  <XCircle size={12} />
+                                  Inactive
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => openEditModal(userData)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                  title="Edit User"
+                                >
+                                  <Edit size={13} />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => openResetPasswordModal(userData)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 transition-colors"
+                                  title="Reset Password"
+                                >
+                                  <KeyRound size={13} />
+                                  Reset
+                                </button>
+                                {userData.isActive ? (
+                                  <button
+                                    onClick={() => handleDeactivateUser(userData.id)}
+                                    className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
+                                    title="Deactivate User"
+                                  >
+                                    <Power size={14} />
+                                  </button>
+                                ) : null}
+                                <button
+                                  onClick={() => openDeleteModal(userData)}
+                                  className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors"
+                                  title="Delete User Permanently"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="lg:hidden space-y-3">
+                  {filteredUsers.map((userData) => {
+                    const permStatus = countPermissions(userData);
+                    const hasModuleAccess = hasPermissions(userData);
+                    return (
+                      <div key={userData.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                        <div className="p-4 space-y-3">
+                          {/* User Info Header */}
+                          <div className="flex items-start gap-3 pb-3 border-b border-slate-100">
+                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${ROLE_AVATAR_COLORS[userData.role] || 'from-slate-400 to-slate-600'} flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0`}>
+                              {userData.name?.charAt(0)?.toUpperCase()}
                             </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                              <ShieldCheck size={12} />
-                              {ROLE_LABELS[userData.role] || userData.role}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-slate-800 text-base mb-1">{userData.name}</div>
+                              <div className="text-xs text-slate-500 truncate">{userData.email}</div>
+                              <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-1 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                <ShieldCheck size={12} />
+                                {ROLE_LABELS[userData.role] || userData.role}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Scope */}
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Scope</h4>
                             <div className="space-y-1.5 text-xs">
                               {userData.collegeNames?.length > 0 && (
-                                <div className="flex items-center gap-1.5 text-slate-600">
-                                  <Building2 size={13} className="text-blue-500 flex-shrink-0" />
-                                  <span className="truncate max-w-[150px]">
-                                    {userData.collegeNames.map(c => c.name).join(', ')}
-                                  </span>
+                                <div className="flex items-start gap-1.5 text-slate-600">
+                                  <Building2 size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                  <span className="flex-1">{userData.collegeNames.map(c => c.name).join(', ')}</span>
                                 </div>
                               )}
                               {userData.allCourses ? (
@@ -1462,214 +1588,99 @@ const UserManagement = () => {
                                   All Courses
                                 </span>
                               ) : userData.courseNames?.length > 0 && (
-                                <div className="flex items-center gap-1.5 text-slate-600">
-                                  <GraduationCap size={13} className="text-emerald-500 flex-shrink-0" />
-                                  <span className="truncate max-w-[150px]">
-                                    {userData.courseNames.map(c => c.name).join(', ')}
-                                  </span>
+                                <div className="flex items-start gap-1.5 text-slate-600">
+                                  <GraduationCap size={13} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+                                  <span className="flex-1">{userData.courseNames.map(c => c.name).join(', ')}</span>
                                 </div>
                               )}
                             </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            {hasModuleAccess ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold w-fit">
-                                  <CheckCircle2 size={12} />
-                                  Granted
+                          </div>
+
+                          {/* Module Access & Status */}
+                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Module Access</h4>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setModuleAccessUser(userData);
+                                  setSelectedModuleKey(null);
+                                  setShowModuleAccessModal(true);
+                                }}
+                                className={`w-full inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${hasModuleAccess
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                  }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {hasModuleAccess ? (
+                                    <CheckCircle2 size={12} />
+                                  ) : (
+                                    <AlertCircle size={12} />
+                                  )}
+                                  <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
                                 </span>
-                                <span className="text-[10px] text-slate-500">{permStatus.granted}/{permStatus.total} modules</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold w-fit">
-                                  <AlertCircle size={12} />
-                                  Pending
+                                <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
+                                  {permStatus.granted}/{permStatus.total}
                                 </span>
-                                <span className="text-[10px] text-slate-500">Needs configuration</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-5 py-4">
-                            {userData.isActive ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
-                                <CheckCircle2 size={12} />
-                                Active
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">
-                                <XCircle size={12} />
-                                Inactive
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => openEditModal(userData)}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
-                                title="Edit User"
-                              >
-                                <Edit size={13} />
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => openResetPasswordModal(userData)}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 transition-colors"
-                                title="Reset Password"
-                              >
-                                <KeyRound size={13} />
-                                Reset
-                              </button>
-                              {userData.isActive ? (
-                                <button
-                                  onClick={() => handleDeactivateUser(userData.id)}
-                                  className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
-                                  title="Deactivate User"
-                                >
-                                  <Power size={14} />
-                                </button>
-                              ) : null}
-                              <button
-                                onClick={() => openDeleteModal(userData)}
-                                className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors"
-                                title="Delete User Permanently"
-                              >
-                                <Trash2 size={14} />
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Mobile Card View */}
-              <div className="lg:hidden space-y-3">
-                {filteredUsers.map((userData) => {
-                  const permStatus = countPermissions(userData);
-                  const hasModuleAccess = hasPermissions(userData);
-                  return (
-                    <div key={userData.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                      <div className="p-4 space-y-3">
-                        {/* User Info Header */}
-                        <div className="flex items-start gap-3 pb-3 border-b border-slate-100">
-                          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${ROLE_AVATAR_COLORS[userData.role] || 'from-slate-400 to-slate-600'} flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0`}>
-                            {userData.name?.charAt(0)?.toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-slate-800 text-base mb-1">{userData.name}</div>
-                            <div className="text-xs text-slate-500 truncate">{userData.email}</div>
-                            <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-1 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                              <ShieldCheck size={12} />
-                              {ROLE_LABELS[userData.role] || userData.role}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Scope */}
-                        <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Scope</h4>
-                          <div className="space-y-1.5 text-xs">
-                            {userData.collegeNames?.length > 0 && (
-                              <div className="flex items-start gap-1.5 text-slate-600">
-                                <Building2 size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
-                                <span className="flex-1">{userData.collegeNames.map(c => c.name).join(', ')}</span>
-                              </div>
-                            )}
-                            {userData.allCourses ? (
-                              <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[11px] font-medium">
-                                All Courses
-                              </span>
-                            ) : userData.courseNames?.length > 0 && (
-                              <div className="flex items-start gap-1.5 text-slate-600">
-                                <GraduationCap size={13} className="text-emerald-500 flex-shrink-0 mt-0.5" />
-                                <span className="flex-1">{userData.courseNames.map(c => c.name).join(', ')}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Module Access & Status */}
-                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Module Access</h4>
-                            {hasModuleAccess ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold w-fit">
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</h4>
+                              {userData.isActive ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
                                   <CheckCircle2 size={12} />
-                                  Granted
+                                  Active
                                 </span>
-                                <span className="text-[10px] text-slate-500">{permStatus.granted}/{permStatus.total} modules</span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col gap-1">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-semibold w-fit">
-                                  <AlertCircle size={12} />
-                                  Pending
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">
+                                  <XCircle size={12} />
+                                  Inactive
                                 </span>
-                                <span className="text-[10px] text-slate-500">Needs config</span>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</h4>
-                            {userData.isActive ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">
-                                <CheckCircle2 size={12} />
-                                Active
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">
-                                <XCircle size={12} />
-                                Inactive
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Actions */}
-                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                          <button
-                            onClick={() => openEditModal(userData)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 transition-colors touch-manipulation min-h-[44px]"
-                            title="Edit User"
-                          >
-                            <Edit size={13} />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => openResetPasswordModal(userData)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 transition-colors touch-manipulation min-h-[44px]"
-                            title="Reset Password"
-                          >
-                            <KeyRound size={13} />
-                            Reset
-                          </button>
-                          {userData.isActive ? (
+
+                          {/* Actions */}
+                          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                             <button
-                              onClick={() => handleDeactivateUser(userData.id)}
-                              className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                              title="Deactivate User"
+                              onClick={() => openEditModal(userData)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 transition-colors touch-manipulation min-h-[44px]"
+                              title="Edit User"
                             >
-                              <Power size={14} />
+                              <Edit size={13} />
+                              Edit
                             </button>
-                          ) : null}
-                          <button
-                            onClick={() => openDeleteModal(userData)}
-                            className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                            title="Delete User Permanently"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                            <button
+                              onClick={() => openResetPasswordModal(userData)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 transition-colors touch-manipulation min-h-[44px]"
+                              title="Reset Password"
+                            >
+                              <KeyRound size={13} />
+                              Reset
+                            </button>
+                            {userData.isActive ? (
+                              <button
+                                onClick={() => handleDeactivateUser(userData.id)}
+                                className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                title="Deactivate User"
+                              >
+                                <Power size={14} />
+                              </button>
+                            ) : null}
+                            <button
+                              onClick={() => openDeleteModal(userData)}
+                              className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                              title="Delete User Permanently"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
               </>
             )}
           </div>
@@ -1735,6 +1746,355 @@ const UserManagement = () => {
         }}
         emptyMessage="No branches available for selected courses"
       />
+
+      {/* Module Access Modal - Left: modules list, Right: access details */}
+      {showModuleAccessModal && moduleAccessUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-lg sm:rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Settings size={20} className="text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                    Module Access - {moduleAccessUser.name}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-white/80 truncate">
+                    {moduleAccessUser.email} • {ROLE_LABELS[moduleAccessUser.role] || moduleAccessUser.role}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowModuleAccessModal(false);
+                  setModuleAccessUser(null);
+                  setSelectedModuleKey(null);
+                }}
+                className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 active:bg-white/40 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body: Left sidebar (modules), Right content (permissions) */}
+            <div className="flex-1 flex flex-col sm:flex-row min-h-[360px] max-h-[70vh]">
+              {/* Left: Module list */}
+              <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/80 overflow-y-auto">
+                <div className="px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                    Pages / Modules
+                  </p>
+                </div>
+                <div className="p-2 space-y-1">
+                  {Object.keys(BACKEND_MODULES).map((key) => {
+                    const moduleKey = BACKEND_MODULES[key];
+                    const modulePerms = MODULE_PERMISSIONS[moduleKey];
+                    const moduleLabel = MODULE_LABELS[moduleKey] || moduleKey;
+                    if (!modulePerms) return null;
+
+                    const permsForUser = moduleAccessUser.permissions?.[moduleKey] || {};
+                    const enabledCount = Object.values(permsForUser).filter((v) => v === true).length;
+                    const totalCount = modulePerms.permissions.length;
+                    const isActive = selectedModuleKey === moduleKey;
+
+                    return (
+                      <button
+                        key={moduleKey}
+                        type="button"
+                        onClick={() => setSelectedModuleKey(moduleKey)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm text-left transition-all ${isActive
+                            ? 'bg-white text-blue-700 border border-blue-200 shadow-sm'
+                            : 'bg-transparent text-slate-700 hover:bg-white'
+                          }`}
+                      >
+                        <span className="truncate font-medium">{moduleLabel}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                          {enabledCount}/{totalCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right: Permissions for selected module */}
+              <div className="flex-1 bg-white overflow-y-auto">
+                {(() => {
+                  const effectiveModuleKey =
+                    selectedModuleKey || Object.values(BACKEND_MODULES)[0];
+                  const modulePerms = MODULE_PERMISSIONS[effectiveModuleKey];
+                  const moduleLabel = MODULE_LABELS[effectiveModuleKey] || effectiveModuleKey;
+                  if (!modulePerms) {
+                    return (
+                      <div className="h-full flex items-center justify-center p-6">
+                        <p className="text-sm text-slate-500">
+                          Select a module from the left to configure access.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const permsForUser =
+                    moduleAccessUser.permissions?.[effectiveModuleKey] || {};
+                  const allEnabled = modulePerms.permissions.every(
+                    (p) => permsForUser[p] === true
+                  );
+
+                  const toggleSinglePermission = (permKey) => {
+                    setModuleAccessUser((prev) => {
+                      if (!prev) return prev;
+                      const currentPerms = prev.permissions || {};
+                      const moduleEntry = currentPerms[effectiveModuleKey] || {};
+                      const updatedModuleEntry = {
+                        ...moduleEntry,
+                        [permKey]: !moduleEntry[permKey],
+                      };
+                      const updatedPermissions = {
+                        ...currentPerms,
+                        [effectiveModuleKey]: updatedModuleEntry,
+                      };
+                      return { ...prev, permissions: updatedPermissions };
+                    });
+                    setUsers((prevUsers) =>
+                      prevUsers.map((u) =>
+                        u.id === moduleAccessUser.id
+                          ? {
+                            ...u,
+                            permissions: {
+                              ...u.permissions,
+                              [effectiveModuleKey]: {
+                                ...(u.permissions?.[effectiveModuleKey] || {}),
+                                [permKey]:
+                                  !(
+                                    u.permissions?.[effectiveModuleKey]?.[permKey]
+                                  ),
+                              },
+                            },
+                          }
+                          : u
+                      )
+                    );
+                    setEditForm((prev) =>
+                      prev && prev.id === moduleAccessUser.id
+                        ? {
+                          ...prev,
+                          permissions: {
+                            ...prev.permissions,
+                            [effectiveModuleKey]: {
+                              ...(prev.permissions?.[effectiveModuleKey] || {}),
+                              [permKey]:
+                                !(
+                                  prev.permissions?.[effectiveModuleKey]?.[permKey]
+                                ),
+                            },
+                          },
+                        }
+                        : prev
+                    );
+                  };
+
+                  const toggleAllForModule = (grant) => {
+                    setModuleAccessUser((prev) => {
+                      if (!prev) return prev;
+                      const currentPerms = prev.permissions || {};
+                      const updatedModuleEntry = {};
+                      modulePerms.permissions.forEach((p) => {
+                        updatedModuleEntry[p] = grant;
+                      });
+                      const updatedPermissions = {
+                        ...currentPerms,
+                        [effectiveModuleKey]: updatedModuleEntry,
+                      };
+                      return { ...prev, permissions: updatedPermissions };
+                    });
+                    setUsers((prevUsers) =>
+                      prevUsers.map((u) =>
+                        u.id === moduleAccessUser.id
+                          ? {
+                            ...u,
+                            permissions: {
+                              ...u.permissions,
+                              [effectiveModuleKey]: modulePerms.permissions.reduce(
+                                (acc, p) => ({ ...acc, [p]: grant }),
+                                {}
+                              ),
+                            },
+                          }
+                          : u
+                      )
+                    );
+                    setEditForm((prev) =>
+                      prev && prev.id === moduleAccessUser.id
+                        ? {
+                          ...prev,
+                          permissions: {
+                            ...prev.permissions,
+                            [effectiveModuleKey]: modulePerms.permissions.reduce(
+                              (acc, p) => ({ ...acc, [p]: grant }),
+                              {}
+                            ),
+                          },
+                        }
+                        : prev
+                    );
+                  };
+
+                  return (
+                    <div className="h-full flex flex-col">
+                      <div className="px-4 sm:px-5 py-3 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                            Access Controls
+                          </p>
+                          <h3 className="text-sm sm:text-base font-bold text-slate-800">
+                            {moduleLabel}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleAllForModule(true)}
+                            className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                          >
+                            Grant All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleAllForModule(false)}
+                            className="px-3 py-1.5 text-[11px] font-semibold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 transition-colors"
+                          >
+                            Revoke All
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 p-4 sm:p-5 space-y-3 overflow-y-auto">
+                        <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                          <p>
+                            Turn individual permissions on or off for this page. Granting all
+                            permissions will give full control for{' '}
+                            <span className="font-semibold">{moduleLabel}</span>.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {modulePerms.permissions.map((permKey) => {
+                            const enabled = permsForUser[permKey] === true;
+                            const label = modulePerms.labels[permKey] || permKey;
+                            return (
+                              <button
+                                key={permKey}
+                                type="button"
+                                onClick={() => toggleSinglePermission(permKey)}
+                                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs text-left transition-all ${enabled
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
+                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className={`w-5 h-5 rounded-md flex items-center justify-center border ${enabled
+                                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                                        : 'bg-slate-50 border-slate-300 text-slate-400'
+                                      }`}
+                                  >
+                                    {enabled ? (
+                                      <Check size={13} />
+                                    ) : (
+                                      <X size={13} />
+                                    )}
+                                  </span>
+                                  <span className="font-medium truncate">{label}</span>
+                                </span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${enabled
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-slate-100 text-slate-500'
+                                    }`}
+                                >
+                                  {enabled ? 'Allowed' : 'Disabled'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {allEnabled && (
+                          <div className="flex items-center gap-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                            <Sparkles size={14} />
+                            <span>
+                              All permissions are granted for this module. The user has full
+                              control over <span className="font-semibold">{moduleLabel}</span>.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Footer with Save Logic */}
+            <div className="flex-shrink-0 bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModuleAccessModal(false);
+                  setModuleAccessUser(null);
+                  setSelectedModuleKey(null);
+                }}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
+                disabled={loadingUsers}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!moduleAccessUser) return;
+                  try {
+                    setLoadingUsers(true);
+                    // Update user endpoint
+                    const response = await api.put(`/rbac/users/${moduleAccessUser.id}`, {
+                      name: moduleAccessUser.name,
+                      email: moduleAccessUser.email,
+                      role: moduleAccessUser.role,
+                      isActive: moduleAccessUser.isActive,
+                      permissions: moduleAccessUser.permissions,
+                      collegeIds: moduleAccessUser.collegeIds || [],
+                      courseIds: moduleAccessUser.courseIds || [],
+                      branchIds: moduleAccessUser.branchIds || []
+                    });
+
+                    if (response.data?.success) {
+                      toast.success('Permissions updated successfully!');
+                      setShowModuleAccessModal(false);
+                      setModuleAccessUser(null);
+                      setSelectedModuleKey(null);
+                      await loadUsers();
+                    } else {
+                      toast.error('Failed to update permissions');
+                    }
+                  } catch (error) {
+                    console.error('Permission update error:', error);
+                    toast.error(error.response?.data?.message || 'Failed to update permissions');
+                  } finally {
+                    setLoadingUsers(false);
+                  }
+                }}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                disabled={loadingUsers}
+              >
+                {loadingUsers ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal with Improved Permissions UI */}
       {editingUser && editForm && (
@@ -1802,14 +2162,13 @@ const UserManagement = () => {
                       {FIXED_ROLES.map(role => {
                         const isSelected = editForm.role === role.value;
                         return (
-                          <div 
+                          <div
                             key={role.value}
                             onClick={() => setEditForm(prev => ({ ...prev, role: role.value }))}
-                            className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer transition-all border-2 ${
-                              isSelected 
-                                ? `${ROLE_COLORS[role.value]} border-current` 
-                                : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
+                            className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer transition-all border-2 ${isSelected
+                              ? `${ROLE_COLORS[role.value]} border-current`
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
                           >
                             <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm flex-shrink-0`}>
                               <ShieldCheck size={14} className="text-white" />
@@ -2010,32 +2369,30 @@ const UserManagement = () => {
                       </button>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                     {Object.keys(BACKEND_MODULES).map(key => {
                       const moduleKey = BACKEND_MODULES[key];
                       const modulePerms = MODULE_PERMISSIONS[moduleKey];
                       const moduleLabel = MODULE_LABELS[moduleKey];
                       if (!modulePerms) return null;
-                      
+
                       const hasAny = hasAnyModulePermission(moduleKey);
                       const { enabled, total } = countModulePermissions(moduleKey);
-                      
+
                       return (
-                        <div 
-                          key={moduleKey} 
-                          className={`rounded-xl border-2 transition-all overflow-hidden ${
-                            hasAny 
-                              ? 'bg-emerald-50/30 border-emerald-200' 
-                              : 'bg-white border-slate-200'
-                          }`}
+                        <div
+                          key={moduleKey}
+                          className={`rounded-xl border-2 transition-all overflow-hidden ${hasAny
+                            ? 'bg-emerald-50/30 border-emerald-200'
+                            : 'bg-white border-slate-200'
+                            }`}
                         >
                           {/* Module Header */}
                           <div className="flex items-center justify-between p-3 bg-slate-50/50">
                             <div className="flex items-center gap-2">
-                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${
-                                hasAny ? 'bg-emerald-100' : 'bg-slate-200'
-                              }`}>
+                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${hasAny ? 'bg-emerald-100' : 'bg-slate-200'
+                                }`}>
                                 {hasAny ? (
                                   <CheckCircle2 size={14} className="text-emerald-600" />
                                 ) : (
@@ -2066,21 +2423,20 @@ const UserManagement = () => {
                               </button>
                             </div>
                           </div>
-                          
+
                           {/* Permissions Grid */}
                           <div className="p-3 grid grid-cols-2 gap-2">
                             {modulePerms.permissions.map(permKey => {
                               const isEnabled = editForm?.permissions?.[moduleKey]?.[permKey] || false;
                               const permLabel = modulePerms.labels[permKey] || permKey;
-                              
+
                               return (
-                                <label 
+                                <label
                                   key={permKey}
-                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${
-                                    isEnabled 
-                                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' 
-                                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
-                                  }`}
+                                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${isEnabled
+                                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                    : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                    }`}
                                 >
                                   <input
                                     type="checkbox"
@@ -2107,9 +2463,8 @@ const UserManagement = () => {
                 <button
                   type="submit"
                   disabled={updatingUser || editForm.collegeIds.length === 0}
-                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
-                    updatingUser || editForm.collegeIds.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
-                  }`}
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${updatingUser || editForm.collegeIds.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg hover:shadow-blue-500/25 active:from-blue-700 active:to-indigo-700'
+                    }`}
                 >
                   {updatingUser ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                   {updatingUser ? 'Saving...' : 'Save Changes'}
@@ -2237,9 +2592,9 @@ const UserManagement = () => {
               </div>
 
               <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-3">
-                <button 
-                  type="button" 
-                  onClick={closeResetPasswordModal} 
+                <button
+                  type="button"
+                  onClick={closeResetPasswordModal}
                   className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 transition-colors touch-manipulation min-h-[44px]"
                 >
                   Cancel
@@ -2247,11 +2602,10 @@ const UserManagement = () => {
                 <button
                   onClick={handleResetPassword}
                   disabled={resettingPassword || !newPassword || newPassword.length < 6}
-                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
-                    resettingPassword || !newPassword || newPassword.length < 6
-                      ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:shadow-lg hover:shadow-amber-500/25 active:from-amber-600 active:to-orange-700'
-                  }`}
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${resettingPassword || !newPassword || newPassword.length < 6
+                    ? 'bg-slate-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:shadow-lg hover:shadow-amber-500/25 active:from-amber-600 active:to-orange-700'
+                    }`}
                 >
                   {resettingPassword ? (
                     <>
@@ -2327,9 +2681,9 @@ const UserManagement = () => {
               </div>
 
               <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-3">
-                <button 
-                  type="button" 
-                  onClick={closeDeleteModal} 
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
                   className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 transition-colors touch-manipulation min-h-[44px]"
                 >
                   Cancel
@@ -2337,11 +2691,10 @@ const UserManagement = () => {
                 <button
                   onClick={handlePermanentDelete}
                   disabled={deletingUser}
-                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${
-                    deletingUser
-                      ? 'bg-slate-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:shadow-lg hover:shadow-rose-500/25 active:from-rose-600 active:to-red-700'
-                  }`}
+                  className={`w-full sm:w-auto px-4 sm:px-6 py-2.5 rounded-lg sm:rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 touch-manipulation min-h-[44px] ${deletingUser
+                    ? 'bg-slate-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-rose-500 to-red-600 hover:shadow-lg hover:shadow-rose-500/25 active:from-rose-600 active:to-red-700'
+                    }`}
                 >
                   {deletingUser ? (
                     <>

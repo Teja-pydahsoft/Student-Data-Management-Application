@@ -80,7 +80,7 @@ const ADDITIONAL_FIELDS = [
 const categorizeField = (field) => {
   const key = field.key?.toLowerCase() || '';
   const label = field.label?.toLowerCase() || '';
-  
+
   const normalize = (str) => {
     return str
       .replace(/[()]/g, ' ')
@@ -90,26 +90,26 @@ const categorizeField = (field) => {
       .trim()
       .toLowerCase();
   };
-  
+
   const normalizedKey = normalize(key);
   const normalizedLabel = normalize(label);
-  
+
   const matches = (pattern) => {
     const normalizedPattern = normalize(pattern);
-    return normalizedKey.includes(normalizedPattern) || 
-           normalizedLabel.includes(normalizedPattern) ||
-           normalizedKey.startsWith(normalizedPattern) || 
-           normalizedLabel.startsWith(normalizedPattern) ||
-           normalizedKey === normalizedPattern || 
-           normalizedLabel === normalizedPattern;
+    return normalizedKey.includes(normalizedPattern) ||
+      normalizedLabel.includes(normalizedPattern) ||
+      normalizedKey.startsWith(normalizedPattern) ||
+      normalizedLabel.startsWith(normalizedPattern) ||
+      normalizedKey === normalizedPattern ||
+      normalizedLabel === normalizedPattern;
   };
-  
+
   if (ACADEMIC_FIELDS.some(matches)) return 'academic';
   if (ADDRESS_FIELDS.some(matches)) return 'address';
   if (BASIC_FIELDS.some(matches)) return 'basic';
   if (CONTACT_FIELDS.some(matches)) return 'contact';
   if (ADDITIONAL_FIELDS.some(matches)) return 'additional';
-  
+
   return 'other';
 };
 
@@ -238,7 +238,7 @@ const Settings = () => {
   const [newCollege, setNewCollege] = useState({ name: '', code: '', isActive: true });
   const [isAddCollegeModalOpen, setIsAddCollegeModalOpen] = useState(false);
   const [collegeDrafts, setCollegeDrafts] = useState({});
-  
+
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creatingCourse, setCreatingCourse] = useState(false);
@@ -258,7 +258,7 @@ const Settings = () => {
   const [isAddBranchModalOpen, setIsAddBranchModalOpen] = useState(false);
   const [branchModalCourseId, setBranchModalCourseId] = useState(null);
   const [newBranch, setNewBranch] = useState({ name: '', code: '', academicYearIds: [] });
-  
+
   // Academic Years state
   const [academicYears, setAcademicYears] = useState([]);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
@@ -267,7 +267,7 @@ const Settings = () => {
   const [editingAcademicYearId, setEditingAcademicYearId] = useState(null);
   const [academicYearDrafts, setAcademicYearDrafts] = useState({});
   const [savingAcademicYearId, setSavingAcademicYearId] = useState(null);
-  
+
   // Registration Forms state
   const [registrationForms, setRegistrationForms] = useState([]);
   const [formsLoading, setFormsLoading] = useState(false);
@@ -279,7 +279,7 @@ const Settings = () => {
     formDescription: '',
     formFields: []
   });
-  
+
   // Field types for form builder
   const FIELD_TYPES = [
     { key: 'text', label: 'Text', icon: '📝' },
@@ -293,7 +293,7 @@ const Settings = () => {
     { key: 'checkbox', label: 'Checkbox', icon: '☑️' },
     { key: 'file', label: 'File Upload', icon: '📎' }
   ];
-  
+
   // Delete confirmation modal state
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
@@ -306,72 +306,8 @@ const Settings = () => {
     isLoadingStudents: false
   });
   const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', 'notifications'
-  
-  // Certificate configuration state
-  const [certificateConfig, setCertificateConfig] = useState({
-    diploma: [
-      { id: 'diploma_1', name: 'SSC Certificate', required: true },
-      { id: 'diploma_2', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'diploma_3', name: '10th Study Certificate', required: true }
-    ],
-    ug: [
-      { id: 'ug_1', name: 'SSC Certificate', required: true },
-      { id: 'ug_2', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'ug_3', name: '10th Study Certificate', required: true },
-      { id: 'ug_4', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
-      { id: 'ug_5', name: 'Inter/Diploma Study Certificate', required: true }
-    ],
-    pg: [
-      { id: 'pg_1', name: 'SSC Certificate', required: true },
-      { id: 'pg_2', name: '10th TC (Transfer Certificate)', required: true },
-      { id: 'pg_3', name: '10th Study Certificate', required: true },
-      { id: 'pg_4', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
-      { id: 'pg_5', name: 'Inter/Diploma Study Certificate', required: true },
-      { id: 'pg_6', name: 'UG Study Certificate', required: true },
-      { id: 'pg_7', name: 'UG TC (Transfer Certificate)', required: true },
-      { id: 'pg_8', name: 'UG PC (Provisional Certificate)', required: true },
-      { id: 'pg_9', name: 'UG CMM (Consolidated Marks Memo)', required: true },
-      { id: 'pg_10', name: 'UG OD (Original Degree)', required: true }
-    ]
-  });
 
-  // Helper functions for certificate management
-  const updateCertificateRequired = (courseType, certId, required) => {
-    setCertificateConfig(prev => ({
-      ...prev,
-      [courseType]: prev[courseType].map(cert => 
-        cert.id === certId ? { ...cert, required } : cert
-      )
-    }));
-  };
 
-  const addCertificate = (courseType) => {
-    const newCert = {
-      id: `${courseType}_${Date.now()}`,
-      name: '',
-      required: false
-    };
-    setCertificateConfig(prev => ({
-      ...prev,
-      [courseType]: [...prev[courseType], newCert]
-    }));
-  };
-
-  const removeCertificate = (courseType, certId) => {
-    setCertificateConfig(prev => ({
-      ...prev,
-      [courseType]: prev[courseType].filter(cert => cert.id !== certId)
-    }));
-  };
-
-  const updateCertificateName = (courseType, certId, name) => {
-    setCertificateConfig(prev => ({
-      ...prev,
-      [courseType]: prev[courseType].map(cert => 
-        cert.id === certId ? { ...cert, name } : cert
-      )
-    }));
-  };
 
   // Calendar state
   const [calendarViewMonthKey, setCalendarViewMonthKey] = useState(() => {
@@ -448,7 +384,7 @@ const Settings = () => {
         endDate: newAcademicYear.endDate || null,
         isActive: true
       });
-      
+
       toast.success('Academic year created successfully');
       setNewAcademicYear({ yearLabel: '', startDate: '', endDate: '' });
       await fetchAcademicYears({ silent: true });
@@ -559,7 +495,7 @@ const Settings = () => {
   // Start editing a form
   const startEditingForm = (form) => {
     let formFields = form.form_fields || [];
-    
+
     // CRITICAL: Ensure required system fields exist in the form builder
     // These fields are needed for document upload and proper form functionality
     const requiredSystemFields = [
@@ -641,7 +577,7 @@ const Settings = () => {
         isSystemField: true
       }
     ];
-    
+
     // Add system fields if they don't exist, or update existing ones to ensure they have isSystemField flag
     requiredSystemFields.forEach(systemField => {
       const existingFieldIndex = formFields.findIndex(f => {
@@ -649,13 +585,13 @@ const Settings = () => {
         const fieldLabel = (f.label || '').toLowerCase();
         const systemKey = systemField.key.toLowerCase();
         const systemLabel = systemField.label.toLowerCase();
-        
-        return fieldKey === systemKey || 
-               fieldLabel === systemLabel ||
-               fieldKey.includes(systemKey) ||
-               fieldLabel.includes(systemLabel);
+
+        return fieldKey === systemKey ||
+          fieldLabel === systemLabel ||
+          fieldKey.includes(systemKey) ||
+          fieldLabel.includes(systemLabel);
       });
-      
+
       if (existingFieldIndex === -1) {
         // Field doesn't exist, add it
         formFields.push(systemField);
@@ -671,7 +607,7 @@ const Settings = () => {
         };
       }
     });
-    
+
     setFormEditData({
       formName: form.form_name,
       formDescription: form.form_description || '',
@@ -810,7 +746,7 @@ const Settings = () => {
         code: newCollege.code.trim(),
         isActive: newCollege.isActive !== undefined ? newCollege.isActive : true
       });
-      
+
       const createdCollege = response.data.data;
       toast.success('College created successfully');
       resetNewCollege();
@@ -857,7 +793,7 @@ const Settings = () => {
         }
         updates.code = draft.code.trim();
       }
-      
+
       await api.put(`/colleges/${collegeId}`, updates);
       toast.success('College updated successfully');
       await fetchColleges({ silent: true });
@@ -1242,7 +1178,7 @@ const Settings = () => {
       // Re-enable body scroll when modal closes
       document.body.style.overflow = '';
     }
-    
+
     return () => {
       // Cleanup: re-enable body scroll
       document.body.style.overflow = '';
@@ -1258,7 +1194,7 @@ const Settings = () => {
     event.preventDefault();
 
     const collegeIdToUse = selectedCollegeId || (selectedCollege?.id);
-    
+
     if (!collegeIdToUse) {
       toast.error('Please select a college first');
       setIsAddCourseModalOpen(false);
@@ -1300,18 +1236,18 @@ const Settings = () => {
 
     try {
       setCreatingCourse(true);
-      
+
       // Ensure semestersPerYear is always a valid number (backend requires it)
-      const semestersPerYearValue = newCourse.usePerYearConfig 
+      const semestersPerYearValue = newCourse.usePerYearConfig
         ? (Number(newCourse.semestersPerYear) || 2) // Default to 2 if not set when using per-year config
         : Number(newCourse.semestersPerYear);
-      
+
       if (!semestersPerYearValue || semestersPerYearValue <= 0 || semestersPerYearValue > 4) {
         toast.error('Semesters per year must be between 1 and 4');
         setCreatingCourse(false);
         return;
       }
-      
+
       const payload = {
         name: newCourse.name.trim(),
         code: newCourse.code.trim(),
@@ -1324,7 +1260,7 @@ const Settings = () => {
       // Add per-year configuration if enabled
       if (newCourse.usePerYearConfig && newCourse.yearSemesterConfig && Array.isArray(newCourse.yearSemesterConfig) && newCourse.yearSemesterConfig.length > 0) {
         // Validate each year config has required fields
-        const validConfig = newCourse.yearSemesterConfig.filter(config => 
+        const validConfig = newCourse.yearSemesterConfig.filter(config =>
           config && typeof config.year === 'number' && typeof config.semesters === 'number'
         );
         if (validConfig.length === Number(newCourse.totalYears)) {
@@ -1420,13 +1356,13 @@ const Settings = () => {
           const response = await api.delete(`/courses/${course.id}?cascade=true`);
           const deletedCount = response.data.deletedStudents || 0;
           toast.success(`Course deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
-          
+
           // Clear selection if deleted course was selected
           if (selectedCourseId === course.id) {
             setSelectedCourseId(null);
             setEditingCourseId(null);
           }
-          
+
           await fetchCourses({ silent: true });
           setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false });
         } catch (error) {
@@ -1536,12 +1472,12 @@ const Settings = () => {
         totalYears: Number(draft.totalYears),
         semestersPerYear: Number(draft.semestersPerYear)
       };
-      
+
       // Include collegeId if it was changed
       if (draft.collegeId !== undefined) {
         updates.collegeId = draft.collegeId;
       }
-      
+
       await api.put(`/courses/${courseId}`, updates);
       toast.success('Course updated successfully');
       await fetchCourses({ silent: true, collegeId: selectedCollegeId });
@@ -1710,11 +1646,15 @@ const Settings = () => {
   };
 
   const handleDeleteBranch = async (courseId, branch) => {
+    // Determine scope: if filtering by batch, delete specific branch ('single').
+    // If showing all batches (grouped view), delete all branch versions ('all').
+    const scope = branchBatchFilter ? 'single' : 'all';
+
     // Show modal with loading state first
     setDeleteModal({
       isOpen: true,
       type: 'branch',
-      item: branch,
+      item: { ...branch, deletionScope: scope },
       affectedStudents: [],
       totalStudentCount: 0,
       hasMoreStudents: false,
@@ -1722,7 +1662,7 @@ const Settings = () => {
       onConfirm: async () => {
         try {
           setSavingBranchId(branch.id);
-          const response = await api.delete(`/courses/${courseId}/branches/${branch.id}?cascade=true`);
+          const response = await api.delete(`/courses/${courseId}/branches/${branch.id}?cascade=true&scope=${scope}`);
           const deletedCount = response.data.deletedStudents || 0;
           toast.success(`Branch deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
           cancelEditBranch();
@@ -1740,7 +1680,7 @@ const Settings = () => {
 
     // Fetch affected students
     try {
-      const response = await api.get(`/courses/${courseId}/branches/${branch.id}/affected-students`);
+      const response = await api.get(`/courses/${courseId}/branches/${branch.id}/affected-students?scope=${scope}`);
       const { students, totalCount, hasMore } = response.data.data || {};
       setDeleteModal(prev => ({
         ...prev,
@@ -1762,10 +1702,10 @@ const Settings = () => {
   const branchesForSelectedCourse = useMemo(() => {
     if (!selectedCourse) return [];
     const allBranches = courseBranches[selectedCourse.id] || [];
-    
+
     // Group branches by code (same code = same branch, just different batches)
     const branchMap = new Map();
-    
+
     allBranches.forEach(branch => {
       const code = branch.code || branch.name;
       if (!branchMap.has(code)) {
@@ -1775,10 +1715,10 @@ const Settings = () => {
           .map(b => b.academicYearLabel)
           .filter(Boolean)
           .sort();
-        
+
         // Use the first active branch, or first branch if none are active
         const representativeBranch = allBranchesWithSameCode.find(b => b.isActive) || allBranchesWithSameCode[0];
-        
+
         branchMap.set(code, {
           ...representativeBranch,
           // Store all academic year IDs and labels for this branch code
@@ -1789,18 +1729,18 @@ const Settings = () => {
         });
       }
     });
-    
+
     // Get unique branches grouped by code
     let uniqueBranches = Array.from(branchMap.values());
-    
+
     // Filter by batch if filter is applied (after grouping)
     if (branchBatchFilter) {
       const filterYearId = parseInt(branchBatchFilter, 10);
-      uniqueBranches = uniqueBranches.filter(branch => 
+      uniqueBranches = uniqueBranches.filter(branch =>
         branch.allAcademicYearIds.includes(filterYearId)
       );
     }
-    
+
     return uniqueBranches;
   }, [selectedCourse, courseBranches, branchBatchFilter]);
 
@@ -1812,7 +1752,7 @@ const Settings = () => {
     const uniqueCodes = new Set(allBranches.map(branch => branch.code || branch.name));
     return uniqueCodes.size;
   }, [selectedCourse, courseBranches]);
-  
+
   // Reset batch filter when course changes
   useEffect(() => {
     setBranchBatchFilter('');
@@ -1820,7 +1760,7 @@ const Settings = () => {
 
   const courseOptionsSummary = useMemo(() => {
     const courseCount = coursesForSelectedCollege.filter((course) => course.isActive).length;
-    
+
     // Count unique branch names per course (using course.branches directly, not courseBranches state)
     const branchCount = coursesForSelectedCollege.reduce((acc, course) => {
       // Use course.branches directly (from API response) instead of courseBranches state
@@ -1849,14 +1789,14 @@ const Settings = () => {
           </div>
           <SkeletonBox height="h-10" width="w-24" className="rounded-md" />
         </div>
-        
+
         {/* Navigation Cards Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
-        
+
         {/* Content Skeleton */}
         <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
           <div className="space-y-4">
@@ -1874,1024 +1814,1443 @@ const Settings = () => {
 
   return (
     <>
-    <div className="space-y-4 bg-white p-3 sm:p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Settings</h1>
-          <p className="text-xs sm:text-sm text-gray-600">
-            Manage colleges, courses, branches, and attendance calendar.
-          </p>
+      <div className="space-y-4 bg-white p-3 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Settings</h1>
+            <p className="text-xs sm:text-sm text-gray-600">
+              Manage colleges, courses, branches, and attendance calendar.
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 sm:py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100 touch-manipulation min-h-[44px]"
+          >
+            <RefreshCcw size={16} />
+            Refresh
+          </button>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 sm:py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100 touch-manipulation min-h-[44px]"
-        >
-          <RefreshCcw size={16} />
-          Refresh
-        </button>
-      </div>
 
-      {/* Navigation Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <button
-          onClick={() => setActiveSection('courses')}
-          className={`rounded-lg border-2 p-3 sm:p-4 text-left transition-all touch-manipulation min-h-[80px] ${
-            activeSection === 'courses'
+        {/* Navigation Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            onClick={() => setActiveSection('courses')}
+            className={`rounded-lg border-2 p-3 sm:p-4 text-left transition-all touch-manipulation min-h-[80px] ${activeSection === 'courses'
               ? 'border-blue-500 bg-blue-50 shadow-md'
               : 'border-gray-200 bg-white hover:border-blue-300 active:border-blue-400 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`rounded-full p-2 ${
-              activeSection === 'courses' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <BookOpen size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Colleges & Courses</h2>
-              <p className="text-xs text-gray-500">Manage colleges, courses & branches</p>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveSection('calendar')}
-          className={`rounded-lg border-2 p-3 text-left transition-all ${
-            activeSection === 'calendar'
-              ? 'border-blue-500 bg-blue-50 shadow-md'
-              : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`rounded-full p-2 ${
-              activeSection === 'calendar' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <CalendarDays size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Attendance Calendar</h2>
-              <p className="text-xs text-gray-500">Holidays & attendance calendar</p>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveSection('academic-calendar')}
-          className={`rounded-lg border-2 p-3 text-left transition-all ${
-            activeSection === 'academic-calendar'
-              ? 'border-green-500 bg-green-50 shadow-md'
-              : 'border-gray-200 bg-white hover:border-green-300 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`rounded-full p-2 ${
-              activeSection === 'academic-calendar' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <Calendar size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Academic Calendar</h2>
-              <p className="text-xs text-gray-500">Manage semester dates</p>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveSection('forms')}
-          className={`rounded-lg border-2 p-3 text-left transition-all ${
-            activeSection === 'forms'
-              ? 'border-purple-500 bg-purple-50 shadow-md'
-              : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`rounded-full p-2 ${
-              activeSection === 'forms' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <FileText size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Registration Form</h2>
-              <p className="text-xs text-gray-500">Student registration form fields</p>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setActiveSection('notifications')}
-          className={`rounded-lg border-2 p-3 text-left transition-all ${
-            activeSection === 'notifications'
-              ? 'border-indigo-500 bg-indigo-50 shadow-md'
-              : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className={`rounded-full p-2 ${
-              activeSection === 'notifications' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
-            }`}>
-              <Bell size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Notifications</h2>
-              <p className="text-xs text-gray-500">SMS & Email templates</p>
-            </div>
-          </div>
-        </button>
-
-      </div>
-
-      {/* Content Section */}
-      {activeSection === 'courses' && (
-        <>
-          {/* Quick Stats Bar */}
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-3 sm:px-4 py-2 sm:py-3">
+              }`}
+          >
             <div className="flex items-center gap-2">
-              <Landmark size={16} className="text-blue-600" />
-              <span className="text-sm text-gray-600">Colleges:</span>
-              <span className="font-semibold text-gray-900">{colleges.filter(c => c.isActive).length}</span>
-            </div>
-            <div className="h-4 w-px bg-gray-300" />
-            <div className="flex items-center gap-2">
-              <GraduationCap size={16} className="text-green-600" />
-              <span className="text-sm text-gray-600">Batches:</span>
-              <span className="font-semibold text-gray-900">{academicYears.filter(y => y.isActive).length}</span>
-            </div>
-            <div className="h-4 w-px bg-gray-300" />
-            <div className="flex items-center gap-2">
-              <BookOpen size={16} className="text-purple-600" />
-              <span className="text-sm text-gray-600">Courses:</span>
-              <span className="font-semibold text-gray-900">{courseOptionsSummary.courseCount}</span>
-            </div>
-            <div className="h-4 w-px bg-gray-300" />
-            <div className="flex items-center gap-2">
-              <Layers size={16} className="text-orange-600" />
-              <span className="text-sm text-gray-600">Branches:</span>
-              <span className="font-semibold text-gray-900">{courseOptionsSummary.branchCount}</span>
-            </div>
-          </div>
-
-          {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
-          <div className="grid gap-3 sm:gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[320px,1fr] min-w-0">
-            {/* Left Column */}
-            <div className="space-y-4 min-w-0">
-              {/* Colleges Card */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-100 px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-                      <Landmark size={16} className="text-blue-600" />
-                      Colleges
-                    </h3>
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                      {colleges.length}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3">
-                  {/* Add College Button */}
-                  <button
-                    onClick={() => setIsAddCollegeModalOpen(true)}
-                    className="mb-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                  >
-                    <Plus size={16} />
-                    Add New College
-                  </button>
-                  
-                  {/* College List */}
-                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto min-h-0">
-                    {colleges.length === 0 && !loading ? (
-                      <p className="py-4 text-center text-sm text-gray-400">No colleges yet</p>
-                    ) : colleges.length === 0 ? (
-                      <SkeletonList count={3} />
-                    ) : (
-                      colleges.map((college) => (
-                        <div
-                          key={college.id}
-                          onClick={() => handleSelectCollege(college.id)}
-                          className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
-                            selectedCollegeId === college.id
-                              ? 'bg-blue-50 border border-blue-200'
-                              : 'hover:bg-gray-50 border border-transparent'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${college.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                            <span className={`text-sm truncate ${selectedCollegeId === college.id ? 'font-medium text-blue-900' : 'text-gray-700'}`}>
-                              {college.name}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEditCollege(college); }}
-                              className="p-1 text-gray-400 hover:text-blue-500"
-                              title="Edit"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleCollegeActive(college); }}
-                              className="p-1 text-gray-400 hover:text-gray-600"
-                              title={college.isActive ? 'Deactivate' : 'Activate'}
-                            >
-                              {college.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteCollege(college); }}
-                              className="p-1 text-gray-400 hover:text-red-500"
-                              title="Delete"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Academic Years Card */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-100 px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-                      <GraduationCap size={16} className="text-green-600" />
-                      Batches (Academic Years)
-                    </h3>
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                      {academicYears.filter(y => y.isActive).length}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3">
-                  {/* Add Year Form */}
-                  <form onSubmit={handleCreateAcademicYear} className="mb-3 flex gap-2">
-                    <input
-                      type="text"
-                      value={newAcademicYear.yearLabel}
-                      onChange={(e) => setNewAcademicYear((prev) => ({ ...prev, yearLabel: e.target.value }))}
-                      placeholder="e.g., 2027"
-                      className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-green-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={creatingAcademicYear || !newAcademicYear.yearLabel.trim()}
-                      className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </form>
-                  
-                  {/* Year Tags */}
-                  <div className="flex flex-wrap gap-2">
-                    {academicYears.length === 0 && !loading ? (
-                      <p className="py-2 text-sm text-gray-400">No batches yet</p>
-                    ) : academicYears.length === 0 ? (
-                      <div className="flex flex-wrap gap-2 w-full">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <SkeletonBox key={i} height="h-8" width="w-20" className="rounded-full" />
-                        ))}
-                      </div>
-                    ) : (
-                      academicYears.map((year) => (
-                        <div
-                          key={year.id}
-                          className={`group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 text-sm font-medium transition-all ${
-                            year.isActive
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          <span>{year.yearLabel}</span>
-                          <button
-                            onClick={() => toggleAcademicYearActive(year)}
-                            disabled={savingAcademicYearId === year.id}
-                            className="p-0.5 rounded hover:bg-white/50 transition-colors"
-                          >
-                            {year.isActive ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteAcademicYear(year)}
-                            disabled={savingAcademicYearId === year.id}
-                            className="p-0.5 rounded text-red-400 hover:text-red-600 hover:bg-white/50 transition-colors"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column - Courses & Branches */}
-            <div className="space-y-4 min-w-0 overflow-hidden">
-              {!selectedCollege ? (
-                <div className="flex h-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8">
-                  <div className="text-center">
-                    <Landmark size={32} className="mx-auto mb-3 text-gray-300" />
-                    <p className="text-sm text-gray-500">Select a college to manage its courses</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-{/* Course List & Branches */}
-                  <div className="grid gap-4 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
-                    {/* Course List */}
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 min-w-0 overflow-hidden">
-                      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Select Course</div>
-                      <div className="space-y-1.5 max-h-[400px] overflow-y-auto min-w-0">
-                        {coursesForSelectedCollege.length === 0 && !loading ? (
-                          <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
-                        ) : coursesForSelectedCollege.length === 0 ? (
-                          <SkeletonList count={3} />
-                        ) : (
-                          coursesForSelectedCollege.map((course) => (
-                            <div
-                              key={course.id}
-                              onClick={() => handleSelectCourse(course.id)}
-                              className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${
-                                selectedCourseId === course.id
-                                  ? 'bg-purple-100 border border-purple-300'
-                                  : 'bg-white hover:bg-purple-50 border border-gray-200'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className={`h-2 w-2 rounded-full flex-shrink-0 ${course.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                <div className="min-w-0">
-                                  <span className={`block text-sm truncate ${selectedCourseId === course.id ? 'font-medium text-purple-900' : 'text-gray-700'}`}>
-                                    {course.name}
-                                  </span>
-                                  <span className="text-xs text-gray-500">{course.totalYears}yr · {course.semestersPerYear}sem</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleEditCourse(course); }}
-                                  className="p-1 text-gray-400 hover:text-blue-500"
-                                  title="Edit"
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleCourseActive(course); }}
-                                  className="p-1 text-gray-400 hover:text-gray-600"
-                                  title={course.isActive ? 'Deactivate' : 'Activate'}
-                                >
-                                  {course.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course); }}
-                                  className="p-1 text-gray-400 hover:text-red-500"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                      {/* Add Course Button Below List */}
-                      {selectedCollege ? (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setIsAddCourseModalOpen(true);
-                            }}
-                            className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer"
-                            style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
-                          >
-                            <Plus size={16} />
-                            Add New Course
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-400 text-center">
-                          Select a college to add courses
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Branches Panel */}
-                    <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden">
-                      {selectedCourse ? (
-                        <>
-                          <div className="border-b border-gray-100 px-4 py-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h4 className="font-semibold text-gray-900">{selectedCourse.name} - Branches</h4>
-                                <p className="text-xs text-gray-500">{selectedCourse.totalYears} years · {selectedCourse.semestersPerYear} semesters/year</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={branchBatchFilter}
-                                  onChange={(e) => setBranchBatchFilter(e.target.value)}
-                                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
-                                >
-                                  <option value="">All Batches</option>
-                                  {academicYears.filter(y => y.isActive).map((year) => (
-                                    <option key={year.id} value={year.id}>{year.yearLabel}</option>
-                                  ))}
-                                </select>
-                                <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-                                  {branchBatchFilter ? branchesForSelectedCourse.length : uniqueBranchCount} {branchBatchFilter ? 'shown' : 'branches'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Add Branch Button */}
-                          <div className="border-b border-gray-100 p-4">
-                            <button
-                              onClick={() => {
-                                setBranchModalCourseId(selectedCourse.id);
-                                setIsAddBranchModalOpen(true);
-                              }}
-                              className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-colors"
-                            >
-                              <Plus size={16} />
-                              Add New Branch
-                            </button>
-                          </div>
-
-                          {/* Branch List */}
-                          <div className="p-4 max-h-[300px] overflow-y-auto">
-                            {branchesLoading ? (
-                              <div className="flex items-center justify-center py-8">
-                                <LoadingAnimation width={24} height={24} showMessage={false} />
-                              </div>
-                            ) : branchesForSelectedCourse.length === 0 ? (
-                              <p className="py-8 text-center text-sm text-gray-400">No branches yet</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {branchesForSelectedCourse.map((branch) => (
-                                  <div
-                                    key={branch.code || branch.id}
-                                    className="group flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 hover:bg-gray-100 transition-colors"
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${branch.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                      <span className="text-sm font-medium text-gray-800 truncate">{branch.name}</span>
-                                      {branch.code && branch.code !== branch.name && (
-                                        <span className="text-xs text-gray-500">({branch.code})</span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <button
-                                        onClick={() => startEditBranch(selectedCourse.id, branch, selectedCourse)}
-                                        disabled={savingBranchId === branch.id}
-                                        className="p-1 text-gray-400 hover:text-blue-500"
-                                        title="Edit"
-                                      >
-                                        <Pencil size={14} />
-                                      </button>
-                                      <button
-                                        onClick={() => toggleBranchActive(selectedCourse.id, branch)}
-                                        disabled={savingBranchId === branch.id}
-                                        className="p-1 text-gray-400 hover:text-gray-600"
-                                        title={branch.isActive ? 'Deactivate' : 'Activate'}
-                                      >
-                                        {branch.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
-                                        disabled={savingBranchId === branch.id}
-                                        className="p-1 text-gray-400 hover:text-red-500"
-                                        title="Delete"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex h-full items-center justify-center p-8">
-                          <div className="text-center">
-                            <Layers size={32} className="mx-auto mb-3 text-gray-300" />
-                            <p className="text-sm text-gray-500">Select a course to view branches</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {activeSection === 'calendar' && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm flex flex-col h-[calc(100vh-280px)] min-h-[600px] max-h-[calc(100vh-200px)] 2xl:max-h-[calc(100vh-180px)]">
-          <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-blue-100 p-2.5 text-blue-600">
-                <CalendarDays size={20} />
+              <div className={`rounded-full p-2 ${activeSection === 'courses' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <BookOpen size={18} />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Attendance Calendar</h2>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Review public holidays, institute breaks, and mark custom holidays.
-                </p>
+                <h2 className="text-sm font-semibold text-gray-900">Colleges & Courses</h2>
+                <p className="text-xs text-gray-500">Manage colleges, courses & branches</p>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
-            {/* Calendar Grid */}
-            <div className="flex-1 border-b border-gray-200 lg:border-b-0 lg:border-r p-4 overflow-y-auto min-h-0">
-              {calendarViewLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <LoadingAnimation width={32} height={32} message="Loading..." />
-                </div>
-              ) : calendarViewError ? (
-                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
-                  <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-red-600" />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-red-800 mb-1">
-                      Calendar data unavailable
+          <button
+            onClick={() => setActiveSection('calendar')}
+            className={`rounded-lg border-2 p-3 text-left transition-all ${activeSection === 'calendar'
+              ? 'border-blue-500 bg-blue-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`rounded-full p-2 ${activeSection === 'calendar' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <CalendarDays size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Attendance Calendar</h2>
+                <p className="text-xs text-gray-500">Holidays & attendance calendar</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('academic-calendar')}
+            className={`rounded-lg border-2 p-3 text-left transition-all ${activeSection === 'academic-calendar'
+              ? 'border-green-500 bg-green-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-green-300 hover:shadow-sm'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`rounded-full p-2 ${activeSection === 'academic-calendar' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <Calendar size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Academic Calendar</h2>
+                <p className="text-xs text-gray-500">Manage semester dates</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('forms')}
+            className={`rounded-lg border-2 p-3 text-left transition-all ${activeSection === 'forms'
+              ? 'border-purple-500 bg-purple-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-sm'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`rounded-full p-2 ${activeSection === 'forms' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <FileText size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Registration Form</h2>
+                <p className="text-xs text-gray-500">Student registration form fields</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('notifications')}
+            className={`rounded-lg border-2 p-3 text-left transition-all ${activeSection === 'notifications'
+              ? 'border-indigo-500 bg-indigo-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`rounded-full p-2 ${activeSection === 'notifications' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <Bell size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Notifications</h2>
+                <p className="text-xs text-gray-500">SMS & Email templates</p>
+              </div>
+            </div>
+          </button>
+
+        </div>
+
+        {/* Content Section */}
+        {activeSection === 'courses' && (
+          <>
+            {/* Quick Stats Bar */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-3 sm:px-4 py-2 sm:py-3">
+              <div className="flex items-center gap-2">
+                <Landmark size={16} className="text-blue-600" />
+                <span className="text-sm text-gray-600">Colleges:</span>
+                <span className="font-semibold text-gray-900">{colleges.filter(c => c.isActive).length}</span>
+              </div>
+              <div className="h-4 w-px bg-gray-300" />
+              <div className="flex items-center gap-2">
+                <GraduationCap size={16} className="text-green-600" />
+                <span className="text-sm text-gray-600">Batches:</span>
+                <span className="font-semibold text-gray-900">{academicYears.filter(y => y.isActive).length}</span>
+              </div>
+              <div className="h-4 w-px bg-gray-300" />
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-purple-600" />
+                <span className="text-sm text-gray-600">Courses:</span>
+                <span className="font-semibold text-gray-900">{courseOptionsSummary.courseCount}</span>
+              </div>
+              <div className="h-4 w-px bg-gray-300" />
+              <div className="flex items-center gap-2">
+                <Layers size={16} className="text-orange-600" />
+                <span className="text-sm text-gray-600">Branches:</span>
+                <span className="font-semibold text-gray-900">{courseOptionsSummary.branchCount}</span>
+              </div>
+            </div>
+
+            {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
+            <div className="grid gap-3 sm:gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[320px,1fr] min-w-0">
+              {/* Left Column */}
+              <div className="space-y-4 min-w-0">
+                {/* Colleges Card */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                        <Landmark size={16} className="text-blue-600" />
+                        Colleges
+                      </h3>
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        {colleges.length}
+                      </span>
                     </div>
-                    <div className="text-sm text-red-700 mb-2">{calendarViewError}</div>
+                  </div>
+                  <div className="p-3">
+                    {/* Add College Button */}
                     <button
-                      type="button"
-                      onClick={handleCalendarModalRetry}
-                      className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+                      onClick={() => setIsAddCollegeModalOpen(true)}
+                      className="mb-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                     >
-                      Retry
+                      <Plus size={16} />
+                      Add New College
                     </button>
+
+                    {/* College List */}
+                    <div className="space-y-1.5 max-h-[280px] overflow-y-auto min-h-0">
+                      {colleges.length === 0 && !loading ? (
+                        <p className="py-4 text-center text-sm text-gray-400">No colleges yet</p>
+                      ) : colleges.length === 0 ? (
+                        <SkeletonList count={3} />
+                      ) : (
+                        colleges.map((college) => (
+                          <div
+                            key={college.id}
+                            onClick={() => handleSelectCollege(college.id)}
+                            className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${selectedCollegeId === college.id
+                              ? 'bg-blue-50 border border-blue-200'
+                              : 'hover:bg-gray-50 border border-transparent'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`h-2 w-2 rounded-full flex-shrink-0 ${college.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                              <span className={`text-sm break-words ${selectedCollegeId === college.id ? 'font-medium text-blue-900' : 'text-gray-700'}`}>
+                                {college.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEditCollege(college); }}
+                                className="p-1 text-gray-400 hover:text-blue-500"
+                                title="Edit"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleCollegeActive(college); }}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title={college.isActive ? 'Deactivate' : 'Activate'}
+                              >
+                                {college.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteCollege(college); }}
+                                className="p-1 text-gray-400 hover:text-red-500"
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col h-full min-h-0">
-                  <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const parts = parseMonthKey(calendarViewMonthKey);
-                        if (!parts) return;
-                        const prev = new Date(Date.UTC(parts.year, parts.month - 2, 1));
-                        handleCalendarMonthChange(`${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`);
-                      }}
-                      className="rounded-md border border-gray-300 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-400"
-                      aria-label="Previous month"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
+
+                {/* Academic Years Card */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className="border-b border-gray-100 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                        <GraduationCap size={16} className="text-green-600" />
+                        Batches (Academic Years)
+                      </h3>
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        {academicYears.filter(y => y.isActive).length}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    {/* Add Year Form */}
+                    <form onSubmit={handleCreateAcademicYear} className="mb-3 flex gap-2">
+                      <input
+                        type="text"
+                        value={newAcademicYear.yearLabel}
+                        onChange={(e) => setNewAcademicYear((prev) => ({ ...prev, yearLabel: e.target.value }))}
+                        placeholder="e.g., 2027"
+                        className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-green-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                      />
+                      <button
+                        type="submit"
+                        disabled={creatingAcademicYear || !newAcademicYear.yearLabel.trim()}
+                        className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </form>
+
+                    {/* Year Tags */}
+                    <div className="flex flex-wrap gap-2">
+                      {academicYears.length === 0 && !loading ? (
+                        <p className="py-2 text-sm text-gray-400">No batches yet</p>
+                      ) : academicYears.length === 0 ? (
+                        <div className="flex flex-wrap gap-2 w-full">
+                          {[1, 2, 3, 4, 5].map((i) => (
+                            <SkeletonBox key={i} height="h-8" width="w-20" className="rounded-full" />
+                          ))}
+                        </div>
+                      ) : (
+                        academicYears.map((year) => (
+                          <div
+                            key={year.id}
+                            className={`group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 text-sm font-medium transition-all ${year.isActive
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-500'
+                              }`}
+                          >
+                            <span>{year.yearLabel}</span>
+                            <button
+                              onClick={() => toggleAcademicYearActive(year)}
+                              disabled={savingAcademicYearId === year.id}
+                              className="p-0.5 rounded hover:bg-white/50 transition-colors"
+                            >
+                              {year.isActive ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAcademicYear(year)}
+                              disabled={savingAcademicYearId === year.id}
+                              className="p-0.5 rounded text-red-400 hover:text-red-600 hover:bg-white/50 transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Courses & Branches */}
+              <div className="space-y-4 min-w-0 overflow-hidden">
+                {!selectedCollege ? (
+                  <div className="flex h-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8">
                     <div className="text-center">
-                      <div className="text-base font-semibold text-gray-900">
-                        {(() => {
-                          const parts = parseMonthKey(calendarViewMonthKey);
-                          return parts ? `${MONTH_NAMES[parts.month - 1]} ${parts.year}` : '';
-                        })()}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-0.5">Tap a date to view details</div>
+                      <Landmark size={32} className="mx-auto mb-3 text-gray-300" />
+                      <p className="text-sm text-gray-500">Select a college to manage its courses</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const parts = parseMonthKey(calendarViewMonthKey);
-                        if (!parts) return;
-                        const next = new Date(Date.UTC(parts.year, parts.month, 1));
-                        handleCalendarMonthChange(`${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`);
-                      }}
-                      className="rounded-md border border-gray-300 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-400"
-                      aria-label="Next month"
-                    >
-                      <ChevronRight size={18} />
-                    </button>
                   </div>
+                ) : (
+                  <>
+                    {/* Course List & Branches */}
+                    <div className="grid gap-4 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
+                      {/* Course List */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 min-w-0 overflow-hidden">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Select Course</div>
+                        <div className="space-y-1.5 max-h-[400px] overflow-y-auto min-w-0">
+                          {coursesForSelectedCollege.length === 0 && !loading ? (
+                            <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
+                          ) : coursesForSelectedCollege.length === 0 ? (
+                            <SkeletonList count={3} />
+                          ) : (
+                            coursesForSelectedCollege.map((course) => (
+                              <div
+                                key={course.id}
+                                onClick={() => handleSelectCourse(course.id)}
+                                className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${selectedCourseId === course.id
+                                  ? 'bg-purple-100 border border-purple-300'
+                                  : 'bg-white hover:bg-purple-50 border border-gray-200'
+                                  }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className={`h-2 w-2 rounded-full flex-shrink-0 ${course.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <div className="min-w-0">
+                                    <span className={`block text-sm truncate ${selectedCourseId === course.id ? 'font-medium text-purple-900' : 'text-gray-700'}`}>
+                                      {course.name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">{course.totalYears}yr · {course.semestersPerYear}sem</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEditCourse(course); }}
+                                    className="p-1 text-gray-400 hover:text-blue-500"
+                                    title="Edit"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleCourseActive(course); }}
+                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                    title={course.isActive ? 'Deactivate' : 'Activate'}
+                                  >
+                                    {course.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course); }}
+                                    className="p-1 text-gray-400 hover:text-red-500"
+                                    title="Delete"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        {/* Add Course Button Below List */}
+                        {selectedCollege ? (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsAddCourseModalOpen(true);
+                              }}
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer"
+                              style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
+                            >
+                              <Plus size={16} />
+                              Add New Course
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-400 text-center">
+                            Select a college to add courses
+                          </div>
+                        )}
+                      </div>
 
-                  <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-semibold uppercase text-gray-600 flex-shrink-0">
-                    {WEEKDAY_NAMES.map((name) => (
-                      <div key={name} className="py-2">{name}</div>
-                    ))}
+                      {/* Branches Panel */}
+                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden">
+                        {selectedCourse ? (
+                          <>
+                            <div className="border-b border-gray-100 px-4 py-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">{selectedCourse.name} - Branches</h4>
+                                  <p className="text-xs text-gray-500">{selectedCourse.totalYears} years · {selectedCourse.semestersPerYear} semesters/year</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={branchBatchFilter}
+                                    onChange={(e) => setBranchBatchFilter(e.target.value)}
+                                    className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                  >
+                                    <option value="">All Batches</option>
+                                    {academicYears.filter(y => y.isActive).map((year) => (
+                                      <option key={year.id} value={year.id}>{year.yearLabel}</option>
+                                    ))}
+                                  </select>
+                                  <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+                                    {branchBatchFilter ? branchesForSelectedCourse.length : uniqueBranchCount} {branchBatchFilter ? 'shown' : 'branches'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Add Branch Button */}
+                            <div className="border-b border-gray-100 p-4">
+                              <button
+                                onClick={() => {
+                                  setBranchModalCourseId(selectedCourse.id);
+                                  setIsAddBranchModalOpen(true);
+                                }}
+                                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                              >
+                                <Plus size={16} />
+                                Add New Branch
+                              </button>
+                            </div>
+
+                            {/* Branch List */}
+                            <div className="p-4 max-h-[300px] overflow-y-auto">
+                              {branchesLoading ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <LoadingAnimation width={24} height={24} showMessage={false} />
+                                </div>
+                              ) : branchesForSelectedCourse.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-gray-400">No branches yet</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {branchesForSelectedCourse.map((branch) => (
+                                    <div
+                                      key={branch.code || branch.id}
+                                      className="group flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 hover:bg-gray-100 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className={`h-2 w-2 rounded-full flex-shrink-0 ${branch.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                        <span className="text-sm font-medium text-gray-800 truncate">{branch.name}</span>
+                                        {branch.code && branch.code !== branch.name && (
+                                          <span className="text-xs text-gray-500">({branch.code})</span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                          onClick={() => startEditBranch(selectedCourse.id, branch, selectedCourse)}
+                                          disabled={savingBranchId === branch.id}
+                                          className="p-1 text-gray-400 hover:text-blue-500"
+                                          title="Edit"
+                                        >
+                                          <Pencil size={14} />
+                                        </button>
+                                        <button
+                                          onClick={() => toggleBranchActive(selectedCourse.id, branch)}
+                                          disabled={savingBranchId === branch.id}
+                                          className="p-1 text-gray-400 hover:text-gray-600"
+                                          title={branch.isActive ? 'Deactivate' : 'Activate'}
+                                        >
+                                          {branch.isActive ? <ToggleRight size={14} className="text-green-500" /> : <ToggleLeft size={14} />}
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteBranch(selectedCourse.id, branch)}
+                                          disabled={savingBranchId === branch.id}
+                                          className="p-1 text-gray-400 hover:text-red-500"
+                                          title="Delete"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex h-full items-center justify-center p-8">
+                            <div className="text-center">
+                              <Layers size={32} className="mx-auto mb-3 text-gray-300" />
+                              <p className="text-sm text-gray-500">Select a course to view branches</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeSection === 'calendar' && (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm flex flex-col h-[calc(100vh-280px)] min-h-[600px] max-h-[calc(100vh-200px)] 2xl:max-h-[calc(100vh-180px)]">
+            <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-blue-100 p-2.5 text-blue-600">
+                  <CalendarDays size={20} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Attendance Calendar</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Review public holidays, institute breaks, and mark custom holidays.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
+              {/* Calendar Grid */}
+              <div className="flex-1 border-b border-gray-200 lg:border-b-0 lg:border-r p-4 overflow-y-auto min-h-0">
+                {calendarViewLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <LoadingAnimation width={32} height={32} message="Loading..." />
                   </div>
+                ) : calendarViewError ? (
+                  <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                    <AlertTriangle size={18} className="mt-0.5 flex-shrink-0 text-red-600" />
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-red-800 mb-1">
+                        Calendar data unavailable
+                      </div>
+                      <div className="text-sm text-red-700 mb-2">{calendarViewError}</div>
+                      <button
+                        type="button"
+                        onClick={handleCalendarModalRetry}
+                        className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-50"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full min-h-0">
+                    <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const parts = parseMonthKey(calendarViewMonthKey);
+                          if (!parts) return;
+                          const prev = new Date(Date.UTC(parts.year, parts.month - 2, 1));
+                          handleCalendarMonthChange(`${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`);
+                        }}
+                        className="rounded-md border border-gray-300 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-400"
+                        aria-label="Previous month"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <div className="text-center">
+                        <div className="text-base font-semibold text-gray-900">
+                          {(() => {
+                            const parts = parseMonthKey(calendarViewMonthKey);
+                            return parts ? `${MONTH_NAMES[parts.month - 1]} ${parts.year}` : '';
+                          })()}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">Tap a date to view details</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const parts = parseMonthKey(calendarViewMonthKey);
+                          if (!parts) return;
+                          const next = new Date(Date.UTC(parts.year, parts.month, 1));
+                          handleCalendarMonthChange(`${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`);
+                        }}
+                        className="rounded-md border border-gray-300 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 hover:border-gray-400"
+                        aria-label="Next month"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
 
-                  <div className="grid grid-cols-7 gap-1.5 flex-1 auto-rows-fr min-h-0">
-                    {(() => {
-                      const data = calendarViewData || {
-                        sundays: [],
-                        publicHolidays: [],
-                        customHolidays: [],
-                        attendanceStatus: {}
-                      };
-                      const calendarCells = buildCalendarMatrix(calendarViewMonthKey);
-                      const publicHolidayMap = new Map();
-                      (data.publicHolidays || []).forEach((holiday) => {
-                        const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
-                        if (normalizedDate) publicHolidayMap.set(normalizedDate, holiday);
-                      });
-                      const customHolidayMap = new Map();
-                      (data.customHolidays || []).forEach((holiday) => {
-                        const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
-                        if (normalizedDate) customHolidayMap.set(normalizedDate, holiday);
-                      });
-                      const sundaySet = new Set((data.sundays || []).map(d => d.split('T')[0]));
-                      const attendanceStatusMap = new Map();
-                      Object.entries(data.attendanceStatus || {}).forEach(([date, status]) => {
-                        attendanceStatusMap.set(date.split('T')[0], status);
-                      });
+                    <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-semibold uppercase text-gray-600 flex-shrink-0">
+                      {WEEKDAY_NAMES.map((name) => (
+                        <div key={name} className="py-2">{name}</div>
+                      ))}
+                    </div>
 
-                      return calendarCells.map((cell) => {
-                        const status = attendanceStatusMap.get(cell.isoDate) || null;
-                        const isSelected = selectedCalendarDate === cell.isoDate;
-                        const isSunday = sundaySet.has(cell.isoDate);
-                        const publicHoliday = publicHolidayMap.get(cell.isoDate);
-                        const customHoliday = customHolidayMap.get(cell.isoDate);
-                        const isHoliday = Boolean(publicHoliday || customHoliday || isSunday);
-                        const statusInfo = status && STATUS_META[status];
+                    <div className="grid grid-cols-7 gap-1.5 flex-1 auto-rows-fr min-h-0">
+                      {(() => {
+                        const data = calendarViewData || {
+                          sundays: [],
+                          publicHolidays: [],
+                          customHolidays: [],
+                          attendanceStatus: {}
+                        };
+                        const calendarCells = buildCalendarMatrix(calendarViewMonthKey);
+                        const publicHolidayMap = new Map();
+                        (data.publicHolidays || []).forEach((holiday) => {
+                          const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
+                          if (normalizedDate) publicHolidayMap.set(normalizedDate, holiday);
+                        });
+                        const customHolidayMap = new Map();
+                        (data.customHolidays || []).forEach((holiday) => {
+                          const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
+                          if (normalizedDate) customHolidayMap.set(normalizedDate, holiday);
+                        });
+                        const sundaySet = new Set((data.sundays || []).map(d => d.split('T')[0]));
+                        const attendanceStatusMap = new Map();
+                        Object.entries(data.attendanceStatus || {}).forEach(([date, status]) => {
+                          attendanceStatusMap.set(date.split('T')[0], status);
+                        });
 
-                        let cellBgColor = 'bg-white';
-                        if (isHoliday) {
-                          if (publicHoliday) cellBgColor = 'bg-orange-50';
-                          else if (customHoliday) cellBgColor = 'bg-purple-50';
-                          else if (isSunday) cellBgColor = 'bg-amber-50';
-                        } else {
-                          cellBgColor = 'bg-blue-50';
-                        }
+                        return calendarCells.map((cell) => {
+                          const status = attendanceStatusMap.get(cell.isoDate) || null;
+                          const isSelected = selectedCalendarDate === cell.isoDate;
+                          const isSunday = sundaySet.has(cell.isoDate);
+                          const publicHoliday = publicHolidayMap.get(cell.isoDate);
+                          const customHoliday = customHolidayMap.get(cell.isoDate);
+                          const isHoliday = Boolean(publicHoliday || customHoliday || isSunday);
+                          const statusInfo = status && STATUS_META[status];
 
-                        const badgeColor = isHoliday
-                          ? publicHoliday
-                            ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                            : customHoliday
-                            ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                            : 'bg-amber-100 text-amber-700 border border-amber-300'
-                          : 'bg-blue-100 text-blue-700 border border-blue-300';
+                          let cellBgColor = 'bg-white';
+                          if (isHoliday) {
+                            if (publicHoliday) cellBgColor = 'bg-orange-50';
+                            else if (customHoliday) cellBgColor = 'bg-purple-50';
+                            else if (isSunday) cellBgColor = 'bg-amber-50';
+                          } else {
+                            cellBgColor = 'bg-blue-50';
+                          }
 
-                        const baseClasses = cell.isCurrentMonth
-                          ? 'cursor-pointer hover:border-blue-500 hover:text-blue-600'
-                          : 'cursor-not-allowed text-gray-300';
+                          const badgeColor = isHoliday
+                            ? publicHoliday
+                              ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                              : customHoliday
+                                ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                                : 'bg-amber-100 text-amber-700 border border-amber-300'
+                            : 'bg-blue-100 text-blue-700 border border-blue-300';
 
-                        return (
-                          <button
-                            key={cell.index}
-                            type="button"
-                            onClick={() => handleCalendarDateSelect(cell.isoDate)}
-                            disabled={!cell.isCurrentMonth}
-                            className={`flex h-full min-h-[70px] flex-col justify-start items-center rounded-md border-2 py-2 px-1.5 text-xs transition-all ${
-                              isSelected
+                          const baseClasses = cell.isCurrentMonth
+                            ? 'cursor-pointer hover:border-blue-500 hover:text-blue-600'
+                            : 'cursor-not-allowed text-gray-300';
+
+                          return (
+                            <button
+                              key={cell.index}
+                              type="button"
+                              onClick={() => handleCalendarDateSelect(cell.isoDate)}
+                              disabled={!cell.isCurrentMonth}
+                              className={`flex h-full min-h-[70px] flex-col justify-start items-center rounded-md border-2 py-2 px-1.5 text-xs transition-all ${isSelected
                                 ? 'border-blue-500 bg-blue-100 text-blue-800 shadow-md ring-2 ring-blue-300 ring-offset-1'
                                 : `${cellBgColor} border-gray-200 text-gray-700 ${baseClasses}`
-                            } ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
-                          >
-                            <span className={`font-semibold text-sm mb-1 ${!cell.isCurrentMonth ? 'text-gray-400' : ''}`}>
-                              {cell.day}
-                            </span>
-                            {isHoliday && (
-                              <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight ${badgeColor}`}>
-                                {publicHoliday ? 'Public' : customHoliday ? 'Inst' : 'Sun'}
+                                } ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                            >
+                              <span className={`font-semibold text-sm mb-1 ${!cell.isCurrentMonth ? 'text-gray-400' : ''}`}>
+                                {cell.day}
                               </span>
-                            )}
-                            {!isHoliday && statusInfo && (
-                              <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight ${statusInfo.badgeClass}`}>
-                                {statusInfo.label}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sidebar */}
-            <aside className="w-full lg:w-[360px] xl:w-[380px] 2xl:w-[400px] p-4 space-y-4 overflow-y-auto flex-shrink-0 border-l border-gray-200">
-              {/* Selected Date Section */}
-              <div className="border-b border-gray-200 pb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900">Selected Date</h3>
-                  {selectedCalendarDate && (
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                      {formatIsoDate(selectedCalendarDate, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </span>
-                  )}
-                </div>
-
-                {!selectedCalendarDate ? (
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-                    Choose a date on the calendar to view holiday details or mark an institute break.
-                  </div>
-                ) : (() => {
-                  const data = calendarViewData || { sundays: [], publicHolidays: [], customHolidays: [] };
-                  const publicHoliday = (data.publicHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
-                  const customHoliday = (data.customHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
-                  const isSunday = (data.sundays || []).some(d => d.split('T')[0] === selectedCalendarDate);
-
-                  return (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                      <div className="text-sm font-semibold text-blue-900 mb-1">
-                        {publicHoliday
-                          ? publicHoliday.localName || publicHoliday.name
-                          : customHoliday
-                          ? customHoliday.title || 'Institute Holiday'
-                          : isSunday
-                          ? 'Sunday'
-                          : 'Instructional Day'}
-                      </div>
-                      <div className="text-xs text-blue-700">
-                        {publicHoliday
-                          ? publicHoliday.name
-                          : customHoliday?.description
-                          ? customHoliday.description
-                          : isSunday
-                          ? 'Weekly holiday'
-                          : 'Classes are expected to be held on this date.'}
-                      </div>
+                              {isHoliday && (
+                                <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight ${badgeColor}`}>
+                                  {publicHoliday ? 'Public' : customHoliday ? 'Inst' : 'Sun'}
+                                </span>
+                              )}
+                              {!isHoliday && statusInfo && (
+                                <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-tight ${statusInfo.badgeClass}`}>
+                                  {statusInfo.label}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
               </div>
 
-              {/* Holiday Management (Admin Only) */}
-              {isAdmin && selectedCalendarDate && (() => {
-                const data = calendarViewData || { customHolidays: [] };
-                const customHoliday = (data.customHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
-                
-                return (
-                  <div className="border-b border-gray-200 pb-4 space-y-3">
-                    {!customHoliday ? (
-                      <>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                            Holiday Title
-                          </label>
-                          <input
-                            type="text"
-                            value={localHolidayTitle}
-                            onChange={(e) => setLocalHolidayTitle(e.target.value)}
-                            placeholder="e.g. Founders' Day"
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
-                            disabled={calendarMutationLoading}
-                          />
+              {/* Sidebar */}
+              <aside className="w-full lg:w-[360px] xl:w-[380px] 2xl:w-[400px] p-4 space-y-4 overflow-y-auto flex-shrink-0 border-l border-gray-200">
+                {/* Selected Date Section */}
+                <div className="border-b border-gray-200 pb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900">Selected Date</h3>
+                    {selectedCalendarDate && (
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        {formatIsoDate(selectedCalendarDate, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    )}
+                  </div>
+
+                  {!selectedCalendarDate ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                      Choose a date on the calendar to view holiday details or mark an institute break.
+                    </div>
+                  ) : (() => {
+                    const data = calendarViewData || { sundays: [], publicHolidays: [], customHolidays: [] };
+                    const publicHoliday = (data.publicHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
+                    const customHoliday = (data.customHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
+                    const isSunday = (data.sundays || []).some(d => d.split('T')[0] === selectedCalendarDate);
+
+                    return (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <div className="text-sm font-semibold text-blue-900 mb-1">
+                          {publicHoliday
+                            ? publicHoliday.localName || publicHoliday.name
+                            : customHoliday
+                              ? customHoliday.title || 'Institute Holiday'
+                              : isSunday
+                                ? 'Sunday'
+                                : 'Instructional Day'}
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                            Notes (visible to staff)
-                          </label>
-                          <textarea
-                            value={localHolidayDescription}
-                            onChange={(e) => setLocalHolidayDescription(e.target.value)}
-                            placeholder="Optional: add a note for this holiday"
-                            rows={3}
-                            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
-                            disabled={calendarMutationLoading}
-                          />
+                        <div className="text-xs text-blue-700">
+                          {publicHoliday
+                            ? publicHoliday.name
+                            : customHoliday?.description
+                              ? customHoliday.description
+                              : isSunday
+                                ? 'Weekly holiday'
+                                : 'Classes are expected to be held on this date.'}
                         </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Holiday Management (Admin Only) */}
+                {isAdmin && selectedCalendarDate && (() => {
+                  const data = calendarViewData || { customHolidays: [] };
+                  const customHoliday = (data.customHolidays || []).find(h => h.date?.split('T')[0] === selectedCalendarDate);
+
+                  return (
+                    <div className="border-b border-gray-200 pb-4 space-y-3">
+                      {!customHoliday ? (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              Holiday Title
+                            </label>
+                            <input
+                              type="text"
+                              value={localHolidayTitle}
+                              onChange={(e) => setLocalHolidayTitle(e.target.value)}
+                              placeholder="e.g. Founders' Day"
+                              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+                              disabled={calendarMutationLoading}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              Notes (visible to staff)
+                            </label>
+                            <textarea
+                              value={localHolidayDescription}
+                              onChange={(e) => setLocalHolidayDescription(e.target.value)}
+                              placeholder="Optional: add a note for this holiday"
+                              rows={3}
+                              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
+                              disabled={calendarMutationLoading}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!selectedCalendarDate) return;
+                              await handleCreateInstituteHoliday({
+                                date: selectedCalendarDate,
+                                title: localHolidayTitle || 'Holiday',
+                                description: localHolidayDescription
+                              });
+                              setLocalHolidayTitle('');
+                              setLocalHolidayDescription('');
+                            }}
+                            disabled={calendarMutationLoading}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                          >
+                            {calendarMutationLoading ? (
+                              <>
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                Saving…
+                              </>
+                            ) : (
+                              'Save Institute Holiday'
+                            )}
+                          </button>
+                        </>
+                      ) : (
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!selectedCalendarDate) return;
-                            await handleCreateInstituteHoliday({
-                              date: selectedCalendarDate,
-                              title: localHolidayTitle || 'Holiday',
-                              description: localHolidayDescription
-                            });
+                            await handleRemoveInstituteHoliday(selectedCalendarDate);
                             setLocalHolidayTitle('');
                             setLocalHolidayDescription('');
+                            setSelectedCalendarDate(null);
                           }}
                           disabled={calendarMutationLoading}
-                          className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           {calendarMutationLoading ? (
                             <>
-                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                              Saving…
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                              Removing…
                             </>
                           ) : (
-                            'Save Institute Holiday'
+                            'Remove Institute Holiday'
                           )}
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await handleRemoveInstituteHoliday(selectedCalendarDate);
-                          setLocalHolidayTitle('');
-                          setLocalHolidayDescription('');
-                          setSelectedCalendarDate(null);
-                        }}
-                        disabled={calendarMutationLoading}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {calendarMutationLoading ? (
-                          <>
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-                            Removing…
-                          </>
-                        ) : (
-                          'Remove Institute Holiday'
-                        )}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
+                      )}
+                    </div>
+                  );
+                })()}
 
-              {/* Legend */}
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-semibold text-gray-700 mb-2">
-                  Calendar Legend
+                {/* Legend */}
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">
+                    Calendar Legend
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-md bg-orange-100 border-2 border-orange-300 flex-shrink-0" />
+                      <span className="text-gray-700">Public Holiday</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-md bg-purple-100 border-2 border-purple-300 flex-shrink-0" />
+                      <span className="text-gray-700">Institute Holiday</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-md bg-amber-100 border-2 border-amber-300 flex-shrink-0" />
+                      <span className="text-gray-700">Sunday</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-md bg-blue-100 border-2 border-blue-300 flex-shrink-0" />
+                      <span className="text-gray-700">Working Day</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-md bg-orange-100 border-2 border-orange-300 flex-shrink-0" />
-                    <span className="text-gray-700">Public Holiday</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-md bg-purple-100 border-2 border-purple-300 flex-shrink-0" />
-                    <span className="text-gray-700">Institute Holiday</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-md bg-amber-100 border-2 border-amber-300 flex-shrink-0" />
-                    <span className="text-gray-700">Sunday</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-md bg-blue-100 border-2 border-blue-300 flex-shrink-0" />
-                    <span className="text-gray-700">Working Day</span>
-                  </div>
-                </div>
-              </div>
-            </aside>
+              </aside>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Academic Calendar Section */}
-      {activeSection === 'academic-calendar' && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
-          <AcademicCalendar
-            colleges={colleges}
-            courses={courses}
-            academicYears={academicYears}
-          />
-        </div>
-      )}
+        {/* Academic Calendar Section */}
+        {activeSection === 'academic-calendar' && (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
+            <AcademicCalendar
+              colleges={colleges}
+              courses={courses}
+              academicYears={academicYears}
+            />
+          </div>
+        )}
 
-      {/* Registration Forms Section */}
-      {activeSection === 'forms' && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-          {formsLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <LoadingAnimation width={32} height={32} message="Loading form..." />
-            </div>
-          ) : registrationForms.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="text-purple-600" size={32} />
+        {/* Registration Forms Section */}
+        {activeSection === 'forms' && (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+            {formsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <LoadingAnimation width={32} height={32} message="Loading form..." />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Registration Form</h3>
-              <p className="text-gray-600">Contact administrator to set up the registration form.</p>
-            </div>
-          ) : (() => {
-            const form = registrationForms[0]; // Only show the first/single form
-            
-            return isEditingForm ? (
-              // Inline Form Editor
-              <div className="p-4">
-                {/* Editor Header */}
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-purple-100 p-2 rounded-lg">
-                      <Pencil size={20} className="text-purple-600" />
+            ) : registrationForms.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FileText className="text-purple-600" size={32} />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Registration Form</h3>
+                <p className="text-gray-600">Contact administrator to set up the registration form.</p>
+              </div>
+            ) : (() => {
+              const form = registrationForms[0]; // Only show the first/single form
+
+              return isEditingForm ? (
+                // Inline Form Editor
+                <div className="p-4">
+                  {/* Editor Header */}
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-purple-100 p-2 rounded-lg">
+                        <Pencil size={20} className="text-purple-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-gray-900">Edit Registration Form</h2>
+                        <p className="text-sm text-gray-500">Customize form fields and settings</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={cancelEditingForm}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveFormChanges}
+                        disabled={savingFormId}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                      >
+                        {savingFormId ? <LoadingAnimation width={16} height={16} showMessage={false} /> : <Settings2 size={16} />}
+                        Save Changes
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Form Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Form Name *</label>
+                      <input
+                        type="text"
+                        value={formEditData.formName}
+                        onChange={(e) => setFormEditData({ ...formEditData, formName: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900">Edit Registration Form</h2>
-                      <p className="text-sm text-gray-500">Customize form fields and settings</p>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={formEditData.formDescription}
+                        onChange={(e) => setFormEditData({ ...formEditData, formDescription: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={cancelEditingForm}
-                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveFormChanges}
-                      disabled={savingFormId}
-                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
-                    >
-                      {savingFormId ? <LoadingAnimation width={16} height={16} showMessage={false} /> : <Settings2 size={16} />}
-                      Save Changes
-                    </button>
-                  </div>
-                </div>
 
-                {/* Form Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Form Name *</label>
-                    <input
-                      type="text"
-                      value={formEditData.formName}
-                      onChange={(e) => setFormEditData({ ...formEditData, formName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                    />
+                  {/* Add Field Types */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Add New Field</label>
+                    <div className="flex flex-wrap gap-2">
+                      {FIELD_TYPES.map((type) => (
+                        <button
+                          key={type.key}
+                          onClick={() => addFormField(type.key)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition-colors"
+                        >
+                          <span>{type.icon}</span>
+                          <span>{type.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <input
-                      type="text"
-                      value={formEditData.formDescription}
-                      onChange={(e) => setFormEditData({ ...formEditData, formDescription: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                    />
-                  </div>
-                </div>
 
-                {/* Add Field Types */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Add New Field</label>
-                  <div className="flex flex-wrap gap-2">
-                    {FIELD_TYPES.map((type) => (
+                  {/* Form Fields Editor - Grouped by Content Headers */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3">Form Fields ({formEditData.formFields.length})</h4>
+                    {(() => {
+                      // Categorize fields
+                      // Personal Information: Date of Birth and Aadhar Number only
+                      const personalFields = formEditData.formFields.filter(f => {
+                        const key = f.key?.toLowerCase() || '';
+                        const label = f.label?.toLowerCase() || '';
+                        return (key.includes('dob') || key.includes('date of birth') ||
+                          label.includes('dob') || label.includes('date of birth') ||
+                          key.includes('adhar') || key.includes('aadhar') ||
+                          label.includes('adhar') || label.includes('aadhar'));
+                      });
+
+                      // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
+                      const basicFields = formEditData.formFields.filter(f => {
+                        const cat = categorizeField(f);
+                        if (cat !== 'basic') {
+                          // Include Caste from additional fields in Basic Information
+                          const key = f.key?.toLowerCase() || '';
+                          const label = f.label?.toLowerCase() || '';
+                          if (key.includes('caste') || label.includes('caste')) {
+                            return true;
+                          }
+                          return false;
+                        }
+                        const key = f.key?.toLowerCase() || '';
+                        const label = f.label?.toLowerCase() || '';
+                        // Exclude DOB and Aadhar from basic (they go to Personal Information)
+                        if (key.includes('dob') || key.includes('date of birth') ||
+                          label.includes('dob') || label.includes('date of birth') ||
+                          key.includes('adhar') || key.includes('aadhar') ||
+                          label.includes('adhar') || label.includes('aadhar')) {
+                          return false;
+                        }
+                        return true;
+                      });
+
+                      const academicFields = formEditData.formFields.filter(f => categorizeField(f) === 'academic');
+                      const contactFields = formEditData.formFields.filter(f => categorizeField(f) === 'contact');
+                      const addressFields = formEditData.formFields.filter(f => categorizeField(f) === 'address');
+                      // Additional fields exclude Caste (moved to Basic) and Personal Information fields
+                      const additionalFields = formEditData.formFields.filter(f => {
+                        const cat = categorizeField(f);
+                        if (cat !== 'additional') return false;
+                        const key = f.key?.toLowerCase() || '';
+                        const label = f.label?.toLowerCase() || '';
+                        // Exclude Caste, DOB, and Aadhar from additional
+                        if (key.includes('caste') || label.includes('caste') ||
+                          key.includes('dob') || key.includes('date of birth') ||
+                          label.includes('dob') || label.includes('date of birth') ||
+                          key.includes('adhar') || key.includes('aadhar') ||
+                          label.includes('adhar') || label.includes('aadhar')) {
+                          return false;
+                        }
+                        return true;
+                      });
+                      const otherFields = formEditData.formFields.filter(f => categorizeField(f) === 'other');
+
+                      const sections = [
+                        { title: 'Basic Information', fields: basicFields, color: 'blue-500' },
+                        { title: 'Academic Information', fields: academicFields, color: 'green-500' },
+                        { title: 'Contact Information', fields: contactFields, color: 'orange-500' },
+                        { title: 'Personal Information', fields: personalFields, color: 'purple-500' },
+                        { title: 'Address Information', fields: addressFields, color: 'gray-500' },
+                        { title: 'Additional Information', fields: additionalFields, color: 'red-500' },
+                        { title: 'Other Fields', fields: otherFields, color: 'indigo-500' }
+                      ].filter(section => section.fields.length > 0);
+
+                      return (
+                        <div className="space-y-6 max-h-[600px] overflow-y-auto">
+                          {sections.map((section, sectionIndex) => (
+                            <div key={sectionIndex} className="border-b border-gray-200 pb-4 last:border-b-0">
+                              <h5 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
+                                {section.title}
+                              </h5>
+                              <div className="space-y-3">
+                                {section.fields.map((field, index) => {
+                                  const fieldIndex = formEditData.formFields.findIndex(f => f.id === field.id || (f.key === field.key && f.label === field.label));
+                                  if (fieldIndex === -1) return null;
+
+                                  const isSystemField = field.isSystemField ||
+                                    ['batch', 'college', 'course', 'branch', 'current_year', 'current_semester', 'apaar_id'].includes(
+                                      (field.key || '').toLowerCase()
+                                    );
+
+                                  return (
+                                    <div
+                                      key={field.id || fieldIndex}
+                                      className={`rounded-lg border-2 p-3 transition-all ${field.isEnabled !== false
+                                        ? isSystemField
+                                          ? 'border-blue-200 bg-blue-50'
+                                          : 'border-gray-200 bg-white'
+                                        : 'border-gray-100 bg-gray-50'
+                                        }`}
+                                    >
+                                      {isSystemField && (
+                                        <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
+                                          <Settings2 size={12} />
+                                          System Field (Required for form functionality)
+                                        </div>
+                                      )}
+                                      <div className="flex items-start gap-3">
+                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                                          <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Label *</label>
+                                            <input
+                                              type="text"
+                                              value={field.label}
+                                              onChange={(e) => updateFormField(fieldIndex, 'label', e.target.value)}
+                                              placeholder="Field label"
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                              disabled={isSystemField}
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Type</label>
+                                            <select
+                                              value={field.type}
+                                              onChange={(e) => updateFormField(fieldIndex, 'type', e.target.value)}
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                              disabled={isSystemField}
+                                            >
+                                              {FIELD_TYPES.map((t) => (
+                                                <option key={t.key} value={t.key}>{t.label}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
+                                            <input
+                                              type="text"
+                                              value={field.placeholder || ''}
+                                              onChange={(e) => updateFormField(fieldIndex, 'placeholder', e.target.value)}
+                                              placeholder="Placeholder text"
+                                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
+                                            />
+                                          </div>
+                                          <div className="flex items-end gap-2">
+                                            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={field.required}
+                                                onChange={(e) => updateFormField(fieldIndex, 'required', e.target.checked)}
+                                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                              />
+                                              Required
+                                            </label>
+                                            <button
+                                              onClick={() => toggleFieldEnabled(fieldIndex)}
+                                              className={`p-1.5 rounded transition-colors ${field.isEnabled !== false
+                                                ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                                }`}
+                                              title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
+                                              disabled={isSystemField}
+                                            >
+                                              {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                if (isSystemField) {
+                                                  toast.error('System fields cannot be removed. They are required for form functionality.');
+                                                  return;
+                                                }
+                                                removeFormField(fieldIndex);
+                                              }}
+                                              className={`p-1.5 rounded transition-colors ${isSystemField
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-red-100 text-red-600 hover:bg-red-200'
+                                                }`}
+                                              title={isSystemField ? 'System field - cannot be removed' : 'Remove field'}
+                                              disabled={isSystemField}
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Options for select/radio/checkbox */}
+                                      {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
+                                        <div className="mt-3 pl-3 border-l-2 border-purple-200">
+                                          <label className="block text-xs text-gray-500 mb-1">Options</label>
+                                          <div className="flex flex-wrap gap-2">
+                                            {(field.options || []).map((option, optIndex) => (
+                                              <div key={optIndex} className="flex items-center gap-1">
+                                                <input
+                                                  type="text"
+                                                  value={option}
+                                                  onChange={(e) => updateFieldOption(fieldIndex, optIndex, e.target.value)}
+                                                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none w-24"
+                                                />
+                                                <button
+                                                  onClick={() => removeFieldOption(fieldIndex, optIndex)}
+                                                  className="p-0.5 text-red-500 hover:bg-red-100 rounded"
+                                                >
+                                                  <X size={14} />
+                                                </button>
+                                              </div>
+                                            ))}
+                                            <button
+                                              onClick={() => addFieldOption(fieldIndex)}
+                                              className="px-2 py-1 text-xs border border-dashed border-gray-300 rounded hover:border-purple-400 hover:bg-purple-50 transition-colors"
+                                            >
+                                              + Add
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Certificate Information Section - Configurable */}
+                  <div className="border-t border-gray-200 pt-6 mt-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                      Certificate Information
+                    </h2>
+                    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <FileText size={16} className="text-gray-600" />
+                        Default Certification Fields
+                      </h3>
+
+                      {/* For Diploma Courses */}
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-gray-700">For Diploma Courses</h4>
+                          <button
+                            onClick={() => addCertificate('diploma')}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                          >
+                            <Plus size={14} />
+                            Add Certificate
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {certificateConfig.diploma.map((cert) => (
+                            <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                              <input
+                                type="text"
+                                value={cert.name}
+                                onChange={(e) => updateCertificateName('diploma', cert.id, e.target.value)}
+                                placeholder="Certificate name"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                              />
+                              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={cert.required}
+                                  onChange={(e) => updateCertificateRequired('diploma', cert.id, e.target.checked)}
+                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span className="text-xs text-gray-600">Required</span>
+                              </label>
+                              <button
+                                onClick={() => removeCertificate('diploma', cert.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remove certificate"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* For UG Courses */}
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-gray-700">For UG Courses</h4>
+                          <button
+                            onClick={() => addCertificate('ug')}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                          >
+                            <Plus size={14} />
+                            Add Certificate
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {certificateConfig.ug.map((cert) => (
+                            <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                              <input
+                                type="text"
+                                value={cert.name}
+                                onChange={(e) => updateCertificateName('ug', cert.id, e.target.value)}
+                                placeholder="Certificate name"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                              />
+                              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={cert.required}
+                                  onChange={(e) => updateCertificateRequired('ug', cert.id, e.target.checked)}
+                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span className="text-xs text-gray-600">Required</span>
+                              </label>
+                              <button
+                                onClick={() => removeCertificate('ug', cert.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remove certificate"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* For PG Courses */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-gray-700">For PG Courses</h4>
+                          <button
+                            onClick={() => addCertificate('pg')}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                          >
+                            <Plus size={14} />
+                            Add Certificate
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {certificateConfig.pg.map((cert) => (
+                            <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                              <input
+                                type="text"
+                                value={cert.name}
+                                onChange={(e) => updateCertificateName('pg', cert.id, e.target.value)}
+                                placeholder="Certificate name"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
+                              />
+                              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={cert.required}
+                                  onChange={(e) => updateCertificateRequired('pg', cert.id, e.target.checked)}
+                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span className="text-xs text-gray-600">Required</span>
+                              </label>
+                              <button
+                                onClick={() => removeCertificate('pg', cert.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remove certificate"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                // Form View Mode
+                <div className="p-4">
+                  {/* Form Header */}
+                  <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-purple-100 p-2.5 rounded-lg">
+                        <FileText size={24} className="text-purple-600" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-lg font-semibold text-gray-900">{form.form_name}</h2>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${form.is_active
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            }`}>
+                            {form.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {form.form_description || 'Student registration form'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <button
-                        key={type.key}
-                        onClick={() => addFormField(type.key)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition-colors"
+                        onClick={() => startEditingForm(form)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                       >
-                        <span>{type.icon}</span>
-                        <span>{type.label}</span>
+                        <Pencil size={16} />
+                        Edit Form
                       </button>
-                    ))}
+                      <button
+                        onClick={() => toggleFormActive(form)}
+                        disabled={savingFormId === form.form_id}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${form.is_active
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          }`}
+                      >
+                        {form.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                        {form.is_active ? 'Active' : 'Inactive'}
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                {/* Form Fields Editor - Grouped by Content Headers */}
-                <div className="border-t border-gray-200 pt-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Form Fields ({formEditData.formFields.length})</h4>
-                  {(() => {
-                    // Categorize fields
-                  // Personal Information: Date of Birth and Aadhar Number only
-                  const personalFields = formEditData.formFields.filter(f => {
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    return (key.includes('dob') || key.includes('date of birth') ||
-                            label.includes('dob') || label.includes('date of birth') ||
-                            key.includes('adhar') || key.includes('aadhar') ||
-                            label.includes('adhar') || label.includes('aadhar'));
-                  });
-                  
-                  // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
-                  const basicFields = formEditData.formFields.filter(f => {
-                    const cat = categorizeField(f);
-                    if (cat !== 'basic') {
-                      // Include Caste from additional fields in Basic Information
+                  {/* Stats */}
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                      <p className="text-2xl font-bold text-gray-900">{form.form_fields?.length || 0}</p>
+                      <p className="text-xs text-gray-500">Total Fields</p>
+                    </div>
+                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-center">
+                      <p className="text-2xl font-bold text-purple-600">{form.form_fields?.filter(f => f.isEnabled !== false).length || 0}</p>
+                      <p className="text-xs text-gray-500">Active Fields</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
+                      <p className="text-2xl font-bold text-amber-600">{form.pending_count || 0}</p>
+                      <p className="text-xs text-gray-500">Pending</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-600">{form.approved_count || 0}</p>
+                      <p className="text-xs text-gray-500">Approved</p>
+                    </div>
+                  </div>
+
+                  {/* Form Fields - Grouped by Content Headers */}
+                  {form.form_fields && form.form_fields.length > 0 ? (() => {
+                    // Personal Information: Date of Birth and Aadhar Number only
+                    const personalFields = form.form_fields.filter(f => {
+                      if (f.isEnabled === false) return false;
                       const key = f.key?.toLowerCase() || '';
                       const label = f.label?.toLowerCase() || '';
-                      if (key.includes('caste') || label.includes('caste')) {
-                        return true;
+                      return (key.includes('dob') || key.includes('date of birth') ||
+                        label.includes('dob') || label.includes('date of birth') ||
+                        key.includes('adhar') || key.includes('aadhar') ||
+                        label.includes('adhar') || label.includes('aadhar'));
+                    });
+
+                    // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
+                    const basicFields = form.form_fields.filter(f => {
+                      if (f.isEnabled === false) return false;
+                      const cat = categorizeField(f);
+                      if (cat !== 'basic') {
+                        // Include Caste from additional fields in Basic Information
+                        const key = f.key?.toLowerCase() || '';
+                        const label = f.label?.toLowerCase() || '';
+                        if (key.includes('caste') || label.includes('caste')) {
+                          return true;
+                        }
+                        return false;
                       }
-                      return false;
-                    }
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    // Exclude DOB and Aadhar from basic (they go to Personal Information)
-                    if (key.includes('dob') || key.includes('date of birth') ||
+                      const key = f.key?.toLowerCase() || '';
+                      const label = f.label?.toLowerCase() || '';
+                      // Exclude DOB and Aadhar from basic (they go to Personal Information)
+                      if (key.includes('dob') || key.includes('date of birth') ||
                         label.includes('dob') || label.includes('date of birth') ||
                         key.includes('adhar') || key.includes('aadhar') ||
                         label.includes('adhar') || label.includes('aadhar')) {
-                      return false;
-                    }
-                    return true;
-                  });
-                  
-                  const academicFields = formEditData.formFields.filter(f => categorizeField(f) === 'academic');
-                  const contactFields = formEditData.formFields.filter(f => categorizeField(f) === 'contact');
-                  const addressFields = formEditData.formFields.filter(f => categorizeField(f) === 'address');
-                  // Additional fields exclude Caste (moved to Basic) and Personal Information fields
-                  const additionalFields = formEditData.formFields.filter(f => {
-                    const cat = categorizeField(f);
-                    if (cat !== 'additional') return false;
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    // Exclude Caste, DOB, and Aadhar from additional
-                    if (key.includes('caste') || label.includes('caste') ||
+                        return false;
+                      }
+                      return true;
+                    });
+
+                    const academicFields = form.form_fields.filter(f => categorizeField(f) === 'academic' && f.isEnabled !== false);
+                    const contactFields = form.form_fields.filter(f => categorizeField(f) === 'contact' && f.isEnabled !== false);
+                    const addressFields = form.form_fields.filter(f => categorizeField(f) === 'address' && f.isEnabled !== false);
+                    // Additional fields exclude Caste (moved to Basic) and Personal Information fields
+                    const additionalFields = form.form_fields.filter(f => {
+                      if (f.isEnabled === false) return false;
+                      const cat = categorizeField(f);
+                      if (cat !== 'additional') return false;
+                      const key = f.key?.toLowerCase() || '';
+                      const label = f.label?.toLowerCase() || '';
+                      // Exclude Caste, DOB, and Aadhar from additional
+                      if (key.includes('caste') || label.includes('caste') ||
                         key.includes('dob') || key.includes('date of birth') ||
                         label.includes('dob') || label.includes('date of birth') ||
                         key.includes('adhar') || key.includes('aadhar') ||
                         label.includes('adhar') || label.includes('aadhar')) {
-                      return false;
-                    }
-                    return true;
-                  });
-                  const otherFields = formEditData.formFields.filter(f => categorizeField(f) === 'other');
+                        return false;
+                      }
+                      return true;
+                    });
+                    const otherFields = form.form_fields.filter(f => categorizeField(f) === 'other' && f.isEnabled !== false);
 
                     const sections = [
                       { title: 'Basic Information', fields: basicFields, color: 'blue-500' },
@@ -2904,851 +3263,311 @@ const Settings = () => {
                     ].filter(section => section.fields.length > 0);
 
                     return (
-                      <div className="space-y-6 max-h-[600px] overflow-y-auto">
+                      <div className="space-y-6">
                         {sections.map((section, sectionIndex) => (
-                          <div key={sectionIndex} className="border-b border-gray-200 pb-4 last:border-b-0">
-                            <h5 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <div key={sectionIndex} className="border-b border-gray-200 pb-6 last:border-b-0">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                               <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
                               {section.title}
-                            </h5>
-                            <div className="space-y-3">
-                              {section.fields.map((field, index) => {
-                                const fieldIndex = formEditData.formFields.findIndex(f => f.id === field.id || (f.key === field.key && f.label === field.label));
-                                if (fieldIndex === -1) return null;
-                                
-                                const isSystemField = field.isSystemField || 
-                                  ['batch', 'college', 'course', 'branch', 'current_year', 'current_semester', 'apaar_id'].includes(
-                                    (field.key || '').toLowerCase()
-                                  );
-                                
-                                return (
-                                  <div
-                                    key={field.id || fieldIndex}
-                                    className={`rounded-lg border-2 p-3 transition-all ${
-                                      field.isEnabled !== false 
-                                        ? isSystemField 
-                                          ? 'border-blue-200 bg-blue-50' 
-                                          : 'border-gray-200 bg-white'
-                                        : 'border-gray-100 bg-gray-50'
-                                    }`}
-                                  >
-                                    {isSystemField && (
-                                      <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-700 font-medium">
-                                        <Settings2 size={12} />
-                                        System Field (Required for form functionality)
-                                      </div>
-                                    )}
-                                    <div className="flex items-start gap-3">
-                                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
-                                        <div>
-                                          <label className="block text-xs text-gray-500 mb-1">Label *</label>
-                                          <input
-                                            type="text"
-                                            value={field.label}
-                                            onChange={(e) => updateFormField(fieldIndex, 'label', e.target.value)}
-                                            placeholder="Field label"
-                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                                            disabled={isSystemField}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-gray-500 mb-1">Type</label>
-                                          <select
-                                            value={field.type}
-                                            onChange={(e) => updateFormField(fieldIndex, 'type', e.target.value)}
-                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                                            disabled={isSystemField}
-                                          >
-                                            {FIELD_TYPES.map((t) => (
-                                              <option key={t.key} value={t.key}>{t.label}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-gray-500 mb-1">Placeholder</label>
-                                          <input
-                                            type="text"
-                                            value={field.placeholder || ''}
-                                            onChange={(e) => updateFormField(fieldIndex, 'placeholder', e.target.value)}
-                                            placeholder="Placeholder text"
-                                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none"
-                                          />
-                                        </div>
-                                        <div className="flex items-end gap-2">
-                                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              checked={field.required}
-                                              onChange={(e) => updateFormField(fieldIndex, 'required', e.target.checked)}
-                                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                            />
-                                            Required
-                                          </label>
-                                          <button
-                                            onClick={() => toggleFieldEnabled(fieldIndex)}
-                                            className={`p-1.5 rounded transition-colors ${
-                                              field.isEnabled !== false
-                                                ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
-                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                            }`}
-                                            title={field.isEnabled !== false ? 'Enabled' : 'Disabled'}
-                                            disabled={isSystemField}
-                                          >
-                                            {field.isEnabled !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              if (isSystemField) {
-                                                toast.error('System fields cannot be removed. They are required for form functionality.');
-                                                return;
-                                              }
-                                              removeFormField(fieldIndex);
-                                            }}
-                                            className={`p-1.5 rounded transition-colors ${
-                                              isSystemField
-                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                : 'bg-red-100 text-red-600 hover:bg-red-200'
-                                            }`}
-                                            title={isSystemField ? 'System field - cannot be removed' : 'Remove field'}
-                                            disabled={isSystemField}
-                                          >
-                                            <Trash2 size={16} />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Options for select/radio/checkbox */}
-                                    {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') && (
-                                      <div className="mt-3 pl-3 border-l-2 border-purple-200">
-                                        <label className="block text-xs text-gray-500 mb-1">Options</label>
-                                        <div className="flex flex-wrap gap-2">
-                                          {(field.options || []).map((option, optIndex) => (
-                                            <div key={optIndex} className="flex items-center gap-1">
-                                              <input
-                                                type="text"
-                                                value={option}
-                                                onChange={(e) => updateFieldOption(fieldIndex, optIndex, e.target.value)}
-                                                className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 outline-none w-24"
-                                              />
-                                              <button
-                                                onClick={() => removeFieldOption(fieldIndex, optIndex)}
-                                                className="p-0.5 text-red-500 hover:bg-red-100 rounded"
-                                              >
-                                                <X size={14} />
-                                              </button>
-                                            </div>
-                                          ))}
-                                          <button
-                                            onClick={() => addFieldOption(fieldIndex)}
-                                            className="px-2 py-1 text-xs border border-dashed border-gray-300 rounded hover:border-purple-400 hover:bg-purple-50 transition-colors"
-                                          >
-                                            + Add
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                            </h2>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {section.fields.map((field, index) => (
+                                <div
+                                  key={field.id || index}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <span className="font-medium text-gray-700">{field.label}</span>
+                                  {field.required && <span className="text-red-500 text-xs">*</span>}
+                                  <span className="text-xs text-gray-400 capitalize">({field.type})</span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ))}
                       </div>
                     );
-                  })()}
-                </div>
+                  })() : (
+                    <p className="text-sm text-gray-500 text-center py-4">No fields configured</p>
+                  )}
 
-                {/* Certificate Information Section - Configurable */}
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                    Certificate Information
-                  </h2>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                      <FileText size={16} className="text-gray-600" />
-                      Default Certification Fields
-                    </h3>
-                    
-                    {/* For Diploma Courses */}
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-gray-700">For Diploma Courses</h4>
-                        <button
-                          onClick={() => addCertificate('diploma')}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
-                        >
-                          <Plus size={14} />
-                          Add Certificate
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {certificateConfig.diploma.map((cert) => (
-                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
-                            <input
-                              type="text"
-                              value={cert.name}
-                              onChange={(e) => updateCertificateName('diploma', cert.id, e.target.value)}
-                              placeholder="Certificate name"
-                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
-                            />
-                            <label className="flex items-center gap-2 text-sm cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={cert.required}
-                                onChange={(e) => updateCertificateRequired('diploma', cert.id, e.target.checked)}
-                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                              />
-                              <span className="text-xs text-gray-600">Required</span>
-                            </label>
-                            <button
-                              onClick={() => removeCertificate('diploma', cert.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Remove certificate"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* For UG Courses */}
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-gray-700">For UG Courses</h4>
-                        <button
-                          onClick={() => addCertificate('ug')}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
-                        >
-                          <Plus size={14} />
-                          Add Certificate
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {certificateConfig.ug.map((cert) => (
-                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
-                            <input
-                              type="text"
-                              value={cert.name}
-                              onChange={(e) => updateCertificateName('ug', cert.id, e.target.value)}
-                              placeholder="Certificate name"
-                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
-                            />
-                            <label className="flex items-center gap-2 text-sm cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={cert.required}
-                                onChange={(e) => updateCertificateRequired('ug', cert.id, e.target.checked)}
-                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                              />
-                              <span className="text-xs text-gray-600">Required</span>
-                            </label>
-                            <button
-                              onClick={() => removeCertificate('ug', cert.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Remove certificate"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* For PG Courses */}
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-gray-700">For PG Courses</h4>
-                        <button
-                          onClick={() => addCertificate('pg')}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
-                        >
-                          <Plus size={14} />
-                          Add Certificate
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {certificateConfig.pg.map((cert) => (
-                          <div key={cert.id} className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
-                            <input
-                              type="text"
-                              value={cert.name}
-                              onChange={(e) => updateCertificateName('pg', cert.id, e.target.value)}
-                              placeholder="Certificate name"
-                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 outline-none"
-                            />
-                            <label className="flex items-center gap-2 text-sm cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={cert.required}
-                                onChange={(e) => updateCertificateRequired('pg', cert.id, e.target.checked)}
-                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                              />
-                              <span className="text-xs text-gray-600">Required</span>
-                            </label>
-                            <button
-                              onClick={() => removeCertificate('pg', cert.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Remove certificate"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Certificate Information Section */}
+                  <div className="border-t border-gray-200 pt-6 mt-6">
+                    <StudyCertificateConfig />
                   </div>
                 </div>
+              );
+            })()}
+          </div>
+        )}
 
+        {/* Notifications Section */}
+        {activeSection === 'notifications' && (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
+            <NotificationSettings />
+          </div>
+        )}
+
+
+        {/* Edit College Modal */}
+        {editingCollegeId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Pencil size={18} className="text-blue-600" />
+                  Edit College
+                </h3>
+                <button
+                  onClick={() => cancelEditCollege(editingCollegeId)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
               </div>
-            ) : (
-              // Form View Mode
-              <div className="p-4">
-                {/* Form Header */}
-                <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-purple-100 p-2.5 rounded-lg">
-                      <FileText size={24} className="text-purple-600" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-semibold text-gray-900">{form.form_name}</h2>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          form.is_active 
-                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' 
-                            : 'bg-gray-100 text-gray-600 border border-gray-200'
-                        }`}>
-                          {form.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {form.form_description || 'Student registration form'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => startEditingForm(form)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                    >
-                      <Pencil size={16} />
-                      Edit Form
-                    </button>
-                    <button
-                      onClick={() => toggleFormActive(form)}
-                      disabled={savingFormId === form.form_id}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                        form.is_active
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {form.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                      {form.is_active ? 'Active' : 'Inactive'}
-                    </button>
-                  </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">College Name *</label>
+                  <input
+                    type="text"
+                    value={collegeDrafts[editingCollegeId]?.name || ''}
+                    onChange={(e) => updateCollegeDraft(editingCollegeId, 'name', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    placeholder="Enter college name"
+                  />
                 </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-gray-900">{form.form_fields?.length || 0}</p>
-                    <p className="text-xs text-gray-500">Total Fields</p>
-                  </div>
-                  <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-purple-600">{form.form_fields?.filter(f => f.isEnabled !== false).length || 0}</p>
-                    <p className="text-xs text-gray-500">Active Fields</p>
-                  </div>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-amber-600">{form.pending_count || 0}</p>
-                    <p className="text-xs text-gray-500">Pending</p>
-                  </div>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-emerald-600">{form.approved_count || 0}</p>
-                    <p className="text-xs text-gray-500">Approved</p>
-                  </div>
-                </div>
-
-                {/* Form Fields - Grouped by Content Headers */}
-                {form.form_fields && form.form_fields.length > 0 ? (() => {
-                  // Personal Information: Date of Birth and Aadhar Number only
-                  const personalFields = form.form_fields.filter(f => {
-                    if (f.isEnabled === false) return false;
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    return (key.includes('dob') || key.includes('date of birth') ||
-                            label.includes('dob') || label.includes('date of birth') ||
-                            key.includes('adhar') || key.includes('aadhar') ||
-                            label.includes('adhar') || label.includes('aadhar'));
-                  });
-                  
-                  // Basic fields exclude Personal Information fields (DOB, Aadhar) and include Caste
-                  const basicFields = form.form_fields.filter(f => {
-                    if (f.isEnabled === false) return false;
-                    const cat = categorizeField(f);
-                    if (cat !== 'basic') {
-                      // Include Caste from additional fields in Basic Information
-                      const key = f.key?.toLowerCase() || '';
-                      const label = f.label?.toLowerCase() || '';
-                      if (key.includes('caste') || label.includes('caste')) {
-                        return true;
-                      }
-                      return false;
-                    }
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    // Exclude DOB and Aadhar from basic (they go to Personal Information)
-                    if (key.includes('dob') || key.includes('date of birth') ||
-                        label.includes('dob') || label.includes('date of birth') ||
-                        key.includes('adhar') || key.includes('aadhar') ||
-                        label.includes('adhar') || label.includes('aadhar')) {
-                      return false;
-                    }
-                    return true;
-                  });
-                  
-                  const academicFields = form.form_fields.filter(f => categorizeField(f) === 'academic' && f.isEnabled !== false);
-                  const contactFields = form.form_fields.filter(f => categorizeField(f) === 'contact' && f.isEnabled !== false);
-                  const addressFields = form.form_fields.filter(f => categorizeField(f) === 'address' && f.isEnabled !== false);
-                  // Additional fields exclude Caste (moved to Basic) and Personal Information fields
-                  const additionalFields = form.form_fields.filter(f => {
-                    if (f.isEnabled === false) return false;
-                    const cat = categorizeField(f);
-                    if (cat !== 'additional') return false;
-                    const key = f.key?.toLowerCase() || '';
-                    const label = f.label?.toLowerCase() || '';
-                    // Exclude Caste, DOB, and Aadhar from additional
-                    if (key.includes('caste') || label.includes('caste') ||
-                        key.includes('dob') || key.includes('date of birth') ||
-                        label.includes('dob') || label.includes('date of birth') ||
-                        key.includes('adhar') || key.includes('aadhar') ||
-                        label.includes('adhar') || label.includes('aadhar')) {
-                      return false;
-                    }
-                    return true;
-                  });
-                  const otherFields = form.form_fields.filter(f => categorizeField(f) === 'other' && f.isEnabled !== false);
-
-                  const sections = [
-                    { title: 'Basic Information', fields: basicFields, color: 'blue-500' },
-                    { title: 'Academic Information', fields: academicFields, color: 'green-500' },
-                    { title: 'Contact Information', fields: contactFields, color: 'orange-500' },
-                    { title: 'Personal Information', fields: personalFields, color: 'purple-500' },
-                    { title: 'Address Information', fields: addressFields, color: 'gray-500' },
-                    { title: 'Additional Information', fields: additionalFields, color: 'red-500' },
-                    { title: 'Other Fields', fields: otherFields, color: 'indigo-500' }
-                  ].filter(section => section.fields.length > 0);
-
-                  return (
-                    <div className="space-y-6">
-                      {sections.map((section, sectionIndex) => (
-                        <div key={sectionIndex} className="border-b border-gray-200 pb-6 last:border-b-0">
-                          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                            <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
-                            {section.title}
-                          </h2>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {section.fields.map((field, index) => (
-                              <div
-                                key={field.id || index}
-                                className="flex items-center gap-2 text-sm"
-                              >
-                                <span className="font-medium text-gray-700">{field.label}</span>
-                                {field.required && <span className="text-red-500 text-xs">*</span>}
-                                <span className="text-xs text-gray-400 capitalize">({field.type})</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })() : (
-                  <p className="text-sm text-gray-500 text-center py-4">No fields configured</p>
-                )}
-
-                {/* Certificate Information Section */}
-                <div className="border-t border-gray-200 pt-6 mt-6">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                    Certificate Information
-                  </h2>
-                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                      <FileText size={16} className="text-gray-600" />
-                      Default Certification Fields (Read-only)
-                    </h3>
-                    
-                    {/* For Diploma Courses */}
-                    <div className="mb-6">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">For Diploma Courses</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">SSC Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* For UG Courses */}
-                    <div className="mb-6">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">For UG Courses</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">SSC Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">Inter/Diploma Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* For PG Courses */}
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">For PG Courses</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">SSC Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">10th Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">Inter/Diploma TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">Inter/Diploma Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">UG Study Certificate</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">UG TC (Transfer Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">UG PC (Provisional Certificate)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">UG CMM (Consolidated Marks Memo)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                        <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                          <span className="text-sm text-gray-700">UG OD (Original Degree)</span>
-                          <span className="text-xs text-gray-500">Yes</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    College Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={collegeDrafts[editingCollegeId]?.code || ''}
+                    onChange={(e) => updateCollegeDraft(editingCollegeId, 'code', e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none uppercase"
+                    placeholder="Enter college code (e.g., PCE)"
+                    required
+                    maxLength={10}
+                  />
                 </div>
               </div>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* Notifications Section */}
-      {activeSection === 'notifications' && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-6">
-          <NotificationSettings />
-        </div>
-      )}
-
-
-      {/* Edit College Modal */}
-      {editingCollegeId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Pencil size={18} className="text-blue-600" />
-                Edit College
-              </h3>
-              <button
-                onClick={() => cancelEditCollege(editingCollegeId)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">College Name *</label>
-                <input
-                  type="text"
-                  value={collegeDrafts[editingCollegeId]?.name || ''}
-                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'name', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Enter college name"
-                />
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                <button
+                  onClick={() => cancelEditCollege(editingCollegeId)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => saveCollegeEdits(editingCollegeId)}
+                  disabled={savingCollegeId === editingCollegeId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingCollegeId === editingCollegeId ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  College Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={collegeDrafts[editingCollegeId]?.code || ''}
-                  onChange={(e) => updateCollegeDraft(editingCollegeId, 'code', e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none uppercase"
-                  placeholder="Enter college code (e.g., PCE)"
-                  required
-                  maxLength={10}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-              <button
-                onClick={() => cancelEditCollege(editingCollegeId)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => saveCollegeEdits(editingCollegeId)}
-                disabled={savingCollegeId === editingCollegeId}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {savingCollegeId === editingCollegeId ? 'Saving...' : 'Save Changes'}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Edit Course Modal */}
-      {editingCourseId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Pencil size={18} className="text-purple-600" />
-                Edit Course
-              </h3>
-              <button
-                onClick={() => setEditingCourseId(null)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
-                <input
-                  type="text"
-                  value={courseDrafts[editingCourseId]?.name || ''}
-                  onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], name: e.target.value } }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="Enter course name"
-                />
+        {/* Edit Course Modal */}
+        {editingCourseId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Pencil size={18} className="text-purple-600" />
+                  Edit Course
+                </h3>
+                <button
+                  onClick={() => setEditingCourseId(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Course Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={courseDrafts[editingCourseId]?.code || ''}
-                  onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], code: e.target.value.toUpperCase() } }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none uppercase"
-                  placeholder="Enter course code (e.g., BTECH)"
-                  required
-                  maxLength={20}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
                   <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={courseDrafts[editingCourseId]?.totalYears || ''}
-                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], totalYears: e.target.value } }))}
+                    type="text"
+                    value={courseDrafts[editingCourseId]?.name || ''}
+                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], name: e.target.value } }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    placeholder="Enter course name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Course Code <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="number"
-                    min={1}
-                    max={4}
-                    value={courseDrafts[editingCourseId]?.semestersPerYear || ''}
-                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], semestersPerYear: e.target.value } }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    type="text"
+                    value={courseDrafts[editingCourseId]?.code || ''}
+                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], code: e.target.value.toUpperCase() } }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none uppercase"
+                    placeholder="Enter course code (e.g., BTECH)"
+                    required
+                    maxLength={20}
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={courseDrafts[editingCourseId]?.totalYears || ''}
+                      onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], totalYears: e.target.value } }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={4}
+                      value={courseDrafts[editingCourseId]?.semestersPerYear || ''}
+                      onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], semestersPerYear: e.target.value } }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-              <button
-                onClick={() => setEditingCourseId(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => saveCourseEdits(editingCourseId)}
-                disabled={savingCourseId === editingCourseId}
-                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                {savingCourseId === editingCourseId ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                <button
+                  onClick={() => setEditingCourseId(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => saveCourseEdits(editingCourseId)}
+                  disabled={savingCourseId === editingCourseId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {savingCourseId === editingCourseId ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Edit Branch Modal */}
-      {editingBranch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Pencil size={18} className="text-orange-600" />
-                Edit Branch
-              </h3>
-              <button
-                onClick={cancelEditBranch}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name *</label>
-                <input
-                  type="text"
-                  value={branchDrafts[editingBranch.branchId]?.name || ''}
-                  onChange={(e) => updateBranchDraft(editingBranch.branchId, 'name', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                  placeholder="Enter branch name"
-                />
+        {/* Edit Branch Modal */}
+        {editingBranch && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Pencil size={18} className="text-orange-600" />
+                  Edit Branch
+                </h3>
+                <button
+                  onClick={cancelEditBranch}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch Code <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={branchDrafts[editingBranch.branchId]?.code || ''}
-                  onChange={(e) => updateBranchDraft(editingBranch.branchId, 'code', e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none uppercase"
-                  placeholder="Enter branch code (e.g., CSE)"
-                  required
-                  maxLength={10}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name *</label>
                   <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={branchDrafts[editingBranch.branchId]?.totalYears || ''}
-                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'totalYears', e.target.value)}
+                    type="text"
+                    value={branchDrafts[editingBranch.branchId]?.name || ''}
+                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'name', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    placeholder="Enter branch name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Branch Code <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="number"
-                    min={1}
-                    max={4}
-                    value={branchDrafts[editingBranch.branchId]?.semestersPerYear || ''}
-                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'semestersPerYear', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    type="text"
+                    value={branchDrafts[editingBranch.branchId]?.code || ''}
+                    onChange={(e) => updateBranchDraft(editingBranch.branchId, 'code', e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none uppercase"
+                    placeholder="Enter branch code (e.g., CSE)"
+                    required
+                    maxLength={10}
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Years</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={branchDrafts[editingBranch.branchId]?.totalYears || ''}
+                      onChange={(e) => updateBranchDraft(editingBranch.branchId, 'totalYears', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Semesters/Year</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={4}
+                      value={branchDrafts[editingBranch.branchId]?.semestersPerYear || ''}
+                      onChange={(e) => updateBranchDraft(editingBranch.branchId, 'semestersPerYear', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-              <button
-                onClick={cancelEditBranch}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const branch = courseBranches[editingBranch.courseId]?.find(b => b.id === editingBranch.branchId);
-                  if (branch) saveBranchEdit(editingBranch.courseId, branch);
-                }}
-                disabled={savingBranchId === editingBranch.branchId}
-                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50"
-              >
-                {savingBranchId === editingBranch.branchId ? 'Saving...' : 'Save Changes'}
-              </button>
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                <button
+                  onClick={cancelEditBranch}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const branch = courseBranches[editingBranch.courseId]?.find(b => b.id === editingBranch.branchId);
+                    if (branch) saveBranchEdit(editingBranch.courseId, branch);
+                  }}
+                  disabled={savingBranchId === editingBranch.branchId}
+                  className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {savingBranchId === editingBranch.branchId ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmModal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false })}
-        onConfirm={deleteModal.onConfirm || (() => {})}
-        title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : deleteModal.type === 'form' ? 'Form' : 'Branch'}`}
-        itemName={deleteModal.item?.name || deleteModal.item?.yearLabel || deleteModal.item?.form_name}
-        itemType={deleteModal.type}
-        affectedStudents={deleteModal.affectedStudents || []}
-        totalStudentCount={deleteModal.totalStudentCount || 0}
-        hasMoreStudents={deleteModal.hasMoreStudents || false}
-        isLoadingStudents={deleteModal.isLoadingStudents || false}
-      />
-    </div>
-    
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmModal
+          isOpen={deleteModal.isOpen}
+          onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false })}
+          onConfirm={deleteModal.onConfirm || (() => { })}
+          title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : deleteModal.type === 'form' ? 'Form' : 'Branch'}`}
+          itemName={deleteModal.item?.name || deleteModal.item?.yearLabel || deleteModal.item?.form_name}
+          itemType={deleteModal.type}
+          affectedStudents={deleteModal.affectedStudents || []}
+          totalStudentCount={deleteModal.totalStudentCount || 0}
+          hasMoreStudents={deleteModal.hasMoreStudents || false}
+          isLoadingStudents={deleteModal.isLoadingStudents || false}
+        />
+      </div>
+
       {/* Add College Modal - Using createPortal to render to document.body */}
       {isAddCollegeModalOpen && typeof document !== 'undefined' && document.body && createPortal(
-        <div 
+        <div
           data-modal="add-college"
           className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             zIndex: 99999
           }}
           onClick={(e) => {
@@ -3758,7 +3577,7 @@ const Settings = () => {
             }
           }}
         >
-          <div 
+          <div
             className="w-full max-w-md rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
             onClick={(e) => e.stopPropagation()}
             style={{ zIndex: 10000 }}
@@ -3780,7 +3599,7 @@ const Settings = () => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <form onSubmit={handleCreateCollege} className="p-6 space-y-4">
               {/* College Name */}
               <div>
@@ -3831,8 +3650,8 @@ const Settings = () => {
                 <button
                   type="submit"
                   disabled={
-                    creatingCollege || 
-                    !newCollege.name.trim() || 
+                    creatingCollege ||
+                    !newCollege.name.trim() ||
                     !newCollege.code?.trim()
                   }
                   className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3858,15 +3677,15 @@ const Settings = () => {
 
       {/* Add Branch Modal - Using createPortal to render to document.body */}
       {isAddBranchModalOpen && typeof document !== 'undefined' && document.body && createPortal(
-        <div 
+        <div
           data-modal="add-branch"
           className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             zIndex: 99999
           }}
           onClick={(e) => {
@@ -3876,7 +3695,7 @@ const Settings = () => {
             }
           }}
         >
-          <div 
+          <div
             className="w-full max-w-md rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
             onClick={(e) => e.stopPropagation()}
             style={{ zIndex: 10000 }}
@@ -3900,12 +3719,12 @@ const Settings = () => {
                 <X size={20} />
               </button>
             </div>
-            
-            <form 
-              onSubmit={(e) => { 
-                e.preventDefault(); 
-                handleAddBranch(null); 
-              }} 
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddBranch(null);
+              }}
               className="p-6 space-y-4"
             >
               {/* Batch Selection - Multiple */}
@@ -4006,9 +3825,9 @@ const Settings = () => {
                 <button
                   type="submit"
                   disabled={
-                    savingBranchId === `new-${branchModalCourseId}` || 
-                    !newBranch.name.trim() || 
-                    !newBranch.code.trim() || 
+                    savingBranchId === `new-${branchModalCourseId}` ||
+                    !newBranch.name.trim() ||
+                    !newBranch.code.trim() ||
                     newBranch.academicYearIds.length === 0
                   }
                   className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -4034,257 +3853,257 @@ const Settings = () => {
 
       {/* Add Course Modal - Using createPortal to render to document.body */}
       {isAddCourseModalOpen && typeof document !== 'undefined' && document.body && createPortal(
-        <div 
+        <div
           data-modal="add-course"
-        className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-        style={{ 
-          position: 'fixed', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0, 
-          zIndex: 99999
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            setIsAddCourseModalOpen(false);
-            resetNewCourse();
-          }
-        }}
-      >
-        <div 
-          className="w-full max-w-2xl rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
-          onClick={(e) => e.stopPropagation()}
-          style={{ zIndex: 10000 }}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAddCourseModalOpen(false);
+              resetNewCourse();
+            }
+          }}
         >
-          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Add New Course</h3>
-              {selectedCollege && (
-                <p className="text-sm text-gray-500 mt-0.5">
-                  for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => {
-                setIsAddCourseModalOpen(false);
-                resetNewCourse();
-              }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
-          
-          <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
-            {/* Course Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Course Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newCourse.name}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Course name (e.g., B.Tech, Diploma)"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                required
-              />
-            </div>
-
-            {/* Course Code */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Course Code <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newCourse.code}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                placeholder="Course code (e.g., BTECH, DIP)"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 uppercase"
-                required
-                maxLength={20}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Unique code for the course (e.g., BTECH, DIP)
-              </p>
-            </div>
-
-            {/* Total Years */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Total Years <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={newCourse.totalYears}
-                onChange={(e) => {
-                  const years = parseInt(e.target.value) || 1;
-                  setNewCourse((prev) => {
-                    const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
-                    let config;
-                    if (prev.usePerYearConfig) {
-                      if (prev.yearSemesterConfig && prev.yearSemesterConfig.length > 0) {
-                        config = Array.from({ length: years }, (_, i) => {
-                          const existing = prev.yearSemesterConfig[i];
-                          return existing || { year: i + 1, semesters: defaultSemesters };
-                        });
-                      } else {
-                        config = Array.from({ length: years }, (_, i) => ({
-                          year: i + 1,
-                          semesters: defaultSemesters
-                        }));
-                      }
-                    } else {
-                      config = [];
-                    }
-                    return { ...prev, totalYears: years, yearSemesterConfig: config };
-                  });
-                }}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                required
-              />
-            </div>
-
-            {/* Semesters Per Year (if not using per-year config) */}
-            {!newCourse.usePerYearConfig && (
+          <div
+            className="w-full max-w-2xl rounded-lg bg-white shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()}
+            style={{ zIndex: 10000 }}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Semesters Per Year <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={4}
-                  value={newCourse.semestersPerYear}
-                  onChange={(e) => setNewCourse((prev) => ({ ...prev, semestersPerYear: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Same number of semesters for all years
-                </p>
+                <h3 className="text-lg font-semibold text-gray-900">Add New Course</h3>
+                {selectedCollege && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
+                  </p>
+                )}
               </div>
-            )}
-
-            {/* Per-year configuration toggle */}
-            <div className="flex items-center gap-2 pt-2">
-              <input
-                type="checkbox"
-                id="modalUsePerYearConfig"
-                checked={newCourse.usePerYearConfig}
-                onChange={(e) => {
-                  const usePerYear = e.target.checked;
-                  setNewCourse((prev) => {
-                    if (usePerYear) {
-                      const totalYears = parseInt(prev.totalYears) || 4;
-                      const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
-                      let config = prev.yearSemesterConfig && prev.yearSemesterConfig.length === totalYears
-                        ? [...prev.yearSemesterConfig]
-                        : Array.from({ length: totalYears }, (_, i) => ({
-                            year: i + 1,
-                            semesters: defaultSemesters
-                          }));
-                      return { ...prev, usePerYearConfig: true, yearSemesterConfig: config };
-                    } else {
-                      return { ...prev, usePerYearConfig: false };
-                    }
-                  });
-                }}
-                className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-              />
-              <label htmlFor="modalUsePerYearConfig" className="text-sm text-gray-700 cursor-pointer">
-                Configure semesters per year (e.g., Diploma Year 1: 1 sem, Year 2-3: 2 sems)
-              </label>
-            </div>
-
-            {/* Per-year semester configuration table */}
-            {newCourse.usePerYearConfig && newCourse.yearSemesterConfig && Array.isArray(newCourse.yearSemesterConfig) && newCourse.yearSemesterConfig.length > 0 && (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="mb-3 text-sm font-medium text-gray-700">Semesters per Year:</div>
-                <div className="space-y-3">
-                  {newCourse.yearSemesterConfig.map((yearConfig, index) => {
-                    if (!yearConfig || typeof yearConfig.year !== 'number' || typeof yearConfig.semesters !== 'number') {
-                      return null;
-                    }
-                    return (
-                      <div key={`year-${yearConfig.year}-${index}`} className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 p-3">
-                        <span className="w-20 text-sm font-medium text-gray-700">Year {yearConfig.year}:</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={4}
-                          value={yearConfig.semesters || 2}
-                          onChange={(e) => {
-                            const semesters = parseInt(e.target.value) || 1;
-                            setNewCourse((prev) => {
-                              if (!prev.yearSemesterConfig || !Array.isArray(prev.yearSemesterConfig)) {
-                                return prev;
-                              }
-                              const config = [...prev.yearSemesterConfig];
-                              if (config[index]) {
-                                config[index] = { ...config[index], semesters };
-                              }
-                              return { ...prev, yearSemesterConfig: config };
-                            });
-                          }}
-                          className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                        />
-                        <span className="text-sm text-gray-600">semester(s)</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
               <button
-                type="button"
                 onClick={() => {
                   setIsAddCourseModalOpen(false);
                   resetNewCourse();
                 }}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  creatingCourse || 
-                  !newCourse.name.trim() || 
-                  !newCourse.code?.trim() ||
-                  !newCourse.totalYears || 
-                  Number(newCourse.totalYears) <= 0 ||
-                  (!newCourse.usePerYearConfig && (!newCourse.semestersPerYear || Number(newCourse.semestersPerYear) <= 0)) ||
-                  (newCourse.usePerYearConfig && (!newCourse.yearSemesterConfig || newCourse.yearSemesterConfig.length !== Number(newCourse.totalYears)))
-                }
-                className="inline-flex items-center gap-2 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creatingCourse ? (
-                  <>
-                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus size={16} />
-                    Create Course
-                  </>
-                )}
+                <X size={20} />
               </button>
             </div>
-          </form>
-        </div>
-      </div>,
-      document.body
-    )}
+
+            <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
+              {/* Course Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Course Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCourse.name}
+                  onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Course name (e.g., B.Tech, Diploma)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  required
+                />
+              </div>
+
+              {/* Course Code */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Course Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCourse.code}
+                  onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="Course code (e.g., BTECH, DIP)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 uppercase"
+                  required
+                  maxLength={20}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Unique code for the course (e.g., BTECH, DIP)
+                </p>
+              </div>
+
+              {/* Total Years */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Total Years <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={newCourse.totalYears}
+                  onChange={(e) => {
+                    const years = parseInt(e.target.value) || 1;
+                    setNewCourse((prev) => {
+                      const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
+                      let config;
+                      if (prev.usePerYearConfig) {
+                        if (prev.yearSemesterConfig && prev.yearSemesterConfig.length > 0) {
+                          config = Array.from({ length: years }, (_, i) => {
+                            const existing = prev.yearSemesterConfig[i];
+                            return existing || { year: i + 1, semesters: defaultSemesters };
+                          });
+                        } else {
+                          config = Array.from({ length: years }, (_, i) => ({
+                            year: i + 1,
+                            semesters: defaultSemesters
+                          }));
+                        }
+                      } else {
+                        config = [];
+                      }
+                      return { ...prev, totalYears: years, yearSemesterConfig: config };
+                    });
+                  }}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  required
+                />
+              </div>
+
+              {/* Semesters Per Year (if not using per-year config) */}
+              {!newCourse.usePerYearConfig && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Semesters Per Year <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4}
+                    value={newCourse.semestersPerYear}
+                    onChange={(e) => setNewCourse((prev) => ({ ...prev, semestersPerYear: e.target.value }))}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Same number of semesters for all years
+                  </p>
+                </div>
+              )}
+
+              {/* Per-year configuration toggle */}
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="modalUsePerYearConfig"
+                  checked={newCourse.usePerYearConfig}
+                  onChange={(e) => {
+                    const usePerYear = e.target.checked;
+                    setNewCourse((prev) => {
+                      if (usePerYear) {
+                        const totalYears = parseInt(prev.totalYears) || 4;
+                        const defaultSemesters = parseInt(prev.semestersPerYear) || 2;
+                        let config = prev.yearSemesterConfig && prev.yearSemesterConfig.length === totalYears
+                          ? [...prev.yearSemesterConfig]
+                          : Array.from({ length: totalYears }, (_, i) => ({
+                            year: i + 1,
+                            semesters: defaultSemesters
+                          }));
+                        return { ...prev, usePerYearConfig: true, yearSemesterConfig: config };
+                      } else {
+                        return { ...prev, usePerYearConfig: false };
+                      }
+                    });
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <label htmlFor="modalUsePerYearConfig" className="text-sm text-gray-700 cursor-pointer">
+                  Configure semesters per year (e.g., Diploma Year 1: 1 sem, Year 2-3: 2 sems)
+                </label>
+              </div>
+
+              {/* Per-year semester configuration table */}
+              {newCourse.usePerYearConfig && newCourse.yearSemesterConfig && Array.isArray(newCourse.yearSemesterConfig) && newCourse.yearSemesterConfig.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-3 text-sm font-medium text-gray-700">Semesters per Year:</div>
+                  <div className="space-y-3">
+                    {newCourse.yearSemesterConfig.map((yearConfig, index) => {
+                      if (!yearConfig || typeof yearConfig.year !== 'number' || typeof yearConfig.semesters !== 'number') {
+                        return null;
+                      }
+                      return (
+                        <div key={`year-${yearConfig.year}-${index}`} className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 p-3">
+                          <span className="w-20 text-sm font-medium text-gray-700">Year {yearConfig.year}:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={4}
+                            value={yearConfig.semesters || 2}
+                            onChange={(e) => {
+                              const semesters = parseInt(e.target.value) || 1;
+                              setNewCourse((prev) => {
+                                if (!prev.yearSemesterConfig || !Array.isArray(prev.yearSemesterConfig)) {
+                                  return prev;
+                                }
+                                const config = [...prev.yearSemesterConfig];
+                                if (config[index]) {
+                                  config[index] = { ...config[index], semesters };
+                                }
+                                return { ...prev, yearSemesterConfig: config };
+                              });
+                            }}
+                            className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                          />
+                          <span className="text-sm text-gray-600">semester(s)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCourseModalOpen(false);
+                    resetNewCourse();
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    creatingCourse ||
+                    !newCourse.name.trim() ||
+                    !newCourse.code?.trim() ||
+                    !newCourse.totalYears ||
+                    Number(newCourse.totalYears) <= 0 ||
+                    (!newCourse.usePerYearConfig && (!newCourse.semestersPerYear || Number(newCourse.semestersPerYear) <= 0)) ||
+                    (newCourse.usePerYearConfig && (!newCourse.yearSemesterConfig || newCourse.yearSemesterConfig.length !== Number(newCourse.totalYears)))
+                  }
+                  className="inline-flex items-center gap-2 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingCourse ? (
+                    <>
+                      <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Create Course
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 };
@@ -4334,20 +4153,19 @@ const StatCard = ({ icon: Icon, title, value }) => (
 
 const StatusBadge = ({ isActive }) => (
   <span
-    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-      isActive ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600 border border-gray-200'
-    }`}
+    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600 border border-gray-200'
+      }`}
   >
     {isActive ? 'Active' : 'Inactive'}
   </span>
 );
 
-const CollegeCard = ({ 
-  college, 
-  isSelected, 
-  onSelect, 
-  onEdit, 
-  onDelete, 
+const CollegeCard = ({
+  college,
+  isSelected,
+  onSelect,
+  onEdit,
+  onDelete,
   onToggleActive,
   isEditing,
   isSaving,
@@ -4359,11 +4177,10 @@ const CollegeCard = ({
 }) => {
   return (
     <div
-      className={`rounded-lg border-2 px-4 py-3 transition-all ${
-        isSelected
-          ? 'border-blue-500 bg-blue-50 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-      }`}
+      className={`rounded-lg border-2 px-4 py-3 transition-all ${isSelected
+        ? 'border-blue-500 bg-blue-50 shadow-sm'
+        : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+        }`}
     >
       {isEditing ? (
         <div className="space-y-3">
@@ -4471,11 +4288,10 @@ const CourseCard = ({ course, isSelected, onSelect }) => {
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-lg border-2 px-4 py-3 text-left transition-all ${
-        isSelected
-          ? 'border-blue-500 bg-blue-50 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-      }`}
+      className={`w-full rounded-lg border-2 px-4 py-3 text-left transition-all ${isSelected
+        ? 'border-blue-500 bg-blue-50 shadow-sm'
+        : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+        }`}
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-900">{course.name}</span>

@@ -15,13 +15,17 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronRight,
-  DollarSign
+  DollarSign,
+  Ticket,
+  FolderTree,
+  Megaphone,
+  Briefcase
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
-import { 
-  MODULE_ROUTE_MAP, 
-  getModuleKeyForPath, 
-  hasModuleAccess, 
+import {
+  MODULE_ROUTE_MAP,
+  getModuleKeyForPath,
+  hasModuleAccess,
   getAllowedFrontendModules,
   isFullAccessRole,
   FRONTEND_MODULES
@@ -31,10 +35,12 @@ import toast from 'react-hot-toast';
 // Navigation items with frontend module keys as permissions
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
-  { 
-    path: '/students', 
-    icon: Users, 
-    label: 'Student Management', 
+  { path: '/announcements', icon: Megaphone, label: 'Announcements', permission: FRONTEND_MODULES.ANNOUNCEMENTS },
+
+  {
+    path: '/students',
+    icon: Users,
+    label: 'Student Management',
     permission: FRONTEND_MODULES.STUDENTS,
     subItems: [
       { path: '/students', label: 'Students Database', permission: FRONTEND_MODULES.STUDENTS },
@@ -46,7 +52,27 @@ const NAV_ITEMS = [
   { path: '/fees', icon: DollarSign, label: 'Fee Management', permission: FRONTEND_MODULES.FEES },
   { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
-  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS }
+  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS },
+  {
+    path: '/tickets',
+    icon: Ticket,
+    label: 'Ticket Management',
+    permission: FRONTEND_MODULES.TICKETS,
+    subItems: [
+      { path: '/tickets', label: 'Tickets', permission: FRONTEND_MODULES.TICKETS },
+      { path: '/task-management', label: 'Task Management', permission: FRONTEND_MODULES.TASK_MANAGEMENT }
+    ]
+  },
+  {
+    path: '/services',
+    icon: Briefcase,
+    label: 'Services',
+    permission: FRONTEND_MODULES.SERVICES,
+    subItems: [
+      { path: '/services/requests', label: 'Service Requests', permission: FRONTEND_MODULES.SERVICES },
+      { path: '/services/config', label: 'Configuration', permission: FRONTEND_MODULES.SERVICES }
+    ]
+  }
 ];
 
 const AdminLayout = () => {
@@ -66,17 +92,17 @@ const AdminLayout = () => {
   // Get allowed modules based on user role and permissions
   const allowedModules = useMemo(() => {
     if (!user) return [];
-    
+
     // Super admin and legacy admin have full access to all modules
     if (isFullAccessRole(user.role)) {
       return Object.values(FRONTEND_MODULES);
     }
-    
+
     // For RBAC users, check permissions using the mapping
     if (user.permissions) {
       return getAllowedFrontendModules(user.permissions);
     }
-    
+
     // Legacy staff users with modules array
     return Array.isArray(user.modules) ? user.modules : [];
   }, [user]);
@@ -85,15 +111,15 @@ const AdminLayout = () => {
   const filteredNavItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if (!item.permission) return true;
-      
+
       // Super admin and legacy admin have full access
       if (isFullAccessRole(user?.role)) return true;
-      
+
       // For RBAC users, check permissions using the mapping
       if (user?.permissions) {
         return hasModuleAccess(user.permissions, item.permission);
       }
-      
+
       // Legacy staff users
       return allowedModules.includes(item.permission);
     }).map((item) => {
@@ -101,16 +127,16 @@ const AdminLayout = () => {
       if (item.subItems) {
         const filteredSubItems = item.subItems.filter((subItem) => {
           if (!subItem.permission) return true;
-          
+
           if (isFullAccessRole(user?.role)) return true;
-          
+
           if (user?.permissions) {
             return hasModuleAccess(user.permissions, subItem.permission);
           }
-          
+
           return allowedModules.includes(subItem.permission);
         });
-        
+
         return { ...item, subItems: filteredSubItems };
       }
       return item;
@@ -153,17 +179,17 @@ const AdminLayout = () => {
   // Redirect user if they try to access a module they don't have access to
   useEffect(() => {
     if (!user) return;
-    
+
     // Super admin and legacy admin have full access
     if (isFullAccessRole(user.role)) return;
-    
+
     const currentModuleKey = getModuleKeyForPath(location.pathname);
-    
+
     // Check if user has access to current module
     if (currentModuleKey && !allowedModules.includes(currentModuleKey)) {
       // Redirect to first allowed route or dashboard
-      const firstAllowedRoute = allowedModules.length > 0 
-        ? MODULE_ROUTE_MAP[allowedModules[0]] 
+      const firstAllowedRoute = allowedModules.length > 0
+        ? MODULE_ROUTE_MAP[allowedModules[0]]
         : '/';
       navigate(firstAllowedRoute, { replace: true });
     }
@@ -230,7 +256,7 @@ const AdminLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const hasSubItems = item.subItems && item.subItems.length > 0;
@@ -252,10 +278,9 @@ const AdminLayout = () => {
                       className={`
                         w-full flex items-center justify-between rounded-lg transition-all duration-200 touch-manipulation
                         gap-3 px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px]
-                        ${
-                          isActive && !isActuallyExpanded
-                            ? 'bg-blue-600 text-white font-semibold shadow-md'
-                            : isActuallyExpanded
+                        ${isActive && !isActuallyExpanded
+                          ? 'bg-blue-600 text-white font-semibold shadow-md'
+                          : isActuallyExpanded
                             ? 'bg-gray-50 text-gray-900 font-medium'
                             : 'text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900'
                         }
@@ -290,10 +315,9 @@ const AdminLayout = () => {
                               className={`
                                 flex items-center rounded-md transition-all duration-200 touch-manipulation
                                 gap-2.5 px-3 py-2.5 text-sm font-medium relative min-h-[44px]
-                                ${
-                                  isSubActive
-                                    ? 'bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400'
-                                    : 'text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm'
+                                ${isSubActive
+                                  ? 'bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400'
+                                  : 'text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm'
                                 }
                               `}
                             >
@@ -316,7 +340,7 @@ const AdminLayout = () => {
                 // If on a sub-route, show parent as active
                 const hasActiveSubItem = item.subItems?.some(subItem => location.pathname === subItem.path);
                 const isActiveState = isActive || hasActiveSubItem;
-                
+
                 return (
                   <Link
                     key={item.path}
@@ -325,10 +349,9 @@ const AdminLayout = () => {
                     className={`
                       flex items-center justify-center rounded-md transition-colors
                       px-2 py-3
-                      ${
-                        isActiveState
-                          ? 'bg-blue-600 text-white font-semibold shadow-md'
-                          : 'text-gray-800 hover:bg-blue-100 hover:text-blue-700'
+                      ${isActiveState
+                        ? 'bg-blue-600 text-white font-semibold shadow-md'
+                        : 'text-gray-800 hover:bg-blue-100 hover:text-blue-700'
                       }
                     `}
                     title={item.label}
@@ -347,16 +370,15 @@ const AdminLayout = () => {
                     flex items-center rounded-md transition-colors touch-manipulation
                     ${sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 sm:px-4 py-2.5 sm:py-3'}
                     min-h-[44px]
-                    ${
-                      isActive
-                        ? 'bg-blue-600 text-white font-semibold shadow-md'
-                        : 'text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700'
+                    ${isActive
+                      ? 'bg-blue-600 text-white font-semibold shadow-md'
+                      : 'text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700'
                     }
                   `}
                   title={sidebarCollapsed ? item.label : ''}
                 >
                   <Icon size={20} className="flex-shrink-0" />
-                  <span 
+                  <span
                     className={`
                       transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
                       ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
@@ -371,7 +393,7 @@ const AdminLayout = () => {
 
           {/* User Info & Logout */}
           <div className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
-            <div 
+            <div
               className={`
                 flex items-center gap-3 mb-2 transition-opacity duration-300 ease-out overflow-hidden
                 ${sidebarCollapsed ? 'opacity-0 h-0 mb-0' : 'opacity-100 h-auto mb-2'}
@@ -393,13 +415,12 @@ const AdminLayout = () => {
             </div>
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${
-                sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
-              }`}
+              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
+                }`}
               title={sidebarCollapsed ? 'Logout' : ''}
             >
               <LogOut size={20} className="flex-shrink-0" />
-              <span 
+              <span
                 className={`
                   transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
                   ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}

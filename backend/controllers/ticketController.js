@@ -1,0 +1,840 @@
+const { masterPool } = require('../config/database');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for ticket photo uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/tickets';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'ticket-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
+// Multer middleware is exported in module.exports below
+
+/**
+ * Generate unique ticket number
+ */
+const generateTicketNumber = async () => {
+  const prefix = 'TKT';
+  const year = new Date().getFullYear();
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}-${year}-${timestamp}-${random}`;
+};
+
+/**
+ * Create a new ticket (student raises complaint)
+ */
+const createTicket = async (req, res) => {
+  try {
+    const { category_id, sub_category_id, title, description } = req.body;
+    const student = req.user || req.student;
+
+    if (!student || !student.admission_number) {
+      return res.status(401).json({
+        success: false,
+        message: 'Student authentication required'
+      });
+    }
+
+    if (!category_id || !title || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Category, title, and description are required'
+      });
+    }
+
+    // Verify category exists and is active
+    const [category] = await masterPool.query(
+      'SELECT id, parent_id, is_active FROM complaint_categories WHERE id = ?',
+      [category_id]
+    );
+
+    if (category.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint category'
+      });
+    }
+
+    if (!category[0].is_active) {
+      return res.status(400).json({
+        success: false,
+        message: 'This complaint category is not available'
+      });
+    }
+
+    // If sub_category_id is provided, verify it belongs to the category
+    if (sub_category_id) {
+      const [subCategory] = await masterPool.query(
+        'SELECT id, parent_id, is_active FROM complaint_categories WHERE id = ? AND parent_id = ?',
+        [sub_category_id, category_id]
+      );
+
+      if (subCategory.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid sub-category for selected category'
+        });
+      }
+
+      if (!subCategory[0].is_active) {
+        return res.status(400).json({
+          success: false,
+          message: 'This sub-category is not available'
+        });
+      }
+    }
+
+    // Get student ID
+    const [studentData] = await masterPool.query(
+      'SELECT id FROM students WHERE admission_number = ?',
+      [student.admission_number]
+    );
+
+    if (studentData.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const studentId = studentData[0].id;
+
+    // Handle photo upload
+    let photoUrl = null;
+    if (req.file) {
+      // For now, store as base64 or file path
+      // In production, you might want to upload to S3
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const base64Image = fileBuffer.toString('base64');
+      const mimeType = req.file.mimetype;
+      photoUrl = `data:${mimeType};base64,${base64Image}`;
+      
+      // Optionally, you can also keep the file path
+      // photoUrl = `/uploads/tickets/${req.file.filename}`;
+    }
+
+    // Generate ticket number
+    const ticketNumber = await generateTicketNumber();
+
+    // Create ticket
+    const [result] = await masterPool.query(
+      `INSERT INTO tickets 
+       (ticket_number, student_id, admission_number, category_id, sub_category_id, title, description, photo_url, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        ticketNumber,
+        studentId,
+        student.admission_number,
+        category_id,
+        sub_category_id || null,
+        title.trim(),
+        description.trim(),
+        photoUrl
+      ]
+    );
+
+    // Clean up uploaded file if we converted to base64
+    if (req.file && photoUrl && photoUrl.startsWith('data:')) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    // Get created ticket
+    const [ticket] = await masterPool.query(
+      `SELECT t.*, 
+        c.name as category_name,
+        sc.name as sub_category_name
+      FROM tickets t
+      LEFT JOIN complaint_categories c ON t.category_id = c.id
+      LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
+      WHERE t.id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Ticket created successfully',
+      data: ticket[0]
+    });
+  } catch (error) {
+    console.error('Error creating ticket:', error);
+    
+    // Clean up uploaded file on error
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error creating ticket',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get all tickets (admin view with filters)
+ */
+const getTickets = async (req, res) => {
+  try {
+    const { status, category_id, assigned_to, student_id, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let query = `
+      SELECT 
+        t.*,
+        c.name as category_name,
+        sc.name as sub_category_name,
+        s.student_name,
+        s.student_mobile,
+        GROUP_CONCAT(DISTINCT CONCAT(ru.name, ' (', ru.username, ')') SEPARATOR ', ') as assigned_users
+      FROM tickets t
+      LEFT JOIN complaint_categories c ON t.category_id = c.id
+      LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
+      LEFT JOIN students s ON t.student_id = s.id
+      LEFT JOIN ticket_assignments ta ON t.id = ta.ticket_id AND ta.is_active = TRUE
+      LEFT JOIN rbac_users ru ON ta.assigned_to = ru.id
+    `;
+
+    const conditions = [];
+    const params = [];
+
+    if (status) {
+      conditions.push('t.status = ?');
+      params.push(status);
+    }
+
+    if (category_id) {
+      conditions.push('t.category_id = ?');
+      params.push(category_id);
+    }
+
+    if (student_id) {
+      conditions.push('t.student_id = ?');
+      params.push(student_id);
+    }
+
+    if (assigned_to) {
+      conditions.push('ta.assigned_to = ?');
+      params.push(assigned_to);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' GROUP BY t.id ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), offset);
+
+    const [tickets] = await masterPool.query(query, params);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(DISTINCT t.id) as total FROM tickets t';
+    if (assigned_to) {
+      countQuery += ' LEFT JOIN ticket_assignments ta ON t.id = ta.ticket_id AND ta.is_active = TRUE';
+    }
+    if (conditions.length > 0) {
+      countQuery += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    const [countResult] = await masterPool.query(countQuery, params.slice(0, -2));
+    const total = countResult[0].total;
+
+    res.json({
+      success: true,
+      data: tickets,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching tickets',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get single ticket with full details
+ */
+const getTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = req.user || req.admin;
+
+    const [tickets] = await masterPool.query(
+      `SELECT 
+        t.*,
+        c.name as category_name,
+        c.description as category_description,
+        sc.name as sub_category_name,
+        sc.description as sub_category_description,
+        s.student_name,
+        s.student_mobile,
+        s.student_email
+      FROM tickets t
+      LEFT JOIN complaint_categories c ON t.category_id = c.id
+      LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
+      LEFT JOIN students s ON t.student_id = s.id
+      WHERE t.id = ?`,
+      [id]
+    );
+
+    if (tickets.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Check if user is a student trying to access their own ticket
+    if (user.role === 'student' || user.admission_number) {
+      const studentAdmissionNumber = user.admission_number || user.admissionNumber;
+      if (tickets[0].admission_number !== studentAdmissionNumber) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You can only view your own tickets.'
+        });
+      }
+    }
+
+    // Get assignments
+    const [assignments] = await masterPool.query(
+      `SELECT 
+        ta.*,
+        ru.name as assigned_to_name,
+        ru.username as assigned_to_username,
+        ru.email as assigned_to_email,
+        ru.role as assigned_to_role,
+        assigned_by_ru.name as assigned_by_name
+      FROM ticket_assignments ta
+      LEFT JOIN rbac_users ru ON ta.assigned_to = ru.id
+      LEFT JOIN rbac_users assigned_by_ru ON ta.assigned_by = assigned_by_ru.id
+      WHERE ta.ticket_id = ? AND ta.is_active = TRUE
+      ORDER BY ta.assigned_at DESC`,
+      [id]
+    );
+
+    // Get status history
+    const [statusHistory] = await masterPool.query(
+      `SELECT 
+        tsh.*,
+        ru.name as changed_by_name,
+        ru.username as changed_by_username
+      FROM ticket_status_history tsh
+      LEFT JOIN rbac_users ru ON tsh.changed_by = ru.id
+      WHERE tsh.ticket_id = ?
+      ORDER BY tsh.created_at DESC`,
+      [id]
+    );
+
+    // Get comments
+    const [comments] = await masterPool.query(
+      `SELECT 
+        tc.*,
+        CASE 
+          WHEN tc.user_type = 'admin' THEN ru.name
+          ELSE s.student_name
+        END as user_name,
+        CASE 
+          WHEN tc.user_type = 'admin' THEN ru.username
+          ELSE s.admission_number
+        END as user_identifier
+      FROM ticket_comments tc
+      LEFT JOIN rbac_users ru ON tc.user_type = 'admin' AND tc.user_id = ru.id
+      LEFT JOIN students s ON tc.user_type = 'student' AND tc.user_id = s.id
+      WHERE tc.ticket_id = ?
+      ORDER BY tc.created_at ASC`,
+      [id]
+    );
+
+    // Get feedback if ticket is completed
+    let feedback = null;
+    if (tickets[0].status === 'completed') {
+      const [feedbackData] = await masterPool.query(
+        'SELECT * FROM ticket_feedback WHERE ticket_id = ?',
+        [id]
+      );
+      if (feedbackData.length > 0) {
+        feedback = feedbackData[0];
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...tickets[0],
+        assignments,
+        status_history: statusHistory,
+        comments,
+        feedback
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ticket:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching ticket',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get tickets for a student
+ */
+const getStudentTickets = async (req, res) => {
+  try {
+    const student = req.user || req.student;
+    
+    if (!student || !student.admission_number) {
+      return res.status(401).json({
+        success: false,
+        message: 'Student authentication required'
+      });
+    }
+
+    const [tickets] = await masterPool.query(
+      `SELECT 
+        t.*,
+        c.name as category_name,
+        sc.name as sub_category_name
+      FROM tickets t
+      LEFT JOIN complaint_categories c ON t.category_id = c.id
+      LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
+      WHERE t.admission_number = ?
+      ORDER BY t.created_at DESC`,
+      [student.admission_number]
+    );
+
+    res.json({
+      success: true,
+      data: tickets
+    });
+  } catch (error) {
+    console.error('Error fetching student tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching tickets',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Assign ticket to RBAC user(s)
+ */
+const assignTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assigned_to, notes } = req.body;
+    const user = req.user || req.admin;
+
+    if (!assigned_to || !Array.isArray(assigned_to) || assigned_to.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one user must be assigned'
+      });
+    }
+
+    // Verify ticket exists
+    const [tickets] = await masterPool.query('SELECT id, status FROM tickets WHERE id = ?', [id]);
+    if (tickets.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Verify all assigned users exist
+    const placeholders = assigned_to.map(() => '?').join(',');
+    const [users] = await masterPool.query(
+      `SELECT id FROM rbac_users WHERE id IN (${placeholders})`,
+      assigned_to
+    );
+
+    if (users.length !== assigned_to.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'One or more assigned users not found'
+      });
+    }
+
+    // Deactivate existing assignments
+    await masterPool.query(
+      'UPDATE ticket_assignments SET is_active = FALSE WHERE ticket_id = ?',
+      [id]
+    );
+
+    // Create new assignments
+    const assignments = [];
+    for (const userId of assigned_to) {
+      const [result] = await masterPool.query(
+        `INSERT INTO ticket_assignments (ticket_id, assigned_to, assigned_by, notes)
+         VALUES (?, ?, ?, ?)`,
+        [id, userId, user.id, notes || null]
+      );
+      assignments.push(result.insertId);
+    }
+
+    // Update ticket status to 'approaching' if it was 'pending'
+    if (tickets[0].status === 'pending') {
+      await updateTicketStatus(id, 'approaching', user.id, 'Ticket assigned to staff');
+    }
+
+    res.json({
+      success: true,
+      message: 'Ticket assigned successfully',
+      data: { assignment_ids: assignments }
+    });
+  } catch (error) {
+    console.error('Error assigning ticket:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error assigning ticket',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update ticket status
+ */
+const updateTicketStatus = async (ticketId, newStatus, changedBy, notes = null) => {
+  const connection = await masterPool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Get current status
+    const [tickets] = await connection.query(
+      'SELECT status FROM tickets WHERE id = ?',
+      [ticketId]
+    );
+
+    if (tickets.length === 0) {
+      throw new Error('Ticket not found');
+    }
+
+    const oldStatus = tickets[0].status;
+
+    // Update ticket status
+    const updateFields = ['status = ?'];
+    const updateValues = [newStatus];
+
+    if (newStatus === 'completed') {
+      updateFields.push('resolved_at = NOW()');
+    } else if (newStatus === 'closed') {
+      updateFields.push('closed_at = NOW()');
+    }
+
+    updateValues.push(ticketId);
+
+    await connection.query(
+      `UPDATE tickets SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
+    );
+
+    // Record status history
+    await connection.query(
+      `INSERT INTO ticket_status_history (ticket_id, old_status, new_status, changed_by, notes)
+       VALUES (?, ?, ?, ?, ?)`,
+      [ticketId, oldStatus, newStatus, changedBy, notes]
+    );
+
+    await connection.commit();
+    return { success: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Update ticket status (API endpoint)
+ */
+const changeTicketStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+    const user = req.user || req.admin;
+
+    const validStatuses = ['pending', 'approaching', 'resolving', 'completed', 'closed'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Status must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    await updateTicketStatus(id, status, user.id, notes);
+
+    res.json({
+      success: true,
+      message: 'Ticket status updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating ticket status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating ticket status',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Add comment to ticket
+ */
+const addComment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comment_text, is_internal } = req.body;
+    const user = req.user || req.admin || req.student;
+
+    if (!comment_text || comment_text.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Comment text is required'
+      });
+    }
+
+    // Verify ticket exists
+    const [tickets] = await masterPool.query('SELECT id FROM tickets WHERE id = ?', [id]);
+    if (tickets.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Determine user type and ID
+    let userId, userType;
+    if (user.role === 'student' || user.admission_number) {
+      const [studentData] = await masterPool.query(
+        'SELECT id FROM students WHERE admission_number = ?',
+        [user.admission_number]
+      );
+      if (studentData.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+      userId = studentData[0].id;
+      userType = 'student';
+    } else {
+      userId = user.id;
+      userType = 'admin';
+    }
+
+    const [result] = await masterPool.query(
+      `INSERT INTO ticket_comments (ticket_id, user_id, user_type, comment_text, is_internal)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, userId, userType, comment_text.trim(), is_internal || false]
+    );
+
+    const [comment] = await masterPool.query(
+      'SELECT * FROM ticket_comments WHERE id = ?',
+      [result.insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Comment added successfully',
+      data: comment[0]
+    });
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error adding comment',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Submit feedback for completed ticket
+ */
+const submitFeedback = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, feedback_text } = req.body;
+    const student = req.user || req.student;
+
+    if (!student || !student.admission_number) {
+      return res.status(401).json({
+        success: false,
+        message: 'Student authentication required'
+      });
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5'
+      });
+    }
+
+    // Verify ticket exists and belongs to student
+    const [tickets] = await masterPool.query(
+      'SELECT id, status, student_id FROM tickets WHERE id = ? AND admission_number = ?',
+      [id, student.admission_number]
+    );
+
+    if (tickets.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found or access denied'
+      });
+    }
+
+    if (tickets[0].status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Feedback can only be submitted for completed tickets'
+      });
+    }
+
+    // Check if feedback already exists
+    const [existing] = await masterPool.query(
+      'SELECT id FROM ticket_feedback WHERE ticket_id = ?',
+      [id]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Feedback already submitted for this ticket'
+      });
+    }
+
+    const [result] = await masterPool.query(
+      `INSERT INTO ticket_feedback (ticket_id, student_id, rating, feedback_text)
+       VALUES (?, ?, ?, ?)`,
+      [id, tickets[0].student_id, rating, feedback_text || null]
+    );
+
+    const [feedback] = await masterPool.query(
+      'SELECT * FROM ticket_feedback WHERE id = ?',
+      [result.insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Feedback submitted successfully',
+      data: feedback[0]
+    });
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error submitting feedback',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get ticket statistics
+ */
+const getTicketStats = async (req, res) => {
+  try {
+    const [stats] = await masterPool.query(
+      `SELECT 
+        status,
+        COUNT(*) as count
+      FROM tickets
+      GROUP BY status`
+    );
+
+    const [categoryStats] = await masterPool.query(
+      `SELECT 
+        c.name as category_name,
+        COUNT(t.id) as count
+      FROM complaint_categories c
+      LEFT JOIN tickets t ON c.id = t.category_id
+      WHERE c.parent_id IS NULL
+      GROUP BY c.id, c.name
+      ORDER BY count DESC
+      LIMIT 10`
+    );
+
+    const [recentTickets] = await masterPool.query(
+      `SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM tickets
+      WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC`
+    );
+
+    res.json({
+      success: true,
+      data: {
+        by_status: stats,
+        by_category: categoryStats,
+        recent_trend: recentTickets
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ticket stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching ticket statistics',
+      error: error.message
+    });
+  }
+};
+
+module.exports = {
+  uploadPhoto: upload.single('photo'), // Multer middleware for photo upload
+  createTicket,
+  getTickets,
+  getTicket,
+  getStudentTickets,
+  assignTicket,
+  changeTicketStatus,
+  addComment,
+  submitFeedback,
+  getTicketStats,
+  updateTicketStatus // Export for internal use
+};
+

@@ -55,7 +55,11 @@ const MODULES = {
   FEE_MANAGEMENT: 'fee_management',
   SETTINGS: 'settings',
   USER_MANAGEMENT: 'user_management',
-  REPORTS: 'reports'
+  REPORTS: 'reports',
+  TICKET_MANAGEMENT: 'ticket_management',
+  TICKET_MANAGEMENT: 'ticket_management',
+  SERVICES: 'services',
+  ANNOUNCEMENTS: 'announcements'
 };
 
 // Granular Permissions for each module
@@ -130,6 +134,30 @@ const MODULE_PERMISSIONS = {
       view: 'View Reports',
       download: 'Download Reports'
     }
+  },
+  [MODULES.TICKET_MANAGEMENT]: {
+    permissions: ['read', 'write'],
+    labels: {
+      read: 'View Tickets',
+      write: 'Manage Tickets (Assign, Update Status, Add Comments)'
+    }
+  },
+  [MODULES.SERVICES]: {
+    permissions: ['view', 'manage_config', 'manage_requests'],
+    labels: {
+      view: 'View Services',
+      manage_config: 'Manage Configuration (Create/Edit Services)',
+      manage_requests: 'Manage Requests (Process/Close)'
+    }
+  },
+  [MODULES.ANNOUNCEMENTS]: {
+    permissions: ['view', 'create', 'edit', 'delete'],
+    labels: {
+      view: 'View Announcements',
+      create: 'Create Announcements',
+      edit: 'Edit Announcements',
+      delete: 'Delete Announcements'
+    }
   }
 };
 
@@ -143,7 +171,12 @@ const MODULE_LABELS = {
   [MODULES.FEE_MANAGEMENT]: 'Fee Management',
   [MODULES.SETTINGS]: 'Settings',
   [MODULES.USER_MANAGEMENT]: 'User Management',
-  [MODULES.REPORTS]: 'Reports'
+  [MODULES.USER_MANAGEMENT]: 'User Management',
+  [MODULES.REPORTS]: 'Reports',
+  [MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
+  [MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
+  [MODULES.SERVICES]: 'Services',
+  [MODULES.ANNOUNCEMENTS]: 'Announcements'
 };
 
 // All modules as array
@@ -292,14 +325,14 @@ const canCreateRole = (creatorRole, targetRole) => {
 // Parse permissions from JSON (handles both old and new format)
 const parsePermissions = (permissionsJson) => {
   if (!permissionsJson) return createDefaultPermissions();
-  
+
   try {
-    const parsed = typeof permissionsJson === 'string' 
-      ? JSON.parse(permissionsJson) 
+    const parsed = typeof permissionsJson === 'string'
+      ? JSON.parse(permissionsJson)
       : permissionsJson;
-    
+
     const permissions = createDefaultPermissions();
-    
+
     Object.keys(parsed).forEach(module => {
       if (ALL_MODULES.includes(module)) {
         const moduleDef = MODULE_PERMISSIONS[module];
@@ -320,7 +353,7 @@ const parsePermissions = (permissionsJson) => {
         }
       }
     });
-    
+
     return permissions;
   } catch (error) {
     console.error('Error parsing permissions:', error);
@@ -333,12 +366,12 @@ const hasPermission = (userPermissions, module, action = 'view') => {
   const permissions = parsePermissions(userPermissions);
   const modulePerms = permissions[module];
   if (!modulePerms) return false;
-  
+
   // If action is specified, check for that specific permission
   if (modulePerms[action] !== undefined) {
     return modulePerms[action] === true;
   }
-  
+
   // Fallback: check if user has any permission in this module
   return Object.values(modulePerms).some(val => val === true);
 };
@@ -348,7 +381,7 @@ const hasModuleAccess = (userPermissions, module) => {
   const permissions = parsePermissions(userPermissions);
   const modulePerms = permissions[module];
   if (!modulePerms) return false;
-  
+
   return Object.values(modulePerms).some(val => val === true);
 };
 

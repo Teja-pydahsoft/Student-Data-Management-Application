@@ -261,3 +261,21 @@ code {
     margin-bottom: 0;
   }
 }
+
+/* Custom Scrollbar for inner elements */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}

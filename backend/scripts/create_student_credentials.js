@@ -1,6 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { masterPool } = require('../config/database');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
 
 /**
  * Generate student login credentials
@@ -9,7 +10,7 @@ require('dotenv').config();
  */
 async function createStudentCredentials() {
   let connection;
-  
+
   try {
     connection = await masterPool.getConnection();
     console.log('📦 Connected to database');
@@ -36,10 +37,12 @@ async function createStudentCredentials() {
     // Get all students
     console.log('\n📚 Fetching all students...');
     const [students] = await connection.query(`
-      SELECT id, admission_number, pin_no, student_name, student_mobile
-      FROM students
-      WHERE student_status = 'regular' OR student_status IS NULL
-      ORDER BY id
+      SELECT s.id, s.admission_number, s.pin_no, s.student_name, s.student_mobile
+      FROM students s
+      LEFT JOIN student_credentials sc ON s.id = sc.student_id
+      WHERE (s.student_status = 'regular' OR s.student_status = 'Regular' OR s.student_status IS NULL)
+      AND sc.id IS NULL
+      ORDER BY s.id
     `);
 
     console.log(`Found ${students.length} students to process\n`);
@@ -75,7 +78,7 @@ async function createStudentCredentials() {
         // Generate password: first 4 letters of student name + last 4 digits of mobile
         const studentName = (student.student_name || '').trim();
         const mobileNumber = student.student_mobile.replace(/\D/g, ''); // Remove non-digits
-        
+
         if (studentName.length < 4) {
           console.log(`⚠️  Skipping student ${student.admission_number || student.id}: Name too short (${studentName.length} chars)`);
           skippedCount++;
@@ -119,7 +122,7 @@ async function createStudentCredentials() {
         `, [student.id, student.admission_number, username, passwordHash]);
 
         successCount++;
-        
+
         if (successCount % 50 === 0) {
           console.log(`✅ Processed ${successCount} students...`);
         }
@@ -139,7 +142,7 @@ async function createStudentCredentials() {
     console.log(`✅ Successfully created/updated: ${successCount} credentials`);
     console.log(`⚠️  Skipped: ${skippedCount} students`);
     console.log(`❌ Errors: ${errorCount} students`);
-    
+
     if (errors.length > 0 && errors.length <= 20) {
       console.log('\n❌ Error details:');
       errors.forEach(err => console.log(`   - ${err}`));
@@ -149,7 +152,7 @@ async function createStudentCredentials() {
     }
 
     console.log('\n🎉 Student credentials generation completed!');
-    
+
   } catch (error) {
     console.error('❌ Fatal error:', error);
     process.exit(1);

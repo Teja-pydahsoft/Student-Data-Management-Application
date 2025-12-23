@@ -1980,6 +1980,10 @@ exports.commitBulkUploadStudents = async (req, res) => {
         if (columnName === 'branch_code') {
           return;
         }
+        // Skip course_code - it's stored in student_data JSON only, not as a column
+        if (columnName === 'course_code') {
+          return;
+        }
         insertColumns.push(columnName);
         insertPlaceholders.push('?');
         insertValues.push(value);
@@ -2038,11 +2042,26 @@ exports.commitBulkUploadStudents = async (req, res) => {
         }
       }
 
-      await connection.query(
-        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-         VALUES (?, ?, ?, ?, ?)`,
-        ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, req.admin.id, studentDataJson]
-      );
+      // Log action (safe)
+      try {
+        await connection.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+           VALUES (?, ?, ?, ?, ?)`,
+          ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, req.admin.id, studentDataJson]
+        );
+      } catch (auditError) {
+        console.error('Audit log error:', auditError.message);
+        try {
+          // Retry with NULL admin
+          await connection.query(
+            `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+             VALUES (?, ?, ?, NULL, ?)`,
+            ['BULK_UPLOAD', 'STUDENT', sanitized.admission_number, studentDataJson]
+          );
+        } catch (e) {
+          console.error('Audit log retry failed:', e.message);
+        }
+      }
 
       await updateStagingStudentStage(
         sanitized.admission_number,
@@ -2211,15 +2230,16 @@ exports.getAllStudents = async (req, res) => {
 
     if (search) {
       // Only search by student name, PIN number, and admission number
-      const searchPattern = `%${search}%`;
+      const searchPattern = `%${search.trim()}%`;
       query += ` AND (
         admission_number LIKE ? 
         OR admission_no LIKE ? 
         OR pin_no LIKE ? 
+        OR student_name LIKE ?
         OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."Student Name"')) LIKE ?
         OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."student_name"')) LIKE ?
       )`;
-      params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     // Date range filter
@@ -2565,6 +2585,21 @@ exports.getStudentByAdmission = async (req, res) => {
       // Keep existing fee_status fallback if derivation fails
     }
 
+    // Fetch today's attendance (IST)
+    try {
+      const formattedDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+      const [attendanceRows] = await masterPool.query(
+        'SELECT status FROM attendance_records WHERE student_id = ? AND attendance_date = ?',
+        [students[0].id, formattedDate]
+      );
+
+      student.today_attendance_status = attendanceRows.length > 0 ? attendanceRows[0].status : 'Not Marked';
+    } catch (attendanceError) {
+      console.error('Failed to fetch attendance status:', attendanceError);
+      student.today_attendance_status = 'Not Available';
+    }
+
     res.json({
       success: true,
       data: student
@@ -2672,16 +2707,23 @@ exports.updateStudent = async (req, res) => {
     applyStageToPayload(mutableStudentData, resolvedStage);
 
     const updatedColumns = new Set();
+    // Allow clearing statuses (set to NULL) via inline dropdowns
+    const allowEmptyUpdates = new Set([
+      'scholar_status',
+      'student_status',
+      'registration_status',
+      'fee_status',
+      'certificates_status'
+    ]);
 
     for (const [key, value] of Object.entries(mutableStudentData)) {
       const columnName = FIELD_MAPPING[key];
+      const hasNonEmptyValue = value !== undefined && value !== '' && value !== '{}' && value !== null;
+      const shouldAllowEmptyUpdate = columnName && allowEmptyUpdates.has(columnName) && (value === '' || value === null);
       if (
         columnName &&
         !updatedColumns.has(columnName) &&
-        value !== undefined &&
-        value !== '' &&
-        value !== '{}' &&
-        value !== null
+        (hasNonEmptyValue || shouldAllowEmptyUpdate)
       ) {
         // Skip updating missing status columns when they don't exist in schema
         if (columnName === 'registration_status' || columnName === 'fee_status') {
@@ -2694,6 +2736,10 @@ exports.updateStudent = async (req, res) => {
 
         // Convert values for specific column types
         let convertedValue = value;
+        if (shouldAllowEmptyUpdate) {
+          convertedValue = null;
+          mutableStudentData[key] = null;
+        }
 
         // Handle gender ENUM conversion - must match MySQL ENUM('M', 'F', 'Other')
         if (columnName === 'gender') {
@@ -2988,14 +3034,15 @@ exports.resetStudentPassword = async (req, res) => {
 
     const student = students[0];
 
-    // Regenerate credentials
+    // Regenerate credentials (pass isPasswordReset = true to use password reset SMS template)
     const { generateStudentCredentials } = require('../utils/studentCredentials');
     const credResult = await generateStudentCredentials(
       student.id,
       student.admission_number,
       student.pin_no,
       student.student_name,
-      student.student_mobile
+      student.student_mobile,
+      true // isPasswordReset = true
     );
 
     if (!credResult.success) {
@@ -3135,11 +3182,23 @@ exports.deleteStudent = async (req, res) => {
     }
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
-       VALUES (?, ?, ?, ?)`,
-      ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
-    );
+    // Log action (safe)
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+         VALUES (?, ?, ?, ?)`,
+        ['DELETE', 'STUDENT', admissionNumber, req.admin.id]
+      );
+    } catch (auditError) {
+      console.error('Delete audit log error:', auditError.message);
+      try {
+        await masterPool.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
+           VALUES (?, ?, ?, NULL)`,
+          ['DELETE', 'STUDENT', admissionNumber]
+        );
+      } catch (e) { }
+    }
 
     clearStudentsCache();
 
@@ -3626,11 +3685,29 @@ exports.createStudent = async (req, res) => {
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
-    );
+    // Log action
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['CREATE', 'STUDENT', admissionNumber, req.admin.id, serializedStudentData]
+      );
+    } catch (auditError) {
+      console.error('Failed to create audit log:', auditError.message);
+      // If admin doesn't exist (FK violation), try with NULL admin
+      if (auditError.code === 'ER_NO_REFERENCED_ROW_2') {
+        try {
+          await masterPool.query(
+            `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+             VALUES (?, ?, ?, NULL, ?)`,
+            ['CREATE', 'STUDENT', admissionNumber, serializedStudentData]
+          );
+          console.log('⚠️ Created audit log with NULL admin due to missing admin reference');
+        } catch (retryError) {
+          console.error('Failed to create audit log fallback:', retryError.message);
+        }
+      }
+    }
 
     clearStudentsCache();
 
@@ -4590,12 +4667,24 @@ exports.bulkUpdatePinNumbers = async (req, res) => {
     fs.unlinkSync(req.file.path);
 
     // Log action
-    await masterPool.query(
-      `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
-       VALUES (?, ?, ?, ?, ?)`,
-      ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
-        JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
-    );
+    try {
+      await masterPool.query(
+        `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk', req.admin.id,
+          JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
+      );
+    } catch (auditError) {
+      console.error('Bulk Pin audit error:', auditError.message);
+      try {
+        await masterPool.query(
+          `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+           VALUES (?, ?, ?, NULL, ?)`,
+          ['BULK_UPDATE_PIN_NUMBERS', 'STUDENT', 'bulk',
+            JSON.stringify({ successCount, failedCount, notFoundCount, totalRows: results.length })]
+        );
+      } catch (e) { }
+    }
 
     if (successCount > 0) {
       clearStudentsCache();
@@ -4642,11 +4731,11 @@ exports.login = async (req, res) => {
 
     // Find student credential
     const [credentials] = await masterPool.query(
-      `SELECT sc.*, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
        FROM student_credentials sc
        JOIN students s ON sc.student_id = s.id
-       WHERE sc.username = ? LIMIT 1`,
-      [username]
+       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
+      [username, username, username]
     );
 
     if (credentials.length === 0) {
@@ -4755,48 +4844,60 @@ exports.getStudentByAdmission = async (req, res) => {
       : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
 
     // Derive fee_status from student_fees for the student's current year/semester
+    // BUT: if admin has explicitly set special statuses like 'permitted' or 'no due',
+    // respect that value for the student portal and do not override it from payments.
     let derivedFeeStatus = fallbackFeeStatus || null;
-    try {
-      const [feeRows] = await masterPool.query(
-        `SELECT amount, paid_amount, payment_status
-         FROM student_fees
-         WHERE student_id = ? AND year = ? AND semester = ?`,
-        [student.id, stage.year, stage.semester]
-      );
+    const normalizedFallbackFee =
+      (fallbackFeeStatus || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_');
+    const protectedFeeStatuses = new Set(['permitted', 'no_due', 'nodue']);
 
-      if (Array.isArray(feeRows) && feeRows.length > 0) {
-        let allPaid = true;
-        let anyPaidOrPartial = false;
+    if (!protectedFeeStatuses.has(normalizedFallbackFee)) {
+      try {
+        const [feeRows] = await masterPool.query(
+          `SELECT amount, paid_amount, payment_status
+           FROM student_fees
+           WHERE student_id = ? AND year = ? AND semester = ?`,
+          [student.id, stage.year, stage.semester]
+        );
 
-        for (const row of feeRows) {
-          const amountVal = parseFloat(row.amount) || 0;
-          const paidVal = parseFloat(row.paid_amount) || 0;
-          const status = String(row.payment_status || '').toLowerCase();
+        if (Array.isArray(feeRows) && feeRows.length > 0) {
+          let allPaid = true;
+          let anyPaidOrPartial = false;
 
-          const isPaid = status === 'paid' || paidVal >= amountVal;
-          const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+          for (const row of feeRows) {
+            const amountVal = parseFloat(row.amount) || 0;
+            const paidVal = parseFloat(row.paid_amount) || 0;
+            const status = String(row.payment_status || '').toLowerCase();
 
-          if (isPaid) {
-            anyPaidOrPartial = true;
-          } else if (isPartial) {
-            anyPaidOrPartial = true;
-            allPaid = false;
+            const isPaid = status === 'paid' || paidVal >= amountVal;
+            const isPartial = status === 'partial' || (paidVal > 0 && paidVal < amountVal);
+
+            if (isPaid) {
+              anyPaidOrPartial = true;
+            } else if (isPartial) {
+              anyPaidOrPartial = true;
+              allPaid = false;
+            } else {
+              // pending
+              allPaid = false;
+            }
+          }
+
+          if (allPaid) {
+            derivedFeeStatus = 'completed';
+          } else if (anyPaidOrPartial) {
+            derivedFeeStatus = 'partially_completed';
           } else {
-            // pending
-            allPaid = false;
+            derivedFeeStatus = 'pending';
           }
         }
-
-        if (allPaid) {
-          derivedFeeStatus = 'completed';
-        } else if (anyPaidOrPartial) {
-          derivedFeeStatus = 'partially_completed';
-        } else {
-          derivedFeeStatus = 'pending';
-        }
+      } catch (e) {
+        console.warn('Failed to derive fee status from student_fees:', e);
       }
-    } catch (e) {
-      console.warn('Failed to derive fee status from student_fees:', e);
     }
 
     const responsePayload = {
@@ -4842,12 +4943,13 @@ exports.sendOtp = async (req, res) => {
     otpCache.set(cacheKey, otp);
 
     // Send SMS
-    // Template: Your {Student/Parent} OTP for {Year}-{Semester} Semester Registration is {OTP}. Valid for 5 minutes - Pydah College
-    const message = `Your ${type || 'Student'} OTP for ${year || ''}-${semester || ''} Semester Registration is ${otp}. Valid for 5 minutes - Pydah College`;
+    // Template: Your {#var#} OTP for {#var#} Semester Registration is {#var#}. Valid for 5 minutes -Pydah College
+    // Template ID: 1707176605569953063
+    const message = `Your ${type || 'Student'} OTP for ${year}-${semester} Semester Registration is ${otp}. Valid for 5 minutes -Pydah College`;
     await smsService.sendSms({
       to: mobileNumber,
       message: message,
-      templateId: process.env.OTP_TEMPLATE_ID,
+      templateId: '1707176605569953063',
       peId: process.env.OTP_PE_ID
     });
 
@@ -4870,7 +4972,7 @@ exports.sendOtp = async (req, res) => {
 // Verify OTP
 exports.verifyOtp = async (req, res) => {
   try {
-    const { admissionNumber, mobileNumber, otp } = req.body;
+    const { admissionNumber, mobileNumber, otp, type } = req.body;
 
     if (!admissionNumber || !mobileNumber || !otp) {
       return res.status(400).json({
@@ -4898,6 +5000,39 @@ exports.verifyOtp = async (req, res) => {
 
     // Clear OTP after successful verification
     otpCache.delete(cacheKey);
+
+    // Persist verification status if type is provided
+    if (type) {
+      try {
+        const [rows] = await masterPool.query(
+          'SELECT id, student_data FROM students WHERE admission_number = ?',
+          [admissionNumber]
+        );
+
+        if (rows.length > 0) {
+          const student = rows[0];
+          let data = {};
+          try {
+            data = typeof student.student_data === 'string'
+              ? JSON.parse(student.student_data)
+              : student.student_data || {};
+          } catch (e) {
+            data = {};
+          }
+
+          const key = type.toLowerCase() === 'student' ? 'is_student_mobile_verified' : 'is_parent_mobile_verified';
+          data[key] = true;
+
+          await masterPool.query(
+            'UPDATE students SET student_data = ? WHERE id = ?',
+            [JSON.stringify(data), student.id]
+          );
+        }
+      } catch (dbError) {
+        console.error('Error persisting OTP verification status:', dbError);
+        // Don't fail the response, just log it; user is verified for this session at least
+      }
+    }
 
     res.json({
       success: true,
@@ -4945,11 +5080,19 @@ exports.updateFeeStatus = async (req, res) => {
     }
 
     // If fee_status is 'permitted', require permit_ending_date
-    if (fee_status === 'permitted' && !permit_ending_date) {
-      return res.status(400).json({
-        success: false,
-        message: 'Permit ending date is required when fee status is "permitted"'
-      });
+    if (fee_status === 'permitted') {
+      if (!permit_ending_date) {
+        return res.status(400).json({
+          success: false,
+          message: 'Permit ending date is required when fee status is "permitted"'
+        });
+      }
+      if (!permit_remarks || !permit_remarks.toString().trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Permit remarks are required when fee status is "permitted"'
+        });
+      }
     }
 
     // If column exists, update column; otherwise, update JSON field only
@@ -5125,37 +5268,44 @@ exports.updateRegistrationStatus = async (req, res) => {
       });
     }
 
-    const hasRegStatusColumn = await columnExists('registration_status');
-
-    if (hasRegStatusColumn) {
+    try {
+      // Try updating the column directly first
       const [result] = await masterPool.query(
         'UPDATE students SET registration_status = ? WHERE admission_number = ?',
         [registration_status, admissionNumber]
       );
+
       if (result.affectedRows === 0) {
         return res.status(404).json({ success: false, message: 'Student not found' });
       }
-    } else {
-      // Fallback: update JSON field inside student_data
-      const [rows] = await masterPool.query(
-        'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
-        [admissionNumber]
-      );
-      if (rows.length === 0) {
-        return res.status(404).json({ success: false, message: 'Student not found' });
-      }
-      const current = rows[0]?.student_data || '{}';
-      let parsed;
-      try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
-      parsed.registration_status = registration_status;
-      parsed['Registration Status'] = registration_status;
-      const serialized = JSON.stringify(parsed);
-      const [upd] = await masterPool.query(
-        'UPDATE students SET student_data = ? WHERE admission_number = ?',
-        [serialized, admissionNumber]
-      );
-      if (upd.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Student not found' });
+    } catch (err) {
+      // If column doesn't exist, fall back to JSON student_data
+      if (err.code === 'ER_BAD_FIELD_ERROR') {
+        const [rows] = await masterPool.query(
+          'SELECT student_data FROM students WHERE admission_number = ? LIMIT 1',
+          [admissionNumber]
+        );
+        if (rows.length === 0) {
+          return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+
+        const current = rows[0]?.student_data || '{}';
+        let parsed;
+        try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
+
+        parsed.registration_status = registration_status;
+        parsed['Registration Status'] = registration_status;
+
+        const serialized = JSON.stringify(parsed);
+        const [upd] = await masterPool.query(
+          'UPDATE students SET student_data = ? WHERE admission_number = ?',
+          [serialized, admissionNumber]
+        );
+        if (upd.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: 'Student not found' });
+        }
+      } else {
+        throw err;
       }
     }
 
@@ -5170,6 +5320,197 @@ exports.updateRegistrationStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while updating registration status'
+    });
+  }
+};
+
+// Bulk resend passwords
+exports.bulkResendPasswords = async (req, res) => {
+  try {
+    const { students } = req.body; // Array of admission numbers
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ success: false, message: 'No students selected' });
+    }
+
+    const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+    const results = [];
+    let successCount = 0;
+
+    // Process in chunks to avoid overwhelming SMS provider
+    const chunkSize = 5;
+    for (let i = 0; i < students.length; i += chunkSize) {
+      const chunk = students.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (admissionNumber) => {
+        try {
+          // Pass false for isPasswordReset to use the "Account Created" template (Template 1)
+          // This matches the "First Password Creation" workflow as requested by the user
+          const result = await generateCredentialsByAdmissionNumber(admissionNumber, false);
+          if (result.success) {
+            successCount++;
+            results.push({
+              admission_number: admissionNumber,
+              status: 'Success',
+              error: null
+            });
+          } else {
+            results.push({
+              admission_number: admissionNumber,
+              status: 'Failed',
+              error: result.error
+            });
+          }
+        } catch (e) {
+          results.push({
+            admission_number: admissionNumber,
+            status: 'Failed',
+            error: e.message
+          });
+        }
+      }));
+    }
+
+    res.json({
+      success: true,
+      data: results,
+      summary: {
+        total: students.length,
+        success: successCount,
+        failed: students.length - successCount
+      }
+    });
+  } catch (error) {
+    console.error('Bulk resend error:', error);
+    res.status(500).json({ success: false, message: 'Server error during bulk processing' });
+  }
+};
+
+// Forgot Password
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { mobileNumber } = req.body;
+
+    if (!mobileNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mobile number is required'
+      });
+    }
+
+    // Sanitize mobile number (keep only digits)
+    const cleanMobile = mobileNumber.replace(/\D/g, '');
+
+    if (cleanMobile.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid mobile number'
+      });
+    }
+
+    // Find students with this mobile number
+    // We check both student_mobile and parent_mobile1 just in case, but usually student_mobile
+    const [students] = await masterPool.query(
+      `SELECT admission_number, student_name FROM students 
+       WHERE REGEXP_REPLACE(student_mobile, '[^0-9]', '') LIKE ?`,
+      [`%${cleanMobile}%`]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No student found with this mobile number'
+      });
+    }
+
+    const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
+    const results = [];
+
+    // Generate and send new password for each matching student
+    for (const student of students) {
+      try {
+        // isPasswordReset = true
+        const result = await generateCredentialsByAdmissionNumber(student.admission_number, true);
+        results.push({
+          admission_number: student.admission_number,
+          success: result.success,
+          error: result.error
+        });
+      } catch (error) {
+        results.push({
+          admission_number: student.admission_number,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    const setCookie = results.some(r => r.success);
+
+    if (!setCookie) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to reset password for found students',
+        results
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'New password has been sent to your mobile number',
+      data: results
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while processing forgot password'
+    });
+  }
+};
+
+// Change Password (Authenticated Student)
+exports.changePassword = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    // User should be attached by auth middleware
+    const studentId = req.user?.id;
+    // JWT payload has admissionNumber (camelCase), but we checked for admission_number (snake_case)
+    const admissionNumber = req.user?.admissionNumber || req.user?.admission_number;
+
+    if (!studentId || !admissionNumber) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update credentials
+    await masterPool.query(
+      `UPDATE student_credentials 
+       SET password_hash = ?, updated_at = CURRENT_TIMESTAMP 
+       WHERE admission_number = ?`,
+      [passwordHash, admissionNumber]
+    );
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while changing password'
     });
   }
 };

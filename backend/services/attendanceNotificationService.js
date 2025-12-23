@@ -40,7 +40,7 @@ const findNotificationRecipients = async ({
     // Find HODs (branch_hod) - Must have access to college AND course AND branch
     if (collegeId && courseId && branchId) {
       console.log(`🔍 Searching for HODs with College: ${collegeId}, Course: ${courseId}, Branch: ${branchId}`);
-      
+
       const [hodRows] = await masterPool.query(
         `
           SELECT 
@@ -70,21 +70,21 @@ const findNotificationRecipients = async ({
         const hodCourseIds = parseScopeData(hod.course_ids);
         const hodBranchIds = parseScopeData(hod.branch_ids);
         const hodCollegeIds = parseScopeData(hod.college_ids);
-        
+
         // STRICT CHECK: Must have access to ALL three (college AND course AND branch)
         // Check college access (REQUIRED - no fallback)
-        const hasCollegeAccess = hod.college_id === collegeId || 
-                                hodCollegeIds.includes(collegeId);
-        
+        const hasCollegeAccess = hod.college_id === collegeId ||
+          hodCollegeIds.includes(collegeId);
+
         // Check course access (REQUIRED - all_courses flag is acceptable)
-        const hasCourseAccess = hod.all_courses || 
-                               hod.course_id === courseId || 
-                               hodCourseIds.includes(courseId);
-        
+        const hasCourseAccess = hod.all_courses ||
+          hod.course_id === courseId ||
+          hodCourseIds.includes(courseId);
+
         // Check branch access (REQUIRED - all_branches flag is acceptable)
-        const hasBranchAccess = hod.all_branches || 
-                               hod.branch_id === branchId || 
-                               hodBranchIds.includes(branchId);
+        const hasBranchAccess = hod.all_branches ||
+          hod.branch_id === branchId ||
+          hodBranchIds.includes(branchId);
 
         console.log(`   HOD: ${hod.name} (ID: ${hod.id})`);
         console.log(`     - College: ${hasCollegeAccess ? '✅' : '❌'} (college_id: ${hod.college_id}, college_ids: ${JSON.stringify(hodCollegeIds)})`);
@@ -115,7 +115,7 @@ const findNotificationRecipients = async ({
     if (collegeId) {
       const isCampusWideReport = !courseId || !branchId;
       console.log(`🔍 Searching for Principals with College: ${collegeId}${isCampusWideReport ? ' (Campus-wide report)' : `, Course: ${courseId}, Branch: ${branchId}`}`);
-      
+
       const [principalRows] = await masterPool.query(
         `
           SELECT 
@@ -140,16 +140,16 @@ const findNotificationRecipients = async ({
       );
 
       console.log(`   Found ${principalRows.length} Principal(s) in database query`);
-      
+
       for (const principal of principalRows) {
         const principalCollegeIds = parseScopeData(principal.college_ids);
         const principalCourseIds = parseScopeData(principal.course_ids);
         const principalBranchIds = parseScopeData(principal.branch_ids);
-        
+
         // Check college access (REQUIRED)
-        const hasCollegeAccess = principal.college_id === collegeId || 
-                                principalCollegeIds.includes(collegeId);
-        
+        const hasCollegeAccess = principal.college_id === collegeId ||
+          principalCollegeIds.includes(collegeId);
+
         if (!hasCollegeAccess) {
           console.log(`   Principal: ${principal.name} (ID: ${principal.id}) - ❌ No college access`);
           continue;
@@ -167,13 +167,13 @@ const findNotificationRecipients = async ({
           console.log(`     ✅ Added Principal (Campus-wide): ${principal.name} (${principal.email})`);
         } else {
           // For specific reports, check course and branch access
-          const hasCourseAccess = principal.all_courses || 
-                                  principal.course_id === courseId || 
-                                  principalCourseIds.includes(courseId);
-          
-          const hasBranchAccess = principal.all_branches || 
-                                 principal.branch_id === branchId || 
-                                 principalBranchIds.includes(branchId);
+          const hasCourseAccess = principal.all_courses ||
+            principal.course_id === courseId ||
+            principalCourseIds.includes(courseId);
+
+          const hasBranchAccess = principal.all_branches ||
+            principal.branch_id === branchId ||
+            principalBranchIds.includes(branchId);
 
           console.log(`   Principal: ${principal.name} (ID: ${principal.id})`);
           console.log(`     - College: ✅ (college_id: ${principal.college_id}, college_ids: ${JSON.stringify(principalCollegeIds)})`);
@@ -271,6 +271,9 @@ const sendAttendanceReportNotifications = async ({
     // Otherwise, use the old lookup method for backward compatibility
     let allRecipients = [];
 
+    // Define Super Admin Email
+    const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
+
     if (recipientUser) {
       // Send directly to the specified user
       allRecipients = [{
@@ -280,7 +283,12 @@ const sendAttendanceReportNotifications = async ({
         phone: recipientUser.phone,
         role: recipientUser.role
       }];
-      console.log(`📧 Sending report directly to ${recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal'}: ${recipientUser.name} (${recipientUser.email})`);
+      console.log(`📧 Sending report directly to ${recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : (recipientUser.role === USER_ROLES.COLLEGE_PRINCIPAL ? 'Principal' : 'Admin')}: ${recipientUser.name} (${recipientUser.email})`);
+
+      // Special case for Super Admin / Global Report
+      if (recipientUser.email === SUPER_ADMIN_EMAIL) {
+        console.log(`🚀 Sending GLOBAL report to Super Admin: ${recipientUser.email}`);
+      }
     } else {
       // Find recipients using lookup (backward compatibility)
       const recipients = await findNotificationRecipients({
@@ -299,16 +307,20 @@ const sendAttendanceReportNotifications = async ({
       ];
     }
 
-    // Safety check: Ensure no other roles are included
-    const invalidRecipients = allRecipients.filter(r => 
-      r.role !== USER_ROLES.BRANCH_HOD && r.role !== USER_ROLES.COLLEGE_PRINCIPAL
+    // Safety check: Ensure no other roles are included, EXCEPT Super Admin email
+    const invalidRecipients = allRecipients.filter(r =>
+      r.role !== USER_ROLES.BRANCH_HOD &&
+      r.role !== USER_ROLES.COLLEGE_PRINCIPAL &&
+      r.email !== SUPER_ADMIN_EMAIL // Allow specific super admin email
     );
-    
+
     if (invalidRecipients.length > 0) {
       console.error(`❌ SECURITY: Found invalid recipients for attendance report:`, invalidRecipients);
       // Remove invalid recipients
-      const validRecipients = allRecipients.filter(r => 
-        r.role === USER_ROLES.BRANCH_HOD || r.role === USER_ROLES.COLLEGE_PRINCIPAL
+      const validRecipients = allRecipients.filter(r =>
+        r.role === USER_ROLES.BRANCH_HOD ||
+        r.role === USER_ROLES.COLLEGE_PRINCIPAL ||
+        r.email === SUPER_ADMIN_EMAIL
       );
       console.log(`⚠️ Removed ${invalidRecipients.length} invalid recipient(s), keeping ${validRecipients.length} valid recipient(s)`);
       allRecipients.length = 0;
@@ -336,7 +348,7 @@ const sendAttendanceReportNotifications = async ({
       console.log(`   - HODs: ${hodCount}`);
       console.log(`   - Principals: ${principalCount}`);
     }
-    console.log(`   ✅ All recipients are HODs or Principals only (no students)`);
+    console.log(`   ✅ All recipients are HODs, Principals, or Super Admin`);
 
     // Calculate attendance statistics
     const totalStudents = students.length;
@@ -355,7 +367,11 @@ const sendAttendanceReportNotifications = async ({
     // Determine recipient type for personalized greeting
     let recipientType = 'Principal';
     if (recipientUser) {
-      recipientType = recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal';
+      if (recipientUser.email === SUPER_ADMIN_EMAIL) {
+        recipientType = 'Super Admin';
+      } else {
+        recipientType = recipientUser.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal';
+      }
     } else {
       // Backward compatibility: determine from recipients
       const recipients = { hods: [], principals: [] };
@@ -363,22 +379,29 @@ const sendAttendanceReportNotifications = async ({
         if (r.role === USER_ROLES.BRANCH_HOD) recipients.hods.push(r);
         if (r.role === USER_ROLES.COLLEGE_PRINCIPAL) recipients.principals.push(r);
       });
-      recipientType = recipients.hods.length > 0 && recipients.principals.length > 0 
-        ? 'HOD/Principal' 
-        : recipients.hods.length > 0 
-          ? 'HOD' 
+      recipientType = recipients.hods.length > 0 && recipients.principals.length > 0
+        ? 'HOD/Principal'
+        : recipients.hods.length > 0
+          ? 'HOD'
           : 'Principal';
     }
-    
+
     // Build email subject with college, course, branch info
     let emailSubject = `Attendance Report - ${collegeName || 'College'}`;
-    if (courseName && courseName !== 'All Courses') {
-      emailSubject += ` - ${courseName}`;
+
+    // Customize subject for Global Report
+    if (recipientUser && recipientUser.email === SUPER_ADMIN_EMAIL && collegeName === 'All Colleges') {
+      emailSubject = `Global Attendance Report - Pydah Group - ${formattedDate}`;
+    } else {
+      if (courseName && courseName !== 'All Courses') {
+        emailSubject += ` - ${courseName}`;
+      }
+      if (branchName && branchName !== 'All Branches') {
+        emailSubject += ` - ${branchName}`;
+      }
+      emailSubject += ` - ${formattedDate}`;
     }
-    if (branchName && branchName !== 'All Branches') {
-      emailSubject += ` - ${branchName}`;
-    }
-    emailSubject += ` - ${formattedDate}`;
+
     const recipientName = recipientUser ? recipientUser.name : recipientType;
     const emailBody = `
       Dear ${recipientName},
@@ -509,7 +532,7 @@ const sendAttendanceReportNotifications = async ({
 
       try {
         console.log(`📧 Sending attendance report email to ${recipient.role === USER_ROLES.BRANCH_HOD ? 'HOD' : 'Principal'}: ${recipient.name} (${recipient.email})`);
-        
+
         // Use PDF file path for attachment (email service will read it)
         const emailResult = await sendBrevoEmail({
           to: recipient.email,

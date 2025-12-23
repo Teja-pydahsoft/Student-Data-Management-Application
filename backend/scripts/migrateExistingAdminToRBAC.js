@@ -64,7 +64,7 @@ async function migrateExistingAdminToRBAC() {
           [mysqlAdmins] = await masterPool.query(
             'SELECT * FROM admins LIMIT 5'
           );
-          
+
           if (mysqlAdmins && mysqlAdmins.length > 0) {
             console.log(`   Found ${mysqlAdmins.length} admin(s) in MySQL:`);
             mysqlAdmins.forEach(admin => {
@@ -93,7 +93,7 @@ async function migrateExistingAdminToRBAC() {
 
     // Create super admin in rbac_users
     const name = 'Super Admin';
-    const email = adminAccount.email || 'admin@example.com';
+    const email = adminAccount.email || 'sriram@pydah.edu.in';
     // Always use 'superadmin' as username for RBAC, regardless of original username
     const username = 'superadmin';
     const password = adminAccount.password; // Use existing password hash
