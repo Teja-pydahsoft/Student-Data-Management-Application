@@ -265,7 +265,7 @@ const notifyTargetedStudents = async (event) => {
         body: `${event.description ? event.description.substring(0, 50) + '...' : 'Check event calendar for details.'}`,
         icon: '/icon-192x192.png',
         data: {
-            url: '/student/events'
+            url: 'https://pydahgroup.com/student/events'
         }
     };
 

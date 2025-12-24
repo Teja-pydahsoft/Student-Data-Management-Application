@@ -6,6 +6,8 @@ const {
   normalizeDate
 } = require('../services/customHolidayService');
 const { getAttendanceStatusForRange } = require('../services/attendanceStatusService');
+const { masterPool } = require('../config/database');
+const { sendNotificationToUser } = require('./pushController');
 
 const padMonth = (value) => String(value).padStart(2, '0');
 
@@ -192,6 +194,32 @@ exports.getCustomHolidays = async (req, res) => {
   }
 };
 
+// Helper: Notify all students about new activity/holiday
+const notifyAllStudents = async (holiday) => {
+  try {
+    // Fetch all regular students
+    const [students] = await masterPool.query("SELECT id FROM students WHERE student_status = 'Regular'");
+
+    if (students.length === 0) return;
+
+    const payload = {
+      title: `New Activity: ${holiday.title}`,
+      body: `${holiday.description ? holiday.description.substring(0, 50) + '...' : 'Check activity calendar.'}`,
+      icon: '/icon-192x192.png',
+      data: {
+        url: 'https://pydahgroup.com/student/calendar'
+      }
+    };
+
+    // Send notifications
+    const promises = students.map(student => sendNotificationToUser(student.id, payload));
+    await Promise.allSettled(promises);
+    console.log(`Activity notifications sent to ${students.length} students.`);
+  } catch (error) {
+    console.error('Failed to send activity notifications:', error);
+  }
+};
+
 exports.saveCustomHoliday = async (req, res) => {
   try {
     const { date, title, description } = req.body || {};
@@ -215,6 +243,10 @@ exports.saveCustomHoliday = async (req, res) => {
       success: true,
       data: holiday
     });
+
+    // Send Notification
+    notifyAllStudents({ title, description }).catch(err => console.error(err));
+
   } catch (error) {
     console.error('Failed to save custom holiday:', error);
     res.status(500).json({

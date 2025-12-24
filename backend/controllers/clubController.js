@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
+const { sendNotificationToUser } = require('./pushController');
 
 const getClubs = async (req, res) => {
     try {
@@ -223,9 +224,49 @@ const createActivity = async (req, res) => {
         );
 
         res.json({ success: true, message: 'Activity posted successfully' });
+
+        // Notify Club Members
+        notifyClubMembers(clubId, title, description).catch(err => console.error('Club notification error:', err));
+
     } catch (error) {
         console.error('Error creating activity:', error);
         res.status(500).json({ success: false, message: 'Failed to post activity' });
+    }
+};
+
+// Helper: Notify club members
+const notifyClubMembers = async (clubId, title, description) => {
+    try {
+        const [rows] = await masterPool.query('SELECT members FROM clubs WHERE id = ?', [clubId]);
+        if (rows.length === 0) return;
+
+        let members = [];
+        try {
+            members = typeof rows[0].members === 'string' ? JSON.parse(rows[0].members) : (rows[0].members || []);
+        } catch (e) {
+            return;
+        }
+
+        // Filter approved members
+        const approvedMembers = members.filter(m => m.status === 'approved');
+
+        if (approvedMembers.length === 0) return;
+
+        const payload = {
+            title: `New Club Activity: ${title}`,
+            body: `${description ? description.substring(0, 50) + '...' : 'Check club for details.'}`,
+            icon: '/icon-192x192.png',
+            data: {
+                url: `https://pydahgroup.com/student/clubs/${clubId}`
+            }
+        };
+
+        const promises = approvedMembers.map(m => sendNotificationToUser(m.student_id, payload));
+        await Promise.allSettled(promises);
+        console.log(`Club activity notifications sent to ${approvedMembers.length} members.`);
+
+    } catch (error) {
+        console.error('Failed to notify club members:', error);
     }
 };
 
