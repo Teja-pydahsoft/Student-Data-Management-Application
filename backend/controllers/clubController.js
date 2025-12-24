@@ -234,6 +234,83 @@ const createActivity = async (req, res) => {
     }
 };
 
+const updateActivity = async (req, res) => {
+    try {
+        const { clubId, activityId } = req.params;
+        const { title, description } = req.body;
+        let image_url = null;
+
+        if (req.file) {
+            image_url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+        } else if (req.body.image_url) {
+            image_url = req.body.image_url;
+        }
+
+        // Fetch current activities
+        const [rows] = await masterPool.query('SELECT activities FROM clubs WHERE id = ?', [clubId]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'Club not found' });
+
+        let activities = [];
+        try {
+            activities = typeof rows[0].activities === 'string' ? JSON.parse(rows[0].activities) : (rows[0].activities || []);
+        } catch (e) {
+            activities = [];
+        }
+
+        const activityIndex = activities.findIndex(a => a.id === activityId);
+        if (activityIndex === -1) {
+            return res.status(404).json({ success: false, message: 'Activity not found' });
+        }
+
+        // Update fields
+        activities[activityIndex].title = title;
+        activities[activityIndex].description = description;
+        if (image_url) {
+            activities[activityIndex].image_url = image_url;
+        }
+        activities[activityIndex].updated_at = new Date().toISOString();
+
+        // Write back
+        await masterPool.query('UPDATE clubs SET activities = ? WHERE id = ?', [JSON.stringify(activities), clubId]);
+
+        res.json({ success: true, message: 'Activity updated successfully' });
+    } catch (error) {
+        console.error('Error updating activity:', error);
+        res.status(500).json({ success: false, message: 'Failed to update activity' });
+    }
+};
+
+const deleteActivity = async (req, res) => {
+    try {
+        const { clubId, activityId } = req.params;
+
+        // Fetch current activities
+        const [rows] = await masterPool.query('SELECT activities FROM clubs WHERE id = ?', [clubId]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'Club not found' });
+
+        let activities = [];
+        try {
+            activities = typeof rows[0].activities === 'string' ? JSON.parse(rows[0].activities) : (rows[0].activities || []);
+        } catch (e) {
+            activities = [];
+        }
+
+        const newActivities = activities.filter(a => a.id !== activityId);
+
+        if (activities.length === newActivities.length) {
+            return res.status(404).json({ success: false, message: 'Activity not found' });
+        }
+
+        // Write back
+        await masterPool.query('UPDATE clubs SET activities = ? WHERE id = ?', [JSON.stringify(newActivities), clubId]);
+
+        res.json({ success: true, message: 'Activity deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting activity:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete activity' });
+    }
+};
+
 // Helper: Notify club members
 const notifyClubMembers = async (clubId, title, description) => {
     try {
@@ -356,5 +433,7 @@ module.exports = {
     createActivity,
     getClubDetails,
     updateClub,
-    deleteClub
+    deleteClub,
+    updateActivity,
+    deleteActivity
 };

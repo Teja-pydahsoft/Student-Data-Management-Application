@@ -170,7 +170,8 @@ const Services = () => {
 
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto">
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                                 <tr>
@@ -221,6 +222,52 @@ const Services = () => {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden">
+                        {loading ? (
+                            <div className="p-6 text-center text-gray-500">Loading...</div>
+                        ) : requests.length === 0 ? (
+                            <div className="p-12 text-center text-gray-500 text-sm">No requests found</div>
+                        ) : (
+                            <div className="divide-y divide-gray-100">
+                                {requests.map(req => (
+                                    <div key={req.id} className="p-4 bg-white hover:bg-gray-50 transition-colors">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-semibold text-gray-900 text-sm">{req.service_name}</h3>
+                                                <span className="text-xs font-mono text-gray-400">#{req.id}</span>
+                                            </div>
+                                            <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                                                {new Date(req.request_date).toLocaleDateString()}
+                                            </span>
+                                        </div>
+
+                                        <p className="text-xs text-gray-600 mb-3 line-clamp-2">
+                                            {(() => {
+                                                try {
+                                                    const data = typeof req.request_data === 'string' ? JSON.parse(req.request_data) : req.request_data;
+                                                    return data?.purpose || 'No purpose specified';
+                                                } catch (e) { return '-'; }
+                                            })()}
+                                        </p>
+
+                                        <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
+                                            <StatusBadge status={req.status} paymentStatus={req.payment_status} />
+
+                                            {req.payment_status === 'pending' ? (
+                                                <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded">Pay at Office</span>
+                                            ) : req.status === 'ready_to_collect' ? (
+                                                <span className="text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded">Ready</span>
+                                            ) : (
+                                                <span className="text-[10px] text-gray-400 font-medium bg-gray-50 px-2 py-1 rounded">Processing</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

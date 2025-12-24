@@ -161,9 +161,25 @@ const Attendance = () => {
     }
 
     // Prepare chart data (ensure arrays based on admin modal logic)
-    const activeSemesterSeries = historyData.timelines?.semester || [];
-    const activeMonthlySeries = historyData.timelines?.monthly || [];
-    const activeWeeklySeries = historyData.timelines?.weekly || [];
+    // Helper to transform series data for BarChart (convert status to numeric 1/0 and avoid object collision)
+    const transformSeriesForChart = (series) => {
+        return series.map(entry => ({
+            ...entry,
+            // Use different keys for the chart values or overwrite safely if we don't need the object in the chart tooltip directly
+            // We overwrite 'holiday' knowing it was an object, but for the chart we need a number.
+            // If we needed the object for a custom tooltip, we should have stored it in a different key (e.g. holidayDetails)
+            present: entry.status === 'present' ? 1 : 0,
+            absent: entry.status === 'absent' ? 1 : 0,
+            holiday: entry.status === 'holiday' ? 1 : 0,
+            unmarked: (entry.status === 'unmarked' || !entry.status) ? 1 : 0,
+            originalHoliday: entry.holiday // Preserve the object if needed later (though default tooltip won't use this)
+        }));
+    };
+
+    // Prepare chart data (ensure arrays based on admin modal logic)
+    const activeSemesterSeries = transformSeriesForChart(historyData.semester?.series || []);
+    const activeMonthlySeries = transformSeriesForChart(historyData.monthly?.series || []);
+    const activeWeeklySeries = transformSeriesForChart(historyData.weekly?.series || []);
 
     // Monthly breakdown data preparation
     const monthlyBreakdown = (() => {

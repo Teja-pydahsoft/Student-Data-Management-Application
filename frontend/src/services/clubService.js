@@ -53,6 +53,18 @@ const deleteClub = async (clubId) => {
     return response.data;
 };
 
+const updateActivity = async (clubId, activityId, activityData) => {
+    const isFormData = activityData instanceof FormData;
+    const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {};
+    const response = await api.put(`/clubs/${clubId}/activities/${activityId}`, activityData, config);
+    return response.data;
+};
+
+const deleteActivity = async (clubId, activityId) => {
+    const response = await api.delete(`/clubs/${clubId}/activities/${activityId}`);
+    return response.data;
+};
+
 export default {
     getClubs,
     getClubDetails,
@@ -63,5 +75,7 @@ export default {
     updateMembershipStatus,
     createActivity,
     updateClub,
-    deleteClub
+    deleteClub,
+    updateActivity,
+    deleteActivity
 };

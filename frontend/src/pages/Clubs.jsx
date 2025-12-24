@@ -19,6 +19,8 @@ const Clubs = () => {
     // Form Data
     const [formData, setFormData] = useState({ name: '', description: '', image: null });
     const [newActivity, setNewActivity] = useState({ title: '', description: '', image_url: '' });
+    const [editingActivityId, setEditingActivityId] = useState(null); // Track which activity is being edited
+
 
     useEffect(() => {
         const type = localStorage.getItem('userType');
@@ -124,15 +126,51 @@ const Clubs = () => {
             const data = new FormData();
             data.append('title', newActivity.title);
             data.append('description', newActivity.description);
-            if (newActivity.image_url) data.append('image', newActivity.image_url);
+            // Only append image if it's a file (new upload) or if we want to keep existing (logic might differ, usually we only send if new)
+            // Ideally, for update, if no new file is selected, we don't send 'image' field or handle it in backend.
+            if (newActivity.image_url instanceof File) {
+                data.append('image', newActivity.image_url);
+            }
 
-            await clubService.createActivity(selectedClub.id, data);
-            toast.success('Activity posted');
+            if (editingActivityId) {
+                await clubService.updateActivity(selectedClub.id, editingActivityId, data);
+                toast.success('Activity updated');
+                setEditingActivityId(null);
+            } else {
+                await clubService.createActivity(selectedClub.id, data);
+                toast.success('Activity posted');
+            }
+
             setNewActivity({ title: '', description: '', image_url: '' });
             fetchClubs();
         } catch (error) {
-            toast.error('Failed to post activity');
+            toast.error(editingActivityId ? 'Failed to update activity' : 'Failed to post activity');
         }
+    };
+
+    const handleEditActivity = (activity) => {
+        setNewActivity({
+            title: activity.title,
+            description: activity.description,
+            image_url: activity.image_url // Keep string URL if exists, will be replaced by File if changed
+        });
+        setEditingActivityId(activity.id);
+    };
+
+    const handleDeleteActivity = async (activityId) => {
+        if (!window.confirm('Are you sure you want to delete this activity?')) return;
+        try {
+            await clubService.deleteActivity(selectedClub.id, activityId);
+            toast.success('Activity deleted');
+            fetchClubs();
+        } catch (error) {
+            toast.error('Failed to delete activity');
+        }
+    };
+
+    const cancelEditActivity = () => {
+        setNewActivity({ title: '', description: '', image_url: '' });
+        setEditingActivityId(null);
     };
 
     const prepareEdit = () => {
@@ -411,7 +449,8 @@ const Clubs = () => {
                                         <div className="lg:col-span-1">
                                             <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 sticky top-4">
                                                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                                    <Plus size={18} /> New Announcement
+                                                    {editingActivityId ? <Edit2 size={18} /> : <Plus size={18} />}
+                                                    {editingActivityId ? 'Edit Announcement' : 'New Announcement'}
                                                 </h3>
                                                 <form onSubmit={handlePostActivity} className="space-y-4">
                                                     <input
@@ -428,15 +467,43 @@ const Clubs = () => {
                                                         value={newActivity.description}
                                                         onChange={e => setNewActivity({ ...newActivity, description: e.target.value })}
                                                     ></textarea>
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={e => setNewActivity({ ...newActivity, image_url: e.target.files[0] })}
-                                                        className="w-full text-xs text-gray-500"
-                                                    />
-                                                    <button type="submit" className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">
-                                                        Post Announcement
-                                                    </button>
+
+                                                    {/* Image Preview / Input */}
+                                                    <div className="space-y-2">
+                                                        {newActivity.image_url && !(newActivity.image_url instanceof File) && (
+                                                            <div className="relative w-full h-32 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                                                                <img src={newActivity.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setNewActivity({ ...newActivity, image_url: '' })}
+                                                                    className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-sm hover:bg-red-50 text-red-500"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            onChange={e => setNewActivity({ ...newActivity, image_url: e.target.files[0] })}
+                                                            className="w-full text-xs text-gray-500"
+                                                        />
+                                                    </div>
+
+                                                    <div className="flex gap-2">
+                                                        {editingActivityId && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={cancelEditActivity}
+                                                                className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        )}
+                                                        <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">
+                                                            {editingActivityId ? 'Update' : 'Post'}
+                                                        </button>
+                                                    </div>
                                                 </form>
                                             </div>
                                         </div>
@@ -458,9 +525,27 @@ const Clubs = () => {
                                                         <div className="p-6 flex-1">
                                                             <div className="flex justify-between items-start mb-2">
                                                                 <h4 className="font-bold text-lg text-gray-900 leading-tight">{activity.title}</h4>
-                                                                <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(activity.posted_at).toLocaleDateString()}</span>
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(activity.posted_at).toLocaleDateString()}</span>
+                                                                    <div className="flex gap-1">
+                                                                        <button
+                                                                            onClick={() => handleEditActivity(activity)}
+                                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                                            title="Edit"
+                                                                        >
+                                                                            <Edit2 size={16} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDeleteActivity(activity.id)}
+                                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                            title="Delete"
+                                                                        >
+                                                                            <Trash2 size={16} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <p className="text-gray-600 text-sm leading-relaxed">{activity.description}</p>
+                                                            <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">{activity.description}</p>
                                                         </div>
                                                     </div>
                                                 ))

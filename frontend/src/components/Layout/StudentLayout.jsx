@@ -100,12 +100,14 @@ const StudentLayout = ({ children }) => {
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2">
-                <button
-                    className={`p-2.5 rounded-xl shadow-sm border transition-all ${isSubscribed ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-400 border-gray-200'}`}
-                    onClick={() => !isSubscribed && setNotificationModalOpen(true)}
-                >
-                    {isSubscribed ? <Bell size={22} fill="currentColor" /> : <BellOff size={22} />}
-                </button>
+                {!isSubscribed && (
+                    <button
+                        className={`p-2.5 rounded-xl shadow-sm border transition-all ${isSubscribed ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                        onClick={() => !isSubscribed && setNotificationModalOpen(true)}
+                    >
+                        {isSubscribed ? <Bell size={22} fill="currentColor" /> : <BellOff size={22} />}
+                    </button>
+                )}
                 <button
                     className="p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
                     onClick={() => setSidebarOpen(!sidebarOpen)}

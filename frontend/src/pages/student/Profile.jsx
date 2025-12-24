@@ -90,7 +90,7 @@ const Profile = () => {
     };
 
     return (
-        <div className="space-y-4 lg:space-y-6 lg:h-[calc(100vh-4rem)] lg:overflow-hidden flex flex-col p-1 w-full max-w-full overflow-x-hidden">
+        <div className="space-y-4 lg:space-y-6 flex flex-col p-1 w-full max-w-full overflow-x-hidden">
             {/* Premium Header Section */}
             <div className="relative mb-6 shrink-0">
                 <div className="h-28 lg:h-32 rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-800 shadow-xl overflow-hidden relative">
@@ -162,17 +162,17 @@ const Profile = () => {
             </div>
 
             {/* Content Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6 flex-1 min-h-0 lg:grid-rows-2 xl:grid-rows-1 pb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0 pb-2">
                 {/* Personal Information */}
-                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-5 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-blue-500 min-w-0">
-                    <div className="flex items-center gap-3 mb-4 shrink-0 border-b border-gray-50 pb-3">
-                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                            <User size={20} strokeWidth={2.5} />
+                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-4 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-blue-500 min-w-0">
+                    <div className="flex items-center gap-3 mb-3 shrink-0 border-b border-gray-50 pb-2">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                            <User size={18} strokeWidth={2.5} />
                         </div>
-                        <h3 className="text-base font-bold text-gray-800 tracking-tight">Personal Data</h3>
+                        <h3 className="text-sm font-bold text-gray-800 tracking-tight">Personal Data</h3>
                     </div>
 
-                    <div className="space-y-1 overflow-y-auto pr-1 custom-scrollbar flex-1">
+                    <div className="space-y-1 flex-1">
                         <InfoItem label="Father's Name" value={displayData.father_name || getStudentData('Father Name')} />
                         <InfoItem label="Gender" value={displayData.gender || getStudentData('Gender')} />
                         <InfoItem label="Date of Birth" value={displayData.dob || getStudentData('DOB')} />
@@ -182,15 +182,15 @@ const Profile = () => {
                 </div>
 
                 {/* Contact Information */}
-                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-5 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-green-500 min-w-0">
-                    <div className="flex items-center gap-3 mb-4 shrink-0 border-b border-gray-50 pb-3">
-                        <div className="p-2.5 bg-green-50 text-green-600 rounded-xl">
-                            <Phone size={20} strokeWidth={2.5} />
+                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-4 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-green-500 min-w-0">
+                    <div className="flex items-center gap-3 mb-3 shrink-0 border-b border-gray-50 pb-2">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                            <Phone size={18} strokeWidth={2.5} />
                         </div>
-                        <h3 className="text-base font-bold text-gray-800 tracking-tight">Contact Details</h3>
+                        <h3 className="text-sm font-bold text-gray-800 tracking-tight">Contact Details</h3>
                     </div>
 
-                    <div className="space-y-1 overflow-y-auto pr-1 custom-scrollbar flex-1">
+                    <div className="space-y-1 flex-1">
                         <InfoItem label="Student Mobile" value={displayData.student_mobile || getStudentData('Student Mobile number')} />
                         <InfoItem label="Parent Mobile 1" value={displayData.parent_mobile1 || getStudentData('Parent Mobile Number 1')} />
                         <InfoItem label="Parent Mobile 2" value={displayData.parent_mobile2 || getStudentData('Parent Mobile Number 2')} />
@@ -198,15 +198,15 @@ const Profile = () => {
                 </div>
 
                 {/* Academic Information */}
-                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-5 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-purple-500 min-w-0">
-                    <div className="flex items-center gap-3 mb-4 shrink-0 border-b border-gray-50 pb-3">
-                        <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
-                            <Book size={20} strokeWidth={2.5} />
+                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-4 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-purple-500 min-w-0">
+                    <div className="flex items-center gap-3 mb-3 shrink-0 border-b border-gray-50 pb-2">
+                        <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                            <Book size={18} strokeWidth={2.5} />
                         </div>
-                        <h3 className="text-base font-bold text-gray-800 tracking-tight">Academic Info</h3>
+                        <h3 className="text-sm font-bold text-gray-800 tracking-tight">Academic Info</h3>
                     </div>
 
-                    <div className="space-y-1 overflow-y-auto pr-1 custom-scrollbar flex-1">
+                    <div className="space-y-1 flex-1">
                         <InfoItem label="College" value={displayData.college || getStudentData('College')} />
                         <InfoItem label="Course" value={displayData.course || getStudentData('Course')} />
                         <InfoItem label="Branch" value={displayData.branch || getStudentData('Branch')} />
@@ -219,15 +219,15 @@ const Profile = () => {
                 </div>
 
                 {/* Address & Other Details */}
-                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-5 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-red-500 min-w-0">
-                    <div className="flex items-center gap-3 mb-4 shrink-0 border-b border-gray-50 pb-3">
-                        <div className="p-2.5 bg-red-50 text-red-600 rounded-xl">
-                            <MapPin size={20} strokeWidth={2.5} />
+                <div className="bg-white rounded-xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-gray-100 p-4 hover:shadow-lg transition-all duration-300 flex flex-col border-t-4 border-t-red-500 min-w-0">
+                    <div className="flex items-center gap-3 mb-3 shrink-0 border-b border-gray-50 pb-2">
+                        <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+                            <MapPin size={18} strokeWidth={2.5} />
                         </div>
-                        <h3 className="text-base font-bold text-gray-800 tracking-tight">Address & Location</h3>
+                        <h3 className="text-sm font-bold text-gray-800 tracking-tight">Address & Location</h3>
                     </div>
 
-                    <div className="space-y-1 overflow-y-auto pr-1 custom-scrollbar flex-1">
+                    <div className="space-y-1 flex-1">
                         <InfoItem label="Full Address" value={displayData.student_address || getStudentData('Student Address')} />
                         <InfoItem label="City/Village" value={displayData.city_village || getStudentData('City')} />
                         <InfoItem label="Mandal" value={displayData.mandal_name || getStudentData('Mandal')} />
