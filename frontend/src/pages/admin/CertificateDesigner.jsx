@@ -3,7 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { serviceService } from '../../services/serviceService';
 import { toast } from 'react-hot-toast';
 import { Save, ArrowLeft, Type, Image as ImageIcon, Minus, Square, Circle, Trash2, MousePointer, LayoutTemplate } from 'lucide-react';
-import { getTCTemplate } from './templates/tcTemplate';
+import { getTCTemplate } from './templates/certificates/tcTemplate';
+import { getStudyConductTemplate } from './templates/certificates/studyConductTemplate';
+import { getBonafideTemplate } from './templates/certificates/bonafideTemplate';
 
 const CertificateDesigner = () => {
     const { serviceId } = useParams();
@@ -251,6 +253,24 @@ const CertificateDesigner = () => {
         setCanvasSize({ width: 595, height: 842 }); // Force A4
     };
 
+    const loadStudyConductTemplate = () => {
+        if (!window.confirm("This will replace your current design. Continue?")) return;
+
+        const scElements = getStudyConductTemplate();
+        // Regenerate IDs
+        const finalElements = scElements.map((el, i) => ({ ...el, id: Date.now() + i }));
+        setElements(finalElements);
+        setCanvasSize({ width: 595, height: 420 }); // Force A5 Landscape (595x420)
+    };
+
+    const loadBonafideTemplate = () => {
+        if (!window.confirm("This will replace your current design. Continue?")) return;
+        const bElements = getBonafideTemplate();
+        const finalElements = bElements.map((el, i) => ({ ...el, id: Date.now() + i }));
+        setElements(finalElements);
+        setCanvasSize({ width: 595, height: 842 }); // Force A4
+    };
+
     // --- Updates ---
     const updateElement = (id, updates) => {
         setElements(elements.map(el => el.id === id ? { ...el, ...updates } : el));
@@ -379,6 +399,8 @@ const CertificateDesigner = () => {
                     <ToolButton icon={<ImageIcon size={16} />} label="Logo" onClick={() => addImage('logo')} />
                     <div className="w-px h-8 bg-gray-300 mx-1"></div>
                     <ToolButton icon={<LayoutTemplate size={16} />} label="TC Template" onClick={loadTCTemplate} />
+                    <ToolButton icon={<LayoutTemplate size={16} />} label="S&C Template" onClick={loadStudyConductTemplate} />
+                    <ToolButton icon={<LayoutTemplate size={16} />} label="Bonafide" onClick={loadBonafideTemplate} />
                 </div>
 
                 <div className="flex items-center gap-2">
