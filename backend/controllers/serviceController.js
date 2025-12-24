@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 const { buildScopeConditions } = require('../utils/scoping');
+const { sendNotificationToUser } = require('./pushController');
 const pdfService = require('../services/pdfService');
 const fs = require('fs');
 
@@ -204,8 +205,11 @@ exports.updateRequestStatus = async (req, res) => {
         const { id } = req.params;
         const { status, collect_date, admin_note, ...otherUpdates } = req.body;
 
-        // Fetch current request data to merge JSON
-        const [existing] = await masterPool.execute('SELECT request_data FROM service_requests WHERE id = ?', [id]);
+        // Fetch current request data to merge JSON, and get student/service info for notification
+        const [existing] = await masterPool.execute(
+            'SELECT sr.request_data, sr.student_id, s.name as service_name FROM service_requests sr LEFT JOIN services s ON sr.service_id = s.id WHERE sr.id = ?',
+            [id]
+        );
 
         if (existing.length === 0) {
             return res.status(404).json({ success: false, message: 'Request not found' });
@@ -251,6 +255,22 @@ exports.updateRequestStatus = async (req, res) => {
         params.push(id);
 
         const [result] = await masterPool.execute(query, params);
+
+        // Send Push Notification
+        if (existing[0] && existing[0].student_id) {
+            const studentId = existing[0].student_id;
+            const serviceName = existing[0].service_name || 'Service Request';
+
+            // Async send (don't await)
+            sendNotificationToUser(studentId, {
+                title: 'Service Update',
+                body: `Your request for ${serviceName} is now ${status}.`,
+                icon: '/icon-192x192.png',
+                data: {
+                    url: '/student/services'
+                }
+            }).catch(e => console.error('Service notification failed:', e));
+        }
 
         res.json({ success: true, message: 'Request updated successfully' });
     } catch (error) {

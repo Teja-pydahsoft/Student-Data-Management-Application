@@ -130,6 +130,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/events', require('./routes/eventRoutes'));
 app.use('/api/student-history', require('./routes/studentHistoryRoutes'));
 app.use('/api/sms-templates', require('./routes/smsTemplateRoutes'));
+app.use('/api/notifications', require('./routes/pushRoutes'));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);

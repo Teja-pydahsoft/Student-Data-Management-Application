@@ -14,6 +14,8 @@ if (rawApiUrl) {
   API_BASE_URL = 'http://localhost:5000/api';
 }
 
+export const API_URL = API_BASE_URL;
+
 // Also create a base URL for static files (without /api)
 export const STATIC_BASE_URL = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
 

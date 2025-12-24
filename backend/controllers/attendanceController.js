@@ -11,6 +11,7 @@ const {
 const { listCustomHolidays } = require('../services/customHolidayService');
 const { getPublicHolidaysForYear } = require('../services/holidayService');
 const { getScopeConditionString } = require('../utils/scoping');
+const { sendNotificationToUser } = require('./pushController');
 
 // Helper function to replace template variables
 const replaceTemplateVariables = (template, variables) => {
@@ -1177,9 +1178,50 @@ exports.markAttendance = async (req, res) => {
       console.warn('Failed to load attendance notification settings, using defaults:', error);
     }
 
+    const pushQueue = []; // Queue for push notifications
     const notificationResults = [];
     console.log(`\n========== NOTIFICATION DISPATCH LOG (${normalizedDate}) ==========`);
-    console.log(`Total absent students to notify: ${smsQueue.length}`);
+    console.log(`Total absent students to notify via SMS: ${smsQueue.length}`);
+
+    // Populate pushQueue from normalizedRecords (which contains all updates/inserts)
+    for (const record of normalizedRecords) {
+      if (['present', 'absent'].includes(record.status)) {
+        pushQueue.push({
+          studentId: record.studentId,
+          status: record.status,
+          date: normalizedDate
+        });
+      }
+    }
+    console.log(`Total students to notify via Push: ${pushQueue.length}`);
+
+    // Process Push Notifications (Async - don't block response significantly, but wait for completion to log)
+    // We do this concurrently with SMS or before/after. Let's do it here.
+    const pushPromises = pushQueue.map(async (item) => {
+      try {
+        const payload = {
+          title: 'Attendance Update',
+          body: `You have been marked ${item.status.toUpperCase()} for ${item.date}.`,
+          icon: '/icon-192x192.png',
+          data: {
+            url: '/student/attendance'
+          }
+        };
+        await sendNotificationToUser(item.studentId, payload);
+      } catch (err) {
+        console.error(`Failed to send push to student ${item.studentId}`, err);
+      }
+    });
+
+    // We don't await all push notifications to finish before sending response IF performance is key, 
+    // but here we wait to ensure reliability or at least trigger them. 
+    // To speed up, we can just trigger them without await, but for debugging/logging, await is better.
+    // Let's not await the entire batch blocking the response too long if it's huge, 
+    // but for reasonable batch sizes, it's fine.
+    // Actually, let's fire and forget for response speed, OR await if we want to log results.
+    // Given the SMS part waits, we can wait here too.
+    await Promise.allSettled(pushPromises);
+    console.log('Push notifications dispatch completed.');
 
     // Get connection again for updating SMS status
     const updateConnection = await masterPool.getConnection();

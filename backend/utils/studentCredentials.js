@@ -66,7 +66,7 @@ async function generateStudentCredentials(studentId, admissionNumber, pinNo, stu
     // Send SMS notification with login credentials
     try {
       // Remove trailing slash from URL to match DLT template format exactly
-      let loginUrl = (process.env.STUDENT_PORTAL_URL || 'pydahsdms.vercel.app').trim();
+      let loginUrl = (process.env.LOGIN_LINK || process.env.STUDENT_PORTAL_URL || 'pydahgroup.com').trim();
       loginUrl = loginUrl.replace(/\/+$/, ''); // Remove trailing slashes
 
       let smsMessage;

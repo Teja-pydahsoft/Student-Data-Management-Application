@@ -7,6 +7,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.10",
     "axios": "^1.5.0",
+    "framer-motion": "^12.23.26",
     "jspdf": "^2.5.1",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.284.0",

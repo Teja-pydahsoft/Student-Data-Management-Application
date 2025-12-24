@@ -41,6 +41,7 @@
     "pdfkit": "^0.14.0",
     "qrcode": "^1.5.3",
     "uuid": "^9.0.0",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

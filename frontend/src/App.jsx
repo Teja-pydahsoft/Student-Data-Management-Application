@@ -62,7 +62,30 @@ const ProtectedStudentRoute = ({ children }) => {
   return children;
 };
 
+import { registerServiceWorker, subscribeUser } from './services/pushService';
+
 function App() {
+  const { isAuthenticated } = useAuthStore();
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const initPush = async () => {
+        try {
+          const registration = await registerServiceWorker();
+          if (registration) {
+            // Check permission state before trying to subscribe to avoid prompt if already denied
+            if (Notification.permission === 'default' || Notification.permission === 'granted') {
+              await subscribeUser(registration);
+            }
+          }
+        } catch (error) {
+          console.error('Push initialization failed:', error);
+        }
+      };
+      initPush();
+    }
+  }, [isAuthenticated]);
+
   return (
     <Router>
       <Toaster

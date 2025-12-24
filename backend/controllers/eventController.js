@@ -1,4 +1,5 @@
 const { masterPool } = require('../config/database');
+const { sendNotificationToUser } = require('./pushController');
 
 const serializeTarget = (target) => {
     if (Array.isArray(target) && target.length > 0) {
@@ -50,8 +51,22 @@ exports.createEvent = async (req, res) => {
         res.status(201).json({
             success: true,
             message: 'Event created successfully',
-            data: { id: result.insertId }
         });
+
+        // Send Push Notifications (Async)
+        notifyTargetedStudents({
+            title,
+            description,
+            event_date,
+            event_type,
+            target_college,
+            target_batch,
+            target_course,
+            target_branch,
+            target_year,
+            target_semester
+        }).catch(err => console.error('Event notification failed:', err));
+
     } catch (error) {
         console.error('Create event error:', error);
         res.status(500).json({ success: false, message: 'Failed to create event' });
@@ -214,4 +229,48 @@ exports.toggleStatus = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to update status' });
     }
+};
+
+// Helper: Notify targeted students
+const notifyTargetedStudents = async (event) => {
+    // 1. Build query to find matching students
+    let query = `SELECT id FROM students WHERE student_status = 'Regular'`;
+    const params = [];
+
+    const addCondition = (field, values) => {
+        if (values && Array.isArray(values) && values.length > 0) {
+            query += ` AND ${field} IN (${values.map(() => '?').join(',')})`;
+            params.push(...values);
+        } else if (values && typeof values === 'string') {
+            query += ` AND ${field} = ?`;
+            params.push(values);
+        }
+    };
+
+    addCondition('college', event.target_college);
+    addCondition('batch', event.target_batch);
+    addCondition('course', event.target_course);
+    addCondition('branch', event.target_branch);
+    addCondition('current_year', event.target_year);
+    addCondition('current_semester', event.target_semester);
+
+    const [students] = await masterPool.query(query, params);
+
+    if (students.length === 0) return;
+
+    console.log(`Sending event notification to ${students.length} students...`);
+
+    const payload = {
+        title: `New Event: ${event.title}`,
+        body: `${event.description ? event.description.substring(0, 50) + '...' : 'Check event calendar for details.'}`,
+        icon: '/icon-192x192.png',
+        data: {
+            url: '/student/events'
+        }
+    };
+
+    // Send in batches to avoid overwhelming (basic batching is handled by Node event loop naturally here for simple map)
+    const promises = students.map(student => sendNotificationToUser(student.id, payload));
+    await Promise.allSettled(promises);
+    console.log('Event notifications sent.');
 };

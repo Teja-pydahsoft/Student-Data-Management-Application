@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import {
     Home,
@@ -12,15 +12,55 @@ import {
     Ticket,
     Megaphone,
     Briefcase,
-    CheckCircle
+    CheckCircle,
+    Bell,
+    BellOff
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
+import NotificationPermissionModal from '../NotificationPermissionModal';
+import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../../services/pushService';
 
 const StudentLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+    const [isSubscribed, setIsSubscribed] = useState(false);
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
+
+    useEffect(() => {
+        checkPushStatus();
+    }, []);
+
+    const checkPushStatus = async () => {
+        const status = await getSubscriptionStatus();
+        if (status === 'granted') {
+            setIsSubscribed(true);
+        } else if (status === 'default') {
+            setIsSubscribed(false);
+            // Show modal automatically if permission is default (not yet asked)
+            // Delay slightly for better UX
+            setTimeout(() => setNotificationModalOpen(true), 1500);
+        } else {
+            setIsSubscribed(false);
+        }
+    };
+
+    const handleAllowNotifications = async () => {
+        const registration = await registerServiceWorker();
+        if (registration) {
+            const success = await subscribeUser(registration);
+            if (success) {
+                setIsSubscribed(true);
+                toast.success('You will now receive notifications!');
+                setNotificationModalOpen(false);
+            } else {
+                toast.error('Failed to subscribe. Please try again.');
+            }
+        } else {
+            toast.error('Push messaging not supported or service worker failed.');
+        }
+    };
 
     const handleLogout = () => {
         logout();
@@ -50,13 +90,27 @@ const StudentLayout = ({ children }) => {
                 }}
             />
 
+            <NotificationPermissionModal
+                isOpen={notificationModalOpen}
+                onClose={() => setNotificationModalOpen(false)}
+                onAllow={handleAllowNotifications}
+            />
+
             {/* Mobile Menu Button */}
-            <button
-                className="lg:hidden fixed top-4 right-4 z-50 p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-                {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
+            <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2">
+                <button
+                    className={`p-2.5 rounded-xl shadow-sm border transition-all ${isSubscribed ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                    onClick={() => !isSubscribed && setNotificationModalOpen(true)}
+                >
+                    {isSubscribed ? <Bell size={22} fill="currentColor" /> : <BellOff size={22} />}
+                </button>
+                <button
+                    className="p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                >
+                    {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
+                </button>
+            </div>
 
             {/* Sidebar */}
             <aside className={`
@@ -89,8 +143,17 @@ const StudentLayout = ({ children }) => {
                                     </div>
                                 )}
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-sm font-bold text-gray-900 truncate">{user?.name || 'Student'}</p>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-bold text-gray-900 truncate">{user?.name || 'Student'}</p>
+                                    <button
+                                        onClick={() => !isSubscribed && setNotificationModalOpen(true)}
+                                        className={`p-1 rounded-full transition-colors ${isSubscribed ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600'}`}
+                                        title={isSubscribed ? "Notifications Enabled" : "Enable Notifications"}
+                                    >
+                                        {isSubscribed ? <Bell size={16} fill="currentColor" /> : <BellOff size={16} />}
+                                    </button>
+                                </div>
                                 <p className="text-xs font-medium text-gray-500 truncate">{user?.admission_number}</p>
                                 <div className="flex items-center gap-1.5 mt-1">
                                     <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
