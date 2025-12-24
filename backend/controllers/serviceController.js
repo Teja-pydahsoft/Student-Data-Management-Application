@@ -386,6 +386,8 @@ exports.downloadCertificate = async (req, res) => {
             filePath = await pdfService.generateStudyCertificate(request, request, collegeDetails); // passing request as student object because it contains joined fields
         } else if (request.template_type === 'refund_application' || request.service_name.toLowerCase().includes('refund')) {
             filePath = await pdfService.generateRefundApplication(request, request, collegeDetails);
+        } else if (request.template_type === 'custodian_certificate') {
+            filePath = await pdfService.generateCustodianCertificate(request, request, collegeDetails);
         } else if (request.template_type === 'dynamic' && request.template_config) {
             let config = request.template_config;
             if (typeof config === 'string') {
@@ -457,11 +459,12 @@ exports.previewTemplate = async (req, res) => {
         // Blank Request Data
         const blankRequest = {
             request_data: JSON.stringify({
-                purpose: '',
-                reason: '',
-                excess_amount: '',
-                amount_in_words: '',
-                payment_mode: ''
+                purpose: 'Passport Verification',
+                reason: 'Personal',
+                excess_amount: '5000',
+                amount_in_words: 'Five Thousand',
+                payment_mode: 'Cash',
+                custody_list: 'S.S.C Certificate, Diploma Certificate'
             }),
             admission_number: ''
         };
@@ -519,6 +522,8 @@ exports.previewTemplate = async (req, res) => {
             filePath = await pdfService.generateStudyCertificate(blankStudent, blankRequest, collegeDetails);
         } else if (type === 'refund_application' || name.toLowerCase().includes('refund')) {
             filePath = await pdfService.generateRefundApplication(blankStudent, blankRequest, collegeDetails);
+        } else if (type === 'custodian_certificate') {
+            filePath = await pdfService.generateCustodianCertificate(blankStudent, blankRequest, collegeDetails);
         } else if (type === 'dynamic' && req.body.template_config) {
             let config = req.body.template_config;
             if (typeof config === 'string') {

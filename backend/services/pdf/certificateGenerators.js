@@ -669,8 +669,153 @@ const generateDynamicCertificate = async (student, request, collegeDetails, conf
   });
 };
 
+/**
+ * Generate Custodian Certificate PDF
+ */
+const generateCustodianCertificate = async (student, request, collegeDetails) => {
+  const tempDir = os.tmpdir();
+  const fileName = `custodian_certificate_${student.admission_number}_${Date.now()}.pdf`;
+  const filePath = path.join(tempDir, fileName);
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40
+  });
+
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  const pageWidth = doc.page.width;
+  const contentWidth = pageWidth - 80;
+  const centerX = pageWidth / 2;
+
+  // --- Header ---
+  // LOGO
+  const logoPath = path.join(__dirname, '../../../frontend/public/logo.png');
+  const logoWidth = 90;
+  const logoX = pageWidth - 130;
+
+  if (fs.existsSync(logoPath)) {
+    doc.image(logoPath, logoX, 40, { width: logoWidth });
+  }
+
+  // College Name
+  doc.font('Helvetica-Bold').fontSize(22).fillColor('#000000'); // Black as per image
+  doc.text((collegeDetails.name || 'PYDAH COLLEGE OF ENGINEERING').toUpperCase(), 40, 45, { align: 'center', width: contentWidth });
+
+  // Subtitle/Address
+  doc.font('Helvetica').fontSize(10);
+  doc.text('(Approved by AICTE and Affiliated to JNT University, Kakinada)', 40, 75, { align: 'center', width: contentWidth });
+  // Need to bold specific parts of address like "PATAVALA" as per image
+  // Doing simple text for now to match layout roughly
+  doc.text('Yanam Road, PATAVALA, KAKINADA-533461, E.G.Dt.', 40, 90, { align: 'center', width: contentWidth });
+
+  // Line separator
+  doc.moveTo(40, 110).lineTo(pageWidth - 40, 110).strokeColor('#000000').lineWidth(1).stroke();
+
+  // Date
+  // Date: 28-06-2025 (Right aligned)
+  const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+  doc.font('Helvetica').fontSize(11).text(`Date: ${today}`, pageWidth - 160, 140);
+
+  // --- Title ---
+  doc.moveDown(4); // spacing
+  const titleY = 200;
+  doc.font('Helvetica-Bold').fontSize(14).text('TO WHOM SO EVER IT MAY CONCERN', 40, titleY, { align: 'center', underline: true });
+
+  // --- Body ---
+  doc.moveDown(3);
+  const bodyY = doc.y + 20;
+
+  // Ensure request_data is parsed
+  let requestData = request.request_data;
+  if (typeof requestData === 'string') {
+    try { requestData = JSON.parse(requestData); } catch (e) { requestData = {}; }
+  } else if (!requestData) {
+    requestData = {};
+  }
+
+  const studentName = (student.student_name || '________________').toUpperCase();
+  const parentName = (student.father_name || student.guardian_name || '________________').toUpperCase();
+  const rollNo = (student.admission_number || '________________').toUpperCase();
+  const course = (student.course || '________'); // e.g. B.Tech
+  const branch = (student.branch || '________'); // e.g. Computer Science & Engineering
+
+  doc.font('Helvetica').fontSize(12).lineGap(6);
+
+  // "This is to certify that Mr. [NAME] S/o [PARENT] bearing Roll No: [ROLL] is studying [COURSE] ([BRANCH]) in our College."
+  // Using continuous text with embedded bold fonts is tricky in PDFKit without multiple text calls or rich text plugins.
+  // We will construct it carefully or use standard text for now, bolding is hard inline without exact positioning or a plugin.
+  // We will try to simulate bolding by changing font for the whole line if acceptable, or just splitting logic.
+  // Given the image, specific variables are bold.
+
+  const textX = 60;
+  const textWidth = pageWidth - 120;
+  let currentY = bodyY;
+
+  // Helper to draw varied text
+  const drawText = (text, isBold = false) => {
+    doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').text(text, { continued: true });
+  };
+
+  doc.text('This is to certify that ', textX, currentY, { continued: true, align: 'justify', width: textWidth });
+  doc.font('Helvetica-Bold').text(`Mr./Ms. ${studentName}`, { continued: true });
+  doc.font('Helvetica').text(' S/o, D/o ', { continued: true });
+  doc.font('Helvetica-Bold').text(`${parentName}`, { continued: true });
+  doc.font('Helvetica').text(' bearing Roll No: ', { continued: true });
+  doc.font('Helvetica-Bold').text(`${rollNo}`, { continued: true });
+  doc.font('Helvetica').text(' is studying ', { continued: true });
+  doc.font('Helvetica-Bold').text(`${course} (${branch})`, { continued: true });
+  doc.font('Helvetica').text(' in our College.', { continued: false });
+
+  doc.moveDown(2);
+  doc.text('The following Certificate is in our Custody.', { align: 'center' });
+  doc.moveDown(1.5);
+
+  // List of Certificates
+  // Expecting 'custody_list' in requestData, comma separated
+  // e.g. "S.S.C Certificate, Diploma Certificate"
+  const certsRaw = requestData.custody_list || requestData.certificates || '_______________________';
+  const certList = certsRaw.split(',').map(c => c.trim()).filter(c => c);
+
+  let listY = doc.y;
+  const listX = centerX - 60; // Approximate center alignment for list
+
+  if (certList.length > 0) {
+    certList.forEach((cert, idx) => {
+      doc.font('Helvetica-Bold').text(`${idx + 1}. ${cert}`, listX, listY);
+      listY += 25;
+    });
+  } else {
+    doc.font('Helvetica-Bold').text(`1. ${certsRaw}`, listX, listY);
+    listY += 25;
+  }
+
+  doc.y = listY + 20;
+
+  // Purpose
+  const purpose = requestData.purpose || 'Passport Verification';
+  doc.moveDown(2);
+  doc.font('Helvetica').text(`This Certificate is issued on his request for ${purpose}.`, textX, doc.y, { align: 'center' });
+
+  // --- Footer ---
+  const footerY = doc.page.height - 150;
+
+  doc.font('Helvetica-Bold').text('Principal', 60, footerY);
+  doc.font('Helvetica').text('(Dr.P.V.Surya Prakash)', 40, footerY + 20); // Hardcoded as per image or need dynamic principal name? User request "same like as the other templates" implies mimicking image.
+  // Ideally this should be dynamic or generic. I'll keep it generic if variable not available, but user said "same as image".
+
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
+};
+
 module.exports = {
   generateStudyCertificate,
   generateRefundApplication,
+  generateCustodianCertificate,
   generateDynamicCertificate
 };

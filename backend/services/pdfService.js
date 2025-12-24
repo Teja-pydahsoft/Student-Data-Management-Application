@@ -7,7 +7,7 @@ const http = require('http');
 const { masterPool } = require('../config/database');
 
 const { downloadLogo } = require('./pdf/utils');
-const { generateStudyCertificate, generateRefundApplication, generateDynamicCertificate } = require('./pdf/certificateGenerators');
+const { generateStudyCertificate, generateRefundApplication, generateDynamicCertificate, generateCustodianCertificate } = require('./pdf/certificateGenerators');
 
 
 
@@ -866,6 +866,7 @@ module.exports = {
   generateAttendanceReportPDF,
   generateStudyCertificate,
   generateRefundApplication,
+  generateCustodianCertificate,
   generateDynamicCertificate
 };
 

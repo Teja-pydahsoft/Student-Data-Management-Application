@@ -21,6 +21,10 @@ const ServicesConfig = () => {
             { label: 'Excess Amount', name: 'excess_amount', type: 'number' },
             { label: 'Amount in Words', name: 'amount_in_words', type: 'text' },
             { label: 'Cheque No', name: 'cheque_no', type: 'text' }
+        ],
+        'custodian_certificate': [
+            { label: 'Certificates in Custody (comma separated)', name: 'custody_list', type: 'text' },
+            { label: 'Purpose', name: 'purpose', type: 'text' }
         ]
     };
 
@@ -342,6 +346,7 @@ const ServicesConfig = () => {
                                         <option value="refund_application">Refund Application</option>
                                         <option value="bonafide_certificate">Bonafide Certificate</option>
                                         <option value="transfer_certificate">Transfer Certificate (TC)</option>
+                                        <option value="custodian_certificate">Custodian Certificate</option>
                                         <option value="dynamic">Dynamic Certificate (Custom)</option>
                                     </select>
                                     <button

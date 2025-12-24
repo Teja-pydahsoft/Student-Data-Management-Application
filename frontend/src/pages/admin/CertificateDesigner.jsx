@@ -6,6 +6,7 @@ import { Save, ArrowLeft, Type, Image as ImageIcon, Minus, Square, Circle, Trash
 import { getTCTemplate } from './templates/certificates/tcTemplate';
 import { getStudyConductTemplate } from './templates/certificates/studyConductTemplate';
 import { getBonafideTemplate } from './templates/certificates/bonafideTemplate';
+import { getCustodianTemplate } from './templates/certificates/custodianTemplate';
 
 const CertificateDesigner = () => {
     const { serviceId } = useParams();
@@ -271,6 +272,14 @@ const CertificateDesigner = () => {
         setCanvasSize({ width: 595, height: 842 }); // Force A4
     };
 
+    const loadCustodianTemplate = () => {
+        if (!window.confirm("This will replace your current design. Continue?")) return;
+        const cElements = getCustodianTemplate();
+        const finalElements = cElements.map((el, i) => ({ ...el, id: Date.now() + i }));
+        setElements(finalElements);
+        setCanvasSize({ width: 595, height: 842 }); // Force A4
+    };
+
     // --- Updates ---
     const updateElement = (id, updates) => {
         setElements(elements.map(el => el.id === id ? { ...el, ...updates } : el));
@@ -363,7 +372,8 @@ const CertificateDesigner = () => {
         'current_year', 'current_semester', 'dob', 'email', 'phone_number',
         'college_name', 'college_address', 'college_email', 'college_website', 'date', 'parent_name', 'religion',
         'gender', 'caste', 'admission_date', 'serial_no', 'mole_1', 'mole_2',
-        'reason', 'conduct', 'date_of_leaving', 'promoted', 'current_year_text', 'academic_year'
+        'reason', 'conduct', 'date_of_leaving', 'promoted', 'current_year_text', 'academic_year',
+        'custody_list', 'purpose'
     ];
 
     // Mock Data for Preview
@@ -379,6 +389,8 @@ const CertificateDesigner = () => {
         branch: '____________________',
         current_year_text: '____',
         current_semester: '__',
+        custody_list: '1. S.S.C Certificate\n2. Diploma Certificate',
+        purpose: 'Passport Verification'
     };
 
     const replaceVariables = (text) => {
@@ -424,6 +436,7 @@ const CertificateDesigner = () => {
                     <ToolButton icon={<LayoutTemplate size={16} />} label="TC Template" onClick={loadTCTemplate} />
                     <ToolButton icon={<LayoutTemplate size={16} />} label="S&C Template" onClick={loadStudyConductTemplate} />
                     <ToolButton icon={<LayoutTemplate size={16} />} label="Bonafide" onClick={loadBonafideTemplate} />
+                    <ToolButton icon={<LayoutTemplate size={16} />} label="Custodian" onClick={loadCustodianTemplate} />
                 </div>
 
                 <div className="flex items-center gap-2">
