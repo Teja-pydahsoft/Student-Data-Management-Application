@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 
@@ -8,6 +8,7 @@ const FeeManagement = () => {
     const [loading, setLoading] = useState(true);
     const [feeData, setFeeData] = useState(null);
     const [error, setError] = useState(null);
+    const [selectedYear, setSelectedYear] = useState('All');
 
     useEffect(() => {
         const fetchFeeDetails = async () => {
@@ -15,7 +16,6 @@ const FeeManagement = () => {
 
             try {
                 setLoading(true);
-                // The backend fee controller expects admission number as studentId
                 const response = await api.get(`/fees/students/${user.admission_number}/details`);
 
                 if (response.data.success) {
@@ -40,6 +40,22 @@ const FeeManagement = () => {
             currency: 'INR'
         }).format(amount || 0);
     };
+
+    const { summary, fees, transactions } = feeData || {};
+    const dueAmount = summary?.dueAmount || 0;
+    const isPaid = dueAmount <= 0;
+
+    // Filter Logic
+    const uniqueYears = useMemo(() => {
+        if (!fees) return [];
+        const years = [...new Set(fees.map(f => f.studentYear))];
+        return years.sort((a, b) => a - b);
+    }, [fees]);
+
+    const filteredFees = useMemo(() => {
+        if (selectedYear === 'All') return fees;
+        return fees?.filter(f => f.studentYear.toString() === selectedYear.toString());
+    }, [fees, selectedYear]);
 
     if (loading) {
         return (
@@ -66,10 +82,6 @@ const FeeManagement = () => {
             </div>
         );
     }
-
-    const { summary, fees, transactions } = feeData || {};
-    const dueAmount = summary?.dueAmount || 0;
-    const isPaid = dueAmount <= 0;
 
     return (
         <div className="space-y-6 animate-fade-in-up pb-10">
@@ -141,7 +153,7 @@ const FeeManagement = () => {
                                 {formatCurrency(summary?.totalFee)}
                             </h3>
                             <p className="text-xs text-gray-400 mt-2">
-                                For Academic Year
+                                Total Applicable Fees
                             </p>
                         </div>
                         <div className="p-3 rounded-xl bg-blue-50 text-blue-500">
@@ -154,11 +166,28 @@ const FeeManagement = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Fee Breakdown */}
                 <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                    <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                        <h2 className="text-lg font-semibold text-gray-900">Fee Breakdown</h2>
-                        <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-200">
-                            {fees?.length || 0} Items
-                        </span>
+                    <div className="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-lg font-semibold text-gray-900">Fee Breakdown</h2>
+                            <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                                {filterValuesCount(filteredFees)} Items
+                            </span>
+                        </div>
+
+                        {/* Year Filter */}
+                        <div className="flex items-center gap-2">
+                            <Filter size={16} className="text-gray-400" />
+                            <select
+                                className="text-sm border-none bg-gray-50 rounded-lg px-3 py-1.5 font-medium text-gray-600 focus:ring-0 cursor-pointer hover:bg-gray-100 transition-colors"
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                            >
+                                <option value="All">All Years</option>
+                                {uniqueYears.map(year => (
+                                    <option key={year} value={year}>Year {year}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
@@ -171,8 +200,8 @@ const FeeManagement = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {fees && fees.length > 0 ? (
-                                    fees.map((inv, index) => (
+                                {filteredFees && filteredFees.length > 0 ? (
+                                    filteredFees.map((inv, index) => (
                                         <tr key={index} className="hover:bg-gray-50/50 transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
@@ -181,7 +210,7 @@ const FeeManagement = () => {
                                                     </div>
                                                     <div>
                                                         <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
-                                                        <p className="text-xs text-gray-500">{inv.remarks || 'Standard Fee'}</p>
+                                                        <p className="text-xs text-gray-500 line-clamp-1">{inv.remarks || 'Standard Fee'}</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -201,7 +230,7 @@ const FeeManagement = () => {
                                 ) : (
                                     <tr>
                                         <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
-                                            No fee records found.
+                                            No fee records found for the selected year.
                                         </td>
                                     </tr>
                                 )}
@@ -219,23 +248,31 @@ const FeeManagement = () => {
                         {transactions && transactions.length > 0 ? (
                             transactions.map((tx, index) => (
                                 <div key={index} className="p-4 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0 relative group">
-                                    <div className="flex justify-between items-start mb-1">
+                                    <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-lg ${tx.transactionType === 'CREDIT' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                                {tx.transactionType === 'CREDIT' ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                                            <div className={`p-2 rounded-lg ${tx.transactionType === 'DEBIT' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                {tx.transactionType === 'DEBIT' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
                                             </div>
                                             <div>
                                                 <p className="font-medium text-gray-900 text-sm">
-                                                    {tx.transactionType === 'CREDIT' ? 'Received Payment' : 'Fee Refund/Adjustment'}
+                                                    {tx.feeHead?.name
+                                                        ? `${tx.feeHead.name} - ${tx.transactionType === 'DEBIT' ? 'Payment' : 'Adjustment'}`
+                                                        : (tx.transactionType === 'DEBIT' ? 'Payment Received' : 'Fee Adjustment')
+                                                    }
                                                 </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {tx.paymentMode} • {tx.receiptNumber || 'No Receipt'}
-                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded uppercase tracking-wide">
+                                                        {tx.paymentMode || 'Unknown'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400">
+                                                        #{tx.receiptNumber || 'Ref N/A'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className={`font-bold text-sm ${tx.transactionType === 'CREDIT' ? 'text-green-600' : 'text-red-600'}`}>
-                                                {tx.transactionType === 'CREDIT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                            <p className={`font-bold text-sm ${tx.transactionType === 'DEBIT' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {tx.transactionType === 'DEBIT' ? '+' : '-'}{formatCurrency(tx.amount)}
                                             </p>
                                             <p className="text-[10px] text-gray-400">
                                                 {new Date(tx.paymentDate).toLocaleDateString()}
@@ -243,8 +280,8 @@ const FeeManagement = () => {
                                         </div>
                                     </div>
                                     {tx.remarks && (
-                                        <p className="text-xs text-gray-400 mt-2 ml-11 bg-gray-50 p-2 rounded border border-gray-100">
-                                            {tx.remarks}
+                                        <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 p-2 rounded border border-gray-100 italic">
+                                            "{tx.remarks}"
                                         </p>
                                     )}
                                 </div>
@@ -263,5 +300,8 @@ const FeeManagement = () => {
         </div>
     );
 };
+
+// Helper for count
+const filterValuesCount = (arr) => arr ? arr.length : 0;
 
 export default FeeManagement;
