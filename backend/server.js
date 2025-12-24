@@ -269,6 +269,10 @@ const startServer = async () => {
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 
+    // Connect to MongoDB
+    const connectDB = require('./config/mongoConfig');
+    await connectDB();
+
     // Test database and S3 connections AFTER server starts (async)
     setTimeout(async () => {
       try {

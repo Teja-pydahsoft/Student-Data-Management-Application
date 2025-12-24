@@ -106,7 +106,7 @@ const allowStudentOwnProfileOrPermission = (module, operation = 'read') => {
 
     // If user is a student, allow access to their own profile
     if (user.role === 'student') {
-      const admissionNumber = req.params.admissionNumber || req.params.id;
+      const admissionNumber = req.params.admissionNumber || req.params.id || req.params.studentId;
       const studentAdmissionNumber = user.admission_number || user.admissionNumber;
 
       // Allow if student is accessing their own profile

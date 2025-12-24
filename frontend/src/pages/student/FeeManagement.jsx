@@ -1,9 +1,78 @@
-import React from 'react';
-import { CreditCard, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import useAuthStore from '../../store/authStore';
+import api from '../../config/api';
 
 const FeeManagement = () => {
+    const { user } = useAuthStore();
+    const [loading, setLoading] = useState(true);
+    const [feeData, setFeeData] = useState(null);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchFeeDetails = async () => {
+            if (!user?.admission_number) return;
+
+            try {
+                setLoading(true);
+                // The backend fee controller expects admission number as studentId
+                const response = await api.get(`/fees/students/${user.admission_number}/details`);
+
+                if (response.data.success) {
+                    setFeeData(response.data);
+                } else {
+                    setError('Failed to load fee details');
+                }
+            } catch (err) {
+                console.error('Error fetching fee details:', err);
+                setError('Unable to fetch fee information. Please try again later.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchFeeDetails();
+    }, [user]);
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR'
+        }).format(amount || 0);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center py-12">
+                <div className="bg-red-50 text-red-600 p-4 rounded-xl inline-block mb-4">
+                    <AlertCircle size={32} />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Something went wrong</h3>
+                <p className="text-gray-500 mt-2">{error}</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
+
+    const { summary, fees, transactions } = feeData || {};
+    const dueAmount = summary?.dueAmount || 0;
+    const isPaid = dueAmount <= 0;
+
     return (
-        <div className="space-y-6 animate-fade-in-up">
+        <div className="space-y-6 animate-fade-in-up pb-10">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -11,47 +80,185 @@ const FeeManagement = () => {
                         Fee Management
                     </h1>
                     <p className="text-gray-500 mt-1">
-                        View and manage your tuition and other fees
+                        Track your fee dues and payment history
                     </p>
                 </div>
             </div>
 
-            {/* Placeholder Content Area */}
+            {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Summary Cards Placeholders */}
-                {[
-                    { label: 'Total Due', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
-                    { label: 'Paid Amount', icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50' },
-                    { label: 'Upcoming', icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50' }
-                ].map((item, index) => (
-                    <div key={index} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">{item.label}</p>
-                                <div className="h-8 w-32 bg-gray-100 rounded-lg mt-2 animate-pulse"></div>
-                            </div>
-                            <div className={`p-3 rounded-xl ${item.bg} ${item.color}`}>
-                                <item.icon size={20} />
-                            </div>
+
+                {/* Total Due */}
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Total Due</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(dueAmount)}
+                            </h3>
+                            {isPaid ? (
+                                <span className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                    <CheckCircle size={12} /> No Dues
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                                    <AlertCircle size={12} /> Payment Pending
+                                </span>
+                            )}
+                        </div>
+                        <div className={`p-3 rounded-xl ${isPaid ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
+                            <AlertCircle size={24} />
                         </div>
                     </div>
-                ))}
+                </div>
+
+                {/* Paid Amount */}
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Total Paid</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(summary?.totalPaid)}
+                            </h3>
+                            <p className="text-xs text-gray-400 mt-2">
+                                Last payment: {transactions && transactions.length > 0
+                                    ? new Date(transactions[transactions.length - 1].paymentDate).toLocaleDateString()
+                                    : 'N/A'}
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-green-50 text-green-500">
+                            <CheckCircle size={24} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Total Fee */}
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-gray-500">Total Fee</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(summary?.totalFee)}
+                            </h3>
+                            <p className="text-xs text-gray-400 mt-2">
+                                For Academic Year
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-blue-50 text-blue-500">
+                            <CreditCard size={24} />
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {/* Main Content Placeholder */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center py-16">
-                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CreditCard className="text-indigo-600" size={32} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Fee Breakdown */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                        <h2 className="text-lg font-semibold text-gray-900">Fee Breakdown</h2>
+                        <span className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                            {fees?.length || 0} Items
+                        </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50/50">
+                                <tr className="text-left text-xs font-medium text-gray-500">
+                                    <th className="px-6 py-4 uppercase tracking-wider">Fee Head</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider">Year/Sem</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Amount</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {fees && fees.length > 0 ? (
+                                    fees.map((inv, index) => (
+                                        <tr key={index} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                                                        <FileText size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
+                                                        <p className="text-xs text-gray-500">{inv.remarks || 'Standard Fee'}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-500">
+                                                Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                                {formatCurrency(inv.amount)}
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100">
+                                                    Applied
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                                            No fee records found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Fee Payment Module
-                </h2>
-                <p className="text-gray-500 max-w-md mx-auto mb-8">
-                    The fee management system is currently being set up. Soon you will be able to view your fee structure, payment history, and make payments online.
-                </p>
-                <button className="px-6 py-2.5 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 transition-colors cursor-not-allowed">
-                    Coming Soon
-                </button>
+
+                {/* Transaction History */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col h-fit">
+                    <div className="p-6 border-b border-gray-100">
+                        <h2 className="text-lg font-semibold text-gray-900">Recent Transactions</h2>
+                    </div>
+                    <div className="p-2 overflow-y-auto max-h-[500px]">
+                        {transactions && transactions.length > 0 ? (
+                            transactions.map((tx, index) => (
+                                <div key={index} className="p-4 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0 relative group">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${tx.transactionType === 'CREDIT' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                {tx.transactionType === 'CREDIT' ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-gray-900 text-sm">
+                                                    {tx.transactionType === 'CREDIT' ? 'Received Payment' : 'Fee Refund/Adjustment'}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {tx.paymentMode} • {tx.receiptNumber || 'No Receipt'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={`font-bold text-sm ${tx.transactionType === 'CREDIT' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {tx.transactionType === 'CREDIT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400">
+                                                {new Date(tx.paymentDate).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {tx.remarks && (
+                                        <p className="text-xs text-gray-400 mt-2 ml-11 bg-gray-50 p-2 rounded border border-gray-100">
+                                            {tx.remarks}
+                                        </p>
+                                    )}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="p-8 text-center">
+                                <div className="p-3 bg-gray-50 rounded-full inline-block mb-3 text-gray-400">
+                                    <Clock size={24} />
+                                </div>
+                                <p className="text-gray-500 text-sm">No transactions yet</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
