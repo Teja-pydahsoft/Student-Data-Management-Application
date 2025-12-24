@@ -1,7 +1,9 @@
 const FeeHead = require('../MongoDb-Models/FeeHead');
 const StudentFee = require('../MongoDb-Models/StudentFee');
+const FeeStructure = require('../MongoDb-Models/FeeStructure'); // Added FeeStructure
 const Transaction = require('../MongoDb-Models/Transaction');
 const mongoose = require('mongoose');
+const { masterPool } = require('../config/database'); // Import MySQL pool
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -205,24 +207,100 @@ exports.getStudentsWithFees = async (req, res) => {
 };
 
 // Get Detailed Fee Info for a Single Student
+// UPDATED: Now fetches student details from SQL and FeeStructure from MongoDB
 exports.getStudentFeeDetails = async (req, res) => {
   try {
     const { studentId } = req.params;
 
-    // Fetch allocated fees
-    const fees = await StudentFee.find({ studentId }).populate('feeHead');
-    
-    // Fetch transactions
-    const transactions = await Transaction.find({ studentId }).sort({ paymentDate: -1 }).populate('feeHead');
+    // 1. Fetch Student Details from SQL
+    // We need course, branch, batch (admission_year), student_data (for college)
+    // Note: custom_fields column might not exist, so we use student_data
+    const [students] = await masterPool.query(
+      `SELECT 
+         s.student_name, s.course, s.branch, s.batch, s.current_year, s.current_semester, s.student_data
+       FROM students s
+       WHERE s.admission_number = ?`,
+      [studentId]
+    );
 
-    // Calculate totals
+    if (!students || students.length === 0) {
+      return res.status(404).json({ success: false, message: 'Student not found in database' });
+    }
+
+    const student = students[0];
+    
+    // Try to determine college from student_data
+    let collegeName = 'Pydah Group'; // Default fallback
+    
+    // Check key fields directly if columns exist (not in schema but just in case) or look into student_data
+    if (student.student_data) {
+        try {
+            const sd = typeof student.student_data === 'string' ? JSON.parse(student.student_data) : student.student_data;
+            if (sd.college) collegeName = sd.college;
+            else if (sd.College) collegeName = sd.College;
+        } catch (e) {
+            console.error('Error parsing student_data:', e);
+        }
+    }
+
+    // 2. Fetch Applicable Fee Structures
+    // We look for structures matching the student's Course, Branch, Batch and Student Year
+    // If 'semester' is defined in fee structure, we only apply if it matches current semester OR we presume all past semesters of current year are due?
+    // Usually, we want ALL fees applicable to the student for their current year + past yeaars?
+    // Or just the current year's fees?
+    // "Fetch the fees correctly" -> implies current total liability.
+    
+    // Let's fetch ALL applicable fee structures for this batch, course, branch up to the current year.
+    const query = {
+      course: student.course,
+      branch: student.branch,
+      batch: student.batch,
+      studentYear: { $lte: student.current_year } // Fees for current and past years
+    };
+    
+    // If college is available in student table, add it.
+    // query.college = collegeName; // Uncomment if strictly filtering by college
+
+    const feeStructures = await FeeStructure.find(query).populate('feeHead');
+
+    // 3. Fetch Transactions
+    // 3. Fetch Transactions
+    // Use regex to be case-insensitive with studentId
+    const transactions = await Transaction.find({ 
+      studentId: { $regex: new RegExp(`^${studentId}$`, 'i') } 
+    }).sort({ paymentDate: -1 }).populate('feeHead');
+
+    // 4. Calculate Totals
     let totalFee = 0;
-    fees.forEach(f => totalFee += f.amount);
+    const feesList = feeStructures.map(fs => {
+        totalFee += fs.amount;
+        return {
+            _id: fs._id,
+            feeHead: fs.feeHead,
+            amount: fs.amount,
+            studentYear: fs.studentYear,
+            semester: fs.semester,
+            remarks: fs.description || 'Fee Structure',
+            isStructure: true
+        };
+    });
+
+    // Also include individual StudentFee overrides/additions (miscellaneous fees not in structure)
+    const individualFees = await StudentFee.find({ studentId }).populate('feeHead');
+    individualFees.forEach(f => {
+        totalFee += f.amount;
+        feesList.push(f);
+    });
 
     let totalPaid = 0;
     transactions.forEach(t => {
-      if (t.transactionType === 'CREDIT') {
-        totalPaid += t.amount;
+      // Ensure amount is a number
+      const amount = Number(t.amount) || 0;
+      // Inverted Logic: DEBIT is used for Payments made by student
+      if (t.transactionType === 'DEBIT') {
+        totalPaid += amount;
+      } else if (t.transactionType === 'CREDIT') {
+        totalPaid -= amount;
       }
     });
 
@@ -231,14 +309,22 @@ exports.getStudentFeeDetails = async (req, res) => {
     res.json({
       success: true,
       studentId,
+      studentDetails: {
+          name: student.student_name,
+          course: student.course,
+          branch: student.branch,
+          batch: student.batch,
+          currentYear: student.current_year
+      },
       summary: {
         totalFee,
         totalPaid,
         dueAmount
       },
-      fees,
+      fees: feesList, // Now contains both Structure fees and Individual fees
       transactions
     });
+
   } catch (error) {
     console.error('Error fetching student fee details:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch student fee details' });
@@ -252,21 +338,11 @@ exports.updateStudentFees = async (req, res) => {
         const { feeHeadId, amount, academicYear, studentYear, semester, remarks } = req.body;
 
         // Validation...
-
-        // Start session if needed for atomicity, but single doc update is atomic
         
-        // This seems to be adding a single fee record or updating it?
-        // Route was POST/PUT /students/:studentId
-        
-        // Let's assume it's adding a new fee component
         const feeHead = await FeeHead.findById(feeHeadId);
         if(!feeHead) return res.status(404).json({success: false, message: 'Fee Head not found'});
 
         // We need college/course/etc for the student. Assuming it's passed or we fetch it.
-        // For now, let's assume the body has all details or we fetch from an existing record if possible
-        // But usually these come from the Student Profile.
-        // Since I don't have access to SQL student easy here without import, I rely on body.
-        
         const { college, course, branch, studentName } = req.body; 
 
         const newFee = new StudentFee({

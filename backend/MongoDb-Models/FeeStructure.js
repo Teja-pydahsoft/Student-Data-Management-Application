@@ -18,8 +18,8 @@ const feeStructureSchema = mongoose.Schema({
     type: String,
     required: true,
   },
-  academicYear: {
-    type: String, // e.g., "2024-2025" (Calendar Year)
+  batch: {
+    type: String, // e.g., "2024", "2023-2027"
     required: true,
   },
   studentYear: { 
@@ -45,7 +45,7 @@ const feeStructureSchema = mongoose.Schema({
   timestamps: true,
 });
 
-// Prevent duplicate fees for the same head/college/course/branch/academicYear/studentYear/semester
-feeStructureSchema.index({ feeHead: 1, college: 1, course: 1, branch: 1, academicYear: 1, studentYear: 1, semester: 1 }, { unique: true });
+// Prevent duplicate fees for the same head/college/course/branch/batch/studentYear/semester
+feeStructureSchema.index({ feeHead: 1, college: 1, course: 1, branch: 1, batch: 1, studentYear: 1, semester: 1 }, { unique: true });
 
 module.exports = mongoose.model('FeeStructure', feeStructureSchema);
