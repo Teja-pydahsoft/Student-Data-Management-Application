@@ -361,10 +361,33 @@ const CertificateDesigner = () => {
     const variables = [
         'student_name', 'admission_number', 'pin_no', 'course', 'branch',
         'current_year', 'current_semester', 'dob', 'email', 'phone_number',
-        'college_name', 'college_address', 'date', 'parent_name', 'religion',
+        'college_name', 'college_address', 'college_email', 'college_website', 'date', 'parent_name', 'religion',
         'gender', 'caste', 'admission_date', 'serial_no', 'mole_1', 'mole_2',
-        'reason', 'conduct', 'date_of_leaving', 'promoted'
+        'reason', 'conduct', 'date_of_leaving', 'promoted', 'current_year_text', 'academic_year'
     ];
+
+    // Mock Data for Preview
+    const previewData = {
+        // College details removed to show variables directly
+        current_year: '2024-25',
+        date: new Date().toLocaleDateString('en-GB'),
+        student_name: '___________________________________',
+        parent_name: '____________________',
+        pin_no: '__________',
+        academic_year: '__________',
+        course: '__________',
+        branch: '____________________',
+        current_year_text: '____',
+        current_semester: '__',
+    };
+
+    const replaceVariables = (text) => {
+        if (!text) return '';
+        return text.replace(/{{(.*?)}}/g, (match, p1) => {
+            const key = p1.trim();
+            return previewData[key] !== undefined ? previewData[key] : match;
+        });
+    };
 
     const paperSizes = [
         { name: 'A3', width: 842, height: 1190 },
@@ -451,6 +474,7 @@ const CertificateDesigner = () => {
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 {/* Content Render */}
+
                                 {el.type === 'text' && (
                                     editingId === el.id ? (
                                         <textarea
@@ -478,7 +502,7 @@ const CertificateDesigner = () => {
                                             whiteSpace: 'pre-wrap',
                                             pointerEvents: 'none'
                                         }}>
-                                            {el.content}
+                                            {replaceVariables(el.content)}
                                         </span>
                                     )
                                 )}
