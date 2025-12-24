@@ -155,6 +155,7 @@ const ServiceRequests = () => {
                             <tr>
                                 <th className="px-6 py-4">Request Info</th>
                                 <th className="px-6 py-4">Student</th>
+                                <th className="px-6 py-4">Mobile</th>
                                 <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4">Dates</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
@@ -179,6 +180,9 @@ const ServiceRequests = () => {
                                                 <span className="font-medium text-gray-900">{req.student_name}</span>
                                                 <span className="text-xs text-gray-500">{req.admission_number} | {req.course}-{req.branch}</span>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                            {req.student_mobile || '-'}
                                         </td>
                                         <td className="px-6 py-4">
                                             {getStatusBadge(req.status)}
@@ -247,59 +251,43 @@ const ServiceRequests = () => {
                     <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-scale-in max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-bold mb-4">Mark as Ready to Collect</h2>
                         <div className="space-y-4">
-                            {selectedRequest?.service_name?.toLowerCase().includes('transfer certificate') && (
-                                <>
-                                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-2">
-                                        <h3 className="text-sm font-bold text-blue-800 mb-2">TC Details Configuration</h3>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Reason for Leaving</label>
-                                                <select
-                                                    className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    value={actionData.reason || ''}
-                                                    onChange={e => setActionData({ ...actionData, reason: e.target.value })}
-                                                >
-                                                    <option value="">Select Reason...</option>
-                                                    <option value="Course Completed">Course Completed</option>
-                                                    <option value="Discontinued">Discontinued</option>
-                                                    <option value="Personal">Personal</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Conduct</label>
-                                                <input
-                                                    type="text"
-                                                    className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    value={actionData.conduct || 'Good'}
-                                                    onChange={e => setActionData({ ...actionData, conduct: e.target.value })}
-                                                    placeholder="e.g. Good"
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Mole 1</label>
-                                                    <input
-                                                        type="text"
+                            {/* Dynamic Admin Fields */}
+                            {selectedRequest?.admin_fields && selectedRequest.admin_fields.length > 0 && (
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-2">
+                                    <h3 className="text-sm font-bold text-blue-800 mb-2">Required Information</h3>
+                                    <div className="space-y-3">
+                                        {(typeof selectedRequest.admin_fields === 'string'
+                                            ? JSON.parse(selectedRequest.admin_fields)
+                                            : selectedRequest.admin_fields
+                                        ).map((field, idx) => (
+                                            <div key={idx}>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                                    {field.label}
+                                                </label>
+                                                {field.type === 'select' ? (
+                                                    <select
                                                         className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                        value={actionData.mole_1 || ''}
-                                                        onChange={e => setActionData({ ...actionData, mole_1: e.target.value })}
-                                                        placeholder="Identification Mark 1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Mole 2</label>
+                                                        value={actionData[field.name] || ''}
+                                                        onChange={e => setActionData({ ...actionData, [field.name]: e.target.value })}
+                                                    >
+                                                        <option value="">Select...</option>
+                                                        {(field.options || []).map(opt => (
+                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
                                                     <input
-                                                        type="text"
+                                                        type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
                                                         className="w-full px-3 py-1.5 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                        value={actionData.mole_2 || ''}
-                                                        onChange={e => setActionData({ ...actionData, mole_2: e.target.value })}
-                                                        placeholder="Identification Mark 2"
+                                                        value={actionData[field.name] || ''}
+                                                        onChange={e => setActionData({ ...actionData, [field.name]: e.target.value })}
+                                                        placeholder={`Enter ${field.label}`}
                                                     />
-                                                </div>
+                                                )}
                                             </div>
-                                        </div>
+                                        ))}
                                     </div>
-                                </>
+                                </div>
                             )}
 
                             <div>

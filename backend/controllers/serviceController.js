@@ -34,7 +34,7 @@ exports.getServices = async (req, res) => {
 
 exports.createService = async (req, res) => {
     try {
-        const { name, description, price, is_active, template_type, template_config } = req.body;
+        const { name, description, price, is_active, template_type, template_config, admin_fields } = req.body;
 
         // Basic validation
         if (!name || price === undefined) {
@@ -42,8 +42,16 @@ exports.createService = async (req, res) => {
         }
 
         const [result] = await masterPool.execute(
-            'INSERT INTO services (name, description, price, is_active, template_type, template_config) VALUES (?, ?, ?, ?, ?, ?)',
-            [name, description, price, is_active !== undefined ? is_active : true, template_type || 'standard', template_config ? JSON.stringify(template_config) : null]
+            'INSERT INTO services (name, description, price, is_active, template_type, template_config, admin_fields) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                name,
+                description,
+                price,
+                is_active !== undefined ? is_active : true,
+                template_type || 'standard',
+                template_config ? JSON.stringify(template_config) : null,
+                admin_fields ? JSON.stringify(admin_fields) : null
+            ]
         );
 
         res.status(201).json({
@@ -63,11 +71,20 @@ exports.createService = async (req, res) => {
 exports.updateService = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, price, is_active, template_type, template_config } = req.body;
+        const { name, description, price, is_active, template_type, template_config, admin_fields } = req.body;
 
         const [result] = await masterPool.execute(
-            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ?, template_type = ?, template_config = ? WHERE id = ?',
-            [name, description, price, is_active, template_type || 'standard', template_config ? JSON.stringify(template_config) : null, id]
+            'UPDATE services SET name = ?, description = ?, price = ?, is_active = ?, template_type = ?, template_config = ?, admin_fields = ? WHERE id = ?',
+            [
+                name,
+                description,
+                price,
+                is_active,
+                template_type || 'standard',
+                template_config ? JSON.stringify(template_config) : null,
+                admin_fields ? JSON.stringify(admin_fields) : null,
+                id
+            ]
         );
 
         if (result.affectedRows === 0) {
@@ -148,8 +165,8 @@ exports.getServiceRequests = async (req, res) => {
 
         // Build query
         let query = `
-      SELECT sr.*, s.name as service_name, s.price as service_price, 
-             st.student_name, st.admission_number, st.course, st.branch
+      SELECT sr.*, s.name as service_name, s.price as service_price, s.admin_fields,
+             st.student_name, st.admission_number, st.course, st.branch, st.student_mobile
       FROM service_requests sr
       JOIN services s ON sr.service_id = s.id
       JOIN students st ON sr.student_id = st.id
@@ -222,12 +239,13 @@ exports.updateRequestStatus = async (req, res) => {
         }
 
         // Merge legitimate extra fields that shouldn't be top-level columns
-        // Allowed extra fields for TC or other certificates
-        const allowedExtras = ['reason', 'conduct', 'mole_1', 'mole_2', 'identification_marks'];
+        // Merge extra fields into request_data
+        // We now allow any extra fields sent from the frontend dynamic form
+        const predefinedFields = ['status', 'collect_date', 'admin_note'];
         let hasDataUpdate = false;
 
-        allowedExtras.forEach(key => {
-            if (otherUpdates[key] !== undefined) {
+        Object.keys(otherUpdates).forEach(key => {
+            if (!predefinedFields.includes(key)) {
                 currentData[key] = otherUpdates[key];
                 hasDataUpdate = true;
             }
