@@ -23,8 +23,13 @@ const masterPoolRaw = mysql.createPool({
     // rejectUnauthorized: true,
     // ca: fs.readFileSync(path.join(__dirname, '../certs/ca.pem')),
     // cert: fs.readFileSync(path.join(__dirname, '../certs/client-cert.pem')),
-    // key: fs.readFileSync(path.join(__dirname, '../certs/client-key.pem'))
-  } : false
+  } : false,
+  timezone: '+05:30' // Enforce IST for database connections
+});
+
+// Enforce IST on every connection establishment
+masterPoolRaw.on('connection', (connection) => {
+  connection.query('SET time_zone = "+05:30"');
 });
 
 // Staging DB connection pool (for pending/unapproved submissions)
@@ -37,8 +42,12 @@ const stagingPoolRaw = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  timezone: '+05:30' // Enforce IST for database connections
+});
+
+// Enforce IST on every connection establishment
+stagingPoolRaw.on('connection', (connection) => {
+  connection.query('SET time_zone = "+05:30"');
 });
 
 // Promise-based pools

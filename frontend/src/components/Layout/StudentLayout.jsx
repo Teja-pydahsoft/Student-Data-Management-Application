@@ -4,6 +4,7 @@ import {
     Home,
     CalendarCheck,
     User,
+    Users,
     LogOut,
     Menu,
     X,
@@ -71,6 +72,7 @@ const StudentLayout = ({ children }) => {
     const navItems = [
         { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
         { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
+        { icon: Users, label: 'Clubs', path: '/student/clubs' },
         { icon: CalendarCheck, label: 'Event Calendar', path: '/student/events' },
         { icon: CheckCircle, label: 'Attendance', path: '/student/attendance' },
         { icon: FileText, label: 'Sem Registration', path: '/student/semester-registration' },

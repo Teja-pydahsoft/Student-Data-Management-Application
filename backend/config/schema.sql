@@ -192,3 +192,19 @@ CREATE TABLE IF NOT EXISTS filter_fields (
   INDEX idx_field_name (field_name),
   INDEX idx_enabled (enabled)
 );
+
+-- Clubs Table (Single Table Architecture)
+CREATE TABLE IF NOT EXISTS clubs (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description TEXT,
+  image_url VARCHAR(255),
+  form_fields JSON, -- Configuration for the joining form
+  members JSON, -- Array of objects: { student_id, student_name, admission_number, status, submission_data, joined_at }
+  activities JSON, -- Array of objects: { id, title, description, image_url, posted_by, posted_at }
+  is_active BOOLEAN DEFAULT TRUE,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL
+);

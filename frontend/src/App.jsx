@@ -26,6 +26,7 @@ import ServicesConfig from './pages/ServicesConfig';
 import ServiceRequests from './pages/ServiceRequests';
 import CertificateDesigner from './pages/admin/CertificateDesigner';
 import Profile from './pages/Profile';
+import Clubs from './pages/Clubs';
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -37,6 +38,7 @@ import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
 import StudentAttendance from './pages/student/Attendance';
 import StudentServices from './pages/student/Services';
+import StudentClubs from './pages/student/StudentClubs';
 
 // Event Pages
 import EventCalendar from './pages/admin/EventCalendar';
@@ -150,6 +152,7 @@ function App() {
           <Route path="services/config" element={<ServicesConfig />} />
           <Route path="services/design/:serviceId" element={<CertificateDesigner />} />
           <Route path="services/requests" element={<ServiceRequests />} />
+          <Route path="clubs" element={<Clubs />} />
         </Route>
 
         {/* Protected Student Routes */}
@@ -172,6 +175,7 @@ function App() {
           <Route path="events" element={<StudentCalendar />} />
           <Route path="attendance" element={<StudentAttendance />} />
           <Route path="services" element={<StudentServices />} />
+          <Route path="clubs" element={<StudentClubs />} />
         </Route>
 
         {/* Fallback */}

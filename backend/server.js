@@ -1,4 +1,5 @@
 const express = require('express');
+process.env.TZ = 'Asia/Kolkata'; // Enforce IST Timezone
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const compression = require('compression');
@@ -131,6 +132,7 @@ app.use('/api/events', require('./routes/eventRoutes'));
 app.use('/api/student-history', require('./routes/studentHistoryRoutes'));
 app.use('/api/sms-templates', require('./routes/smsTemplateRoutes'));
 app.use('/api/notifications', require('./routes/pushRoutes'));
+app.use('/api/clubs', require('./routes/clubRoutes'));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);

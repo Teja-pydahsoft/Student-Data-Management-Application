@@ -36,6 +36,7 @@ import toast from 'react-hot-toast';
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
   { path: '/announcements', icon: Megaphone, label: 'Announcements', permission: FRONTEND_MODULES.ANNOUNCEMENTS },
+  { path: '/clubs', icon: Users, label: 'Clubs', permission: FRONTEND_MODULES.ANNOUNCEMENTS }, // Reusing announcement permission for now, or use a new one if available.
 
   {
     path: '/students',
