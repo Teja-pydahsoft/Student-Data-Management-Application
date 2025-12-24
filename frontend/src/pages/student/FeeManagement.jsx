@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter } from 'lucide-react';
+import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter, Bus, BookOpen, Zap } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 
@@ -211,6 +211,32 @@ const FeeManagement = () => {
                                                     <div>
                                                         <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
                                                         <p className="text-xs text-gray-500 line-clamp-1">{inv.remarks || 'Standard Fee'}</p>
+                                                        <div className="flex flex-wrap gap-2 mt-1">
+                                                            {inv.isStructure ? (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                                                    <BookOpen size={10} /> Academic
+                                                                </span>
+                                                            ) : (
+                                                                // Check if it's a Transport fee
+                                                                (inv.feeHead?.name?.toLowerCase().includes('transport') || inv.feeHead?.name?.toLowerCase().includes('bus')) ? (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
+                                                                        <Bus size={10} /> Transport
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
+                                                                        <Zap size={10} /> Individual
+                                                                    </span>
+                                                                )
+                                                            )}
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                                                Year {inv.studentYear}
+                                                            </span>
+                                                            {inv.semester && (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                                                    Sem {inv.semester}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>

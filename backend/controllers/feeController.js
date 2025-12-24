@@ -271,22 +271,51 @@ exports.getStudentFeeDetails = async (req, res) => {
     }).sort({ paymentDate: -1 }).populate('feeHead');
 
     // 4. Calculate Totals
+    // 4. Calculate Totals
     let totalFee = 0;
-    const feesList = feeStructures.map(fs => {
-        totalFee += fs.amount;
-        return {
-            _id: fs._id,
-            feeHead: fs.feeHead,
-            amount: fs.amount,
-            studentYear: fs.studentYear,
-            semester: fs.semester,
-            remarks: fs.description || 'Fee Structure',
-            isStructure: true
-        };
+    const feesList = [];
+
+    // Fetch individual fees first to check for overrides
+    // Use regex for case-insensitive match
+    const individualFees = await StudentFee.find({ 
+        studentId: { $regex: new RegExp(`^${studentId}$`, 'i') } 
+    }).populate('feeHead');
+
+    // Create a set of keys for existing individual fees to avoid duplicates
+    // Key format: feeHeadId-studentYear-semester
+    const individualFeeKeys = new Set();
+    individualFees.forEach(f => {
+        if (f.feeHead && f.feeHead._id) {
+            // Normalize semester: treat null/undefined as '0' or 'none'
+            const sem = f.semester ? f.semester.toString() : '0';
+            const key = `${f.feeHead._id.toString()}-${f.studentYear}-${sem}`;
+            individualFeeKeys.add(key);
+        }
     });
 
-    // Also include individual StudentFee overrides/additions (miscellaneous fees not in structure)
-    const individualFees = await StudentFee.find({ studentId }).populate('feeHead');
+    // Add Fee Structures ONLY if not overridden by an individual fee
+    feeStructures.forEach(fs => {
+        if (fs.feeHead && fs.feeHead._id) {
+             const sem = fs.semester ? fs.semester.toString() : '0';
+             const key = `${fs.feeHead._id.toString()}-${fs.studentYear}-${sem}`;
+             
+             // Check if this specific fee structure is already "covered" by an individual fee
+             if (!individualFeeKeys.has(key)) {
+                totalFee += fs.amount;
+                feesList.push({
+                    _id: fs._id,
+                    feeHead: fs.feeHead,
+                    amount: fs.amount,
+                    studentYear: fs.studentYear,
+                    semester: fs.semester,
+                    remarks: fs.description || 'Fee Structure',
+                    isStructure: true
+                });
+             }
+        }
+    });
+
+    // Add Individual Fees
     individualFees.forEach(f => {
         totalFee += f.amount;
         feesList.push(f);
