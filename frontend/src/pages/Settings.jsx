@@ -1703,6 +1703,12 @@ const Settings = () => {
     if (!selectedCourse) return [];
     const allBranches = courseBranches[selectedCourse.id] || [];
 
+    // If filtering by batch, return specific branches for that batch (no grouping)
+    if (branchBatchFilter) {
+      const filterYearId = parseInt(branchBatchFilter, 10);
+      return allBranches.filter(branch => branch.academicYearId === filterYearId);
+    }
+
     // Group branches by code (same code = same branch, just different batches)
     const branchMap = new Map();
 
@@ -1731,17 +1737,7 @@ const Settings = () => {
     });
 
     // Get unique branches grouped by code
-    let uniqueBranches = Array.from(branchMap.values());
-
-    // Filter by batch if filter is applied (after grouping)
-    if (branchBatchFilter) {
-      const filterYearId = parseInt(branchBatchFilter, 10);
-      uniqueBranches = uniqueBranches.filter(branch =>
-        branch.allAcademicYearIds.includes(filterYearId)
-      );
-    }
-
-    return uniqueBranches;
+    return Array.from(branchMap.values());
   }, [selectedCourse, courseBranches, branchBatchFilter]);
 
   // Get unique branch count for display (unique by code)

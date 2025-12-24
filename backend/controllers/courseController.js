@@ -1406,11 +1406,23 @@ exports.deleteBranch = async (req, res) => {
       // Delete branch(es)
       if (scope === 'all') {
         // Delete all branches with the same code for this course
-        const [result] = await connection.query(
-          'DELETE FROM course_branches WHERE course_id = ? AND code = ?',
-          [courseId, branchCode]
-        );
-        deletedBranches = result.affectedRows;
+        if (branchCode) {
+          const [result] = await connection.query(
+            'DELETE FROM course_branches WHERE course_id = ? AND code = ?',
+            [courseId, branchCode]
+          );
+          deletedBranches = result.affectedRows;
+        }
+
+        // Fallback: If no branches were deleted (e.g., code mismatch or null code)
+        // ensure we at least delete the specific targeted branch ID.
+        if (deletedBranches === 0) {
+          const [result] = await connection.query(
+            'DELETE FROM course_branches WHERE course_id = ? AND id = ?',
+            [courseId, branchId]
+          );
+          deletedBranches = result.affectedRows;
+        }
       } else {
         // Delete only the specific branch
         const [result] = await connection.query(
