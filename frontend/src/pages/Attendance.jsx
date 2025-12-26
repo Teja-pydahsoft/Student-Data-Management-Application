@@ -851,7 +851,8 @@ const Attendance = () => {
       attendanceDate,
       page: pageToUse,
       pageSize,
-      filters
+      filters,
+      pendingFilter
     };
     return JSON.stringify(keyObj);
   };
@@ -1271,6 +1272,13 @@ const Attendance = () => {
       if (filters.studentName) params.append('studentName', filters.studentName.trim());
       if (filters.parentMobile) params.append('parentMobile', filters.parentMobile.trim());
 
+      // Apply attendance status filter based on pendingFilter
+      if (pendingFilter === 'pending') {
+        params.append('attendanceStatus', 'unmarked');
+      } else if (pendingFilter === 'marked') {
+        params.append('attendanceStatus', 'marked');
+      }
+
       // When filters are applied, use infinite scroll with 50 students per page
       // When no filters, use pagination normally
       if (hasFilters) {
@@ -1651,7 +1659,8 @@ const Attendance = () => {
     filters.branch,
     filters.currentYear,
     filters.currentSemester,
-    pageSize
+    pageSize,
+    pendingFilter
   ]);
 
   useEffect(() => {
@@ -1768,24 +1777,11 @@ const Attendance = () => {
   };
 
   // Filter students based on pending filter
+  // Since we now filter on the backend via pendingFilter -> attendanceStatus param,
+  // we just return the students array as is.
   const filteredStudents = useMemo(() => {
-    if (pendingFilter === 'all') {
-      return students;
-    }
-    if (pendingFilter === 'pending') {
-      return students.filter(student => {
-        const status = initialStatusMap[student.id];
-        return status === undefined; // Not yet marked
-      });
-    }
-    if (pendingFilter === 'marked') {
-      return students.filter(student => {
-        const status = initialStatusMap[student.id];
-        return status !== undefined; // Already marked
-      });
-    }
     return students;
-  }, [students, pendingFilter, initialStatusMap]);
+  }, [students]);
 
   // Sort students based on sortConfig
   const sortedStudents = useMemo(() => {
@@ -3245,11 +3241,18 @@ const Attendance = () => {
           </div>
         </div>
         <div
-          className={`bg-white border ${pendingCount > 0 && !loading ? 'border-amber-300' : 'border-gray-200'} rounded-xl shadow-sm p-4 ${pendingCount > 0 && !loading ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
+          className={`bg-white border rounded-xl shadow-sm p-4 transition-all duration-200 
+            ${pendingFilter === 'pending'
+              ? 'border-amber-500 ring-2 ring-amber-200 bg-amber-50'
+              : pendingCount > 0 && !loading
+                ? 'border-amber-300 hover:border-amber-400 hover:bg-gray-50 cursor-pointer'
+                : 'border-gray-200'
+            }`}
           onClick={() => {
             if (pendingCount > 0 && !loading) {
               setPendingFilter(pendingFilter === 'pending' ? 'all' : 'pending');
-              setShowPendingStudents(true);
+              // Don't need to set showPendingStudents since filteredStudents logic handles it
+              // setShowPendingStudents(true); 
             }
           }}
           title={pendingCount > 0 && !loading ? "Click to view pending students" : ""}

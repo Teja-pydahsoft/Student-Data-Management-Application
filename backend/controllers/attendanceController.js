@@ -449,6 +449,21 @@ exports.getAttendance = async (req, res) => {
       params.push(mobileLike, mobileLike, mobileLike, mobileLike);
     }
 
+    const { attendanceStatus } = req.query;
+    if (attendanceStatus) {
+      if (attendanceStatus === 'unmarked') {
+        query += ' AND ar.id IS NULL';
+      } else if (attendanceStatus === 'marked') {
+        query += ' AND ar.id IS NOT NULL';
+      } else if (attendanceStatus === 'present') {
+        query += " AND ar.status = 'present'";
+      } else if (attendanceStatus === 'absent') {
+        query += " AND ar.status = 'absent'";
+      } else if (attendanceStatus === 'holiday') {
+        query += " AND ar.status = 'holiday'";
+      }
+    }
+
     query += ' ORDER BY s.student_name ASC';
 
     // Build count query for pagination - use same WHERE clause but count distinct students
@@ -456,10 +471,13 @@ exports.getAttendance = async (req, res) => {
     let countQuery = `
       SELECT COUNT(DISTINCT s.id) AS total
       FROM students s
+      LEFT JOIN attendance_records ar
+        ON ar.student_id = s.id
+        AND ar.attendance_date = ?
       WHERE 1=1
     `;
 
-    const countParams = [];
+    const countParams = [attendanceDate];
 
     // Optimize: Order WHERE conditions to use composite index effectively
     countQuery += ` AND s.student_status = 'Regular'`;
@@ -546,6 +564,20 @@ exports.getAttendance = async (req, res) => {
       countParams.push(mobileLike, mobileLike, mobileLike, mobileLike);
     }
 
+    if (attendanceStatus) {
+      if (attendanceStatus === 'unmarked') {
+        countQuery += ' AND ar.id IS NULL';
+      } else if (attendanceStatus === 'marked') {
+        countQuery += ' AND ar.id IS NOT NULL';
+      } else if (attendanceStatus === 'present') {
+        countQuery += " AND ar.status = 'present'";
+      } else if (attendanceStatus === 'absent') {
+        countQuery += " AND ar.status = 'absent'";
+      } else if (attendanceStatus === 'holiday') {
+        countQuery += " AND ar.status = 'holiday'";
+      }
+    }
+
     const parsedLimit = limit ? parseInt(limit, 10) : null;
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
 
@@ -557,6 +589,7 @@ exports.getAttendance = async (req, res) => {
     // This reduces database round trips from 3 queries to 1
     let statsQuery = `
       SELECT 
+        COUNT(DISTINCT s.id) AS total_students,
         COUNT(DISTINCT CASE WHEN ar.status = 'present' THEN s.id END) AS present_count,
         COUNT(DISTINCT CASE WHEN ar.status = 'absent' THEN s.id END) AS absent_count,
         COUNT(DISTINCT CASE WHEN ar.id IS NOT NULL THEN s.id END) AS marked_count
@@ -654,10 +687,11 @@ exports.getAttendance = async (req, res) => {
     const [statsRows] = await masterPool.query(statsQuery, statsParams);
     const statsRow = statsRows[0] || {};
 
+    const statisticsTotal = parseInt(statsRow.total_students || 0, 10);
     const presentCount = parseInt(statsRow.present_count || 0, 10);
     const absentCount = parseInt(statsRow.absent_count || 0, 10);
     const markedCount = parseInt(statsRow.marked_count || 0, 10);
-    const unmarkedCount = Math.max(0, total - markedCount);
+    const unmarkedCount = Math.max(0, statisticsTotal - markedCount);
 
     const statistics = {
       total: total,
