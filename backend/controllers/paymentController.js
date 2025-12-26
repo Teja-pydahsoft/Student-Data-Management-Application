@@ -162,7 +162,7 @@ exports.verifyPayment = async (req, res) => {
             depositedToAccount: paymentConfig.account_name,
             paymentDate: new Date(),
             collectedBy: 'online_system',
-            collectedByName: 'Razorpay Integration'
+            collectedByName: 'Razorpay (ONLINE)'
         });
 
         await newTransaction.save();
