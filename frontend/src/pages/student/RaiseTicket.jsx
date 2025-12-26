@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
-import LoadingAnimation from '../../components/LoadingAnimation';
+
+import { SkeletonBox } from '../../components/SkeletonLoader';
 
 const RaiseTicket = () => {
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ const RaiseTicket = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (!formData.category_id) {
       toast.error('Please select a complaint category');
       return;
@@ -119,7 +120,34 @@ const RaiseTicket = () => {
   };
 
   if (categoriesLoading) {
-    return <LoadingAnimation />;
+    return (
+      <div className="max-w-3xl mx-auto p-6 space-y-6 animate-pulse">
+        <div className="space-y-2">
+          <SkeletonBox height="h-8" width="w-48" />
+          <SkeletonBox height="h-4" width="w-72" />
+        </div>
+        <div className="bg-white rounded-lg border p-6 space-y-6">
+          <div className="space-y-2">
+            <SkeletonBox height="h-4" width="w-32" />
+            <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
+          </div>
+          <div className="space-y-2">
+            <SkeletonBox height="h-4" width="w-24" />
+            <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
+          </div>
+          <div className="space-y-2">
+            <SkeletonBox height="h-4" width="w-32" />
+            <SkeletonBox height="h-32" width="w-full" className="rounded-lg" />
+            <SkeletonBox height="h-3" width="w-full" />
+          </div>
+          <SkeletonBox height="h-20" width="w-full" className="rounded-lg" />
+          <div className="flex gap-4 pt-4 border-t">
+            <SkeletonBox height="h-12" width="w-full" className="rounded-lg" />
+            <SkeletonBox height="h-12" width="w-32" className="rounded-lg" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

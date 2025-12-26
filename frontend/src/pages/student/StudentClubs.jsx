@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, BookOpen, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import clubService from '../../services/clubService';
 import toast from 'react-hot-toast';
 
@@ -77,7 +78,21 @@ const StudentClubs = () => {
 
             {viewMode === 'list' ? (
                 loading ? (
-                    <div className="text-center py-10">Loading...</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-64">
+                                <SkeletonBox height="h-32" width="w-full" />
+                                <div className="p-4 flex-1 flex flex-col justify-between">
+                                    <div className="space-y-2">
+                                        <SkeletonBox height="h-6" width="w-3/4" />
+                                        <SkeletonBox height="h-4" width="w-full" />
+                                        <SkeletonBox height="h-4" width="w-2/3" />
+                                    </div>
+                                    <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {clubs.map(club => (

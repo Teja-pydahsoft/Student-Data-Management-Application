@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { serviceService } from '../../services/serviceService';
 import { toast } from 'react-hot-toast';
 import { FileText, Clock, CheckCircle, AlertCircle, Download, CreditCard, X, Plus } from 'lucide-react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import api from '../../config/api';
 
 const Services = () => {
@@ -140,7 +141,19 @@ const Services = () => {
             {activeTab === 'available' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {loading ? (
-                        [1, 2, 3].map(i => <div key={i} className="h-48 bg-gray-100 rounded-xl animate-pulse"></div>)
+                        Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-56 flex flex-col justify-between animate-pulse">
+                                <div className="flex justify-between items-start mb-4">
+                                    <SkeletonBox height="h-12" width="w-12" className="rounded-lg" />
+                                    <SkeletonBox height="h-6" width="w-16" />
+                                </div>
+                                <div className="space-y-2">
+                                    <SkeletonBox height="h-6" width="w-3/4" />
+                                    <SkeletonBox height="h-4" width="w-full" />
+                                </div>
+                                <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
+                            </div>
+                        ))
                     ) : services.length === 0 ? (
                         <div className="col-span-full py-12 text-center text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
                             No services available at the moment.
@@ -185,7 +198,16 @@ const Services = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr><td colSpan="6" className="p-6 text-center">Loading...</td></tr>
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <tr key={i} className="animate-pulse">
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-16" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-32" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-24" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-40" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-6" width="w-24" className="rounded-full" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-20" /></td>
+                                        </tr>
+                                    ))
                                 ) : requests.length === 0 ? (
                                     <tr><td colSpan="6" className="p-12 text-center text-gray-500">No requests found</td></tr>
                                 ) : (
@@ -227,7 +249,21 @@ const Services = () => {
                     {/* Mobile Card View */}
                     <div className="md:hidden">
                         {loading ? (
-                            <div className="p-6 text-center text-gray-500">Loading...</div>
+                            <div className="space-y-4 animate-pulse">
+                                {Array.from({ length: 4 }).map((_, i) => (
+                                    <div key={i} className="p-4 bg-white rounded-lg border border-gray-100 space-y-3">
+                                        <div className="flex justify-between">
+                                            <SkeletonBox height="h-4" width="w-1/3" />
+                                            <SkeletonBox height="h-4" width="w-1/4" />
+                                        </div>
+                                        <SkeletonBox height="h-3" width="w-2/3" />
+                                        <div className="flex justify-between pt-2">
+                                            <SkeletonBox height="h-5" width="w-20" className="rounded-full" />
+                                            <SkeletonBox height="h-5" width="w-16" className="rounded-md" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         ) : requests.length === 0 ? (
                             <div className="p-12 text-center text-gray-500 text-sm">No requests found</div>
                         ) : (

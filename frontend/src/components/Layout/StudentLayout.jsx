@@ -24,6 +24,7 @@ import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../
 
 const StudentLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
     const [notificationModalOpen, setNotificationModalOpen] = useState(false);
     const [isSubscribed, setIsSubscribed] = useState(false);
     const navigate = useNavigate();
@@ -114,14 +115,26 @@ const StudentLayout = ({ children }) => {
                 </button>
             </div>
 
+            {/* Desktop Sidebar Toggle Button */}
+            {!desktopSidebarOpen && (
+                <button
+                    className="hidden lg:flex fixed top-6 left-6 z-50 p-2 bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200 text-gray-500 hover:text-gray-900 transition-all hover:scale-105 active:scale-95"
+                    onClick={() => setDesktopSidebarOpen(true)}
+                    title="Expand Sidebar"
+                >
+                    <Menu size={20} />
+                </button>
+            )}
+
             {/* Sidebar */}
             <aside className={`
                 fixed inset-y-0 left-0 z-40 w-72 bg-white/90 backdrop-blur-xl border-r border-gray-200/60 shadow-[4px_0_24px_-2px_rgba(0,0,0,0.02)] transform transition-transform duration-300 cubic-bezier(0.4, 0, 0.2, 1)
-                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+                ${desktopSidebarOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full'}
             `}>
                 <div className="h-full flex flex-col">
                     {/* Logo Area */}
-                    <div className="h-20 flex items-center px-8 border-b border-gray-100">
+                    <div className="h-20 flex items-center justify-between px-6 border-b border-gray-100">
                         <div className="flex items-center gap-3">
                             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
                                 <span className="font-bold text-lg">P</span>
@@ -130,11 +143,17 @@ const StudentLayout = ({ children }) => {
                                 Student Portal
                             </span>
                         </div>
+                        <button
+                            onClick={() => setDesktopSidebarOpen(false)}
+                            className="hidden lg:flex p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                        >
+                            <Menu size={20} />
+                        </button>
                     </div>
 
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
-                        <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Menu</p>
+
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.path}
@@ -206,7 +225,7 @@ const StudentLayout = ({ children }) => {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 lg:ml-72 h-screen overflow-y-auto p-4 lg:p-8 relative z-10">
+            <main className={`flex-1 h-screen overflow-y-auto p-4 lg:p-8 relative z-10 transition-all duration-300 ${desktopSidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}`}>
                 <div className="w-full">
                     <Outlet />
                 </div>

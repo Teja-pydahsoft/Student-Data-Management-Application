@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Loader2, Megaphone, Calendar, BarChart2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 
@@ -51,8 +52,24 @@ const StudentAnnouncements = () => {
 
     if (loading && announcements.length === 0 && polls.length === 0) {
         return (
-            <div className="flex justify-center items-center py-20">
-                <Loader2 className="animate-spin text-blue-600" size={32} />
+            <div className="space-y-6 animate-pulse p-2 md:p-6 min-h-screen">
+                <div className="flex gap-1 mx-auto md:mx-0">
+                    <SkeletonBox height="h-10" width="w-32" className="rounded-xl" />
+                    <SkeletonBox height="h-10" width="w-32" className="rounded-xl" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-96">
+                            <SkeletonBox height="h-52" width="w-full" />
+                            <div className="p-6 space-y-4">
+                                <SkeletonBox height="h-4" width="w-32" />
+                                <SkeletonBox height="h-6" width="w-full" />
+                                <SkeletonBox height="h-4" width="w-full" />
+                                <SkeletonBox height="h-4" width="w-2/3" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }

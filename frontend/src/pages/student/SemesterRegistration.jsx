@@ -16,6 +16,7 @@ import {
     X,
     Award
 } from 'lucide-react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import api from '../../config/api';
@@ -252,8 +253,36 @@ const SemesterRegistration = () => {
 
     if (initialLoading) {
         return (
-            <div className="flex items-center justify-center min-h-[500px]">
-                <Loader2 className="animate-spin text-blue-600" size={32} />
+            <div className="max-w-6xl mx-auto space-y-8 animate-pulse pb-20">
+                <div className="space-y-2">
+                    <SkeletonBox height="h-8" width="w-64" />
+                    <SkeletonBox height="h-4" width="w-96" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-white rounded-2xl p-6 border-l-4 border-gray-200 h-48 flex flex-col justify-between">
+                            <div className="flex justify-between items-start">
+                                <SkeletonBox height="h-12" width="w-12" className="rounded-xl" />
+                                <SkeletonBox height="h-6" width="w-20" className="rounded-full" />
+                            </div>
+                            <div className="space-y-2">
+                                <SkeletonBox height="h-6" width="w-32" />
+                                <SkeletonBox height="h-4" width="w-full" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg lg:pl-64">
+                    <div className="max-w-6xl mx-auto flex items-center justify-between">
+                        <div className="space-y-1">
+                            <SkeletonBox height="h-4" width="w-32" />
+                            <SkeletonBox height="h-3" width="w-48" />
+                        </div>
+                        <SkeletonBox height="h-12" width="w-48" className="rounded-lg" />
+                    </div>
+                </div>
             </div>
         );
     }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -12,7 +13,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import api from '../../config/api';
-import LoadingAnimation from '../../components/LoadingAnimation';
+
 import toast from 'react-hot-toast';
 
 const STATUS_COLORS = {
@@ -87,7 +88,40 @@ const MyTickets = () => {
   };
 
   if (isLoading) {
-    return <LoadingAnimation />;
+    return (
+      <div className="max-w-6xl mx-auto p-6 space-y-6 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <SkeletonBox height="h-8" width="w-48" />
+            <SkeletonBox height="h-4" width="w-64" />
+          </div>
+          <SkeletonBox height="h-10" width="w-40" />
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-lg border p-6">
+              <div className="flex justify-between items-start">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <SkeletonBox height="h-6" width="w-64" />
+                    <SkeletonBox height="h-6" width="w-24" className="rounded-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <SkeletonBox height="h-4" width="w-48" />
+                    <SkeletonBox height="h-4" width="w-56" />
+                    <SkeletonBox height="h-4" width="w-40" />
+                  </div>
+                  <SkeletonBox height="h-16" width="w-full" className="rounded-lg" />
+                </div>
+                <div className="ml-4">
+                  <SkeletonBox height="h-10" width="w-10" className="rounded-lg" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

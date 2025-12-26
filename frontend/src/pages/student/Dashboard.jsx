@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X, Users } from 'lucide-react';
+import { SkeletonBox, SkeletonCard } from '../../components/SkeletonLoader';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 import { serviceService } from '../../services/serviceService';
@@ -232,6 +233,107 @@ const Dashboard = () => {
             default: return 'bg-gray-100 text-gray-700';
         }
     };
+
+    if (loading) {
+        return (
+            <div className="space-y-8 animate-pulse relative z-0 pb-12">
+                {/* Welcome Header Skeleton */}
+                <div className="space-y-2">
+                    <SkeletonBox height="h-10" width="w-64" />
+                    <SkeletonBox height="h-6" width="w-48" />
+                </div>
+
+                {/* Stats Row Skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-40">
+                        <SkeletonBox height="h-4" width="w-32" className="mb-4" />
+                        <div className="flex items-center gap-4">
+                            <SkeletonBox height="h-12" width="w-12" className="rounded-full" />
+                            <div>
+                                <SkeletonBox height="h-6" width="w-24" className="mb-2" />
+                                <SkeletonBox height="h-3" width="w-32" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-40">
+                        <SkeletonBox height="h-4" width="w-32" className="mb-4" />
+                        <div className="flex items-end gap-2">
+                            <div>
+                                <SkeletonBox height="h-10" width="w-20" />
+                                <SkeletonBox height="h-3" width="w-24" className="mt-1" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center h-40">
+                        <SkeletonBox height="h-4" width="w-32" className="mb-4" />
+                        <SkeletonBox height="h-10" width="w-full" className="rounded-md" />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Col (Clubs & Feed) */}
+                    <div className="lg:col-span-8 flex flex-col gap-6">
+                        {/* Club Skeleton */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-64">
+                            <div className="flex justify-between mb-6">
+                                <div className="flex gap-4">
+                                    <SkeletonBox height="h-14" width="w-14" className="rounded-xl" />
+                                    <div>
+                                        <SkeletonBox height="h-6" width="w-48" className="mb-2" />
+                                        <SkeletonBox height="h-4" width="w-32" />
+                                    </div>
+                                </div>
+                                <SkeletonBox height="h-10" width="w-32" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <SkeletonBox height="h-32" className="rounded-xl" />
+                                <SkeletonBox height="h-32" className="rounded-xl" />
+                            </div>
+                        </div>
+                        {/* Feed Skeleton */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <SkeletonBox height="h-6" width="w-48" className="mb-6" />
+                            <div className="space-y-4">
+                                <SkeletonCard />
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Col */}
+                    <div className="lg:col-span-4 flex flex-col gap-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <SkeletonBox height="h-6" width="w-40" className="mb-4" />
+                            <div className="space-y-4">
+                                <div className="flex gap-3">
+                                    <SkeletonBox height="h-12" width="w-12" className="rounded-lg" />
+                                    <div className="flex-1 space-y-2">
+                                        <SkeletonBox height="h-4" width="w-full" />
+                                        <SkeletonBox height="h-3" width="w-2/3" />
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <SkeletonBox height="h-12" width="w-12" className="rounded-lg" />
+                                    <div className="flex-1 space-y-2">
+                                        <SkeletonBox height="h-4" width="w-full" />
+                                        <SkeletonBox height="h-3" width="w-2/3" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 h-64">
+                            <SkeletonBox height="h-6" width="w-32" className="mb-4" />
+                            <div className="space-y-3">
+                                <SkeletonBox height="h-12" width="w-full" />
+                                <SkeletonBox height="h-12" width="w-full" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-fade-in relative z-0 pb-12">

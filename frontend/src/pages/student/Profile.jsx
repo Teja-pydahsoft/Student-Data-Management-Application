@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../config/api';
 import { User, Mail, Phone, MapPin, Calendar, Book, Hash, Lock, Shield, Clock } from 'lucide-react';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 import useAuthStore from '../../store/authStore';
 import { toast } from 'react-hot-toast';
 
@@ -58,8 +59,40 @@ const Profile = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="space-y-4 lg:space-y-6 flex flex-col p-1 w-full max-w-full overflow-x-hidden animate-pulse">
+                {/* Header Skeleton */}
+                <div className="relative mb-6 shrink-0">
+                    <SkeletonBox height="h-28 lg:h-32" className="rounded-2xl" />
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-14 lg:-mt-16 relative z-10">
+                        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 lg:p-5 flex flex-col md:flex-row items-center md:items-end gap-5">
+                            <SkeletonBox height="h-28 w-28 lg:h-32 lg:w-32" className="rounded-full border-[5px] border-white shrink-0" />
+                            <div className="flex-1 text-center md:text-left pb-1 space-y-2">
+                                <SkeletonBox height="h-8" width="w-48" className="mx-auto md:mx-0" />
+                                <SkeletonBox height="h-4" width="w-32" className="mx-auto md:mx-0" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grid Skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 pb-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="bg-white rounded-xl shadow border border-gray-100 p-4 h-64 flex flex-col gap-4">
+                            <div className="flex items-center gap-3 border-b border-gray-50 pb-2">
+                                <SkeletonBox height="h-8" width="w-8" className="rounded-lg" />
+                                <SkeletonBox height="h-4" width="w-32" />
+                            </div>
+                            <div className="space-y-3 flex-1">
+                                {Array.from({ length: 5 }).map((_, j) => (
+                                    <div key={j} className="space-y-1">
+                                        <SkeletonBox height="h-3" width="w-24" />
+                                        <SkeletonBox height="h-4" width="w-32" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }

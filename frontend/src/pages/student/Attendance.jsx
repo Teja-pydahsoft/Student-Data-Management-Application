@@ -27,6 +27,7 @@ import {
 import api from '../../config/api';
 import { toast } from 'react-hot-toast';
 import CalendarWidget from '../../components/Attendance/CalendarWidget';
+import { SkeletonBox } from '../../components/SkeletonLoader';
 
 const Attendance = () => {
     const [loading, setLoading] = useState(true);
@@ -144,8 +145,48 @@ const Attendance = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="space-y-6 w-full max-w-[1920px] mx-auto px-4 md:px-6 pb-8 animate-pulse">
+                <header className="flex items-center justify-between">
+                    <div className="space-y-2">
+                        <SkeletonBox height="h-8" width="w-64" />
+                        <SkeletonBox height="h-4" width="w-48" />
+                    </div>
+                </header>
+
+                {/* Semester Summary Skeleton */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 md:p-6 space-y-6">
+                    <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div className="space-y-2">
+                            <SkeletonBox height="h-4" width="w-32" />
+                            <SkeletonBox height="h-6" width="w-64" />
+                            <div className="flex gap-2">
+                                <SkeletonBox height="h-6" width="w-40" className="rounded-full" />
+                                <SkeletonBox height="h-6" width="w-32" className="rounded-full" />
+                            </div>
+                        </div>
+                        <SkeletonBox height="h-20" width="w-48" className="rounded-xl" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <SkeletonBox height="h-24" className="rounded-xl" />
+                        <SkeletonBox height="h-24" className="rounded-xl" />
+                        <SkeletonBox height="h-24" className="rounded-xl" />
+                        <SkeletonBox height="h-24" className="rounded-xl" />
+                    </div>
+                </div>
+
+                {/* Grid Skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-8 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <SkeletonBox height="h-40" className="rounded-2xl" />
+                            <SkeletonBox height="h-40" className="rounded-2xl" />
+                        </div>
+                        <SkeletonBox height="h-80" className="rounded-2xl" />
+                    </div>
+                    <div className="lg:col-span-4 space-y-6">
+                        <SkeletonBox height="h-96" className="rounded-2xl" />
+                    </div>
+                </div>
             </div>
         );
     }
