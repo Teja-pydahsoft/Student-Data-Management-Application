@@ -1,6 +1,7 @@
 const { masterPool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { sendNotificationToUser } = require('./pushController');
+const fs = require('fs');
 
 const getClubs = async (req, res) => {
     try {
@@ -76,8 +77,21 @@ const createClub = async (req, res) => {
         let image_url = '';
 
         if (req.file) {
-            image_url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-        } else if (req.body.image_url) {
+            try {
+                const fileBuffer = fs.readFileSync(req.file.path);
+                const base64Image = fileBuffer.toString('base64');
+                const mimeType = req.file.mimetype;
+                image_url = `data:${mimeType};base64,${base64Image}`;
+
+                // Clean up temp file
+                fs.unlinkSync(req.file.path);
+            } catch (fileError) {
+                console.error('Error processing profile image:', fileError);
+                // Continue without image or handle error
+            }
+        }
+        // Fallback or explicit URL (though uncommon now with file upload priority)
+        else if (req.body.image_url) {
             image_url = req.body.image_url;
         }
 
@@ -94,6 +108,9 @@ const createClub = async (req, res) => {
         res.json({ success: true, message: 'Club created successfully', data: { image_url } });
     } catch (error) {
         console.error('Error creating club:', error);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(500).json({ success: false, message: 'Failed to create club' });
     }
 };
@@ -394,9 +411,19 @@ const updateClub = async (req, res) => {
         let params = [name, description];
 
         if (req.file) {
-            const image_url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-            query += ', image_url = ?';
-            params.push(image_url);
+            try {
+                const fileBuffer = fs.readFileSync(req.file.path);
+                const base64Image = fileBuffer.toString('base64');
+                const mimeType = req.file.mimetype;
+                const image_url = `data:${mimeType};base64,${base64Image}`;
+
+                query += ', image_url = ?';
+                params.push(image_url);
+
+                fs.unlinkSync(req.file.path);
+            } catch (fileError) {
+                console.error('Error processing update image:', fileError);
+            }
         }
 
         query += ' WHERE id = ?';
@@ -407,6 +434,9 @@ const updateClub = async (req, res) => {
         res.json({ success: true, message: 'Club updated successfully' });
     } catch (error) {
         console.error('Error updating club:', error);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(500).json({ success: false, message: 'Failed to update club' });
     }
 };
