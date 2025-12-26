@@ -15,10 +15,11 @@ const getClubs = async (req, res) => {
             // Use parameter expansion for IN clause
             const placeholders = ids.map(() => '?').join(',');
             const [rows] = await masterPool.query(
-                `SELECT * FROM clubs WHERE id IN (${placeholders}) ORDER BY created_at DESC`,
+                `SELECT * FROM clubs WHERE id IN (${placeholders})`,
                 ids
             );
-            clubs = rows;
+            // Re-sort results in memory to match the ID order (which is already sorted by created_at)
+            clubs = ids.map(id => rows.find(r => r.id === id)).filter(Boolean);
         }
 
         // Helper to safe parse
