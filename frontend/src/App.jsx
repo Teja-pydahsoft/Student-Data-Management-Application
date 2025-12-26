@@ -39,6 +39,7 @@ import StudentAnnouncements from './pages/student/StudentAnnouncements';
 import StudentAttendance from './pages/student/Attendance';
 import StudentServices from './pages/student/Services';
 import StudentClubs from './pages/student/StudentClubs';
+import FeeManagement from './pages/student/FeeManagement';
 
 // Event Pages
 import EventCalendar from './pages/admin/EventCalendar';
@@ -176,6 +177,7 @@ function App() {
           <Route path="attendance" element={<StudentAttendance />} />
           <Route path="services" element={<StudentServices />} />
           <Route path="clubs" element={<StudentClubs />} />
+          <Route path="fees" element={<FeeManagement />} />
         </Route>
 
         {/* Fallback */}
