@@ -307,6 +307,68 @@ const Settings = () => {
   });
   const [activeSection, setActiveSection] = useState('courses'); // 'courses', 'calendar', 'academic-calendar', 'forms', 'notifications'
 
+  // Certificate Configuration State
+  const [certificateConfig, setCertificateConfig] = useState({
+    diploma: [
+      { id: '10th_tc', name: '10th TC (Transfer Certificate)', required: true },
+      { id: '10th_study', name: '10th Study Certificate', required: true }
+    ],
+    ug: [
+      { id: '10th_tc', name: '10th TC (Transfer Certificate)', required: true },
+      { id: '10th_study', name: '10th Study Certificate', required: true },
+      { id: 'inter_diploma_tc', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'inter_diploma_study', name: 'Inter/Diploma Study Certificate', required: true }
+    ],
+    pg: [
+      { id: '10th_tc', name: '10th TC (Transfer Certificate)', required: true },
+      { id: '10th_study', name: '10th Study Certificate', required: true },
+      { id: 'inter_diploma_tc', name: 'Inter/Diploma TC (Transfer Certificate)', required: true },
+      { id: 'inter_diploma_study', name: 'Inter/Diploma Study Certificate', required: true },
+      { id: 'ug_study', name: 'UG Study Certificate', required: true },
+      { id: 'ug_tc', name: 'UG TC (Transfer Certificate)', required: true },
+      { id: 'ug_pc', name: 'UG PC (Provisional Certificate)', required: true },
+      { id: 'ug_cmm', name: 'UG CMM (Consolidated Marks Memo)', required: true },
+      { id: 'ug_od', name: 'UG OD (Original Degree)', required: true }
+    ]
+  });
+
+  const addCertificate = (type) => {
+    const newCert = {
+      id: `custom_${Date.now()}`,
+      name: '',
+      required: false
+    };
+    setCertificateConfig(prev => ({
+      ...prev,
+      [type]: [...prev[type], newCert]
+    }));
+  };
+
+  const removeCertificate = (type, id) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [type]: prev[type].filter(cert => cert.id !== id)
+    }));
+  };
+
+  const updateCertificateName = (type, id, name) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [type]: prev[type].map(cert =>
+        cert.id === id ? { ...cert, name } : cert
+      )
+    }));
+  };
+
+  const updateCertificateRequired = (type, id, required) => {
+    setCertificateConfig(prev => ({
+      ...prev,
+      [type]: prev[type].map(cert =>
+        cert.id === id ? { ...cert, required } : cert
+      )
+    }));
+  };
+
 
 
   // Calendar state
@@ -3288,8 +3350,40 @@ const Settings = () => {
 
                   {/* Certificate Information Section */}
                   <div className="border-t border-gray-200 pt-6 mt-6">
-                    <StudyCertificateConfig />
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+                      Certificate Information
+                    </h2>
+                    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <FileText size={16} className="text-gray-600" />
+                        Default Certification Fields
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {['diploma', 'ug', 'pg'].map(type => (
+                          <div key={type} className="space-y-2">
+                            <h4 className="text-sm font-medium text-gray-800 uppercase border-b border-gray-200 pb-1 mb-2">
+                              {type === 'ug' ? 'UG Courses' : type === 'pg' ? 'PG Courses' : 'Diploma Courses'}
+                            </h4>
+                            <ul className="space-y-1">
+                              {certificateConfig[type]?.map(cert => (
+                                <li key={cert.id} className="flex items-start gap-2 text-sm text-gray-600">
+                                  <div className={`mt-1 w-1.5 h-1.5 rounded-full ${cert.required ? 'bg-teal-500' : 'bg-gray-300'}`}></div>
+                                  <span className={cert.required ? 'font-medium text-gray-700' : ''}>
+                                    {cert.name}
+                                    {cert.required && <span className="text-red-500 ml-0.5">*</span>}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
+
+
                 </div>
               );
             })()}

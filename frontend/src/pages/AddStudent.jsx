@@ -38,8 +38,8 @@ const AddStudent = () => {
   const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
   const [admissionNumberLoading, setAdmissionNumberLoading] = useState(false);
   const [isAdmissionNumberManual, setIsAdmissionNumberManual] = useState(false);
-  
-  
+
+
   const [studentData, setStudentData] = useState({
     pin_no: '',
     current_year: '1',
@@ -51,9 +51,9 @@ const AddStudent = () => {
     stud_type: '',
     student_name: '',
     student_status: '',
-    scholar_status: '',
-    fee_status: '',
-    registration_status: '',
+    scholar_status: 'Eligible',
+    fee_status: 'due',
+    registration_status: 'Pending',
     student_mobile: '',
     parent_mobile1: '',
     parent_mobile2: '',
@@ -80,7 +80,7 @@ const AddStudent = () => {
         const response = await api.get('/colleges');
         const collegeData = response.data.data || [];
         setColleges(collegeData);
-        
+
         // Auto-select college if only one is available (for scoped users)
         if (collegeData.length === 1) {
           const singleCollege = collegeData[0];
@@ -166,7 +166,7 @@ const AddStudent = () => {
     if (!courseType) return;
     const certificates = getCertificatesForCourse();
     if (certificates.length === 0) return;
-    
+
     const allYes = certificates.every(cert => certificateStatus[cert.key] === true);
     if (allYes && certificates.length > 0) {
       setStudentData(prev => ({ ...prev, certificates_status: 'Verified' }));
@@ -182,13 +182,13 @@ const AddStudent = () => {
       try {
         setCourseOptionsLoading(true);
         // Always use the scoped /courses endpoint to respect user's assigned scope
-        const url = selectedCollegeId 
+        const url = selectedCollegeId
           ? `/courses?collegeId=${selectedCollegeId}&includeInactive=false`
           : '/courses?includeInactive=false';
         const response = await api.get(url);
         const courseData = response.data.data || [];
         setCourseOptions(courseData);
-        
+
         // Auto-select course if only one is available (for scoped users)
         const activeCourses = courseData.filter((course) => course?.isActive !== false);
         if (activeCourses.length === 1) {
@@ -198,7 +198,7 @@ const AddStudent = () => {
             ...prev,
             course: singleCourse.name
           }));
-          
+
           // Also auto-select branch if only one is available
           const activeBranches = (singleCourse.branches || []).filter((b) => b?.isActive !== false);
           if (activeBranches.length === 1) {
@@ -240,16 +240,16 @@ const AddStudent = () => {
     let branches = (selectedCourse.branches || []).filter(
       (branch) => branch?.isActive !== false
     );
-    
+
     // Always deduplicate branches by name to avoid showing duplicates
     const branchMap = new Map();
-    
+
     if (studentData.batch) {
       // If batch is selected, filter and prefer batch-specific branches
       const matchingBranches = branches.filter(
         (branch) => branch.academicYearLabel === studentData.batch || !branch.academicYearLabel
       );
-      
+
       matchingBranches.forEach(branch => {
         const existing = branchMap.get(branch.name);
         // Prefer batch-specific branch over generic one
@@ -265,7 +265,7 @@ const AddStudent = () => {
         }
       });
     }
-    
+
     return Array.from(branchMap.values());
   }, [selectedCourse, studentData.batch]);
 
@@ -309,7 +309,7 @@ const AddStudent = () => {
   const semesterOptions = useMemo(() => {
     // Get selected year
     const selectedYear = Number(studentData.current_year) || 0;
-    
+
     // Check if structure has per-year semester configuration
     if (activeStructure?.years && Array.isArray(activeStructure.years) && selectedYear > 0) {
       const yearConfig = activeStructure.years.find(y => y.yearNumber === selectedYear);
@@ -317,7 +317,7 @@ const AddStudent = () => {
         return yearConfig.semesters.map(sem => String(sem.semesterNumber));
       }
     }
-    
+
     // Fallback to default semestersPerYear
     if (!activeStructure?.semestersPerYear) {
       return ['1', '2'];
@@ -339,7 +339,7 @@ const AddStudent = () => {
         setStudentData((prev) => ({ ...prev, branch: '' }));
       }
     }
-    
+
     // Auto-select first branch if only one option available for this batch
     if (!selectedBranchName && branchOptions.length === 1) {
       setSelectedBranchName(branchOptions[0].name);
@@ -438,7 +438,7 @@ const AddStudent = () => {
     const batchYear = parseInt(studentData.batch, 10);
     const currentCalendarYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1; // 1-12
-    
+
     // Calculate which academic year the student should be in
     // Assuming academic year starts in June
     let calculatedYear = currentCalendarYear - batchYear + 1;
@@ -446,13 +446,13 @@ const AddStudent = () => {
       // Before June, student is still in the previous academic year
       calculatedYear = calculatedYear - 1;
     }
-    
+
     const totalYears = Number(activeStructure.totalYears) || 4;
     const semestersPerYear = Number(activeStructure.semestersPerYear) || 2;
-    
+
     // Clamp to valid range
     calculatedYear = Math.max(1, Math.min(calculatedYear, totalYears));
-    
+
     // Calculate current semester (default to 1 for first half, 2 for second half of academic year)
     let calculatedSemester = 1;
     if (currentMonth >= 6 && currentMonth <= 11) {
@@ -462,10 +462,10 @@ const AddStudent = () => {
     }
 
     setStudentData((prev) => {
-      const shouldUpdate = 
-        prev.current_year !== String(calculatedYear) || 
+      const shouldUpdate =
+        prev.current_year !== String(calculatedYear) ||
         prev.current_semester !== String(calculatedSemester);
-      
+
       if (shouldUpdate) {
         return {
           ...prev,
@@ -549,23 +549,23 @@ const AddStudent = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     // Track if user manually changes admission number
     if (name === 'admission_no' && value) {
       setIsAdmissionNumberManual(true);
     }
-    
+
     // If batch changes, reset the manual flag to allow auto-generation
     if (name === 'batch') {
       setIsAdmissionNumberManual(false);
     }
-    
+
     setStudentData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Comprehensive validation for all required fields
     const requiredFields = [
       { field: 'admission_no', label: 'Admission Number' },
@@ -580,9 +580,7 @@ const AddStudent = () => {
       { field: 'batch', label: 'Batch' },
       { field: 'stud_type', label: 'Student Type' },
       { field: 'student_status', label: 'Student Status' },
-      { field: 'scholar_status', label: 'Scholar Status' },
-      { field: 'fee_status', label: 'Fee Status' },
-      { field: 'registration_status', label: 'Registration Status' },
+
       { field: 'student_mobile', label: 'Student Mobile' },
       { field: 'parent_mobile1', label: 'Parent Mobile 1' },
       { field: 'caste', label: 'Caste' },
@@ -591,7 +589,7 @@ const AddStudent = () => {
     ];
 
     const missingFields = requiredFields.filter(({ field }) => !studentData[field] || !studentData[field].toString().trim());
-    
+
     if (missingFields.length > 0) {
       const fieldNames = missingFields.slice(0, 3).map(f => f.label).join(', ');
       const moreCount = missingFields.length > 3 ? ` and ${missingFields.length - 3} more` : '';
@@ -610,10 +608,10 @@ const AddStudent = () => {
 
     try {
       setLoading(true);
-      
+
       // Create FormData for multipart submission (to handle photo upload)
       const formData = new FormData();
-      
+
       // Add all student data fields
       Object.entries({
         ...studentData,
@@ -624,13 +622,13 @@ const AddStudent = () => {
           formData.append(key, value);
         }
       });
-      
+
       const response = await api.post('/students', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      
+
       if (response.data.success) {
         toast.success('Student added successfully');
         navigate('/students', { state: { newStudent: response.data.data } });
@@ -998,68 +996,11 @@ const AddStudent = () => {
                 </select>
               </div>
 
-              {/* 9. Scholar Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Scholar Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="scholar_status"
-                  value={studentData.scholar_status}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Scholar Status</option>
-                  {SCHOLAR_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* 10. Fee Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fee Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="fee_status"
-                  value={studentData.fee_status}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Fee Status</option>
-                  {FEE_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {/* 11. Registration Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Registration Status <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="registration_status"
-                  value={studentData.registration_status}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Registration Status</option>
-                  {REGISTRATION_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+
+
 
               {/* 10. Previous College Name */}
               <div>
@@ -1295,9 +1236,9 @@ const AddStudent = () => {
                     className="cursor-pointer flex flex-col items-center gap-2"
                   >
                     {studentData.student_photo && studentData.student_photo.startsWith('data:') ? (
-                      <img 
-                        src={studentData.student_photo} 
-                        alt="Student preview" 
+                      <img
+                        src={studentData.student_photo}
+                        alt="Student preview"
                         className="w-24 h-24 object-cover rounded-lg border-2 border-primary-300"
                       />
                     ) : (
@@ -1355,7 +1296,7 @@ const AddStudent = () => {
                   <FileText size={16} className="text-gray-600" />
                   Default Certification Fields
                 </h3>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {getCertificatesForCourse().map((cert) => (
                     <div key={cert.key} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
@@ -1386,24 +1327,24 @@ const AddStudent = () => {
 
           <div className="flex justify-end pt-6">
             <button
-  type="submit"
-  disabled={loading}
-  className="flex items-center gap-2 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white px-8 py-4 rounded-xl font-semibold
+              type="submit"
+              disabled={loading}
+              className="flex items-center gap-2 bg-gradient-to-r from-gray-800 via-gray-900 to-black text-white px-8 py-4 rounded-xl font-semibold
              hover:from-gray-900 hover:via-black hover:to-gray-800 focus:ring-4 focus:ring-gray-400/40 transition-all duration-300
              disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-2xl transform hover:scale-105 active:scale-95"
->
-  {loading ? (
-    <>
-      <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
-      Saving...
-    </>
-  ) : (
-    <>
-      <Save size={18} />
-      Save Student
-    </>
-  )}
-</button>
+            >
+              {loading ? (
+                <>
+                  <LoadingAnimation width={16} height={16} variant="inline" showMessage={false} />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={18} />
+                  Save Student
+                </>
+              )}
+            </button>
 
           </div>
         </form>
