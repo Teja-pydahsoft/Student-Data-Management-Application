@@ -466,116 +466,130 @@ const Dashboard = () => {
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Center: Feed (50% Width on Large) */}
-                <div className="lg:col-span-6 flex flex-col gap-6">
+                {/* Student Clubs Section */}
+                <div className="lg:col-span-8 flex flex-col gap-6">
+                    {/* Club Section */}
+                    {(() => {
+                        const joinedClub = clubs.find(c => c.userStatus === 'approved');
 
-                    {/* Student Clubs Section (New) */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                                    <Users size={18} />
+                        if (joinedClub) {
+                            // SHOW JOINED CLUB FEED
+                            return (
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative z-10">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-14 w-14 rounded-xl bg-gray-100 overflow-hidden border border-gray-200">
+                                                {joinedClub.image_url ? (
+                                                    <img src={joinedClub.image_url} alt={joinedClub.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-50"><Users size={24} /></div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-gray-900">{joinedClub.name}</h3>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle size={10} /> Member</span>
+                                                    <span className="text-xs text-gray-500">View your club dashboard</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Link
+                                            to="/student/clubs"
+                                            className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-semibold hover:bg-indigo-100 transition-colors"
+                                        >
+                                            Visit Club Page
+                                        </Link>
+                                    </div>
+
+                                    {/* Mini Activity Feed */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Latest Activity</h4>
+                                        {joinedClub.activities && joinedClub.activities.length > 0 ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {joinedClub.activities.slice(0, 2).map((activity, idx) => (
+                                                    <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-indigo-100 transition-all group cursor-pointer" onClick={() => navigate('/student/clubs')}>
+                                                        {activity.image_url && (
+                                                            <div className="h-32 mb-3 rounded-lg overflow-hidden relative">
+                                                                <img src={activity.image_url} alt="" className="w-full h-full object-cover" />
+                                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                                                            </div>
+                                                        )}
+                                                        <h5 className="font-bold text-gray-900 line-clamp-1 mb-1">{activity.title}</h5>
+                                                        <p className="text-xs text-gray-500 mb-2">{new Date(activity.posted_at).toLocaleDateString()}</p>
+                                                        <p className="text-sm text-gray-600 line-clamp-2">{activity.description}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                                <p className="text-gray-500 text-sm">No recent activities posted.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                Student Clubs
-                            </h3>
-                            <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                                View All
-                            </Link>
-                        </div>
+                            );
+                        } else {
+                            // SHOW EXPLORE CLUBS LIST
+                            return (
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative z-10">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                                <Users size={18} />
+                                            </div>
+                                            Student Clubs
+                                        </h3>
+                                        <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                                            View All
+                                        </Link>
+                                    </div>
 
-                        {clubs.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {clubs.slice(0, 2).map(club => (
-                                    <div key={club.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all group">
-                                        <div className="h-24 bg-gray-50 flex items-center justify-center relative overflow-hidden">
-                                            {club.image_url ? (
-                                                <img src={club.image_url} alt={club.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                                            ) : (
-                                                <Users size={32} className="text-gray-300" />
-                                            )}
-                                            {/* Status Badge */}
-                                            {club.userStatus && (
-                                                <div className="absolute top-2 right-2">
-                                                    {club.userStatus === 'approved' && <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><CheckCircle size={10} /> Member</span>}
-                                                    {club.userStatus === 'pending' && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><Clock size={10} /> Pending</span>}
+                                    {clubs.length > 0 ? (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {clubs.slice(0, 3).map(club => (
+                                                <div key={club.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all group flex flex-col h-full">
+                                                    <div className="h-24 bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                                                        {club.image_url ? (
+                                                            <img src={club.image_url} alt={club.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                                        ) : (
+                                                            <Users size={32} className="text-gray-300" />
+                                                        )}
+                                                        {club.userStatus === 'pending' && (
+                                                            <div className="absolute top-2 right-2">
+                                                                <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><Clock size={10} /> Pending</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="p-3 flex-1 flex flex-col">
+                                                        <h4 className="font-bold text-gray-900 text-sm mb-1 truncate">{club.name}</h4>
+                                                        <div className="mt-auto pt-2">
+                                                            {club.userStatus === 'pending' ? (
+                                                                <div className="text-xs text-gray-400 font-medium block text-center bg-gray-50 py-1.5 rounded-md cursor-not-allowed">
+                                                                    Request Sent
+                                                                </div>
+                                                            ) : (
+                                                                <Link to="/student/clubs" className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 font-medium block text-center py-1.5 rounded-md shadow-sm transition-colors">
+                                                                    Join Club
+                                                                </Link>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
-                                        <div className="p-3">
-                                            <h4 className="font-bold text-gray-900 text-sm mb-1 truncate">{club.name}</h4>
-                                            {club.userStatus === 'approved' ? (
-                                                <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium block mt-2 text-center bg-indigo-50 py-1.5 rounded-md">
-                                                    View Activities
-                                                </Link>
-                                            ) : club.userStatus === 'pending' ? (
-                                                <div className="text-xs text-gray-400 font-medium block mt-2 text-center bg-gray-50 py-1.5 rounded-md cursor-not-allowed">
-                                                    Request Sent
-                                                </div>
-                                            ) : (
-                                                <Link to="/student/clubs" className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 font-medium block mt-2 text-center py-1.5 rounded-md shadow-sm transition-colors">
-                                                    Join Club
-                                                </Link>
-                                            )}
+                                    ) : (
+                                        <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                            <p className="text-gray-500 text-sm">No clubs available.</p>
+                                            <Link to="/student/clubs" className="text-indigo-600 text-xs font-semibold mt-1 inline-block">Explore Clubs</Link>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                                <p className="text-gray-500 text-sm">No clubs available.</p>
-                                <Link to="/student/clubs" className="text-indigo-600 text-xs font-semibold mt-1 inline-block">Explore Clubs</Link>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Upcoming Events Section */}
-                    {upcomingEvents.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                                        <Calendar size={18} />
-                                    </div>
-                                    Upcoming Events
-                                </h3>
-                                <Link
-                                    to="/student/events"
-                                    state={{ initialDate: upcomingEvents.length > 0 ? upcomingEvents[0].event_date : new Date() }}
-                                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-                                >
-                                    View Calendar
-                                </Link>
-                            </div>
-
-                            <div className="space-y-3">
-                                {upcomingEvents.slice(0, 3).map((event) => (
-                                    <div
-                                        key={event.id}
-                                        onClick={() => {
-                                            setSelectedEvent(event);
-                                            setShowEventModal(true);
-                                        }}
-                                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all cursor-pointer group"
-                                    >
-                                        <div className="flex-shrink-0 w-12 h-12 bg-indigo-50 text-indigo-600 rounded-lg flex flex-col items-center justify-center border border-indigo-100 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                            <span className="text-[10px] font-bold uppercase">{new Date(event.event_date).toLocaleString('default', { month: 'short' })}</span>
-                                            <span className="text-lg font-bold leading-none">{new Date(event.event_date).getDate()}</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-sm font-semibold text-gray-900 truncate group-hover:text-indigo-700">{event.title}</h4>
-                                            <p className="text-xs text-gray-500 truncate">{event.description || 'No details'}</p>
-                                        </div>
-                                        <div className="text-xs text-gray-400 group-hover:text-indigo-500">
-                                            <ArrowRight size={16} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                                    )}
+                                </div>
+                            );
+                        }
+                    })()}
 
                     {/* Feed Section */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col flex-1">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col flex-1 relative z-10">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                                 <div className="p-2 bg-blue-100 rounded-lg">
@@ -660,97 +674,97 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* Services Widget (25% Width on Large) */}
-                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                                <FileText size={20} />
-                            </div>
-                            <h3 className="text-lg font-semibold text-gray-900">Services</h3>
-                        </div>
-                        <Link to="/student/services" className="text-blue-600 hover:bg-blue-50 p-1 rounded">
-                            <ArrowRight size={16} />
-                        </Link>
-                    </div>
+                {/* Right Column: Events & Services (4col) */}
+                <div className="lg:col-span-4 flex flex-col gap-6">
 
-                    {/* Active Requests List */}
-                    {serviceRequests.length > 0 ? (
-                        <div className="flex-1 space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
-                            {serviceRequests.map(req => (
-                                <div key={req.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition">
-                                    <div className="flex justify-between items-start mb-1">
-                                        <span className="font-medium text-xs text-gray-900 line-clamp-1">{req.service_name}</span>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${getStatusColor(req.status)}`}>
-                                            {req.status === 'ready_to_collect' ? 'Ready' : req.status.replace('_', ' ')}
-                                        </span>
+                    {/* Upcoming Events Section (Moved Here) */}
+                    {upcomingEvents.length > 0 && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative z-10">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                        <Calendar size={18} />
                                     </div>
-                                    <div className="text-[10px] text-gray-400">{new Date(req.request_date).toLocaleDateString()}</div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-lg mb-4">
-                            <p className="text-sm">No active requests</p>
+                                    Upcoming Events
+                                </h3>
+                                <Link
+                                    to="/student/events"
+                                    state={{ initialDate: upcomingEvents.length > 0 ? upcomingEvents[0].event_date : new Date() }}
+                                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                                >
+                                    View Calendar
+                                </Link>
+                            </div>
+
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                                {upcomingEvents.slice(0, 4).map((event) => (
+                                    <div
+                                        key={event.id}
+                                        onClick={() => {
+                                            setSelectedEvent(event);
+                                            setShowEventModal(true);
+                                        }}
+                                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex-shrink-0 w-12 h-12 bg-indigo-50 text-indigo-600 rounded-lg flex flex-col items-center justify-center border border-indigo-100 group-hover:bg-white group-hover:shadow-sm transition-all">
+                                            <span className="text-[10px] font-bold uppercase">{new Date(event.event_date).toLocaleString('default', { month: 'short' })}</span>
+                                            <span className="text-lg font-bold leading-none">{new Date(event.event_date).getDate()}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-sm font-semibold text-gray-900 truncate group-hover:text-indigo-700">{event.title}</h4>
+                                            <p className="text-xs text-gray-500 truncate">{event.description || 'No details'}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                        Apply for Study or Custodian Certificates online.
-                    </p>
-                    <Link
-                        to="/student/services"
-                        className="w-full py-2.5 bg-gray-900 text-white text-center font-medium rounded-lg hover:bg-gray-800 transition shadow-sm text-sm"
-                    >
-                        New Request
-                    </Link>
-                </div>
+                    {/* Services Widget */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit relative z-10">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                    <FileText size={20} />
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Services</h3>
+                            </div>
+                            <Link to="/student/services" className="text-blue-600 hover:bg-blue-50 p-1 rounded">
+                                <ArrowRight size={16} />
+                            </Link>
+                        </div>
 
-                {/* Profile Details (Sidebar) (25% Width on Large) */}
-                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit">
-                    <div className="flex items-center gap-4 mb-6">
-                        <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                            <User size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-900">Your Details</h3>
-                            <p className="text-sm text-gray-500">{get('admission_number')}</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                        <div className="flex items-center gap-3 text-sm">
-                            <User size={16} className="text-gray-400" />
-                            <span className="text-gray-700 truncate">{get('student_name', user?.name)}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm">
-                            <CheckCircle size={16} className={isRegistrationCompleted ? 'text-green-500' : 'text-yellow-500'} />
-                            <span className="text-gray-700">Registration: {registrationLabel}</span>
-                        </div>
-                        {/* Hide Fees if Registration is Completed as per user request */}
-                        {!isRegistrationCompleted && (
-                            <div className="flex items-center gap-3 text-sm">
-                                <BookOpen size={16} className={feeStatusLabel === 'Completed' ? 'text-green-500' : (feeStatusLabel === 'Partially Completed' ? 'text-yellow-500' : 'text-red-500')} />
-                                <span className="text-gray-700">Fees: {feeStatusLabel}</span>
+                        {/* Active Requests List */}
+                        {serviceRequests.length > 0 ? (
+                            <div className="flex-1 space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                                {serviceRequests.map(req => (
+                                    <div key={req.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="font-medium text-xs text-gray-900 line-clamp-1">{req.service_name}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${getStatusColor(req.status)}`}>
+                                                {req.status === 'ready_to_collect' ? 'Ready' : req.status.replace('_', ' ')}
+                                            </span>
+                                        </div>
+                                        <div className="text-[10px] text-gray-400">{new Date(req.request_date).toLocaleDateString()}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-lg mb-4">
+                                <p className="text-sm">No active requests</p>
                             </div>
                         )}
-                        <div className="flex items-center gap-3 text-sm">
-                            <Smartphone size={16} className="text-gray-400" />
-                            <span className="text-gray-700">{get('student_mobile', 'No mobile')}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm">
-                            <MapPin size={16} className="text-gray-400" />
-                            <span className="text-gray-700 truncate">{get('college', 'Pydah Group')}</span>
-                        </div>
-                    </div>
 
-                    <Link
-                        to="/student/profile"
-                        className="flex items-center justify-between w-full p-4 rounded-lg border border-gray-200 hover:border-purple-200 hover:bg-purple-50 transition-colors group cursor-pointer"
-                    >
-                        <span className="font-medium text-gray-700 group-hover:text-purple-700">View Full Profile</span>
-                        <CheckCircle size={18} className="text-gray-400 group-hover:text-purple-600" />
-                    </Link>
+                        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                            Apply for Study or Custodian Certificates online.
+                        </p>
+                        <Link
+                            to="/student/services"
+                            className="w-full py-2.5 bg-gray-900 text-white text-center font-medium rounded-lg hover:bg-gray-800 transition shadow-sm text-sm"
+                        >
+                            New Request
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div >
