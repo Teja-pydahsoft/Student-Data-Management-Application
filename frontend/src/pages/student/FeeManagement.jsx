@@ -63,8 +63,8 @@ const FeeManagement = () => {
                 studentId: user?.admission_number,
                 amount: amountToPay,
                 feeHeadId: feeItem?.feeHead?._id,
-                studentYear: feeItem?.studentYear,
-                semester: feeItem?.semester,
+                studentYear: feeItem?.studentYear || studentDetails?.currentYear,
+                semester: feeItem?.semester || studentDetails?.currentSemester,
                 remarks: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'General Fee Payment'
             });
 
@@ -92,8 +92,8 @@ const FeeManagement = () => {
                             studentId: user?.admission_number,
                             amount: amountToPay,
                             feeHeadId: feeItem?.feeHead?._id,
-                            studentYear: feeItem?.studentYear,
-                            semester: feeItem?.semester,
+                            studentYear: feeItem?.studentYear || studentDetails?.currentYear,
+                            semester: feeItem?.semester || studentDetails?.currentSemester,
                             remarks: feeItem ? `Online Payment: ${feeItem.feeHead?.name}` : 'Online Lumpsum Payment'
                         });
 
@@ -138,7 +138,7 @@ const FeeManagement = () => {
         }).format(amount || 0);
     };
 
-    const { summary, fees, transactions } = feeData || {};
+    const { summary, fees, transactions, studentDetails } = feeData || {};
     const dueAmount = summary?.dueAmount || 0;
     const isPaid = dueAmount <= 0;
 

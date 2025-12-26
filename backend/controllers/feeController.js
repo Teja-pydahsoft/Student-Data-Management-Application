@@ -343,7 +343,8 @@ exports.getStudentFeeDetails = async (req, res) => {
           course: student.course,
           branch: student.branch,
           batch: student.batch,
-          currentYear: student.current_year
+          currentYear: student.current_year,
+          currentSemester: student.current_semester
       },
       summary: {
         totalFee,
