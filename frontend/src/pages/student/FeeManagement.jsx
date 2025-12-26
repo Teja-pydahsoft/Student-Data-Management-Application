@@ -154,7 +154,9 @@ const FeeManagement = () => {
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
-            currency: 'INR'
+            currency: 'INR',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
         }).format(amount || 0);
     };
 
@@ -391,12 +393,12 @@ const FeeManagement = () => {
                         <table className="w-full hidden md:table">
                             <thead className="bg-gray-50/50">
                                 <tr className="text-left text-xs font-medium text-gray-500">
-                                    <th className="px-6 py-4 uppercase tracking-wider">Fee Head</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider">Year/Sem</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Total</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Paid</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Due</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-center">Action</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider">Fee Head</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider">Year/Sem</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider text-right">Total</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider text-right">Paid</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider text-right">Due</th>
+                                    <th className="px-4 py-3 uppercase tracking-wider text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -425,7 +427,7 @@ const FeeManagement = () => {
 
                                         return (
                                             <tr key={index} className="hover:bg-gray-50/50 transition-colors">
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 py-3">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
                                                             <FileText size={16} />
@@ -462,19 +464,19 @@ const FeeManagement = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                <td className="px-4 py-3 text-sm text-gray-500">
                                                     Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                                <td className="px-4 py-3 text-right font-medium text-gray-900">
                                                     {formatCurrency(inv.amount)}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-green-600">
+                                                <td className="px-4 py-3 text-right font-medium text-green-600">
                                                     {formatCurrency(itemPaid)}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-bold text-red-600">
+                                                <td className="px-4 py-3 text-right font-bold text-red-600">
                                                     {formatCurrency(itemDue)}
                                                 </td>
-                                                <td className="px-6 py-4 text-center space-y-2">
+                                                <td className="px-4 py-3 text-center space-y-2">
                                                     {isFullyPaid ? (
                                                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 border border-green-100 block w-fit mx-auto">
                                                             Paid
