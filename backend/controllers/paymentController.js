@@ -105,7 +105,7 @@ exports.verifyPayment = async (req, res) => {
 
         // 1. Fetch Student/Config to get secret for verification
         const [students] = await masterPool.query(
-            'SELECT s.course, s.student_data FROM students s WHERE s.admission_number = ?',
+            'SELECT s.student_name, s.course, s.student_data FROM students s WHERE s.admission_number = ?',
             [studentId]
         );
 
@@ -148,6 +148,7 @@ exports.verifyPayment = async (req, res) => {
         // Note: transactionType 'DEBIT' is used for payments in this system (inverted logic confirmed earlier)
         const newTransaction = new Transaction({
             studentId,
+            studentName: student.student_name,
             amount: Number(amount),
             transactionType: 'DEBIT', // Payment Received
             paymentMode: 'UPI', // Defaulting to UPI for Razorpay for now, or 'Card'/'Net Banking'
