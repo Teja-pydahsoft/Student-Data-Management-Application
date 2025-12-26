@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   },
   { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
   { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },
-  { path: '/fees', icon: DollarSign, label: 'Fee Management', permission: FRONTEND_MODULES.FEES },
+
   { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
   { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
   { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS },

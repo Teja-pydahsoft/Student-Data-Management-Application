@@ -14,7 +14,7 @@ import AddStudent from './pages/AddStudent';
 import Settings from './pages/Settings';
 import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
-import FeeManagement from './pages/FeeManagement';
+
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
@@ -32,7 +32,7 @@ import Clubs from './pages/Clubs';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentProfile from './pages/student/Profile';
 import SemesterRegistration from './pages/student/SemesterRegistration';
-import StudentFeeManagement from './pages/student/FeeManagement';
+
 import RaiseTicket from './pages/student/RaiseTicket';
 import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
@@ -141,7 +141,7 @@ function App() {
           <Route path="promotions" element={<StudentPromotions />} />
           <Route path="courses" element={<Settings />} />
           <Route path="attendance" element={<Attendance />} />
-          <Route path="fees" element={<FeeManagement />} />
+
           <Route path="users" element={<UserManagement />} />
           <Route path="reports" element={<Reports />} />
           <Route path="tickets" element={<TicketManagement />} />
@@ -167,7 +167,7 @@ function App() {
           <Route index element={<Navigate to="/student/dashboard" replace />} />
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="profile" element={<StudentProfile />} />
-          <Route path="fees" element={<StudentFeeManagement />} />
+
           <Route path="semester-registration" element={<SemesterRegistration />} />
           <Route path="raise-ticket" element={<RaiseTicket />} />
           <Route path="my-tickets" element={<MyTickets />} />

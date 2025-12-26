@@ -2609,7 +2609,7 @@ exports.getAttendanceSummary = async (req, res) => {
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
           SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
           GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
-          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s+05:30') AS last_updated
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
@@ -3875,7 +3875,7 @@ exports.downloadDayEndReport = async (req, res) => {
           SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
           SUM(CASE WHEN ar.status = 'holiday' THEN 1 ELSE 0 END) AS holiday,
           GROUP_CONCAT(DISTINCT CASE WHEN ar.status = 'holiday' THEN ar.holiday_reason ELSE NULL END SEPARATOR ', ') AS holiday_reasons,
-          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s.000Z') AS last_updated
+          DATE_FORMAT(MAX(ar.updated_at), '%Y-%m-%dT%H:%i:%s+05:30') AS last_updated
         FROM students s
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 

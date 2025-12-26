@@ -43,13 +43,9 @@ const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   }
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 };
 
 const computeSundaysForMonthKey = (monthKey) => {
@@ -81,12 +77,14 @@ const computeSundaysForMonthKey = (monthKey) => {
 
 const formatFriendlyDate = (dateString) => {
   if (!dateString) return '';
-  const date = new Date(`${dateString}T00:00:00`);
+  // Append IST offset to ensure we interpret the date as IST midnight
+  const date = new Date(`${dateString}T00:00:00+05:30`);
   if (Number.isNaN(date.getTime())) return dateString;
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString('en-IN', {
     weekday: 'short',
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    timeZone: 'Asia/Kolkata'
   });
 };
 
@@ -683,13 +681,15 @@ const Attendance = () => {
   const calendarMonthLoaded = calendarInfo.month === calendarMonthKey;
   const attendanceDateLabel = useMemo(() => {
     if (!attendanceDate) return 'Select date';
-    const date = new Date(`${attendanceDate}T00:00:00`);
+    // Append IST offset to ensure we interpret the date as IST midnight
+    const date = new Date(`${attendanceDate}T00:00:00+05:30`);
     if (Number.isNaN(date.getTime())) return attendanceDate;
-    return date.toLocaleDateString(undefined, {
+    return date.toLocaleDateString('en-IN', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
     });
   }, [attendanceDate]);
   const selectedDateStatus = useMemo(
@@ -4542,7 +4542,7 @@ const Attendance = () => {
                             </span>
                             {historyData.semester?.lastUpdated && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
-                                <Clock size={12} /> Updated {historyData.semester?.lastUpdated}
+                                <Clock size={12} /> Updated {historyData.semester?.lastUpdated ? new Date(historyData.semester.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : ''}
                               </span>
                             )}
                           </div>
