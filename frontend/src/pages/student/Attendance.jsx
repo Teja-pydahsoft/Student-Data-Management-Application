@@ -224,15 +224,15 @@ const Attendance = () => {
         <div className="space-y-6 animate-fade-in w-full max-w-[1920px] mx-auto px-4 md:px-6 pb-8">
             <header className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 heading-font">Attendance History</h1>
-                    <p className="text-gray-500">Track your comprehensive attendance overview</p>
+                    <h1 className="text-xl md:text-2xl font-bold text-gray-900 heading-font">Attendance History</h1>
+                    <p className="text-xs md:text-sm text-gray-500">Track your comprehensive attendance overview</p>
                 </div>
             </header>
 
             {/* Semester Summary Card */}
             {historyData.semester && stats && (
                 <section>
-                    <div className="bg-white border border-indigo-100 rounded-2xl shadow-sm p-6">
+                    <div className="bg-white border border-indigo-100 rounded-2xl shadow-sm p-4 md:p-6">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                             <div className="space-y-1">
                                 <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Semester Attendance</p>
@@ -250,8 +250,8 @@ const Attendance = () => {
                                     )}
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <div className="inline-flex items-center gap-4 px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                            <div className="mt-4 md:mt-0 w-full md:w-auto md:text-right">
+                                <div className="flex md:inline-flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100 w-full md:w-auto">
                                     <div className="text-left">
                                         <p className="text-xs text-gray-600 font-medium uppercase">Attendance %</p>
                                         <p className="text-3xl font-bold text-indigo-700">{stats.percentage}%</p>
@@ -297,9 +297,9 @@ const Attendance = () => {
                 <div className="lg:col-span-8 space-y-6">
                     {/* Weekly & Monthly Summaries */}
                     <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+                        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 md:p-6">
                             <h3 className="text-sm font-bold text-blue-700 uppercase tracking-wide">Weekly Summary</h3>
-                            <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+                            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                                 <div>
                                     <p className="text-xs text-gray-500">Present</p>
                                     <p className="text-xl font-bold text-green-600">
@@ -327,9 +327,9 @@ const Attendance = () => {
                             </div>
                         </div>
 
-                        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+                        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 md:p-6">
                             <h3 className="text-sm font-bold text-purple-700 uppercase tracking-wide">Monthly Summary</h3>
-                            <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+                            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                                 <div>
                                     <p className="text-xs text-gray-500">Present</p>
                                     <p className="text-xl font-bold text-green-600">
