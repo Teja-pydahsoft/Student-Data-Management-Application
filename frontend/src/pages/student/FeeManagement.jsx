@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter, Bus, BookOpen, Zap } from 'lucide-react';
+import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter, Bus, BookOpen, Zap, X } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 
@@ -10,6 +10,11 @@ const FeeManagement = () => {
     const [error, setError] = useState(null);
     const [selectedYear, setSelectedYear] = useState('All');
     const [paymentLoading, setPaymentLoading] = useState(false);
+
+    // Modal State
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [selectedPaymentFee, setSelectedPaymentFee] = useState(null);
+    const [payAmount, setPayAmount] = useState('');
 
     // Load Razorpay Script
     const loadRazorpayScript = () => {
@@ -46,8 +51,22 @@ const FeeManagement = () => {
         fetchFeeDetails();
     }, [user]);
 
-    const handlePayment = async (amountToPay, feeItem = null) => {
-        if (amountToPay <= 0) return;
+    // Open Modal
+    const handlePayment = (amountToPay, feeItem = null) => {
+        setSelectedPaymentFee(feeItem);
+        setPayAmount(amountToPay.toString());
+        setIsPaymentModalOpen(true);
+    };
+
+    // Proceed with Payment
+    const initiateTransaction = async () => {
+        const amountToPay = parseFloat(payAmount);
+        if (!amountToPay || amountToPay <= 0) {
+            alert("Please enter a valid amount");
+            return;
+        }
+
+        const feeItem = selectedPaymentFee;
 
         try {
             setPaymentLoading(true);
@@ -63,8 +82,8 @@ const FeeManagement = () => {
                 studentId: user?.admission_number,
                 amount: amountToPay,
                 feeHeadId: feeItem?.feeHead?._id,
-                studentYear: feeItem?.studentYear || studentDetails?.currentYear,
-                semester: feeItem?.semester || studentDetails?.currentSemester,
+                studentYear: feeItem?.studentYear || feeData?.studentDetails?.currentYear,
+                semester: feeItem?.semester || feeData?.studentDetails?.currentSemester,
                 remarks: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'General Fee Payment'
             });
 
@@ -73,7 +92,7 @@ const FeeManagement = () => {
                 return;
             }
 
-            const { order, key_id, studentDetails } = orderResponse.data;
+            const { order, key_id, studentDetails: orderStudentDetails } = orderResponse.data;
 
             // 2. Open Razorpay Checkout
             const options = {
@@ -92,14 +111,15 @@ const FeeManagement = () => {
                             studentId: user?.admission_number,
                             amount: amountToPay,
                             feeHeadId: feeItem?.feeHead?._id,
-                            studentYear: feeItem?.studentYear || studentDetails?.currentYear,
-                            semester: feeItem?.semester || studentDetails?.currentSemester,
+                            studentYear: feeItem?.studentYear || feeData?.studentDetails?.currentYear,
+                            semester: feeItem?.semester || feeData?.studentDetails?.currentSemester,
                             remarks: feeItem ? `Online Payment: ${feeItem.feeHead?.name}` : 'Online Lumpsum Payment'
                         });
 
                         if (verifyRes.data.success) {
                             alert('Payment successful!');
                             fetchFeeDetails(); // Refresh data
+                            setIsPaymentModalOpen(false);
                         } else {
                             alert('Payment verification failed.');
                         }
@@ -111,9 +131,9 @@ const FeeManagement = () => {
                     }
                 },
                 prefill: {
-                    name: studentDetails.name,
-                    email: studentDetails.email || '',
-                    contact: studentDetails.contact || ''
+                    name: orderStudentDetails?.name,
+                    email: orderStudentDetails?.email || '',
+                    contact: orderStudentDetails?.contact || ''
                 },
                 theme: {
                     color: '#4F46E5' // Indigo
@@ -139,7 +159,69 @@ const FeeManagement = () => {
     };
 
     const { summary, fees, transactions, studentDetails } = feeData || {};
-    const dueAmount = summary?.dueAmount || 0;
+
+    // Helper to check if a transaction is a credit/waiver
+    const isCredit = (tx) => {
+        const mode = tx.paymentMode?.toLowerCase() || '';
+        const remark = tx.remarks?.toLowerCase() || '';
+        return mode.includes('waiver') ||
+            mode.includes('adjustment') ||
+            mode.includes('concession') ||
+            mode.includes('credit') ||
+            remark.includes('concession') ||
+            remark.includes('scholarship') ||
+            remark.includes('credit');
+    };
+
+    const stats = useMemo(() => {
+        // Initial values
+        let grossFee = 0; // Sum of positive fees
+        let totalPaid = 0; // Sum of real payments
+        let totalCredit = 0; // Sum of credit/waiver transactions
+
+        // 1. Calculate Gross Fee (Positive Fees Only)
+        // We ignore negative fees to avoid double counting as they likely correspond to the credit transactions
+        // giving the "2x" issue reported.
+        if (fees) {
+            fees.forEach(f => {
+                if (f.amount > 0) {
+                    grossFee += f.amount;
+                }
+            });
+        }
+
+        // 2. Calculate Paid and Credits from Transactions
+        if (transactions) {
+            transactions.forEach(tx => {
+                const amount = Number(tx.amount) || 0;
+
+                if (tx.transactionType === 'CREDIT') {
+                    // Explicit CREDIT tx -> Credits
+                    totalCredit += amount;
+                } else if (tx.transactionType === 'DEBIT') {
+                    if (isCredit(tx)) {
+                        // Waiver/Adjustment DEBIT -> Credits
+                        totalCredit += amount;
+                    } else {
+                        // Real Payment -> Paid
+                        totalPaid += amount;
+                    }
+                }
+            });
+        }
+
+        // 3. Due
+        const dueAmount = grossFee - totalPaid - totalCredit;
+
+        return {
+            due: dueAmount,
+            paid: totalPaid,
+            credit: totalCredit,
+            total: grossFee
+        };
+    }, [fees, transactions]);
+
+    const dueAmount = stats.due;
     const isPaid = dueAmount <= 0;
 
     // Filter Logic
@@ -195,81 +277,88 @@ const FeeManagement = () => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
 
                 {/* Total Due */}
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
-                    <div className="flex items-start justify-between">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 relative">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 md:gap-0">
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Total Due</p>
-                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                            <p className="text-xs md:text-sm font-medium text-gray-500">Total Due</p>
+                            <h3 className="text-lg md:text-2xl font-bold text-gray-900 mt-1">
                                 {formatCurrency(dueAmount)}
                             </h3>
                             {isPaid ? (
-                                <span className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                                    <CheckCircle size={12} /> No Dues
+                                <span className="inline-flex items-center gap-1 mt-1 md:mt-2 text-[10px] md:text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 md:py-1 rounded-full">
+                                    <CheckCircle size={10} className="md:w-3 md:h-3" /> No Dues
                                 </span>
                             ) : (
-                                <span className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full">
-                                    <AlertCircle size={12} /> Payment Pending
+                                <span className="inline-flex items-center gap-1 mt-1 md:mt-2 text-[10px] md:text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 md:py-1 rounded-full">
+                                    <AlertCircle size={10} className="md:w-3 md:h-3" /> Pending
                                 </span>
                             )}
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <div className={`p-3 rounded-xl ${isPaid ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
-                                <AlertCircle size={24} />
-                            </div>
-                            {!isPaid && (
-                                <button
-                                    onClick={() => handlePayment(dueAmount)}
-                                    disabled={paymentLoading}
-                                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
-                                >
-                                    {paymentLoading ? 'Processing...' : 'Pay Total Due'}
-                                </button>
-                            )}
+                        <div className={`absolute top-4 right-4 p-2 md:p-3 rounded-xl ${isPaid ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
+                            <AlertCircle size={16} className="md:w-6 md:h-6" />
                         </div>
                     </div>
                 </div>
 
                 {/* Paid Amount */}
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
-                    <div className="flex items-start justify-between">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 relative">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 md:gap-0">
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Total Paid</p>
-                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-                                {formatCurrency(summary?.totalPaid)}
+                            <p className="text-xs md:text-sm font-medium text-gray-500">Total Paid</p>
+                            <h3 className="text-lg md:text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(stats.paid)}
                             </h3>
-                            <p className="text-xs text-gray-400 mt-2">
-                                Last payment: {transactions && transactions.length > 0
-                                    ? new Date(transactions[transactions.length - 1].paymentDate).toLocaleDateString()
-                                    : 'N/A'}
+                            <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2">
+                                Amount collected
                             </p>
                         </div>
-                        <div className="p-3 rounded-xl bg-green-50 text-green-500">
-                            <CheckCircle size={24} />
+                        <div className="absolute top-4 right-4 p-2 md:p-3 rounded-xl bg-blue-50 text-blue-500">
+                            <CheckCircle size={16} className="md:w-6 md:h-6" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Credits */}
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 relative">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 md:gap-0">
+                        <div>
+                            <p className="text-xs md:text-sm font-medium text-gray-500">Credited</p>
+                            <h3 className="text-lg md:text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(stats.credit)}
+                            </h3>
+                            <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2">
+                                Total Credited
+                            </p>
+                        </div>
+                        <div className="absolute top-4 right-4 p-2 md:p-3 rounded-xl bg-orange-50 text-orange-500">
+                            <Zap size={16} className="md:w-6 md:h-6" />
                         </div>
                     </div>
                 </div>
 
                 {/* Total Fee */}
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300">
-                    <div className="flex items-start justify-between">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 relative">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 md:gap-0">
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Total Fee</p>
-                            <h3 className="text-2xl font-bold text-gray-900 mt-1">
-                                {formatCurrency(summary?.totalFee)}
+                            <p className="text-xs md:text-sm font-medium text-gray-500">Total Fee</p>
+                            <h3 className="text-lg md:text-2xl font-bold text-gray-900 mt-1">
+                                {formatCurrency(stats.total)}
                             </h3>
-                            <p className="text-xs text-gray-400 mt-2">
-                                Total Applicable Fees
+                            <p className="text-[10px] md:text-xs text-gray-400 mt-1 md:mt-2">
+                                Total Applicable
                             </p>
                         </div>
-                        <div className="p-3 rounded-xl bg-blue-50 text-blue-500">
-                            <CreditCard size={24} />
+                        <div className="absolute top-4 right-4 p-2 md:p-3 rounded-xl bg-purple-50 text-purple-500">
+                            <BookOpen size={16} className="md:w-6 md:h-6" />
                         </div>
                     </div>
                 </div>
             </div>
+
+
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Fee Breakdown */}
@@ -298,85 +387,197 @@ const FeeManagement = () => {
                         </div>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        {/* Desktop Table View */}
+                        <table className="w-full hidden md:table">
                             <thead className="bg-gray-50/50">
                                 <tr className="text-left text-xs font-medium text-gray-500">
                                     <th className="px-6 py-4 uppercase tracking-wider">Fee Head</th>
                                     <th className="px-6 py-4 uppercase tracking-wider">Year/Sem</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Amount</th>
-                                    <th className="px-6 py-4 uppercase tracking-wider text-center">Status</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Total</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Paid</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-right">Due</th>
+                                    <th className="px-6 py-4 uppercase tracking-wider text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {filteredFees && filteredFees.length > 0 ? (
-                                    filteredFees.map((inv, index) => (
-                                        <tr key={index} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                                                        <FileText size={16} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
-                                                        <p className="text-xs text-gray-500 line-clamp-1">{inv.remarks || 'Standard Fee'}</p>
-                                                        <div className="flex flex-wrap gap-2 mt-1">
-                                                            {inv.isStructure ? (
-                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                                                                    <BookOpen size={10} /> Academic
-                                                                </span>
-                                                            ) : (
-                                                                // Check if it's a Transport fee
-                                                                (inv.feeHead?.name?.toLowerCase().includes('transport') || inv.feeHead?.name?.toLowerCase().includes('bus')) ? (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
-                                                                        <Bus size={10} /> Transport
+                                    filteredFees.map((inv, index) => {
+                                        // Calculate paid amount for this specific fee item
+                                        let itemPaid = 0;
+                                        if (transactions) {
+                                            transactions.forEach(tx => {
+                                                // Link transaction to fee item by feeHead and year/sem
+                                                if (tx.feeHead?._id === inv.feeHead?._id &&
+                                                    tx.studentYear?.toString() === inv.studentYear?.toString() &&
+                                                    (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
+                                                ) {
+                                                    if (tx.transactionType === 'DEBIT') {
+                                                        itemPaid += Number(tx.amount) || 0;
+                                                    } else {
+                                                        itemPaid += Number(tx.amount) || 0;
+                                                    }
+                                                }
+                                            });
+                                        }
+
+                                        const itemDue = Math.max(0, inv.amount - itemPaid);
+                                        const isFullyPaid = itemDue <= 0;
+
+                                        return (
+                                            <tr key={index} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                                                            <FileText size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
+                                                            <p className="text-xs text-gray-500 line-clamp-1">{inv.remarks || 'Standard Fee'}</p>
+                                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                                {inv.isStructure ? (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                                                        <BookOpen size={10} /> Academic
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
-                                                                        <Zap size={10} /> Individual
-                                                                    </span>
-                                                                )
-                                                            )}
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                                                Year {inv.studentYear}
-                                                            </span>
-                                                            {inv.semester && (
+                                                                    // Check if it's a Transport fee
+                                                                    (inv.feeHead?.name?.toLowerCase().includes('transport') || inv.feeHead?.name?.toLowerCase().includes('bus')) ? (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700">
+                                                                            <Bus size={10} /> Transport
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
+                                                                            <Zap size={10} /> Individual
+                                                                        </span>
+                                                                    )
+                                                                )}
                                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                                                    Sem {inv.semester}
+                                                                    Year {inv.studentYear}
                                                                 </span>
-                                                            )}
+                                                                {inv.semester && (
+                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                                                        Sem {inv.semester}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-500">
-                                                Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-medium text-gray-900">
-                                                {formatCurrency(inv.amount)}
-                                            </td>
-                                            <td className="px-6 py-4 text-center space-y-2">
-                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100 block w-fit mx-auto">
-                                                    Applied
-                                                </span>
-                                                <button
-                                                    onClick={() => handlePayment(inv.amount, inv)}
-                                                    disabled={paymentLoading}
-                                                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline underline-offset-2 disabled:opacity-50"
-                                                >
-                                                    Pay Now
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                    Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                                    {formatCurrency(inv.amount)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-green-600">
+                                                    {formatCurrency(itemPaid)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-red-600">
+                                                    {formatCurrency(itemDue)}
+                                                </td>
+                                                <td className="px-6 py-4 text-center space-y-2">
+                                                    {isFullyPaid ? (
+                                                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 border border-green-100 block w-fit mx-auto">
+                                                            Paid
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handlePayment(itemDue, inv)}
+                                                            disabled={paymentLoading}
+                                                            className="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold text-xs rounded-lg hover:bg-indigo-100 transition disabled:opacity-50"
+                                                        >
+                                                            Pay Now
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
                                 ) : (
                                     <tr>
-                                        <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
                                             No fee records found for the selected year.
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
+
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4 p-4">
+                            {filteredFees && filteredFees.length > 0 ? (
+                                filteredFees.map((inv, index) => {
+                                    // Calculate paid amount for this specific fee item (Duplicate Logic for Mobile View)
+                                    let itemPaid = 0;
+                                    if (transactions) {
+                                        transactions.forEach(tx => {
+                                            if (tx.feeHead?._id === inv.feeHead?._id &&
+                                                tx.studentYear?.toString() === inv.studentYear?.toString() &&
+                                                (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
+                                            ) {
+                                                itemPaid += Number(tx.amount) || 0;
+                                            }
+                                        });
+                                    }
+
+                                    const itemDue = Math.max(0, inv.amount - itemPaid);
+                                    const isFullyPaid = itemDue <= 0;
+
+                                    return (
+                                        <div key={index} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                                        <FileText size={16} />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-bold text-gray-900 text-sm">{inv.feeHead?.name || 'Tuition Fee'}</h4>
+                                                        <span className="text-xs text-gray-500">Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}</span>
+                                                    </div>
+                                                </div>
+                                                {isFullyPaid ? (
+                                                    <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700">
+                                                        PAID
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                                        DUE
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-2 text-center py-3 border-t border-b border-gray-200 mb-3">
+                                                <div>
+                                                    <p className="text-[10px] text-gray-400 uppercase">Total</p>
+                                                    <p className="font-semibold text-gray-900 text-sm">{formatCurrency(inv.amount)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] text-gray-400 uppercase">Paid</p>
+                                                    <p className="font-semibold text-green-600 text-sm">{formatCurrency(itemPaid)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] text-gray-400 uppercase">Due</p>
+                                                    <p className="font-bold text-red-600 text-sm">{formatCurrency(itemDue)}</p>
+                                                </div>
+                                            </div>
+
+                                            {!isFullyPaid && (
+                                                <button
+                                                    onClick={() => handlePayment(itemDue, inv)}
+                                                    disabled={paymentLoading}
+                                                    className="w-full py-2 bg-indigo-600 text-white font-semibold text-xs rounded-lg hover:bg-indigo-700 transition"
+                                                >
+                                                    Pay Balance ({formatCurrency(itemDue)})
+                                                </button>
+                                            )}
+                                        </div>
+                                    )
+                                })
+                            ) : (
+                                <div className="text-center py-8 text-gray-500 text-sm">
+                                    No fee records found.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -387,46 +588,51 @@ const FeeManagement = () => {
                     </div>
                     <div className="p-2 overflow-y-auto max-h-[500px]">
                         {transactions && transactions.length > 0 ? (
-                            transactions.map((tx, index) => (
-                                <div key={index} className="p-4 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0 relative group">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-lg ${tx.transactionType === 'DEBIT' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                                {tx.transactionType === 'DEBIT' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-gray-900 text-sm">
-                                                    {tx.feeHead?.name
-                                                        ? `${tx.feeHead.name} - ${tx.transactionType === 'DEBIT' ? 'Payment' : 'Adjustment'}`
-                                                        : (tx.transactionType === 'DEBIT' ? 'Payment Received' : 'Fee Adjustment')
-                                                    }
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded uppercase tracking-wide">
-                                                        {tx.paymentMode || 'Unknown'}
-                                                    </span>
-                                                    <span className="text-xs text-gray-400">
-                                                        #{tx.receiptNumber || 'Ref N/A'}
-                                                    </span>
+                            transactions.map((tx, index) => {
+                                const isCon = isCredit(tx);
+                                const isPayment = tx.transactionType === 'DEBIT' && !isCon;
+
+                                return (
+                                    <div key={index} className="p-4 hover:bg-gray-50 rounded-xl transition-colors border-b border-gray-50 last:border-0 relative group">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${isCon ? 'bg-green-100 text-green-600' : (isPayment ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600')}`}>
+                                                    {isCon ? <Zap size={16} /> : (isPayment ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900 text-sm">
+                                                        {tx.feeHead?.name
+                                                            ? `${tx.feeHead.name}`
+                                                            : (isCon ? 'Credit / Waiver' : 'Fee Payment')
+                                                        }
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded uppercase tracking-wide">
+                                                            {tx.paymentMode || 'Unknown'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-400">
+                                                            #{tx.receiptNumber || 'Ref N/A'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <div className="text-right">
+                                                <p className={`font-bold text-sm ${isCon ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {isCon ? '+' : '-'}{formatCurrency(tx.amount)}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400">
+                                                    {new Date(tx.paymentDate).toLocaleDateString()}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className={`font-bold text-sm ${tx.transactionType === 'DEBIT' ? 'text-green-600' : 'text-red-600'}`}>
-                                                {tx.transactionType === 'DEBIT' ? '+' : '-'}{formatCurrency(tx.amount)}
+                                        {tx.remarks && (
+                                            <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 p-2 rounded border border-gray-100 italic">
+                                                "{tx.remarks}"
                                             </p>
-                                            <p className="text-[10px] text-gray-400">
-                                                {new Date(tx.paymentDate).toLocaleDateString()}
-                                            </p>
-                                        </div>
+                                        )}
                                     </div>
-                                    {tx.remarks && (
-                                        <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 p-2 rounded border border-gray-100 italic">
-                                            "{tx.remarks}"
-                                        </p>
-                                    )}
-                                </div>
-                            ))
+                                )
+                            })
                         ) : (
                             <div className="p-8 text-center">
                                 <div className="p-3 bg-gray-50 rounded-full inline-block mb-3 text-gray-400">
@@ -438,6 +644,70 @@ const FeeManagement = () => {
                     </div>
                 </div>
             </div>
+            {/* Payment Modal */}
+            {isPaymentModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl transform transition-all scale-100 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-gray-900">Confirm Payment</h3>
+                            <button
+                                onClick={() => setIsPaymentModalOpen(false)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <ArrowDownLeft size={24} className="rotate-45" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                                <p className="text-sm text-indigo-600 font-medium mb-1">Paying for</p>
+                                <p className="text-lg font-bold text-indigo-900">
+                                    {selectedPaymentFee ? selectedPaymentFee.feeHead?.name : 'Total Due Balance'}
+                                </p>
+                                {selectedPaymentFee && (
+                                    <p className="text-xs text-indigo-500 mt-1">
+                                        Amount Due: {formatCurrency(selectedPaymentFee.amount)}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Enter Amount to Pay (INR)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₹</span>
+                                    <input
+                                        type="number"
+                                        value={payAmount}
+                                        onChange={(e) => setPayAmount(e.target.value)}
+                                        className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-bold text-lg text-gray-900"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    You can initiate a partial payment if you wish.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={initiateTransaction}
+                                disabled={paymentLoading || !payAmount || Number(payAmount) <= 0}
+                                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:shadow-xl hover:translate-y-[-2px] transition-all disabled:opacity-50 disabled:translate-y-0"
+                            >
+                                {paymentLoading ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Processing...
+                                    </span>
+                                ) : (
+                                    `Pay ${formatCurrency(payAmount || 0)}`
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
