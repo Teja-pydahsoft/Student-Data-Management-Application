@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X, Users } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 import { serviceService } from '../../services/serviceService';
+import clubService from '../../services/clubService';
 import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -17,7 +18,9 @@ const Dashboard = () => {
     const [polls, setPolls] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
     const [serviceRequests, setServiceRequests] = useState([]);
+
     const [events, setEvents] = useState([]);
+    const [clubs, setClubs] = useState([]);
 
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -31,13 +34,14 @@ const Dashboard = () => {
             try {
                 if (!user?.admission_number) return;
 
-                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes] = await Promise.allSettled([
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes, clubsRes] = await Promise.allSettled([
                     api.get(`/students/${user.admission_number}`),
                     api.get('/announcements/student'),
                     api.get('/polls/student'),
                     api.get('/attendance/student'),
                     serviceService.getRequests(),
-                    api.get('/events/student')
+                    api.get('/events/student'),
+                    clubService.getClubs()
                 ]);
 
                 // Handle Profile
@@ -77,6 +81,11 @@ const Dashboard = () => {
                 // Handle Events
                 if (eventsRes.status === 'fulfilled' && eventsRes.value.data.success) {
                     setEvents(eventsRes.value.data.data);
+                }
+
+                // Handle Clubs
+                if (clubsRes.status === 'fulfilled' && clubsRes.value.success) {
+                    setClubs(clubsRes.value.data);
                 }
 
             } catch (error) {
@@ -459,6 +468,66 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Center: Feed (50% Width on Large) */}
                 <div className="lg:col-span-6 flex flex-col gap-6">
+
+                    {/* Student Clubs Section (New) */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                    <Users size={18} />
+                                </div>
+                                Student Clubs
+                            </h3>
+                            <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                                View All
+                            </Link>
+                        </div>
+
+                        {clubs.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {clubs.slice(0, 2).map(club => (
+                                    <div key={club.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all group">
+                                        <div className="h-24 bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                                            {club.image_url ? (
+                                                <img src={club.image_url} alt={club.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                            ) : (
+                                                <Users size={32} className="text-gray-300" />
+                                            )}
+                                            {/* Status Badge */}
+                                            {club.userStatus && (
+                                                <div className="absolute top-2 right-2">
+                                                    {club.userStatus === 'approved' && <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><CheckCircle size={10} /> Member</span>}
+                                                    {club.userStatus === 'pending' && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm"><Clock size={10} /> Pending</span>}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="p-3">
+                                            <h4 className="font-bold text-gray-900 text-sm mb-1 truncate">{club.name}</h4>
+                                            {club.userStatus === 'approved' ? (
+                                                <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium block mt-2 text-center bg-indigo-50 py-1.5 rounded-md">
+                                                    View Activities
+                                                </Link>
+                                            ) : club.userStatus === 'pending' ? (
+                                                <div className="text-xs text-gray-400 font-medium block mt-2 text-center bg-gray-50 py-1.5 rounded-md cursor-not-allowed">
+                                                    Request Sent
+                                                </div>
+                                            ) : (
+                                                <Link to="/student/clubs" className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 font-medium block mt-2 text-center py-1.5 rounded-md shadow-sm transition-colors">
+                                                    Join Club
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                <p className="text-gray-500 text-sm">No clubs available.</p>
+                                <Link to="/student/clubs" className="text-indigo-600 text-xs font-semibold mt-1 inline-block">Explore Clubs</Link>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Upcoming Events Section */}
                     {upcomingEvents.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

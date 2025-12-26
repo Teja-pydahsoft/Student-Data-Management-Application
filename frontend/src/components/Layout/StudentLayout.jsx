@@ -76,9 +76,7 @@ const StudentLayout = ({ children }) => {
         { icon: CalendarCheck, label: 'Event Calendar', path: '/student/events' },
         { icon: CheckCircle, label: 'Attendance', path: '/student/attendance' },
         { icon: FileText, label: 'Sem Registration', path: '/student/semester-registration' },
-
         { icon: Briefcase, label: 'Services', path: '/student/services' },
-        { icon: User, label: 'Profile', path: '/student/profile' },
         { icon: CreditCard, label: 'Fee Management', path: '/student/fees' },
     ];
 
@@ -134,39 +132,6 @@ const StudentLayout = ({ children }) => {
                         </div>
                     </div>
 
-                    {/* User Info Card */}
-                    <div className="mx-4 mt-6 p-4 rounded-2xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                        <div className="flex items-center gap-4 relative z-10">
-                            <div className="h-12 w-12 rounded-full ring-2 ring-white shadow-md bg-gray-200 overflow-hidden shrink-0">
-                                {user?.student_photo ? (
-                                    <img src={user.student_photo} alt="Profile" className="h-full w-full object-cover" />
-                                ) : (
-                                    <div className="h-full w-full bg-blue-100 flex items-center justify-center text-blue-600">
-                                        <User size={20} />
-                                    </div>
-                                )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-sm font-bold text-gray-900 truncate">{user?.name || 'Student'}</p>
-                                    <button
-                                        onClick={() => !isSubscribed && setNotificationModalOpen(true)}
-                                        className={`p-1 rounded-full transition-colors ${isSubscribed ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600'}`}
-                                        title={isSubscribed ? "Notifications Enabled" : "Enable Notifications"}
-                                    >
-                                        {isSubscribed ? <Bell size={16} fill="currentColor" /> : <BellOff size={16} />}
-                                    </button>
-                                </div>
-                                <p className="text-xs font-medium text-gray-500 truncate">{user?.admission_number}</p>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                    <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-                                    <span className="text-[10px] font-semibold text-green-600 tracking-wide uppercase">Online</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
                         <p className="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Menu</p>
@@ -194,6 +159,31 @@ const StudentLayout = ({ children }) => {
                         ))}
                     </nav>
 
+                    {/* User Info Card (Moved to Bottom) */}
+                    <div
+                        onClick={() => navigate('/student/profile')}
+                        className="mx-4 mb-2 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md transition-all"
+                    >
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                        <div className="flex items-center gap-3 relative z-10">
+                            <div className="h-10 w-10 rounded-full ring-2 ring-white shadow-md bg-gray-200 overflow-hidden shrink-0">
+                                {user?.student_photo ? (
+                                    <img src={user.student_photo} alt="Profile" className="h-full w-full object-cover" />
+                                ) : (
+                                    <div className="h-full w-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                        <User size={18} />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-bold text-gray-900 truncate">{user?.name || 'Student'}</p>
+                                </div>
+                                <p className="text-xs font-medium text-gray-500 truncate">{user?.admission_number}</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Logout */}
                     <div className="p-4 border-t border-gray-100 bg-gray-50/30">
                         <button
@@ -216,7 +206,7 @@ const StudentLayout = ({ children }) => {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 lg:ml-72 h-screen overflow-y-auto p-4 lg:p-8">
+            <main className="flex-1 lg:ml-72 h-screen overflow-y-auto p-4 lg:p-8 relative z-10">
                 <div className="w-full">
                     <Outlet />
                 </div>
