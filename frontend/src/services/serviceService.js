@@ -41,6 +41,11 @@ export const serviceService = {
         return response.data;
     },
 
+    createRequestByAdmin: async (data) => {
+        const response = await api.post('/services/requests/admin', data);
+        return response.data;
+    },
+
     processPayment: async (requestId) => {
         const response = await api.post('/services/pay', { request_id: requestId });
         return response.data;

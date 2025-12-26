@@ -32,10 +32,11 @@ router.delete('/:id', verifyPermission(MODULES.SERVICES, 'manage_config'), servi
 
 // --- Service Requests ---
 
-// Student Request (Student Role Only) - Keeping as is or could be permission based if students had RBAC
-// Currently students are handled by role check in controller or middleware, assuming simplified role check for now check controller
 // Student Request (Student Role Only)
 router.post('/requests', serviceController.requestService);
+
+// Admin Create Request (Admin Only)
+router.post('/requests/admin', verifyPermission(MODULES.SERVICES, 'manage_requests'), serviceController.createRequestByAdmin);
 
 // Get Service Requests (Student sees own, Admin sees all with permission)
 router.get('/requests', (req, res, next) => {
@@ -45,14 +46,6 @@ router.get('/requests', (req, res, next) => {
     }
     // If admin/staff, check permission and attach scope
     const middleware = [verifyPermission(MODULES.SERVICES, 'view'), attachUserScope];
-    // Execute middleware chain manually or simplify route structure
-    // Since we are inside a handler, better to just call them sequentially or restructure
-    // BUT since we are in a callback, we can't easily chain standard middleware.
-    // Better approach: Define the route with middleware array at routing level.
-
-    // However, since we have conditional logic, we have to invoke them.
-    // Let's rely on standard routing instead.
-
     return verifyPermission(MODULES.SERVICES, 'view')(req, res, () => {
         attachUserScope(req, res, next);
     });

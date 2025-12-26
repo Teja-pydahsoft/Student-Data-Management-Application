@@ -157,6 +157,92 @@ exports.requestService = async (req, res) => {
     }
 };
 
+// Create Request (Admin on behalf of Student)
+exports.createRequestByAdmin = async (req, res) => {
+    try {
+        const {
+            service_id,
+            admission_number,
+            purpose,
+            // Student Details
+            student_name, father_name, student_mobile,
+            course, branch, current_year, current_semester,
+            dob, gender, caste, student_address,
+            ...otherData
+        } = req.body;
+
+        // Validation
+        if (!service_id || !admission_number || !student_name) {
+            return res.status(400).json({ success: false, message: 'Service, Admission Number, and Student Name are required' });
+        }
+
+        // Check if student exists
+        const [students] = await masterPool.execute('SELECT id FROM students WHERE admission_number = ?', [admission_number]);
+        let student_id;
+
+        if (students.length > 0) {
+            student_id = students[0].id;
+            // Update Student Details
+            await masterPool.execute(
+                `UPDATE students SET 
+                    student_name = ?, father_name = ?, student_mobile = ?, 
+                    course = ?, branch = ?, current_year = ?, current_semester = ?,
+                    dob = ?, gender = ?, caste = ?, student_address = ?
+                WHERE id = ?`,
+                [
+                    student_name, father_name || null, student_mobile || null,
+                    course || null, branch || null, current_year || null, current_semester || null,
+                    dob || null, gender || null, caste || null, student_address || null,
+                    student_id
+                ]
+            );
+        } else {
+            // Create New Student
+            const [res] = await masterPool.execute(
+                `INSERT INTO students (
+                    admission_number, student_name, father_name, student_mobile, 
+                    course, branch, current_year, current_semester,
+                    dob, gender, caste, student_address, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                [
+                    admission_number, student_name, father_name || null, student_mobile || null,
+                    course || null, branch || null, current_year || null, current_semester || null,
+                    dob || null, gender || null, caste || null, student_address || null
+                ]
+            );
+            student_id = res.insertId;
+        }
+
+        // Verify service
+        const [service] = await masterPool.execute('SELECT * FROM services WHERE id = ?', [service_id]);
+        if (service.length === 0) {
+            return res.status(400).json({ success: false, message: 'Invalid service' });
+        }
+
+        const request_data = JSON.stringify({ purpose, ...otherData });
+
+        // Create request as PAID immediately
+        const [result] = await masterPool.execute(
+            'INSERT INTO service_requests (student_id, service_id, status, payment_status, request_data, created_at, request_date) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+            [student.id, service_id, 'pending', 'paid', request_data]
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Service request created and marked as paid.',
+            requestId: result.insertId,
+            // Return context for frontend
+            student_name: student_name,
+            service_name: service[0].name,
+            service_price: service[0].price
+        });
+
+    } catch (error) {
+        console.error('Error creating admin request:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
 // Get Requests
 exports.getServiceRequests = async (req, res) => {
     try {
@@ -551,4 +637,3 @@ exports.previewTemplate = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
-
