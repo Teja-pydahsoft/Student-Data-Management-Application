@@ -9,30 +9,127 @@ const FeeManagement = () => {
     const [feeData, setFeeData] = useState(null);
     const [error, setError] = useState(null);
     const [selectedYear, setSelectedYear] = useState('All');
+    const [paymentLoading, setPaymentLoading] = useState(false);
+
+    // Load Razorpay Script
+    const loadRazorpayScript = () => {
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
+
+    const fetchFeeDetails = async () => {
+        if (!user?.admission_number) return;
+
+        try {
+            setLoading(true);
+            const response = await api.get(`/fees/students/${user.admission_number}/details`);
+
+            if (response.data.success) {
+                setFeeData(response.data);
+            } else {
+                setError('Failed to load fee details');
+            }
+        } catch (err) {
+            console.error('Error fetching fee details:', err);
+            setError('Unable to fetch fee information. Please try again later.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchFeeDetails = async () => {
-            if (!user?.admission_number) return;
-
-            try {
-                setLoading(true);
-                const response = await api.get(`/fees/students/${user.admission_number}/details`);
-
-                if (response.data.success) {
-                    setFeeData(response.data);
-                } else {
-                    setError('Failed to load fee details');
-                }
-            } catch (err) {
-                console.error('Error fetching fee details:', err);
-                setError('Unable to fetch fee information. Please try again later.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchFeeDetails();
     }, [user]);
+
+    const handlePayment = async (amountToPay, feeItem = null) => {
+        if (amountToPay <= 0) return;
+
+        try {
+            setPaymentLoading(true);
+            const resScript = await loadRazorpayScript();
+
+            if (!resScript) {
+                alert('Razorpay SDK failed to load. Are you online?');
+                return;
+            }
+
+            // 1. Create Order
+            const orderResponse = await api.post('/payments/create-order', {
+                studentId: user?.admission_number,
+                amount: amountToPay,
+                feeHeadId: feeItem?.feeHead?._id,
+                studentYear: feeItem?.studentYear,
+                semester: feeItem?.semester,
+                remarks: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'General Fee Payment'
+            });
+
+            if (!orderResponse.data.success) {
+                alert(orderResponse.data.message || 'Failed to initialize payment');
+                return;
+            }
+
+            const { order, key_id, studentDetails } = orderResponse.data;
+
+            // 2. Open Razorpay Checkout
+            const options = {
+                key: key_id,
+                amount: order.amount,
+                currency: order.currency,
+                name: 'Pydah Group',
+                description: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'Fee Payment',
+                order_id: order.id,
+                handler: async (response) => {
+                    try {
+                        setPaymentLoading(true);
+                        // 3. Verify Payment
+                        const verifyRes = await api.post('/payments/verify', {
+                            ...response,
+                            studentId: user?.admission_number,
+                            amount: amountToPay,
+                            feeHeadId: feeItem?.feeHead?._id,
+                            studentYear: feeItem?.studentYear,
+                            semester: feeItem?.semester,
+                            remarks: feeItem ? `Online Payment: ${feeItem.feeHead?.name}` : 'Online Lumpsum Payment'
+                        });
+
+                        if (verifyRes.data.success) {
+                            alert('Payment successful!');
+                            fetchFeeDetails(); // Refresh data
+                        } else {
+                            alert('Payment verification failed.');
+                        }
+                    } catch (err) {
+                        console.error('Verification error:', err);
+                        alert('Something went wrong during verification.');
+                    } finally {
+                        setPaymentLoading(false);
+                    }
+                },
+                prefill: {
+                    name: studentDetails.name,
+                    email: studentDetails.email || '',
+                    contact: studentDetails.contact || ''
+                },
+                theme: {
+                    color: '#4F46E5' // Indigo
+                }
+            };
+
+            const paymentObject = new window.Razorpay(options);
+            paymentObject.open();
+
+        } catch (err) {
+            console.error('Payment error:', err);
+            alert('Failed to initiate payment. Please try again.');
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
 
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat('en-IN', {
@@ -118,8 +215,19 @@ const FeeManagement = () => {
                                 </span>
                             )}
                         </div>
-                        <div className={`p-3 rounded-xl ${isPaid ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
-                            <AlertCircle size={24} />
+                        <div className="flex flex-col items-end gap-2">
+                            <div className={`p-3 rounded-xl ${isPaid ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
+                                <AlertCircle size={24} />
+                            </div>
+                            {!isPaid && (
+                                <button
+                                    onClick={() => handlePayment(dueAmount)}
+                                    disabled={paymentLoading}
+                                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                    {paymentLoading ? 'Processing...' : 'Pay Total Due'}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -246,10 +354,17 @@ const FeeManagement = () => {
                                             <td className="px-6 py-4 text-right font-medium text-gray-900">
                                                 {formatCurrency(inv.amount)}
                                             </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100">
+                                            <td className="px-6 py-4 text-center space-y-2">
+                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-100 block w-fit mx-auto">
                                                     Applied
                                                 </span>
+                                                <button
+                                                    onClick={() => handlePayment(inv.amount, inv)}
+                                                    disabled={paymentLoading}
+                                                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline underline-offset-2 disabled:opacity-50"
+                                                >
+                                                    Pay Now
+                                                </button>
                                             </td>
                                         </tr>
                                     ))

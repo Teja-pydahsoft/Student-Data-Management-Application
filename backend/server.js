@@ -28,6 +28,7 @@ const feeRoutes = require('./routes/feeRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
 const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -133,6 +134,7 @@ app.use('/api/student-history', require('./routes/studentHistoryRoutes'));
 app.use('/api/sms-templates', require('./routes/smsTemplateRoutes'));
 app.use('/api/notifications', require('./routes/pushRoutes'));
 app.use('/api/clubs', require('./routes/clubRoutes'));
+app.use('/api/payments', paymentRoutes);
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);

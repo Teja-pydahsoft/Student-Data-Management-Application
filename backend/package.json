@@ -43,7 +43,8 @@
     "qrcode": "^1.5.3",
     "uuid": "^9.0.1",
     "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "razorpay": "^2.9.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

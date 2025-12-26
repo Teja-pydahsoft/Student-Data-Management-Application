@@ -5,6 +5,10 @@ const paymentConfigSchema = mongoose.Schema({
         type: String,
         required: true
     },
+    course: {
+        type: String,
+        required: true
+    },
     account_name: {
         type: String, // e.g., "College Fees Account"
         required: true
@@ -23,6 +27,14 @@ const paymentConfigSchema = mongoose.Schema({
     },
     upi_id: {
         type: String, // Optional
+        required: false
+    },
+    razorpay_key_id: {
+        type: String,
+        required: false
+    },
+    razorpay_key_secret: {
+        type: String,
         required: false
     },
     is_active: {
