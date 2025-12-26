@@ -105,7 +105,7 @@ exports.verifyPayment = async (req, res) => {
 
         // 1. Fetch Student/Config to get secret for verification
         const [students] = await masterPool.query(
-            'SELECT s.student_name, s.course, s.student_data FROM students s WHERE s.admission_number = ?',
+            'SELECT s.student_name, s.course, s.current_year, s.current_semester, s.student_data FROM students s WHERE s.admission_number = ?',
             [studentId]
         );
 
@@ -156,8 +156,8 @@ exports.verifyPayment = async (req, res) => {
             referenceOrderId: razorpay_order_id, // Custom field if needed, or put in remarks
             remarks: remarks || `Online Payment via Razorpay (${razorpay_payment_id})`,
             feeHead: feeHeadId || null,
-            studentYear: studentYear?.toString(),
-            semester: semester?.toString(),
+            studentYear: (studentYear || student.current_year)?.toString(),
+            semester: (semester || student.current_semester)?.toString(),
             paymentConfigId: paymentConfig._id,
             depositedToAccount: paymentConfig.account_name,
             paymentDate: new Date(),
