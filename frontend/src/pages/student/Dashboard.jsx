@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 import { serviceService } from '../../services/serviceService';
@@ -17,10 +17,13 @@ const Dashboard = () => {
     const [polls, setPolls] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
     const [serviceRequests, setServiceRequests] = useState([]);
+    const [events, setEvents] = useState([]);
 
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
     const [currentAnnouncement, setCurrentAnnouncement] = useState(null);
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState(null);
 
     // Initial Data Fetch
     useEffect(() => {
@@ -28,12 +31,13 @@ const Dashboard = () => {
             try {
                 if (!user?.admission_number) return;
 
-                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes] = await Promise.allSettled([
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes] = await Promise.allSettled([
                     api.get(`/students/${user.admission_number}`),
                     api.get('/announcements/student'),
                     api.get('/polls/student'),
                     api.get('/attendance/student'),
-                    serviceService.getRequests()
+                    serviceService.getRequests(),
+                    api.get('/events/student')
                 ]);
 
                 // Handle Profile
@@ -68,6 +72,11 @@ const Dashboard = () => {
                 // Handle Services
                 if (servicesRes.status === 'fulfilled' && servicesRes.value.data) {
                     setServiceRequests(servicesRes.value.data);
+                }
+
+                // Handle Events
+                if (eventsRes.status === 'fulfilled' && eventsRes.value.data.success) {
+                    setEvents(eventsRes.value.data.data);
                 }
 
             } catch (error) {
@@ -142,6 +151,15 @@ const Dashboard = () => {
         return items.sort((a, b) => b.date - a.date);
     }, [polls, announcements]);
 
+    // Filter Upcoming Events
+    const upcomingEvents = useMemo(() => {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // Include today's events from start of day
+        return events
+            .filter(e => new Date(e.event_date) >= now)
+            .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+    }, [events]);
+
 
     // Helpers
     const displayData = studentData || user;
@@ -168,9 +186,12 @@ const Dashboard = () => {
         return raw === 'completed' ? 'Completed' : 'Pending';
     };
 
-    const feeStatusLabel = normalizeFeeStatus();
     const registrationLabel = normalizeRegistrationStatus();
-    const isRegistrationCompleted = registrationLabel === 'Completed' && feeStatusLabel === 'Completed';
+    // User Request: If registration is completed, change fee status to 'Completed' (No Due) automatically
+    const feeStatusLabel = registrationLabel === 'Completed' ? 'Completed' : normalizeFeeStatus();
+
+    // Registration is considered fully complete if the registration status says so
+    const isRegistrationCompleted = registrationLabel === 'Completed';
 
     const closeAnnouncement = () => {
         if (currentAnnouncement) {
@@ -181,6 +202,17 @@ const Dashboard = () => {
             }
         }
         setShowAnnouncement(false);
+    };
+
+    const formatTime = (timeStr) => {
+        if (!timeStr) return '';
+        // Handle "09:30:00" or "09:30"
+        const [hours, minutes] = timeStr.split(':');
+        let h = parseInt(hours, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12; // the hour '0' should be '12'
+        return `${h}:${minutes} ${ampm}`;
     };
 
     const getStatusColor = (status) => {
@@ -214,6 +246,76 @@ const Dashboard = () => {
                             >
                                 Close & Continue
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Event Details Modal */}
+            {showEventModal && selectedEvent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in relative">
+                        <button
+                            onClick={() => setShowEventModal(false)}
+                            className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors z-10"
+                        >
+                            <X size={20} className="text-gray-600" />
+                        </button>
+
+                        <div className="bg-indigo-600 p-8 text-white relative overflow-hidden">
+                            <div className="relative z-10">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-sm border border-white/10 uppercase tracking-wide">
+                                        {selectedEvent.event_type}
+                                    </span>
+                                </div>
+                                <h3 className="text-2xl font-bold leading-tight mb-2">{selectedEvent.title}</h3>
+                                <div className="flex items-center gap-4 text-indigo-100 text-sm">
+                                    <div className="flex items-center gap-1.5">
+                                        <Calendar size={16} />
+                                        <span>{new Date(selectedEvent.event_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-32 h-32 bg-indigo-500/50 rounded-full blur-2xl"></div>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="flex flex-col gap-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Start Time</p>
+                                        <div className="flex items-center gap-2 text-gray-900 font-medium">
+                                            <Clock size={18} className="text-indigo-500" />
+                                            {selectedEvent.start_time ? formatTime(selectedEvent.start_time) : 'All Day'}
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">End Time</p>
+                                        <div className="flex items-center gap-2 text-gray-900 font-medium">
+                                            <Clock size={18} className="text-indigo-500" />
+                                            {selectedEvent.end_time ? formatTime(selectedEvent.end_time) : 'N/A'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-900 mb-2 uppercase tracking-wide">Description</h4>
+                                    <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap">
+                                        {selectedEvent.description || 'No description provided.'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+                                <button
+                                    onClick={() => setShowEventModal(false)}
+                                    className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 transition-colors shadow-lg shadow-gray-200"
+                                >
+                                    Close Details
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -312,7 +414,7 @@ const Dashboard = () => {
                 {isRegistrationCompleted && (
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col justify-center relative overflow-hidden h-full">
                         <div className="flex items-center justify-between mb-4 z-10">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Registration</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Registration Status</h3>
                             <div className="p-1.5 bg-green-100 text-green-600 rounded-lg">
                                 <CheckCircle size={18} />
                             </div>
@@ -320,7 +422,7 @@ const Dashboard = () => {
 
                         <div className="z-10">
                             <div className="flex items-center gap-2 mb-1">
-                                <span className="text-2xl font-bold text-gray-900">Completed</span>
+                                <span className="text-xl font-bold text-gray-900">Sem Registration Completed</span>
                             </div>
                             <p className="text-xs text-gray-500">You are all set for this semester.</p>
                         </div>
@@ -356,87 +458,129 @@ const Dashboard = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Center: Feed (50% Width on Large) */}
-                <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <span role="img" aria-label="feed">📰</span>
+                <div className="lg:col-span-6 flex flex-col gap-6">
+                    {/* Upcoming Events Section */}
+                    {upcomingEvents.length > 0 && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                        <Calendar size={18} />
+                                    </div>
+                                    Upcoming Events
+                                </h3>
+                                <Link to="/student/calendar" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View Calendar</Link>
                             </div>
-                            Recent Updates & Polls
-                        </h3>
-                        {/* Link to all announcements maybe? */}
-                    </div>
 
-                    <div className="space-y-4 flex-1">
-                        {loading ? (
-                            <div className="text-center py-8 text-gray-500">Loading updates...</div>
-                        ) : feedItems.length > 0 ? (
-                            feedItems.slice(0, 5).map((item, index) => {
-                                if (item.type === 'poll') {
-                                    const poll = item.data;
-                                    return (
-                                        <div key={`poll-${poll.id}`} className="p-5 rounded-xl bg-purple-50 border border-purple-100 hover:border-purple-200 transition-colors relative">
-                                            <div className="absolute top-4 right-4 text-purple-200">
-                                                <Vote size={48} className="opacity-20" />
-                                            </div>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wide">Active Poll</span>
-                                                <span className="text-xs text-gray-500">{new Date(poll.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            <h4 className="font-bold text-gray-900 mb-2">{poll.question}</h4>
-                                            <p className="text-sm text-gray-600 mb-4">{poll.total_votes} students have voted</p>
+                            <div className="space-y-3">
+                                {upcomingEvents.slice(0, 3).map((event) => (
+                                    <div
+                                        key={event.id}
+                                        onClick={() => {
+                                            setSelectedEvent(event);
+                                            setShowEventModal(true);
+                                        }}
+                                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex-shrink-0 w-12 h-12 bg-indigo-50 text-indigo-600 rounded-lg flex flex-col items-center justify-center border border-indigo-100 group-hover:bg-white group-hover:shadow-sm transition-all">
+                                            <span className="text-[10px] font-bold uppercase">{new Date(event.event_date).toLocaleString('default', { month: 'short' })}</span>
+                                            <span className="text-lg font-bold leading-none">{new Date(event.event_date).getDate()}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-sm font-semibold text-gray-900 truncate group-hover:text-indigo-700">{event.title}</h4>
+                                            <p className="text-xs text-gray-500 truncate">{event.description || 'No details'}</p>
+                                        </div>
+                                        <div className="text-xs text-gray-400 group-hover:text-indigo-500">
+                                            <ArrowRight size={16} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                                            {/* Show Vote Status or Action */}
-                                            {poll.has_voted ? (
-                                                <div className="flex items-center gap-2 text-sm text-purple-700 font-medium bg-purple-100 px-3 py-2 rounded-lg inline-flex">
-                                                    <CheckCircle size={16} /> Voted
+                    {/* Feed Section */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col flex-1">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                    <span role="img" aria-label="feed">📰</span>
+                                </div>
+                                Recent Updates & Polls
+                            </h3>
+                        </div>
+
+                        <div className="space-y-4 flex-1">
+                            {loading ? (
+                                <div className="text-center py-8 text-gray-500">Loading updates...</div>
+                            ) : feedItems.length > 0 ? (
+                                feedItems.slice(0, 5).map((item, index) => {
+                                    if (item.type === 'poll') {
+                                        const poll = item.data;
+                                        return (
+                                            <div key={`poll-${poll.id}`} className="p-5 rounded-xl bg-purple-50 border border-purple-100 hover:border-purple-200 transition-colors relative">
+                                                <div className="absolute top-4 right-4 text-purple-200">
+                                                    <Vote size={48} className="opacity-20" />
                                                 </div>
-                                            ) : (
-                                                <Link
-                                                    to="/student/announcements"
-                                                    className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 inline-block"
-                                                >
-                                                    Participate Now
-                                                </Link>
-                                            )}
-                                        </div>
-                                    );
-                                } else {
-                                    const ann = item.data;
-                                    return (
-                                        <div key={`ann-${ann.id}`} className="p-5 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 transition-colors group">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-base">{ann.title}</h4>
-                                                <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100 whitespace-nowrap">
-                                                    {new Date(ann.created_at).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
-                                                {ann.content}
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    setCurrentAnnouncement(ann);
-                                                    setShowAnnouncement(true);
-                                                }}
-                                                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                                            >
-                                                Read More &rarr;
-                                            </button>
-                                        </div>
-                                    );
-                                }
-                            })
-                        ) : (
-                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                <p className="text-gray-500 text-sm">No new updates</p>
-                            </div>
-                        )}
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wide">Active Poll</span>
+                                                    <span className="text-xs text-gray-500">{new Date(poll.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                                <h4 className="font-bold text-gray-900 mb-2">{poll.question}</h4>
+                                                <p className="text-sm text-gray-600 mb-4">{poll.total_votes} students have voted</p>
 
-                        <div className="text-center pt-2">
-                            <Link to="/student/announcements" className="text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">
-                                View All Announcements & Polls
-                            </Link>
+                                                {/* Show Vote Status or Action */}
+                                                {poll.has_voted ? (
+                                                    <div className="flex items-center gap-2 text-sm text-purple-700 font-medium bg-purple-100 px-3 py-2 rounded-lg inline-flex">
+                                                        <CheckCircle size={16} /> Voted
+                                                    </div>
+                                                ) : (
+                                                    <Link
+                                                        to="/student/announcements"
+                                                        className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 inline-block"
+                                                    >
+                                                        Participate Now
+                                                    </Link>
+                                                )}
+                                            </div>
+                                        );
+                                    } else {
+                                        const ann = item.data;
+                                        return (
+                                            <div key={`ann-${ann.id}`} className="p-5 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 transition-colors group">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-base">{ann.title}</h4>
+                                                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100 whitespace-nowrap">
+                                                        {new Date(ann.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
+                                                    {ann.content}
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        setCurrentAnnouncement(ann);
+                                                        setShowAnnouncement(true);
+                                                    }}
+                                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                                >
+                                                    Read More &rarr;
+                                                </button>
+                                            </div>
+                                        );
+                                    }
+                                })
+                            ) : (
+                                <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                    <p className="text-gray-500 text-sm">No new updates</p>
+                                </div>
+                            )}
+
+                            <div className="text-center pt-2">
+                                <Link to="/student/announcements" className="text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">
+                                    View All Announcements & Polls
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -508,10 +652,13 @@ const Dashboard = () => {
                             <CheckCircle size={16} className={isRegistrationCompleted ? 'text-green-500' : 'text-yellow-500'} />
                             <span className="text-gray-700">Registration: {registrationLabel}</span>
                         </div>
-                        <div className="flex items-center gap-3 text-sm">
-                            <BookOpen size={16} className={feeStatusLabel === 'Completed' ? 'text-green-500' : (feeStatusLabel === 'Partially Completed' ? 'text-yellow-500' : 'text-red-500')} />
-                            <span className="text-gray-700">Fees: {feeStatusLabel}</span>
-                        </div>
+                        {/* Hide Fees if Registration is Completed as per user request */}
+                        {!isRegistrationCompleted && (
+                            <div className="flex items-center gap-3 text-sm">
+                                <BookOpen size={16} className={feeStatusLabel === 'Completed' ? 'text-green-500' : (feeStatusLabel === 'Partially Completed' ? 'text-yellow-500' : 'text-red-500')} />
+                                <span className="text-gray-700">Fees: {feeStatusLabel}</span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-3 text-sm">
                             <Smartphone size={16} className="text-gray-400" />
                             <span className="text-gray-700">{get('student_mobile', 'No mobile')}</span>
@@ -531,7 +678,7 @@ const Dashboard = () => {
                     </Link>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 
