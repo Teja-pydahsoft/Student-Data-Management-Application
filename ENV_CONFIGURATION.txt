@@ -35,18 +35,3 @@ UPLOAD_DIR=uploads
 # Logging
 LOG_LEVEL=warn
 
-# ============================================
-# AWS S3 Configuration
-# ============================================
-AWS_REGION=ap-south-1
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-S3_BUCKET_NAME=your_s3_bucket_name
-
-# Note: Replace the above values with your actual AWS credentials and S3 bucket name
-# The S3 bucket should be created in the same region as specified in AWS_REGION
-# Make sure the IAM user/role has the following permissions:
-# - s3:PutObject
-# - s3:GetObject
-# - s3:ListBucket
-

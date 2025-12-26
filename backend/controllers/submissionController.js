@@ -1185,9 +1185,9 @@ exports.submitForm = async (req, res) => {
     console.log('Resolved formId:', formId);
 
     if (!formData || typeof formData !== 'object') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Form data is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Form data is required'
       });
     }
 
@@ -1214,68 +1214,68 @@ exports.submitForm = async (req, res) => {
     let generatedAdmissionNumber = null;
     try {
       // Auto-assign is always enabled, so always generate admission number
-        // Get academic year from form data (batch field)
-        let academicYear = formData.batch || formData.academic_year;
-        
-        // Extract year if batch contains range like "2024-2028" or "2024-25"
-        if (academicYear && typeof academicYear === 'string') {
-          const yearMatch = academicYear.match(/^(\d{4})/);
-          if (yearMatch) {
-            academicYear = yearMatch[1];
-          }
-        }
-        
-        // Default to current year if no batch/academic year specified
-        if (!academicYear) {
-          academicYear = new Date().getFullYear().toString();
-        }
+      // Get academic year from form data (batch field)
+      let academicYear = formData.batch || formData.academic_year;
 
-        const yearPrefix = academicYear.toString();
+      // Extract year if batch contains range like "2024-2028" or "2024-25"
+      if (academicYear && typeof academicYear === 'string') {
+        const yearMatch = academicYear.match(/^(\d{4})/);
+        if (yearMatch) {
+          academicYear = yearMatch[1];
+        }
+      }
 
-        // Query MySQL to find max admission number for this year
-        const masterConn2 = await masterPool.getConnection();
-        const [existingRows] = await masterConn2.query(
-          `SELECT admission_number FROM students 
+      // Default to current year if no batch/academic year specified
+      if (!academicYear) {
+        academicYear = new Date().getFullYear().toString();
+      }
+
+      const yearPrefix = academicYear.toString();
+
+      // Query MySQL to find max admission number for this year
+      const masterConn2 = await masterPool.getConnection();
+      const [existingRows] = await masterConn2.query(
+        `SELECT admission_number FROM students 
            WHERE admission_number REGEXP ? 
            ORDER BY admission_number DESC`,
-          [`^${yearPrefix}[0-9]{4}$`]
-        );
-        masterConn2.release();
+        [`^${yearPrefix}[0-9]{4}$`]
+      );
+      masterConn2.release();
 
-        // Find the maximum sequence number for this year
-        let maxSeq = 0;
-        existingRows.forEach(row => {
-          const admNum = row.admission_number;
-          if (admNum && admNum.startsWith(yearPrefix)) {
-            const seqPart = admNum.substring(yearPrefix.length);
-            const seqNum = parseInt(seqPart, 10);
+      // Find the maximum sequence number for this year
+      let maxSeq = 0;
+      existingRows.forEach(row => {
+        const admNum = row.admission_number;
+        if (admNum && admNum.startsWith(yearPrefix)) {
+          const seqPart = admNum.substring(yearPrefix.length);
+          const seqNum = parseInt(seqPart, 10);
+          if (!isNaN(seqNum) && seqNum > maxSeq) {
+            maxSeq = seqNum;
+          }
+        }
+      });
+
+      // Also check form_submissions for any pending numbers
+      const [submissions] = await masterPool.query(
+        'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
+        [`${yearPrefix}%`]
+      );
+
+      if (submissions) {
+        submissions.forEach(sub => {
+          const admNum = sub.admission_number;
+          if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
+            const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
             if (!isNaN(seqNum) && seqNum > maxSeq) {
               maxSeq = seqNum;
             }
           }
         });
+      }
 
-        // Also check form_submissions for any pending numbers
-        const [submissions] = await masterPool.query(
-          'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
-          [`${yearPrefix}%`]
-        );
-
-        if (submissions) {
-          submissions.forEach(sub => {
-            const admNum = sub.admission_number;
-            if (admNum && admNum.startsWith(yearPrefix) && /^\d+$/.test(admNum.substring(yearPrefix.length))) {
-              const seqNum = parseInt(admNum.substring(yearPrefix.length), 10);
-              if (!isNaN(seqNum) && seqNum > maxSeq) {
-                maxSeq = seqNum;
-              }
-            }
-          });
-        }
-
-        const nextSeq = maxSeq + 1;
-        generatedAdmissionNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
-        console.log(`Generated admission number: ${generatedAdmissionNumber} for academic year ${academicYear}`);
+      const nextSeq = maxSeq + 1;
+      generatedAdmissionNumber = `${yearPrefix}${nextSeq.toString().padStart(4, '0')}`;
+      console.log(`Generated admission number: ${generatedAdmissionNumber} for academic year ${academicYear}`);
     } catch (error) {
       console.error('Error generating admission number:', error);
       // Continue without assigning
@@ -1298,9 +1298,9 @@ exports.submitForm = async (req, res) => {
 
   } catch (error) {
     console.error('Submit form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while submitting form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while submitting form'
     });
   }
 };
@@ -1313,7 +1313,7 @@ exports.getAllSubmissions = async (req, res) => {
     // Build MySQL query
     let query = 'SELECT * FROM form_submissions WHERE 1=1';
     const params = [];
-    
+
     if (status) {
       query += ' AND status = ?';
       params.push(status);
@@ -1322,9 +1322,9 @@ exports.getAllSubmissions = async (req, res) => {
       query += ' AND form_id = ?';
       params.push(formId);
     }
-    
+
     query += ' ORDER BY created_at DESC';
-    
+
     const [submissions] = await masterPool.query(query, params);
 
     // Enrich with form/admin names via separate queries
@@ -1375,9 +1375,9 @@ exports.getAllSubmissions = async (req, res) => {
 
   } catch (error) {
     console.error('Get submissions error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching submissions' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching submissions'
     });
   }
 };
@@ -1428,9 +1428,9 @@ exports.getSubmissionById = async (req, res) => {
 
   } catch (error) {
     console.error('Get submission error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching submission' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching submission'
     });
   }
 };
@@ -1514,7 +1514,7 @@ exports.approveSubmission = async (req, res) => {
     for (const field of formFields) {
       const col = field.key?.replace(/[^a-zA-Z0-9_]/g, '_');
       if (!col) continue;
-      
+
       // Check if column exists (MySQL doesn't support IF NOT EXISTS in ALTER TABLE)
       const [columns] = await masterConn.query(
         `SELECT COUNT(*) as count 
@@ -1524,7 +1524,7 @@ exports.approveSubmission = async (req, res) => {
          AND COLUMN_NAME = ?`,
         [destinationTable, col]
       );
-      
+
       if (columns[0].count === 0) {
         await masterConn.query(
           `ALTER TABLE ${destinationTable} ADD COLUMN ${col} VARCHAR(1024) NULL`
@@ -1707,7 +1707,7 @@ exports.approveSubmission = async (req, res) => {
 
         await masterConn.query(query, insertValues);
         console.log('✅ Student data inserted successfully');
-        
+
         // Generate student login credentials automatically
         try {
           const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
@@ -1733,90 +1733,7 @@ exports.approveSubmission = async (req, res) => {
 
     // Upload documents to S3 if enabled and documents exist
     const uploadedDocuments = {};
-    try {
-      const s3Service = require('../services/s3Service');
-      const documentSettingsController = require('../controllers/documentSettingsController');
-      
-      // Get document requirements to determine which documents to upload
-      const [docSettings] = await masterConn.query(
-        'SELECT value FROM settings WHERE `key` = ? LIMIT 1',
-        ['document_requirements']
-      );
-      
-      let docRequirements = {};
-      if (docSettings && docSettings.length > 0 && docSettings[0].value) {
-        try {
-          docRequirements = JSON.parse(docSettings[0].value);
-        } catch (e) {
-          console.warn('Could not parse document requirements:', e);
-        }
-      }
-
-      // Extract student info for S3 folder structure
-      const studentInfo = {
-        college: submissionData.college || 'Unknown',
-        batch: submissionData.batch || 'Unknown',
-        course: submissionData.course || 'Unknown',
-        branch: submissionData.branch || 'Unknown',
-        admissionNumber: finalAdmissionNumber
-      };
-
-      // Upload documents that are present in submission data
-      // Look for all keys starting with "document_" in submission_data
-      const documentKeys = Object.keys(submissionData).filter(key => 
-        key.toLowerCase().startsWith('document_') && 
-        typeof submissionData[key] === 'string' && 
-        submissionData[key].startsWith('data:')
-      );
-
-      for (const docKey of documentKeys) {
-        const docValue = submissionData[docKey];
-        if (docValue && typeof docValue === 'string' && docValue.startsWith('data:')) {
-          try {
-            // Extract file extension from MIME type
-            const mimeMatch = docValue.match(/data:([^;]+);base64,/);
-            const mimeType = mimeMatch ? mimeMatch[1] : 'application/pdf';
-            const extension = mimeType.includes('pdf') ? 'pdf' : 
-                            mimeType.includes('image') ? (mimeType.includes('png') ? 'png' : 'jpg') : 'pdf';
-            
-            // Extract document name from key (e.g., "document_Diploma_Certificate" -> "Diploma Certificate")
-            let docLabel = docKey.replace(/^document_/i, '').replace(/_/g, ' ');
-            // Try to find matching label in docRequirements
-            const matchingReq = Object.entries(docRequirements).find(([key, req]) => 
-              key.toLowerCase().replace(/[^a-z0-9]/g, '') === docKey.toLowerCase().replace(/^document_/i, '').replace(/[^a-z0-9]/g, '') ||
-              req?.label?.toLowerCase().replace(/[^a-z0-9]/g, '') === docLabel.toLowerCase().replace(/[^a-z0-9]/g, '')
-            );
-            if (matchingReq && matchingReq[1]?.label) {
-              docLabel = matchingReq[1].label;
-            }
-            
-            const fileName = `${docLabel.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
-            
-            const uploadResult = await s3Service.uploadStudentDocument(
-              docValue,
-              fileName,
-              mimeType,
-              studentInfo
-            );
-            
-            uploadedDocuments[docKey] = {
-              fileId: uploadResult.key,
-              fileName: uploadResult.fileName,
-              webViewLink: uploadResult.presignedUrl || uploadResult.publicUrl,
-              folderPath: uploadResult.folderPath
-            };
-            
-            console.log(`✅ Uploaded ${docKey} to S3: ${uploadResult.key}`);
-          } catch (uploadError) {
-            console.error(`❌ Error uploading ${docKey} to S3:`, uploadError.message);
-            // Continue with other documents even if one fails
-          }
-        }
-      }
-    } catch (s3Error) {
-      console.error('S3 upload error (non-fatal):', s3Error.message);
-      // Don't fail the approval if S3 upload fails
-    }
+    // S3 upload functionality has been removed as per configuration
 
     // Update submission status
     await masterConn.query(
@@ -1833,11 +1750,11 @@ exports.approveSubmission = async (req, res) => {
           'SELECT student_data FROM students WHERE admission_number = ? OR admission_no = ?',
           [finalAdmissionNumber, finalAdmissionNumber]
         );
-        
+
         if (existingStudents.length > 0) {
           const existingData = parseJSON(existingStudents[0].student_data) || {};
           existingData.uploaded_documents = uploadedDocuments;
-          
+
           await masterConn.query(
             'UPDATE students SET student_data = ? WHERE admission_number = ? OR admission_no = ?',
             [safeJSONStringify(existingData), finalAdmissionNumber, finalAdmissionNumber]
@@ -1853,7 +1770,7 @@ exports.approveSubmission = async (req, res) => {
     await masterConn.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) 
        VALUES (?, ?, ?, ?, ?)`,
-      ['APPROVE', 'SUBMISSION', submissionId, req.admin.id, JSON.stringify({ 
+      ['APPROVE', 'SUBMISSION', submissionId, req.admin.id, JSON.stringify({
         admissionNumber: finalAdmissionNumber,
         documentsUploaded: Object.keys(uploadedDocuments).length
       })]
@@ -1869,9 +1786,9 @@ exports.approveSubmission = async (req, res) => {
   } catch (error) {
     await masterConn.rollback();
     console.error('Approve submission error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while approving submission' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while approving submission'
     });
   } finally {
     masterConn.release();
@@ -1883,7 +1800,7 @@ exports.rejectSubmission = async (req, res) => {
   try {
     const { submissionId } = req.params;
     const { reason } = req.body;
-    
+
     // Check for reject permission
     const user = req.user || req.admin;
     if (user && user.role !== 'super_admin' && user.role !== 'admin') {
@@ -1902,7 +1819,7 @@ exports.rejectSubmission = async (req, res) => {
        WHERE submission_id = ? AND status = ?`,
       ['rejected', new Date(), req.admin.id, reason || 'No reason provided', submissionId, 'pending']
     );
-    
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
@@ -1926,9 +1843,9 @@ exports.rejectSubmission = async (req, res) => {
 
   } catch (error) {
     console.error('Reject submission error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while rejecting submission' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while rejecting submission'
     });
   }
 };
@@ -1959,9 +1876,9 @@ exports.deleteSubmission = async (req, res) => {
     );
 
     if (!existingSubmission || existingSubmission.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Submission not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Submission not found'
       });
     }
 
@@ -1974,8 +1891,8 @@ exports.deleteSubmission = async (req, res) => {
     );
 
     if (deleteResult.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
+      return res.status(404).json({
+        success: false,
         message: 'Submission not found or could not be deleted'
       });
     }
@@ -1988,8 +1905,8 @@ exports.deleteSubmission = async (req, res) => {
       await masterConn3.query(
         `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
          VALUES (?, ?, ?, ?, ?)`,
-        ['DELETE', 'SUBMISSION', submissionId, req.admin?.id || user?.id, JSON.stringify({ 
-          status: existingSubmission[0].status 
+        ['DELETE', 'SUBMISSION', submissionId, req.admin?.id || user?.id, JSON.stringify({
+          status: existingSubmission[0].status
         })]
       );
       masterConn3.release();
@@ -2011,8 +1928,8 @@ exports.deleteSubmission = async (req, res) => {
       sqlState: error.sqlState,
       sql: error.sql
     });
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Server error while deleting submission',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -2112,7 +2029,7 @@ exports.bulkUploadSubmissions = async (req, res) => {
 
     // Determine file type and parse accordingly
     const isExcel = req.file.mimetype.includes('excel') || req.file.mimetype.includes('spreadsheet') ||
-                   req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
+      req.file.originalname.endsWith('.xlsx') || req.file.originalname.endsWith('.xls');
 
     logBulkUploadEvent('info', 'FILE_TYPE_DETERMINED', {
       isExcel,
@@ -2281,7 +2198,7 @@ exports.bulkUploadSubmissions = async (req, res) => {
           }
 
           let value = rawValue;
-          
+
           // Special handling for batch field - preserve exact value, especially numeric values like "2025"
           if (fieldKey === 'batch') {
             if (typeof value === 'number') {
@@ -2841,12 +2758,12 @@ exports.generateAdmissionSeries = async (req, res) => {
           // Filter submissions by academic year (batch) and assign numbers
           let assignedCount = 0;
           const masterConnAssign = await masterPool.getConnection();
-          
+
           try {
             for (const submission of pendingSubmissions) {
               const subData = submission.submission_data || {};
               let subYear = subData.batch || subData.academic_year;
-              
+
               // Extract year from batch
               if (subYear && typeof subYear === 'string') {
                 const subYearMatch = subYear.match(/(\d{4})/);
@@ -2854,7 +2771,7 @@ exports.generateAdmissionSeries = async (req, res) => {
                   subYear = subYearMatch[1];
                 }
               }
-              
+
               // Only assign if submission matches the academic year or has no year specified
               if (!subYear || subYear === academicYear) {
                 // Get the next sequence number for this year
@@ -2864,15 +2781,15 @@ exports.generateAdmissionSeries = async (req, res) => {
                    WHERE admission_number REGEXP ?`,
                   [`^${yearPrefix}[0-9]{4}$`]
                 );
-                
+
                 let currentMaxSeq = latestRows[0]?.max_seq || 0;
-                
+
                 // Also check form_submissions
                 const [latestSubs] = await masterConnAssign.query(
                   'SELECT admission_number FROM form_submissions WHERE admission_number LIKE ?',
                   [`${yearPrefix}%`]
                 );
-                
+
                 if (latestSubs) {
                   latestSubs.forEach(sub => {
                     const admNum = sub.admission_number;
@@ -2885,9 +2802,9 @@ exports.generateAdmissionSeries = async (req, res) => {
                     }
                   });
                 }
-                
+
                 const newAdmNum = `${yearPrefix}${(currentMaxSeq + 1).toString().padStart(4, '0')}`;
-                
+
                 await masterConnAssign.query(
                   'UPDATE form_submissions SET admission_number = ?, updated_at = ? WHERE submission_id = ?',
                   [newAdmNum, new Date(), submission.submission_id]
@@ -3739,7 +3656,7 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
   for (const field of formFields) {
     const col = field.key?.replace(/[^a-zA-Z0-9_]/g, '_');
     if (!col) continue;
-    
+
     // Check if column exists (MySQL doesn't support IF NOT EXISTS in ALTER TABLE)
     const [columns] = await masterConn.query(
       `SELECT COUNT(*) as count 
@@ -3749,7 +3666,7 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
        AND COLUMN_NAME = ?`,
       [destinationTable, col]
     );
-    
+
     if (columns[0].count === 0) {
       await masterConn.query(
         `ALTER TABLE ${destinationTable} ADD COLUMN ${col} VARCHAR(1024) NULL`
@@ -3821,7 +3738,7 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
       `UPDATE students SET ${updateFields.join(', ')} WHERE admission_number = ? OR admission_no = ?`,
       [...updateValues, finalAdmissionNumber, finalAdmissionNumber]
     );
-    
+
     // Generate credentials if they don't exist (for updated students)
     try {
       const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');
@@ -3877,7 +3794,7 @@ const approveSingleSubmission = async (submission, submissionData, admissionNumb
     const query = `INSERT INTO students (${insertFields.join(', ')}) VALUES (${placeholders})`;
 
     await masterConn.query(query, insertValues);
-    
+
     // Generate student login credentials automatically
     try {
       const { generateCredentialsByAdmissionNumber } = require('../utils/studentCredentials');

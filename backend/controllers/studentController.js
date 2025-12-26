@@ -3488,87 +3488,16 @@ exports.createStudent = async (req, res) => {
 
     // Handle document uploads if files are present
     const uploadedDocuments = {};
+    // S3 upload functionality has been removed as per configuration
     if (req.files && req.files.length > 0) {
-      try {
-        const s3Service = require('../services/s3Service');
-        const fs = require('fs');
-
-        // Extract student info for S3 folder structure
-        const collegeName = incomingData.college || 'Unknown_College';
-        const batch = incomingData.batch || 'Unknown_Batch';
-        const course = incomingData.course || 'Unknown_Course';
-        const branch = incomingData.branch || 'Unknown_Branch';
-
-        const studentInfo = {
-          college: collegeName,
-          batch: batch,
-          course: course,
-          branch: branch,
-          admissionNumber: admissionNumber
-        };
-
-        console.log(`📁 Preparing to upload documents to S3 for student: ${admissionNumber}`);
-
-        // Process each uploaded file
-        for (const file of req.files) {
-          try {
-            // Extract document name from fieldname (format: document_Document_Name)
-            const docName = file.fieldname.replace(/^document_/, '').replace(/_/g, ' ');
-            const fileName = file.originalname || `${docName.replace(/\s+/g, '_')}_${admissionNumber}`;
-
-            const uploadResult = await s3Service.uploadStudentDocument(
-              file.path,
-              fileName,
-              file.mimetype || 'application/pdf',
-              studentInfo
-            );
-
-            uploadedDocuments[docName] = {
-              fileId: uploadResult.key,
-              fileName: uploadResult.fileName,
-              webViewLink: uploadResult.presignedUrl || uploadResult.publicUrl,
-              folderPath: uploadResult.folderPath
-            };
-            console.log(`⬆️ Uploaded ${docName} to S3: ${uploadResult.key}`);
-
-            // Clean up temp file
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (uploadError) {
-            console.error(`❌ Failed to upload file ${file.originalname} to S3:`, uploadError);
-            // Continue processing other files even if one fails
-          }
-        }
-
-        // Update student_data with document links
-        if (Object.keys(uploadedDocuments).length > 0) {
-          const [currentStudentRows] = await masterPool.query(
-            'SELECT student_data FROM students WHERE admission_number = ?',
-            [admissionNumber]
-          );
-
-          if (currentStudentRows.length > 0) {
-            const currentStudentData = parseJSON(currentStudentRows[0].student_data) || {};
-            const updatedStudentData = {
-              ...currentStudentData,
-              uploaded_documents: {
-                ...currentStudentData.uploaded_documents,
-                ...uploadedDocuments
-              }
-            };
-
-            await masterPool.query(
-              'UPDATE students SET student_data = ? WHERE admission_number = ?',
-              [JSON.stringify(updatedStudentData), admissionNumber]
-            );
-            console.log('🔗 Updated student record with S3 document links.');
-          }
-        }
-      } catch (s3Error) {
-        console.error('S3 upload error (non-fatal):', s3Error.message);
-        // Don't fail the student creation if S3 upload fails
-      }
+      console.log('⚠️ S3 upload is disabled. Documents were not uploaded.');
+      // Clean up temp files
+      req.files.forEach(file => {
+        try { // Use try-catch for safety
+          const fs = require('fs');
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        } catch (e) { }
+      });
     }
 
     // Auto-set certificates_status based on document requirements if certificates_status is not explicitly set

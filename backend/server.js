@@ -253,19 +253,7 @@ const startServer = async () => {
   try {
     console.log('🔄 Starting server...');
 
-    // Display S3 Configuration
-    const AWS_REGION = process.env.AWS_REGION || 'not set';
-    const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || 'not set';
-    const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'not set';
-    const accessKeyDisplay = AWS_ACCESS_KEY_ID !== 'not set' && AWS_ACCESS_KEY_ID.length > 8
-      ? AWS_ACCESS_KEY_ID.substring(0, 8) + '...'
-      : AWS_ACCESS_KEY_ID;
 
-    console.log('☁️  S3 Service Configuration:');
-    console.log(`   Region: ${AWS_REGION}`);
-    console.log(`   Bucket: ${S3_BUCKET_NAME}`);
-    console.log(`   Access Key ID: ${accessKeyDisplay}`);
-    console.log(`   Secret Access Key: ${process.env.AWS_SECRET_ACCESS_KEY ? '***' + (process.env.AWS_SECRET_ACCESS_KEY.substring(process.env.AWS_SECRET_ACCESS_KEY.length - 4) || '') : 'NOT SET'}`);
 
     // Start the server FIRST (before DB connection test)
     const server = app.listen(PORT, () => {
@@ -297,22 +285,7 @@ const startServer = async () => {
         console.error('❌ Database test error:', dbError.message);
       }
 
-      // Test S3 connection
-      try {
-        const s3Service = require('./services/s3Service');
-        const s3Connected = await s3Service.testConnection();
 
-        if (s3Connected) {
-          console.log('✅ S3 bucket connection: SUCCESS');
-        } else {
-          console.error('❌ S3 bucket connection: FAILED');
-          console.error('⚠️  Document uploads may fail but server is running');
-        }
-      } catch (s3Error) {
-        console.error('❌ S3 connection test error:', s3Error.message);
-        console.error('⚠️  Document uploads may fail but server is running');
-        // Don't fail server startup if S3 is not configured
-      }
     }, 1000); // Wait 1 second after server starts
 
     // Graceful shutdown
