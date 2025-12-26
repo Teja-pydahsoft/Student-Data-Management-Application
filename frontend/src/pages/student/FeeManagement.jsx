@@ -272,7 +272,7 @@ const FeeManagement = () => {
                     <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
                         Fee Management
                     </h1>
-                    <p className="text-gray-500 mt-1">
+                    <p className="text-gray-500 mt-1 hidden md:block">
                         Track your fee dues and payment history
                     </p>
                 </div>
