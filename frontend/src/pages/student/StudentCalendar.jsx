@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
     Calendar as CalendarIcon,
     ChevronLeft,
@@ -13,6 +14,7 @@ import api from '../../config/api';
 import toast from 'react-hot-toast';
 
 const StudentCalendar = () => {
+    const location = useLocation();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState([]);
 
@@ -21,8 +23,11 @@ const StudentCalendar = () => {
     const [selectedEvent, setSelectedEvent] = useState(null);
 
     useEffect(() => {
+        if (location.state?.initialDate) {
+            setCurrentDate(new Date(location.state.initialDate));
+        }
         fetchEvents();
-    }, []);
+    }, [location.state]);
 
     useEffect(() => {
         generateCalendar(currentDate);

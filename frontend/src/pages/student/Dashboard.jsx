@@ -469,7 +469,13 @@ const Dashboard = () => {
                                     </div>
                                     Upcoming Events
                                 </h3>
-                                <Link to="/student/events" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View Calendar</Link>
+                                <Link
+                                    to="/student/events"
+                                    state={{ initialDate: upcomingEvents.length > 0 ? upcomingEvents[0].event_date : new Date() }}
+                                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                                >
+                                    View Calendar
+                                </Link>
                             </div>
 
                             <div className="space-y-3">
