@@ -1274,70 +1274,44 @@ const AddStudent = () => {
                     Manage List
                   </button>
                 </div>
-                {!isPreviousCollegeInputVisible ? (
-                  <select
-                    name="previous_college"
-                    value={studentData.previous_college}
-                    onChange={handlePreviousCollegeSelectChange}
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                  >
-                    <option value="">
-                      {previousCollegesLoading ? "Loading..." : "Select Previous College"}
-                    </option>
-                    {(() => {
-                      // Determine filter based on selected course and year
-                      let targetCategory = 'All';
-                      const courseName = selectedCourseName ? selectedCourseName.toLowerCase() : '';
-                      const currentYear = parseInt(studentData.current_year) || 1;
+                {(() => {
+                  // Determine filter based on selected course and year
+                  let targetCategory = 'All';
+                  const courseName = selectedCourseName ? selectedCourseName.toLowerCase() : '';
+                  const currentYear = parseInt(studentData.current_year) || 1;
 
-                      if (courseName.includes('diploma')) {
-                        targetCategory = '10th/School';
-                      } else if (courseName.includes('b.tech') || courseName.includes('btech')) {
-                        if (currentYear === 1) {
-                          targetCategory = 'Inter/Junior College';
-                        } else {
-                          targetCategory = 'Diploma College';
-                        }
-                      }
+                  if (courseName.includes('diploma')) {
+                    targetCategory = '10th/School';
+                  } else if (courseName.includes('b.tech') || courseName.includes('btech')) {
+                    if (currentYear === 1) {
+                      targetCategory = 'Inter/Junior College';
+                    } else {
+                      targetCategory = 'Diploma College';
+                    }
+                  }
 
-                      // Filter colleges
-                      const filteredList = previousColleges.filter(col => {
-                        if (targetCategory === 'All') return true;
-                        // Strict filtering as per requirement: "show the tenth school lists only"
-                        return col.category === targetCategory;
-                      });
+                  // Filter colleges
+                  const filteredList = previousColleges.filter(col => {
+                    if (targetCategory === 'All') return true;
+                    // Strict filtering
+                    return col.category === targetCategory;
+                  });
 
-                      // If list is empty after filter, show empty (don't fallback to all)
-                      const listToShow = targetCategory === 'All' ? previousColleges : filteredList;
+                  // If filtering is active but list is empty, show empty list (don't fallback to all)
+                  const listToShow = targetCategory === 'All' ? previousColleges : filteredList;
+                  const options = listToShow.map(col => col.name);
 
-                      return listToShow.map((col) => (
-                        <option key={col.id} value={col.name}>
-                          {col.name} {col.category && col.category !== 'Other' ? `(${col.category})` : ''}
-                        </option>
-                      ));
-                    })()}
-                    <option value="Other">Other (Enter Manually)</option>
-                  </select>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
+                  return (
+                    <SearchableSelect
                       name="previous_college"
                       value={studentData.previous_college}
                       onChange={handleChange}
-                      placeholder="Enter College Name"
-                      className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                      autoFocus
+                      options={options}
+                      placeholder={previousCollegesLoading ? "Loading..." : "Search or enter college name..."}
+                      disabled={previousCollegesLoading}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setIsPreviousCollegeInputVisible(false)}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
-                    >
-                      Show List
-                    </button>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>

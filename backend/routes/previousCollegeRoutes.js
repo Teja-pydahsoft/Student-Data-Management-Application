@@ -12,5 +12,8 @@ const upload = multer({ dest: 'uploads/' });
 router.get('/', previousCollegeController.getAllPreviousColleges);
 router.post('/', previousCollegeController.addPreviousCollege);
 router.post('/bulk', upload.single('file'), previousCollegeController.bulkAddPreviousColleges);
+router.put('/:id', previousCollegeController.updatePreviousCollege);
+router.delete('/:id', previousCollegeController.deletePreviousCollege);
+router.delete('/bulk/delete', previousCollegeController.bulkDeletePreviousColleges);
 
 module.exports = router;

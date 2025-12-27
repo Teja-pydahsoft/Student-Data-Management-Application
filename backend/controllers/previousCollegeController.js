@@ -168,3 +168,99 @@ exports.bulkAddPreviousColleges = async (req, res) => {
         });
     }
 };
+
+// Update previous college
+exports.updatePreviousCollege = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, category } = req.body;
+
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'College name is required'
+            });
+        }
+
+        const [result] = await pool.query(
+            'UPDATE previous_colleges SET name = ?, category = ? WHERE id = ?',
+            [name.trim(), category || 'Other', id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'College not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'College updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating previous college:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update college',
+            error: error.message
+        });
+    }
+};
+
+// Delete previous college
+exports.deletePreviousCollege = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [result] = await pool.query('DELETE FROM previous_colleges WHERE id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'College not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'College deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting previous college:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete college',
+            error: error.message
+        });
+    }
+};
+
+// Bulk Delete Previous Colleges
+exports.bulkDeletePreviousColleges = async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No college IDs provided for deletion'
+            });
+        }
+
+        const [result] = await pool.query('DELETE FROM previous_colleges WHERE id IN (?)', [ids]);
+
+        res.json({
+            success: true,
+            message: `Successfully deleted ${result.affectedRows} colleges`,
+            deletedCount: result.affectedRows
+        });
+    } catch (error) {
+        console.error('Error bulk deleting colleges:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete colleges',
+            error: error.message
+        });
+    }
+};

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Plus, Trash2, Search, Save } from 'lucide-react';
+import { X, Upload, Plus, Trash2, Search, Save, Edit2, Check } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from './LoadingAnimation';
@@ -16,6 +16,11 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
     const [search, setSearch] = useState('');
     const [saving, setSaving] = useState(false);
     const [filterCategory, setFilterCategory] = useState('All');
+
+    // Edit State
+    const [editingId, setEditingId] = useState(null);
+    const [editName, setEditName] = useState('');
+    const [editCategory, setEditCategory] = useState('Other');
 
     useEffect(() => {
         if (isOpen) {
@@ -38,18 +43,46 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
         }
     };
 
+    const handleDeleteAllDisplayed = async () => {
+        if (filteredColleges.length === 0) return;
+        const count = filteredColleges.length;
+        if (!window.confirm(`Are you sure you want to delete ALL ${count} colleges currently listed? This cannot be undone.`)) return;
+
+        const idsToDelete = filteredColleges.map(c => c.id);
+
+        try {
+            setSaving(true);
+            const response = await api.delete('/previous-colleges/bulk/delete', {
+                data: { ids: idsToDelete }
+            });
+
+            if (response.data.success) {
+                toast.success(`Deleted ${response.data.deletedCount} colleges`);
+                fetchColleges();
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to delete colleges');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleAddSingle = async (e) => {
         e.preventDefault();
         if (!newCollegeName.trim()) return;
+
+        // Infer category based on current filter or default
+        const categoryToAdd = filterCategory === 'All' ? 'Other' : filterCategory;
 
         try {
             setSaving(true);
             const response = await api.post('/previous-colleges', {
                 name: newCollegeName,
-                category: selectedCategory
+                category: categoryToAdd
             });
             if (response.data.success) {
-                toast.success('College added successfully');
+                toast.success(`Added to ${categoryToAdd}`);
                 setNewCollegeName('');
                 fetchColleges();
             }
@@ -58,6 +91,42 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleUpdate = async (id) => {
+        if (!editName.trim()) return;
+        try {
+            const response = await api.put(`/previous-colleges/${id}`, {
+                name: editName,
+                category: editCategory
+            });
+            if (response.data.success) {
+                toast.success('Updated successfully');
+                setEditingId(null);
+                fetchColleges();
+            }
+        } catch (error) {
+            toast.error('Failed to update');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this college?')) return;
+        try {
+            const response = await api.delete(`/previous-colleges/${id}`);
+            if (response.data.success) {
+                toast.success('Deleted successfully');
+                fetchColleges();
+            }
+        } catch (error) {
+            toast.error('Failed to delete');
+        }
+    };
+
+    const startEditing = (college) => {
+        setEditingId(college.id);
+        setEditName(college.name);
+        setEditCategory(college.category || 'Other');
     };
 
     const handleBulkUpload = async () => {
@@ -142,16 +211,27 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
                                 <option value="All">All Categories</option>
                                 {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                             </select>
-                            <button
-                                onClick={() => setIsBulkMode(!isBulkMode)}
-                                className={`w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center justify-center gap-2 ${isBulkMode
+
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <button
+                                    onClick={handleDeleteAllDisplayed}
+                                    disabled={filteredColleges.length === 0}
+                                    className="px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Delete all colleges in current list"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                                <button
+                                    onClick={() => setIsBulkMode(!isBulkMode)}
+                                    className={`w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center justify-center gap-2 ${isBulkMode
                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
                                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                    }`}
-                            >
-                                <Upload size={16} />
-                                {isBulkMode ? 'Cancel Bulk' : 'Bulk Upload'}
-                            </button>
+                                        }`}
+                                >
+                                    <Upload size={16} />
+                                    {isBulkMode ? 'Cancel' : 'Bulk Upload'}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -227,13 +307,9 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
                     {/* Add Single Section */}
                     {!isBulkMode && (
                         <form onSubmit={handleAddSingle} className="mb-6 flex flex-col sm:flex-row gap-2">
-                            <select
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                className="w-full sm:w-40 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
-                            >
-                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                            </select>
+                            <div className="w-full sm:w-auto flex items-center px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500 whitespace-nowrap">
+                                <span>{filterCategory === 'All' ? 'Category: Other' : filterCategory}</span>
+                            </div>
                             <input
                                 type="text"
                                 value={newCollegeName}
@@ -266,11 +342,56 @@ const ManagePreviousCollegesModal = ({ isOpen, onClose }) => {
                                 </div>
                             ) : displayedColleges.length > 0 ? (
                                 displayedColleges.map((college) => (
-                                    <div key={college.id} className="px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex justify-between items-center">
-                                        <span>{college.name}</span>
-                                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                                            {college.category || 'Other'}
-                                        </span>
+                                    <div key={college.id} className="px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors grid grid-cols-12 gap-4 items-center group">
+                                        {editingId === college.id ? (
+                                            <>
+                                                <div className="col-span-6">
+                                                    <input
+                                                        type="text"
+                                                        value={editName}
+                                                        onChange={(e) => setEditName(e.target.value)}
+                                                        className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                                <div className="col-span-4">
+                                                    <select
+                                                        value={editCategory}
+                                                        onChange={(e) => setEditCategory(e.target.value)}
+                                                        className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    >
+                                                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-2 flex justify-end gap-2">
+                                                    <button onClick={() => handleUpdate(college.id)} className="text-green-600 hover:text-green-800 p-1">
+                                                        <Check size={16} />
+                                                    </button>
+                                                    <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="col-span-6 truncate" title={college.name}>
+                                                    {college.name}
+                                                </div>
+                                                <div className="col-span-4">
+                                                    <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full inline-block truncate max-w-full">
+                                                        {college.category || 'Other'}
+                                                    </span>
+                                                </div>
+                                                <div className="col-span-2 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => startEditing(college)} className="text-blue-500 hover:text-blue-700 p-1">
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(college.id)} className="text-red-500 hover:text-red-700 p-1">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 ))
                             ) : (
