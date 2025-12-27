@@ -28,6 +28,37 @@ const Dashboard = () => {
     const [currentAnnouncement, setCurrentAnnouncement] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
+    const [showBirthday, setShowBirthday] = useState(false);
+
+    // Initial Data Fetch
+    useEffect(() => {
+        if (studentData) {
+            const checkBirthday = () => {
+                const dobStr = studentData.dob || studentData.student_data?.['DOB (Date of Birth - DD-MM-YYYY)'] || studentData.student_data?.dob;
+                if (!dobStr) return;
+
+                const dob = new Date(dobStr);
+                const today = new Date();
+
+                // Check if date is valid
+                if (isNaN(dob.getTime())) return;
+
+                const isBirthday =
+                    dob.getDate() === today.getDate() &&
+                    dob.getMonth() === today.getMonth();
+
+                if (isBirthday) {
+                    const sessionKey = `birthday_shown_${new Date().getFullYear()}`;
+                    if (!sessionStorage.getItem(sessionKey)) {
+                        setShowBirthday(true);
+                        sessionStorage.setItem(sessionKey, 'true');
+                        // Trigger confetti effect if available or just clean UI (UI is handled)
+                    }
+                }
+            };
+            checkBirthday();
+        }
+    }, [studentData]);
 
     // Initial Data Fetch
     useEffect(() => {
@@ -427,6 +458,44 @@ const Dashboard = () => {
                                     Close Details
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Birthday Modal */}
+            {showBirthday && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-bounce-in relative text-center pb-8 border-4 border-yellow-300">
+                        <button
+                            onClick={() => setShowBirthday(false)}
+                            className="absolute top-2 right-2 p-2 rounded-full hover:bg-gray-100 transition-colors z-20 text-gray-500"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        {/* Confetti Background/Header */}
+                        <div className="bg-gradient-to-b from-yellow-300 to-yellow-100 h-32 w-full relative flex items-center justify-center overflow-hidden">
+                            <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#F59E0B 2px, transparent 2px)', backgroundSize: '20px 20px' }}></div>
+                            <div className="text-6xl animate-pulse">🎂</div>
+                        </div>
+
+                        <div className="px-6 -mt-10 relative z-10">
+                            <div className="bg-white rounded-full p-2 w-24 h-24 mx-auto shadow-lg flex items-center justify-center border-4 border-white mb-4">
+                                <span className="text-4xl">🥳</span>
+                            </div>
+
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Happy Birthday!</h2>
+                            <p className="text-gray-600 mb-6 font-medium">
+                                {displayData?.student_name?.split(' ')[0]}, wishing you a fantastic day filled with joy and success! 🎈
+                            </p>
+
+                            <button
+                                onClick={() => setShowBirthday(false)}
+                                className="w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-lg"
+                            >
+                                Thank You!
+                            </button>
                         </div>
                     </div>
                 </div>

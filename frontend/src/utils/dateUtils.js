@@ -16,5 +16,5 @@ export const formatDate = (dateString) => {
     return 'N/A';
   }
 
-  return date.toLocaleString();
+  return date.toLocaleDateString();
 };
