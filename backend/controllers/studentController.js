@@ -386,7 +386,10 @@ const sanitizeCellValue = (value) => {
     return '';
   }
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   if (typeof value === 'number') {
     if (Number.isInteger(value)) {
@@ -422,12 +425,18 @@ const convertDate = (value) => {
     // Excel date serial number (days since 1900-01-01)
     const excelEpoch = new Date(1899, 11, 30);
     const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   // Handle Date objects
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   // Handle DD-Month-YYYY format (e.g., 09-Sep-2003)
@@ -506,7 +515,10 @@ const convertDate = (value) => {
   // Try parsing as ISO date
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0];
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   return str; // Return as-is if can't parse
@@ -1010,7 +1022,10 @@ const sanitizeStudentPayload = (payload) => {
       return;
     }
     if (value instanceof Date) {
-      sanitized[key] = value.toISOString().split('T')[0];
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      sanitized[key] = `${year}-${month}-${day}`;
       return;
     }
     sanitized[key] = value;
