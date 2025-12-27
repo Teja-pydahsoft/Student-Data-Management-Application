@@ -197,6 +197,13 @@ router.post(
 );
 router.post('/otp/send', authMiddleware, studentController.sendOtp);
 router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
+router.get(
+  '/:admissionNumber/sms-logs',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.getStudentSmsLogs
+);
 router.delete(
   '/:admissionNumber',
   authMiddleware,

@@ -3,6 +3,8 @@
 const DEFAULT_TEMPLATE =
   'Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH.';
 
+const { masterPool } = require('../config/database');
+
 // DLT Template ID and PE ID for absent SMS
 const SMS_TEMPLATE_ID = process.env.SMS_TEMPLATE_ID || '1607100000000150000';
 const SMS_PE_ID = process.env.SMS_PE_ID || '1102395590000010000';
@@ -44,9 +46,37 @@ const formatDateForMessage = (dateString = '') => {
   return `${day}-${month}-${year}`;
 };
 
+const logSmsToDb = async ({ studentId, mobileNumber, message, category, currentYear, currentSemester, status, messageId, errorDetails }) => {
+  if (!studentId) return;
+
+  try {
+    const query = `
+      INSERT INTO sms_logs 
+      (student_id, mobile_number, message, category, current_year, current_semester, status, message_id, error_details)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    const params = [
+      studentId,
+      mobileNumber,
+      message,
+      category || 'General',
+      currentYear || null,
+      currentSemester || null,
+      status,
+      messageId || null,
+      errorDetails || null
+    ];
+
+    await masterPool.query(query, params);
+  } catch (error) {
+    console.error('Failed to log SMS to DB:', error);
+  }
+};
+
 const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   const logPrefix = `[SMS] ${meta?.student?.admissionNumber || 'unknown'}`;
-  
+  const student = meta?.student || {};
+
   if (!to) {
     console.log(`${logPrefix} ⚠️ SKIPPED - No destination number provided`);
     return {
@@ -59,6 +89,20 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
   if (SMS_TEST_MODE) {
     console.log(`${logPrefix} 🧪 TEST MODE - SMS simulated to ${to}`);
     console.log(`${logPrefix}    Message: ${message}`);
+
+    // Log success in DB for test mode
+    await logSmsToDb({
+      studentId: student.id,
+      mobileNumber: to,
+      message,
+      category: meta.category || 'General',
+      currentYear: student.currentYear,
+      currentSemester: student.currentSemester,
+      status: 'Sent',
+      messageId: 'TEST-MODE-' + Date.now(),
+      errorDetails: 'Test Mode Simulation'
+    });
+
     return {
       success: true,
       mocked: true,
@@ -85,28 +129,30 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
     };
   }
 
+  let result = { success: false };
+
   try {
     console.log(`${logPrefix} 📤 SENDING SMS to ${to}...`);
-    
+
     // BulkSMSApps.com API parameters
     // Using the exact parameter names that work with their API
     const params = new URLSearchParams();
-    
+
     // API Key - try 'apikey' (most common for bulksmsapps)
     params.append('apikey', SMS_API_KEY);
-    
+
     // Sender ID 
     params.append('sender', SMS_SENDER_ID);
-    
+
     // Mobile number - singular 'number' 
     params.append('number', to);
-    
+
     // Message content
     params.append('message', message);
-    
+
     // DLT Template ID (lowercase)
     params.append('templateid', templateId || SMS_TEMPLATE_ID);
-    
+
     // Principal Entity ID (lowercase)
     params.append('peid', peId || SMS_PE_ID);
 
@@ -118,12 +164,12 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
 
     // Build URL with query parameters (GET method)
     const fullUrl = `${apiUrl}?${params.toString()}`;
-    
+
     // Log request details
     console.log(`${logPrefix}    API URL: ${apiUrl}`);
     console.log(`${logPrefix}    Full Request: ${apiUrl}?apikey=***&sender=${SMS_SENDER_ID}&number=${to}&templateid=${templateId || SMS_TEMPLATE_ID}&peid=${peId || SMS_PE_ID}`);
     console.log(`${logPrefix}    Message: "${message}"`);
-    
+
     // Send GET request
     const response = await fetch(fullUrl, {
       method: 'GET',
@@ -136,16 +182,30 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
     const text = await response.text();
     console.log(`${logPrefix}    HTTP Status: ${response.status}`);
     console.log(`${logPrefix}    API Response: ${text}`);
-    
+
     if (!response.ok) {
       console.error(`${logPrefix} ❌ FAILED - HTTP ${response.status}`);
-      return {
+      result = {
         success: false,
         skipped: false,
         reason: `http_${response.status}`,
         details: text,
         sentTo: to
       };
+
+      // Log failure
+      await logSmsToDb({
+        studentId: student.id,
+        mobileNumber: to,
+        message,
+        category: meta.category || 'General',
+        currentYear: student.currentYear,
+        currentSemester: student.currentSemester,
+        status: 'Failed',
+        errorDetails: `HTTP ${response.status}: ${text}`
+      });
+
+      return result;
     }
 
     // Check for success patterns FIRST (message IDs are definitive success)
@@ -158,18 +218,30 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
       /submitted/i,
       /accepted/i
     ];
-    
+
     // Extract just the first line or first part before HTML
     const firstLine = text.split('\n')[0].trim();
     const beforeHtml = text.split('<!DOCTYPE')[0].trim();
     const relevantText = beforeHtml || firstLine || text;
-    
+
     console.log(`${logPrefix}    Checking response: "${relevantText.substring(0, 100)}"`);
-    
+
     // Check if we have a MessageId (definitive success)
     const messageIdMatch = text.match(/MessageId[-:]\s*(\d+)/i);
     if (messageIdMatch) {
       console.log(`${logPrefix} ✅ SUCCESS - SMS sent to ${to} (MessageId: ${messageIdMatch[1]})`);
+
+      await logSmsToDb({
+        studentId: student.id,
+        mobileNumber: to,
+        message,
+        category: meta.category || 'General',
+        currentYear: student.currentYear,
+        currentSemester: student.currentSemester,
+        status: 'Sent',
+        messageId: messageIdMatch[1]
+      });
+
       return {
         success: true,
         data: relevantText,
@@ -177,21 +249,33 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
         sentTo: to
       };
     }
-    
+
     // Check other success patterns
-    const hasSuccess = successPatterns.some(pattern => 
+    const hasSuccess = successPatterns.some(pattern =>
       pattern instanceof RegExp ? pattern.test(relevantText) : relevantText.toLowerCase().includes(pattern.toLowerCase())
     );
-    
+
     if (hasSuccess) {
       console.log(`${logPrefix} ✅ SUCCESS - SMS sent to ${to}`);
+
+      await logSmsToDb({
+        studentId: student.id,
+        mobileNumber: to,
+        message,
+        category: meta.category || 'General',
+        currentYear: student.currentYear,
+        currentSemester: student.currentSemester,
+        status: 'Sent',
+        messageId: null
+      });
+
       return {
         success: true,
         data: relevantText,
         sentTo: to
       };
     }
-    
+
     // Check for error patterns only if no success pattern found
     const errorPatterns = [
       'Object reference not set',
@@ -207,14 +291,26 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
       'balance',
       'expired'
     ];
-    
-    const hasError = errorPatterns.some(pattern => 
+
+    const hasError = errorPatterns.some(pattern =>
       relevantText.includes(pattern) || relevantText.toLowerCase().includes(pattern.toLowerCase())
     );
-    
+
     if (hasError) {
       console.error(`${logPrefix} ❌ API ERROR - SMS to ${to} failed`);
       console.error(`${logPrefix}    Error details: ${relevantText}`);
+
+      await logSmsToDb({
+        studentId: student.id,
+        mobileNumber: to,
+        message,
+        category: meta.category || 'General',
+        currentYear: student.currentYear,
+        currentSemester: student.currentSemester,
+        status: 'Failed',
+        errorDetails: relevantText
+      });
+
       return {
         success: false,
         skipped: false,
@@ -223,20 +319,44 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
         sentTo: to
       };
     }
-    
+
     // If response is short and doesn't look like an error, assume success
     if (relevantText.length > 0 && relevantText.length < 200) {
       console.log(`${logPrefix} ✅ SUCCESS (assumed) - SMS sent to ${to}`);
+
+      await logSmsToDb({
+        studentId: student.id,
+        mobileNumber: to,
+        message,
+        category: meta.category || 'General',
+        currentYear: student.currentYear,
+        currentSemester: student.currentSemester,
+        status: 'Sent',
+        messageId: null
+      });
+
       return {
         success: true,
         data: relevantText,
         sentTo: to
       };
     }
-    
+
     // Unknown response format - log it and mark as potentially failed
     console.warn(`${logPrefix} ⚠️ UNKNOWN RESPONSE - Unable to determine SMS status`);
     console.warn(`${logPrefix}    Response: ${relevantText.substring(0, 200)}`);
+
+    await logSmsToDb({
+      studentId: student.id,
+      mobileNumber: to,
+      message,
+      category: meta.category || 'General',
+      currentYear: student.currentYear,
+      currentSemester: student.currentSemester,
+      status: 'Failed',
+      errorDetails: 'Unknown Response: ' + relevantText.substring(0, 200)
+    });
+
     return {
       success: false,
       skipped: false,
@@ -246,6 +366,18 @@ const dispatchSms = async ({ to, message, templateId, peId, meta = {} }) => {
     };
   } catch (error) {
     console.error(`${logPrefix} ❌ EXCEPTION - ${error.message || error}`);
+
+    await logSmsToDb({
+      studentId: student.id,
+      mobileNumber: to,
+      message,
+      category: meta.category || 'General',
+      currentYear: student.currentYear,
+      currentSemester: student.currentSemester,
+      status: 'Failed',
+      errorDetails: error.message || String(error)
+    });
+
     return {
       success: false,
       skipped: false,
@@ -289,14 +421,14 @@ const resolveParentContact = (student) => {
 const buildAbsenceMessage = (template, variables) => {
   let message = template;
   let varIndex = 0;
-  
+
   // Replace each {#var#} placeholder with the corresponding variable value
   message = message.replace(/\{#var#\}/g, () => {
     const value = variables[varIndex] || '';
     varIndex++;
     return value;
   });
-  
+
   return message;
 };
 
@@ -315,28 +447,28 @@ const convertTemplateToDLT = (template, variables) => {
   // {{studentName}} -> "your ward" (first variable)
   // {{admissionNumber}} -> can be included in the message
   // {{date}} -> formatted date (second variable)
-  
+
   let dltTemplate = template;
   const dltVariables = [];
-  
+
   // Replace {{studentName}} with first {#var#} and add "your ward" to variables
   if (dltTemplate.includes('{{studentName}}')) {
     dltTemplate = dltTemplate.replace(/\{\{studentName\}\}/g, '{#var#}');
     dltVariables.push('your ward');
   }
-  
+
   // Replace {{admissionNumber}} - include it in the message if present
   if (dltTemplate.includes('{{admissionNumber}}')) {
     const admissionNumber = variables.studentName || variables.admissionNumber || '';
     dltTemplate = dltTemplate.replace(/\{\{admissionNumber\}\}/g, admissionNumber);
   }
-  
+
   // Replace {{date}} with second {#var#} and add formatted date to variables
   if (dltTemplate.includes('{{date}}')) {
     dltTemplate = dltTemplate.replace(/\{\{date\}\}/g, '{#var#}');
     dltVariables.push(variables.date || formatDateForMessage(variables.attendanceDate));
   }
-  
+
   return { template: dltTemplate, variables: dltVariables };
 };
 
@@ -366,9 +498,9 @@ exports.sendAbsenceNotification = async ({
   }
 
   const formattedDate = formatDateForMessage(attendanceDate);
-  const studentName = student.student_name || 
-                     (student.student_data && (student.student_data['Student Name'] || student.student_data['student_name'])) || 
-                     'your ward';
+  const studentName = student.student_name ||
+    (student.student_data && (student.student_data['Student Name'] || student.student_data['student_name'])) ||
+    'your ward';
   const admissionNumber = student.admission_number || '';
 
   // Convert template format if needed
@@ -400,10 +532,13 @@ exports.sendAbsenceNotification = async ({
     templateId: SMS_TEMPLATE_ID,
     peId: SMS_PE_ID,
     meta: {
+      category: 'Attendance',
       template: 'attendance_absent',
       student: {
         id: student.id,
-        admissionNumber: student.admission_number
+        admissionNumber: student.admission_number,
+        currentYear: student.current_year,
+        currentSemester: student.current_semester
       },
       attendanceDate
     }
@@ -417,4 +552,3 @@ module.exports = {
   sendAbsenceNotification: exports.sendAbsenceNotification,
   sendSms: dispatchSms
 };
-

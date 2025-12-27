@@ -481,7 +481,15 @@ exports.sendSMSAnnouncement = async (req, res) => {
                                 message: message,
                                 templateId: template_id,
                                 peId: process.env.SMS_PE_ID,
-                                meta: { type: 'announcement', studentId: student.id }
+                                meta: {
+                                    category: 'Announcement',
+                                    student: {
+                                        id: student.id,
+                                        admissionNumber: student.admission_number,
+                                        currentYear: student.current_year,
+                                        currentSemester: student.current_semester
+                                    }
+                                }
                             });
                             sentCount++;
                         } else {

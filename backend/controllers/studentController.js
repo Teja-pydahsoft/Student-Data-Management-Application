@@ -5474,3 +5474,62 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
+
+// Get student SMS logs
+exports.getStudentSmsLogs = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+
+    // First get student ID and scope check
+    let query = 'SELECT id, college, course, branch FROM students WHERE admission_number = ?';
+    let params = [admissionNumber];
+
+    // Apply scope check if userScope exists
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope);
+      if (scopeCondition) {
+        query += ` AND ${scopeCondition}`;
+        params = [...params, ...scopeParams];
+      }
+    }
+
+    const [students] = await masterPool.query(query, params);
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found or you don\'t have permission to view this student'
+      });
+    }
+
+    const studentId = students[0].id;
+
+    // Fetch SMS logs
+    const [logs] = await masterPool.query(
+      `SELECT 
+        id, 
+        message, 
+        category, 
+        current_year, 
+        current_semester, 
+        status, 
+        sent_at, 
+        mobile_number 
+      FROM sms_logs 
+      WHERE student_id = ? 
+      ORDER BY sent_at DESC`,
+      [studentId]
+    );
+
+    res.json({
+      success: true,
+      data: logs
+    });
+  } catch (error) {
+    console.error('Failed to fetch SMS logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching SMS logs'
+    });
+  }
+};

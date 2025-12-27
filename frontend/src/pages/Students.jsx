@@ -22,12 +22,14 @@ import {
   RefreshCw,
   Book,
   Calendar,
-  History
+  History,
+  MessageSquare
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import StudentHistoryTab from '../components/Students/StudentHistoryTab';
 import StudentAttendanceTab from '../components/Students/StudentAttendanceTab';
+import StudentSmsTab from '../components/Students/StudentSmsTab';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -3257,6 +3259,12 @@ const Students = () => {
                   >
                     <History size={16} /> History
                   </button>
+                  <button
+                    onClick={() => setActiveStudentTab('sms_tracking')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-all ${activeStudentTab === 'sms_tracking' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <MessageSquare size={16} /> SMS
+                  </button>
                 </div>
 
                 {activeStudentTab === 'attendance' && (
@@ -3265,6 +3273,10 @@ const Students = () => {
 
                 {activeStudentTab === 'history' && (
                   <StudentHistoryTab student={selectedStudent} />
+                )}
+
+                {activeStudentTab === 'sms_tracking' && (
+                  <StudentSmsTab student={selectedStudent} />
                 )}
 
                 <div className={`space-y-4 sm:space-y-6 ${activeStudentTab !== 'details' ? 'hidden' : ''}`}>
