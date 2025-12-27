@@ -33,6 +33,7 @@ const EventCalendar = ({ isEmbedded = false }) => {
         title: '',
         description: '',
         event_date: '',
+        end_date: '',
         start_time: '',
         end_time: '',
         event_type: 'academic',
@@ -82,10 +83,16 @@ const EventCalendar = ({ isEmbedded = false }) => {
         for (let i = 1; i <= daysInMonth; i++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
             const dayEvents = events.filter(e => {
-                const eventDate = new Date(e.event_date);
-                return eventDate.getDate() === i &&
-                    eventDate.getMonth() === month &&
-                    eventDate.getFullYear() === year;
+                const eventStartDate = new Date(e.event_date);
+                // Reset time part for accurate comparison
+                eventStartDate.setHours(0, 0, 0, 0);
+
+                const eventEndDate = e.end_date ? new Date(e.end_date) : new Date(e.event_date);
+                eventEndDate.setHours(0, 0, 0, 0);
+
+                const currentDayDate = new Date(year, month, i);
+
+                return currentDayDate >= eventStartDate && currentDayDate <= eventEndDate;
             });
             days.push({ day: i, date: dateStr, events: dayEvents });
         }
@@ -99,7 +106,7 @@ const EventCalendar = ({ isEmbedded = false }) => {
     const handleDayClick = (dayObj) => {
         if (!dayObj.day) return;
         setEditId(null);
-        setFormData({ ...initialFormState, event_date: dayObj.date });
+        setFormData({ ...initialFormState, event_date: dayObj.date, end_date: dayObj.date });
         setSelectedDate(dayObj.date);
         setIsModalOpen(true);
     };
@@ -118,10 +125,20 @@ const EventCalendar = ({ isEmbedded = false }) => {
         const istDate = new Date(eventDate.getTime() + (5.5 * 60 * 60 * 1000));
         const formattedDate = istDate.toISOString().split('T')[0];
 
+        let formattedEndDate = '';
+        if (event.end_date) {
+            const endDateObj = new Date(event.end_date);
+            const istEndDate = new Date(endDateObj.getTime() + (5.5 * 60 * 60 * 1000));
+            formattedEndDate = istEndDate.toISOString().split('T')[0];
+        } else {
+            formattedEndDate = formattedDate;
+        }
+
         setFormData({
             title: event.title,
             description: event.description || '',
             event_date: formattedDate,
+            end_date: formattedEndDate,
             start_time: event.start_time || '',
             end_time: event.end_time || '',
             event_type: event.event_type,
@@ -179,6 +196,7 @@ const EventCalendar = ({ isEmbedded = false }) => {
             case 'holiday': return 'bg-red-100 text-red-700 border-red-200';
             case 'exam': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
             case 'academic': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case 'event': return 'bg-purple-100 text-purple-700 border-purple-200';
             default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
     };
@@ -275,7 +293,9 @@ const EventCalendar = ({ isEmbedded = false }) => {
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${getEventTypeColor(ev.event_type)}`}>{ev.event_type}</span>
                                         </div>
                                         <div className="text-xs text-gray-500 flex items-center gap-2 mb-1">
-                                            <CalendarCheck size={12} /> {new Date(ev.event_date).toLocaleDateString()}
+                                            <CalendarCheck size={12} />
+                                            {new Date(ev.event_date).toLocaleDateString()}
+                                            {ev.end_date && ev.end_date !== ev.event_date && ` - ${new Date(ev.end_date).toLocaleDateString()}`}
                                         </div>
                                         <div className="flex justify-between items-center mt-2">
                                             {ev.target_college ? (
@@ -321,28 +341,39 @@ const EventCalendar = ({ isEmbedded = false }) => {
                                                 onChange={e => setFormData({ ...formData, title: e.target.value })}
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                            <select
+                                                className="w-full p-2 border rounded-lg"
+                                                value={formData.event_type}
+                                                onChange={e => setFormData({ ...formData, event_type: e.target.value })}
+                                            >
+                                                <option value="academic">Academic</option>
+                                                <option value="event">Event</option>
+                                                <option value="holiday">Holiday</option>
+                                                <option value="exam">Exam</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                                                <select
-                                                    className="w-full p-2 border rounded-lg"
-                                                    value={formData.event_type}
-                                                    onChange={e => setFormData({ ...formData, event_type: e.target.value })}
-                                                >
-                                                    <option value="academic">Academic</option>
-                                                    <option value="holiday">Holiday</option>
-                                                    <option value="exam">Exam</option>
-                                                    <option value="other">Other</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                                                 <input
                                                     required
                                                     type="date"
                                                     className="w-full p-2 border rounded-lg"
                                                     value={formData.event_date}
                                                     onChange={e => setFormData({ ...formData, event_date: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full p-2 border rounded-lg"
+                                                    value={formData.end_date}
+                                                    min={formData.event_date}
+                                                    onChange={e => setFormData({ ...formData, end_date: e.target.value })}
                                                 />
                                             </div>
                                         </div>

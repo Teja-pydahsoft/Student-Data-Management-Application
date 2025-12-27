@@ -29,12 +29,13 @@ exports.createEvent = async (req, res) => {
 
         const [result] = await masterPool.query(
             `INSERT INTO events 
-            (title, description, event_date, start_time, end_time, event_type, created_by, target_college, target_batch, target_course, target_branch, target_year, target_semester) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (title, description, event_date, end_date, start_time, end_time, event_type, created_by, target_college, target_batch, target_course, target_branch, target_year, target_semester) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
                 event_date,
+                req.body.end_date || null,
                 start_time || null,
                 end_time || null,
                 event_type || 'other',
@@ -176,6 +177,7 @@ exports.updateEvent = async (req, res) => {
                 title = ?, 
                 description = ?, 
                 event_date = ?, 
+                end_date = ?,
                 start_time = ?, 
                 end_time = ?, 
                 event_type = ?,
@@ -190,6 +192,7 @@ exports.updateEvent = async (req, res) => {
                 title,
                 description,
                 event_date,
+                req.body.end_date || null,
                 start_time || null,
                 end_time || null,
                 event_type,
