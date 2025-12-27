@@ -143,7 +143,7 @@ const Attendance = () => {
   const [coursesWithBranches, setCoursesWithBranches] = useState([]);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [columnOrder, setColumnOrder] = useState([
-    'student', 'pin', 'registrationStatus', 'batch', 'course', 'branch', 'year', 'semester', 'parentContact', 'attendance', 'smsStatus', 'insights'
+    'student', 'pin', 'registrationStatus', 'batch', 'course', 'branch', 'year', 'semester', 'parentContact', 'attendance', 'smsStatus'
   ]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -2406,29 +2406,7 @@ const Attendance = () => {
     return response.data.data;
   };
 
-  const handleOpenHistory = async (student) => {
-    setSelectedStudent(student);
-    setHistoryData(null);
-    setHistoryModalOpen(true);
-    setHistoryLoading(true);
 
-    try {
-      const data = await fetchStudentHistoryData(student.id);
-      setHistoryData(data);
-    } catch (error) {
-      console.error('Failed to load student attendance history:', error);
-      toast.error(error.response?.data?.message || error.message || 'Unable to load attendance history');
-      setHistoryModalOpen(false);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const handleCloseHistory = () => {
-    setHistoryModalOpen(false);
-    setHistoryData(null);
-    setSelectedStudent(null);
-  };
 
   const csvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -3386,8 +3364,7 @@ const Attendance = () => {
                         semester: { label: 'Semester', sortable: true },
                         parentContact: { label: 'Parent Contact', sortable: true },
                         attendance: { label: 'Attendance', sortable: true },
-                        smsStatus: { label: 'SMS Status', sortable: false },
-                        insights: { label: 'Insights', sortable: false, align: 'right' }
+                        smsStatus: { label: 'SMS Status', sortable: false }
                       };
                       const config = columnConfig[columnKey];
                       if (!config) return null;
@@ -3441,8 +3418,7 @@ const Attendance = () => {
                     return (
                       <tr
                         key={student.id}
-                        className="hover:bg-gray-50 cursor-pointer"
-                        onClick={() => handleStudentClick(student)}
+                        className="hover:bg-gray-50"
                       >
                         {columnOrder.map((columnKey) => {
                           if (columnKey === 'student') {
@@ -3818,25 +3794,7 @@ const Attendance = () => {
                               </td>
                             );
                           }
-                          if (columnKey === 'insights') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStudentClick(student);
-                                    }}
-                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
-                                  >
-                                    <BarChart3 size={16} />
-                                    View Report
-                                  </button>
-                                </div>
-                              </td>
-                            );
-                          }
+
                           return null;
                         })}
                       </tr>
@@ -3863,7 +3821,7 @@ const Attendance = () => {
                   >
                     <div className="p-4 space-y-3">
                       {/* Header with Photo and Name */}
-                      <div className="flex items-start gap-3" onClick={() => handleStudentClick(student)}>
+                      <div className="flex items-start gap-3">
                         {renderPhoto(student)}
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
@@ -3958,13 +3916,6 @@ const Attendance = () => {
                         )}
                       </div>
 
-                      {/* Action Button */}
-                      <button
-                        onClick={() => handleStudentClick(student)}
-                        className="w-full mt-2 py-2.5 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm min-h-[44px]"
-                      >
-                        View Report
-                      </button>
                     </div>
                   </div>
                 );
@@ -4057,397 +4008,405 @@ const Attendance = () => {
       </section>
 
       {/* SMS Results Summary Button - Shows when there are results */}
-      {smsResults.length > 0 && (
-        <button
-          onClick={() => setSmsModalOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
-        >
-          <CalendarCheck size={20} />
-          <span className="font-medium">SMS Report</span>
-          <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-            {smsResults.length}
-          </span>
-        </button>
-      )}
+      {
+        smsResults.length > 0 && (
+          <button
+            onClick={() => setSmsModalOpen(true)}
+            className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+          >
+            <CalendarCheck size={20} />
+            <span className="font-medium">SMS Report</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+              {smsResults.length}
+            </span>
+          </button>
+        )
+      }
 
       {/* SMS Dispatch Summary Modal */}
-      {smsModalOpen && smsResults.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <CalendarCheck size={24} className="text-white" />
-                <div>
-                  <h3 className="font-bold text-white text-lg">SMS Dispatch Summary</h3>
-                  <p className="text-blue-100 text-sm">{attendanceDate} • {smsResults.length} students</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const headers = ['Student Name', 'PIN Number', 'Admission Number', 'College', 'Course', 'Branch', 'Year', 'Semester', 'Parent Mobile', 'Status', 'Reason'];
-                    const rows = smsResults.map(result => [
-                      result.studentName || '-',
-                      result.pinNumber || '-',
-                      result.admissionNumber || '-',
-                      result.college || '-',
-                      result.course || '-',
-                      result.branch || '-',
-                      result.year || '-',
-                      result.semester || '-',
-                      result.sentTo || result.parentMobile || '-',
-                      result.success ? (result.mocked ? 'Simulated (Test)' : 'Sent') : (result.skipped ? 'Skipped' : 'Failed'),
-                      result.reason || '-'
-                    ]);
-                    const csvContent = [
-                      headers.join(','),
-                      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-                    ].join('\n');
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `sms-dispatch-report-${attendanceDate}.csv`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(link.href);
-                    toast.success('SMS report downloaded');
-                  }}
-                  className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Download size={16} />
-                  Download CSV
-                </button>
-                <button
-                  onClick={() => setSmsModalOpen(false)}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
-              <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
-                <Check size={16} className="text-green-600" />
-                <div>
-                  <div className="text-xs text-green-700 font-medium">Sent</div>
-                  <div className="text-lg font-bold text-green-800">
-                    {smsResults.filter(r => r.success && !r.mocked).length}
+      {
+        smsModalOpen && smsResults.length > 0 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <CalendarCheck size={24} className="text-white" />
+                  <div>
+                    <h3 className="font-bold text-white text-lg">SMS Dispatch Summary</h3>
+                    <p className="text-blue-100 text-sm">{attendanceDate} • {smsResults.length} students</p>
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
-                <RefreshCw size={16} className="text-blue-600" />
-                <div>
-                  <div className="text-xs text-blue-700 font-medium">Test Mode</div>
-                  <div className="text-lg font-bold text-blue-800">
-                    {smsResults.filter(r => r.success && r.mocked).length}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2">
-                <AlertTriangle size={16} className="text-amber-600" />
-                <div>
-                  <div className="text-xs text-amber-700 font-medium">Skipped</div>
-                  <div className="text-lg font-bold text-amber-800">
-                    {smsResults.filter(r => r.skipped).length}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-red-100 border border-red-200 rounded-lg px-3 py-2">
-                <X size={16} className="text-red-600" />
-                <div>
-                  <div className="text-xs text-red-700 font-medium">Failed</div>
-                  <div className="text-lg font-bold text-red-800">
-                    {smsResults.filter(r => !r.success && !r.skipped).length}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Detailed Table with Scroll */}
-            <div className="flex-1 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 border-b border-gray-200 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Student Name</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">PIN</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Admission No</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">College</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Branch</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Year</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Sem</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Parent Mobile</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {smsResults
-                    .slice((smsCurrentPage - 1) * smsPageSize, smsCurrentPage * smsPageSize)
-                    .map((result, index) => (
-                      <tr key={result.studentId || index} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{result.studentName || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.pinNumber || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.admissionNumber || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600 max-w-[150px] truncate" title={result.college}>{result.college || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.course || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.branch || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.year || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600">{result.semester || '-'}</td>
-                        <td className="px-3 py-2 text-gray-600 font-mono text-xs">{result.sentTo || result.parentMobile || '-'}</td>
-                        <td className="px-3 py-2">
-                          {result.success ? (
-                            result.mocked ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                <RefreshCw size={12} />
-                                Test Mode
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                <Check size={12} />
-                                Sent
-                              </span>
-                            )
-                          ) : result.skipped ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={result.reason}>
-                              <AlertTriangle size={12} />
-                              {result.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title={result.reason || result.details}>
-                              <X size={12} />
-                              Failed
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Footer */}
-            {smsResults.length > smsPageSize && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-                <div className="text-sm text-gray-600">
-                  Showing {((smsCurrentPage - 1) * smsPageSize) + 1} to {Math.min(smsCurrentPage * smsPageSize, smsResults.length)} of {smsResults.length} students
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setSmsCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={smsCurrentPage === 1}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      const headers = ['Student Name', 'PIN Number', 'Admission Number', 'College', 'Course', 'Branch', 'Year', 'Semester', 'Parent Mobile', 'Status', 'Reason'];
+                      const rows = smsResults.map(result => [
+                        result.studentName || '-',
+                        result.pinNumber || '-',
+                        result.admissionNumber || '-',
+                        result.college || '-',
+                        result.course || '-',
+                        result.branch || '-',
+                        result.year || '-',
+                        result.semester || '-',
+                        result.sentTo || result.parentMobile || '-',
+                        result.success ? (result.mocked ? 'Simulated (Test)' : 'Sent') : (result.skipped ? 'Skipped' : 'Failed'),
+                        result.reason || '-'
+                      ]);
+                      const csvContent = [
+                        headers.join(','),
+                        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                      ].join('\n');
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                      const link = document.createElement('a');
+                      link.href = URL.createObjectURL(blob);
+                      link.download = `sms-dispatch-report-${attendanceDate}.csv`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(link.href);
+                      toast.success('SMS report downloaded');
+                    }}
+                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                   >
-                    Previous
+                    <Download size={16} />
+                    Download CSV
                   </button>
-                  <span className="text-sm text-gray-600">
-                    Page {smsCurrentPage} of {Math.ceil(smsResults.length / smsPageSize)}
-                  </span>
                   <button
-                    onClick={() => setSmsCurrentPage(p => Math.min(Math.ceil(smsResults.length / smsPageSize), p + 1))}
-                    disabled={smsCurrentPage >= Math.ceil(smsResults.length / smsPageSize)}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setSmsModalOpen(false)}
+                    className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
                   >
-                    Next
+                    <X size={20} />
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-      {/* Holiday Alert Modal - Shows for both Public and Institute Holidays */}
-      {showHolidayAlert && (nonWorkingDayDetails.isNonWorkingDay || customHolidayForDate || publicHolidayMatches.length > 0 || selectedDateIsSunday) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 py-6">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-amber-100 p-3 flex-shrink-0">
-                <AlertTriangle className="text-amber-600" size={24} />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Today is a Holiday</h3>
-                <div className="space-y-2">
-                  {/* Institute Holiday Section - Show prominently */}
-                  {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday) && (
-                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-purple-800 mb-1">
-                        Institute Holiday
-                      </div>
-                      <div className="text-sm font-semibold text-purple-900">
-                        {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.title || 'Institute Holiday'}
-                      </div>
-                      {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.description && (
-                        <div className="text-xs text-purple-700 mt-1">
-                          {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday).description}
-                        </div>
-                      )}
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
+                  <Check size={16} className="text-green-600" />
+                  <div>
+                    <div className="text-xs text-green-700 font-medium">Sent</div>
+                    <div className="text-lg font-bold text-green-800">
+                      {smsResults.filter(r => r.success && !r.mocked).length}
                     </div>
-                  )}
-
-                  {/* Public Holiday Section */}
-                  {(() => {
-                    const publicHolidays = [];
-                    if (nonWorkingDayDetails.holidays && nonWorkingDayDetails.holidays.length > 0) {
-                      publicHolidays.push(...nonWorkingDayDetails.holidays);
-                    }
-                    if (publicHolidayMatches.length > 0) {
-                      publicHolidays.push(...publicHolidayMatches);
-                    }
-                    if (selectedDateHolidayInfo?.publicHoliday) {
-                      publicHolidays.push(selectedDateHolidayInfo.publicHoliday);
-                    }
-
-                    return publicHolidays.length > 0 ? (
-                      <div className="space-y-2">
-                        {publicHolidays.map((holiday, index) => (
-                          <div key={index} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-orange-800 mb-1">
-                              Public Holiday
-                            </div>
-                            <div className="text-sm font-semibold text-orange-900">
-                              {holiday.localName || holiday.name}
-                            </div>
-                            {holiday.name && holiday.localName && holiday.localName !== holiday.name && (
-                              <div className="text-xs text-orange-700 mt-1">
-                                {holiday.name}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null;
-                  })()}
-
-                  {/* Sunday Section */}
-                  {selectedDateIsSunday && !nonWorkingDayDetails.customHoliday && !customHolidayForDate && publicHolidayMatches.length === 0 && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-amber-800 mb-1">
-                        Weekly Holiday
-                      </div>
-                      <div className="text-sm font-semibold text-amber-900">
-                        Sunday
-                      </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
+                  <RefreshCw size={16} className="text-blue-600" />
+                  <div>
+                    <div className="text-xs text-blue-700 font-medium">Test Mode</div>
+                    <div className="text-lg font-bold text-blue-800">
+                      {smsResults.filter(r => r.success && r.mocked).length}
                     </div>
-                  )}
-
-                  {/* General reasons list if available */}
-                  {nonWorkingDayDetails.reasons && nonWorkingDayDetails.reasons.length > 0 && (
-                    <div className="space-y-1 text-sm text-gray-600">
-                      {nonWorkingDayDetails.reasons.map((reason, index) => (
-                        <div key={index} className="text-xs">
-                          • {reason}
-                        </div>
-                      ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle size={16} className="text-amber-600" />
+                  <div>
+                    <div className="text-xs text-amber-700 font-medium">Skipped</div>
+                    <div className="text-lg font-bold text-amber-800">
+                      {smsResults.filter(r => r.skipped).length}
                     </div>
-                  )}
-
-                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div className="text-sm text-amber-800">
-                      <strong>Note:</strong> Attendance cannot be marked on holidays. Please select a working day to mark attendance.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-red-100 border border-red-200 rounded-lg px-3 py-2">
+                  <X size={16} className="text-red-600" />
+                  <div>
+                    <div className="text-xs text-red-700 font-medium">Failed</div>
+                    <div className="text-lg font-bold text-red-800">
+                      {smsResults.filter(r => !r.success && !r.skipped).length}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowHolidayAlert(false);
-                  setHolidayAlertShown(true);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
-              >
-                Understood
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Attendance Report Modal */}
-      {showReportModal && attendanceReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4">
-          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Attendance Report</h2>
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Total Students</p>
-                  <p className="text-2xl font-bold text-blue-700">{attendanceReport.totalStudents.toLocaleString()}</p>
-                </div>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Present</p>
-                  <p className="text-2xl font-bold text-green-700">{attendanceReport.presentCount.toLocaleString()}</p>
-                </div>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-sm text-gray-600 mb-1">Absent</p>
-                  <p className="text-2xl font-bold text-red-700">{attendanceReport.absentCount.toLocaleString()}</p>
-                </div>
+              {/* Detailed Table with Scroll */}
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 border-b border-gray-200 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Student Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">PIN</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Admission No</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">College</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Branch</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Year</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Sem</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Parent Mobile</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {smsResults
+                      .slice((smsCurrentPage - 1) * smsPageSize, smsCurrentPage * smsPageSize)
+                      .map((result, index) => (
+                        <tr key={result.studentId || index} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-900">{result.studentName || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.pinNumber || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.admissionNumber || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600 max-w-[150px] truncate" title={result.college}>{result.college || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.course || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.branch || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.year || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600">{result.semester || '-'}</td>
+                          <td className="px-3 py-2 text-gray-600 font-mono text-xs">{result.sentTo || result.parentMobile || '-'}</td>
+                          <td className="px-3 py-2">
+                            {result.success ? (
+                              result.mocked ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                  <RefreshCw size={12} />
+                                  Test Mode
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                  <Check size={12} />
+                                  Sent
+                                </span>
+                              )
+                            ) : result.skipped ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={result.reason}>
+                                <AlertTriangle size={12} />
+                                {result.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700" title={result.reason || result.details}>
+                                <X size={12} />
+                                Failed
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
 
-              {attendanceReport.absentCount > 0 && (
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Absent Students PIN Numbers</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {attendanceReport.absentPinNumbers.length > 0 ? (
-                      attendanceReport.absentPinNumbers.map((pin, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-3 py-1 rounded-md bg-red-100 text-red-800 text-sm font-medium border border-red-200"
-                        >
-                          {pin}
-                        </span>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-500">No PIN numbers available for absent students</p>
-                    )}
+              {/* Pagination Footer */}
+              {smsResults.length > smsPageSize && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+                  <div className="text-sm text-gray-600">
+                    Showing {((smsCurrentPage - 1) * smsPageSize) + 1} to {Math.min(smsCurrentPage * smsPageSize, smsResults.length)} of {smsResults.length} students
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSmsCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={smsCurrentPage === 1}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Page {smsCurrentPage} of {Math.ceil(smsResults.length / smsPageSize)}
+                    </span>
+                    <button
+                      onClick={() => setSmsCurrentPage(p => Math.min(Math.ceil(smsResults.length / smsPageSize), p + 1))}
+                      disabled={smsCurrentPage >= Math.ceil(smsResults.length / smsPageSize)}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               )}
-
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Date & Filters</h3>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p><span className="font-medium">Date:</span> {attendanceDateLabel}</p>
-                  {filters.batch && <p><span className="font-medium">Batch:</span> {filters.batch}</p>}
-                  {filters.course && <p><span className="font-medium">Course:</span> {filters.course}</p>}
-                  {filters.branch && <p><span className="font-medium">Branch:</span> {filters.branch}</p>}
-                  {filters.currentYear && <p><span className="font-medium">Year:</span> {filters.currentYear}</p>}
-                  {filters.currentSemester && <p><span className="font-medium">Semester:</span> {filters.currentSemester}</p>}
-                </div>
-              </div>
-            </div>
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setShowReportModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmSave}
-                disabled={saving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? 'Saving...' : 'Confirm & Save'}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
+      {/* Holiday Alert Modal - Shows for both Public and Institute Holidays */}
+      {
+        showHolidayAlert && (nonWorkingDayDetails.isNonWorkingDay || customHolidayForDate || publicHolidayMatches.length > 0 || selectedDateIsSunday) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-3 py-6">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="rounded-full bg-amber-100 p-3 flex-shrink-0">
+                  <AlertTriangle className="text-amber-600" size={24} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Today is a Holiday</h3>
+                  <div className="space-y-2">
+                    {/* Institute Holiday Section - Show prominently */}
+                    {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday) && (
+                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-purple-800 mb-1">
+                          Institute Holiday
+                        </div>
+                        <div className="text-sm font-semibold text-purple-900">
+                          {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.title || 'Institute Holiday'}
+                        </div>
+                        {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday)?.description && (
+                          <div className="text-xs text-purple-700 mt-1">
+                            {(nonWorkingDayDetails.customHoliday || customHolidayForDate || selectedDateHolidayInfo?.customHoliday).description}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Public Holiday Section */}
+                    {(() => {
+                      const publicHolidays = [];
+                      if (nonWorkingDayDetails.holidays && nonWorkingDayDetails.holidays.length > 0) {
+                        publicHolidays.push(...nonWorkingDayDetails.holidays);
+                      }
+                      if (publicHolidayMatches.length > 0) {
+                        publicHolidays.push(...publicHolidayMatches);
+                      }
+                      if (selectedDateHolidayInfo?.publicHoliday) {
+                        publicHolidays.push(selectedDateHolidayInfo.publicHoliday);
+                      }
+
+                      return publicHolidays.length > 0 ? (
+                        <div className="space-y-2">
+                          {publicHolidays.map((holiday, index) => (
+                            <div key={index} className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-orange-800 mb-1">
+                                Public Holiday
+                              </div>
+                              <div className="text-sm font-semibold text-orange-900">
+                                {holiday.localName || holiday.name}
+                              </div>
+                              {holiday.name && holiday.localName && holiday.localName !== holiday.name && (
+                                <div className="text-xs text-orange-700 mt-1">
+                                  {holiday.name}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Sunday Section */}
+                    {selectedDateIsSunday && !nonWorkingDayDetails.customHoliday && !customHolidayForDate && publicHolidayMatches.length === 0 && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-amber-800 mb-1">
+                          Weekly Holiday
+                        </div>
+                        <div className="text-sm font-semibold text-amber-900">
+                          Sunday
+                        </div>
+                      </div>
+                    )}
+
+                    {/* General reasons list if available */}
+                    {nonWorkingDayDetails.reasons && nonWorkingDayDetails.reasons.length > 0 && (
+                      <div className="space-y-1 text-sm text-gray-600">
+                        {nonWorkingDayDetails.reasons.map((reason, index) => (
+                          <div key={index} className="text-xs">
+                            • {reason}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="text-sm text-amber-800">
+                        <strong>Note:</strong> Attendance cannot be marked on holidays. Please select a working day to mark attendance.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHolidayAlert(false);
+                    setHolidayAlertShown(true);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Attendance Report Modal */}
+      {
+        showReportModal && attendanceReport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4">
+            <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">Attendance Report</h2>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Total Students</p>
+                    <p className="text-2xl font-bold text-blue-700">{attendanceReport.totalStudents.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Present</p>
+                    <p className="text-2xl font-bold text-green-700">{attendanceReport.presentCount.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-1">Absent</p>
+                    <p className="text-2xl font-bold text-red-700">{attendanceReport.absentCount.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {attendanceReport.absentCount > 0 && (
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Absent Students PIN Numbers</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {attendanceReport.absentPinNumbers.length > 0 ? (
+                        attendanceReport.absentPinNumbers.map((pin, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-3 py-1 rounded-md bg-red-100 text-red-800 text-sm font-medium border border-red-200"
+                          >
+                            {pin}
+                          </span>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">No PIN numbers available for absent students</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Date & Filters</h3>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <p><span className="font-medium">Date:</span> {attendanceDateLabel}</p>
+                    {filters.batch && <p><span className="font-medium">Batch:</span> {filters.batch}</p>}
+                    {filters.course && <p><span className="font-medium">Course:</span> {filters.course}</p>}
+                    {filters.branch && <p><span className="font-medium">Branch:</span> {filters.branch}</p>}
+                    {filters.currentYear && <p><span className="font-medium">Year:</span> {filters.currentYear}</p>}
+                    {filters.currentSemester && <p><span className="font-medium">Semester:</span> {filters.currentSemester}</p>}
+                  </div>
+                </div>
+              </div>
+              <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmSave}
+                  disabled={saving}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? 'Saving...' : 'Confirm & Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
       <HolidayCalendarModal
         isOpen={calendarModalOpen}
@@ -4476,391 +4435,7 @@ const Attendance = () => {
         calendarError={calendarError}
         onRetryCalendarFetch={handleRetryCalendarFetch}
       />
-      {historyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black bg-opacity-40 px-4 py-6 overflow-y-auto">
-          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 text-blue-600 rounded-full p-2">
-                  <BarChart3 size={20} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Attendance History</h2>
-                  <p className="text-sm text-gray-500">
-                    {selectedStudent?.studentName} • {selectedStudent?.pinNumber || 'No PIN'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => selectedStudent && handleDownloadReport(selectedStudent)}
-                  disabled={!selectedStudent || downloadingStudentId === selectedStudent?.id}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border transition-colors ${downloadingStudentId === selectedStudent?.id
-                    ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                    }`}
-                >
-                  {downloadingStudentId === selectedStudent?.id ? (
-                    <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Download size={16} />
-                  )}
-                  Download report
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCloseHistory}
-                  className="rounded-full p-2 hover:bg-gray-100 text-gray-500"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {historyLoading ? (
-              <div className="py-20 flex justify-center">
-                <LoadingAnimation message="Fetching attendance history..." />
-              </div>
-            ) : !historyData ? (
-              <div className="py-20 flex flex-col items-center gap-3 text-gray-500">
-                <AlertTriangle size={28} />
-                <p>Unable to load attendance history.</p>
-              </div>
-            ) : (
-              <div className="px-6 py-6 space-y-6 overflow-y-auto">
-                {/* Semester Summary - Show prominently if available */}
-                {historyData.semester && (
-                  <section>
-                    <div className="bg-white border border-indigo-100 rounded-2xl shadow-sm p-5">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold text-indigo-600 uppercase">Semester Attendance</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            {historyData.semester?.startDate} → {historyData.semester?.endDate}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              <Calendar size={12} /> {historyData.semester?.workingDays ?? 0} working days
-                            </span>
-                            {historyData.semester?.lastUpdated && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
-                                <Clock size={12} /> Updated {historyData.semester?.lastUpdated ? new Date(historyData.semester.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : ''}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {(() => {
-                            const semesterTotals = historyData.semester?.totals || {};
-                            const totalDays =
-                              (semesterTotals.present || 0) +
-                              (semesterTotals.absent || 0) +
-                              (semesterTotals.unmarked || 0) +
-                              (semesterTotals.holidays || 0);
-                            const presentDays = semesterTotals.present || 0;
-                            const percentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : '0.0';
-                            return (
-                              <div className="inline-flex items-center gap-3 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-100">
-                                <div className="text-left">
-                                  <p className="text-xs text-gray-600">Attendance %</p>
-                                  <p className="text-2xl font-bold text-indigo-700">{percentage}%</p>
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  <p>
-                                    <span className="font-semibold text-green-600">{semesterTotals.present ?? 0}</span> present
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold text-red-500">{semesterTotals.absent ?? 0}</span> absent
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-3">
-                        <div className="bg-green-50 border border-green-100 rounded-lg p-3">
-                          <p className="text-xs text-gray-600">Present</p>
-                          <p className="text-xl font-bold text-green-700">
-                            {historyData.semester?.totals?.present ?? 0}
-                          </p>
-                        </div>
-                        <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                          <p className="text-xs text-gray-600">Absent</p>
-                          <p className="text-xl font-bold text-red-600">
-                            {historyData.semester?.totals?.absent ?? 0}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                          <p className="text-xs text-gray-600">Unmarked</p>
-                          <p className="text-xl font-bold text-gray-700">
-                            {historyData.semester?.totals?.unmarked ?? 0}
-                          </p>
-                        </div>
-                        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
-                          <p className="text-xs text-gray-600">Holidays</p>
-                          <p className="text-xl font-bold text-amber-700">
-                            {historyData.semester?.totals?.holidays ?? 0}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <h3 className="text-sm font-semibold text-blue-700 uppercase">Weekly Summary</h3>
-                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                      <div>
-                        <p className="text-xs text-gray-500">Present</p>
-                        <p className="text-lg font-semibold text-green-600">
-                          {historyData.weekly?.totals?.present ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Absent</p>
-                        <p className="text-lg font-semibold text-red-500">
-                          {historyData.weekly?.totals?.absent ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Unmarked</p>
-                        <p className="text-lg font-semibold text-gray-600">
-                          {historyData.weekly?.totals?.unmarked ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Holidays</p>
-                        <p className="text-lg font-semibold text-amber-600">
-                          {historyData.weekly?.totals?.holidays ?? 0}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-500">
-                      Range: {historyData.weekly?.startDate} → {historyData.weekly?.endDate}
-                    </p>
-                  </div>
-
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                    <h3 className="text-sm font-semibold text-purple-700 uppercase">Monthly Summary</h3>
-                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                      <div>
-                        <p className="text-xs text-gray-500">Present</p>
-                        <p className="text-lg font-semibold text-green-600">
-                          {historyData.monthly?.totals?.present ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Absent</p>
-                        <p className="text-lg font-semibold text-red-500">
-                          {historyData.monthly?.totals?.absent ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Unmarked</p>
-                        <p className="text-lg font-semibold text-gray-600">
-                          {historyData.monthly?.totals?.unmarked ?? 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Holidays</p>
-                        <p className="text-lg font-semibold text-amber-600">
-                          {historyData.monthly?.totals?.holidays ?? 0}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-500">
-                      Range: {historyData.monthly?.startDate} → {historyData.monthly?.endDate}
-                    </p>
-                  </div>
-                </section>
-
-                <section className={`grid gap-6 ${historyData.semester ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-gray-800">Weekly Status Timeline</h3>
-                    <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={weeklyChartSeries}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                          <YAxis allowDecimals={false} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
-                          <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
-                          <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
-                          <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-gray-800">Monthly Status Timeline</h3>
-                    <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={monthlyChartSeries}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                          <YAxis allowDecimals={false} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
-                          <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
-                          <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
-                          <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  {historyData.semester && (
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-gray-800">Semester Status Timeline</h3>
-                      <div className="h-64 bg-white border border-gray-200 rounded-xl p-3">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={semesterChartSeries}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={80} />
-                            <YAxis allowDecimals={false} />
-                            <Tooltip />
-                            <Legend />
-                            <Bar dataKey="present" stackId="status" fill="#16a34a" name="Present" />
-                            <Bar dataKey="absent" stackId="status" fill="#ef4444" name="Absent" />
-                            <Bar dataKey="holiday" stackId="status" fill="#f59e0b" name="Holiday" />
-                            <Bar dataKey="unmarked" stackId="status" fill="#a3a3a3" name="Unmarked" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* Monthly Breakdown - Show all months in semester */}
-                {historyData.semester && historyData.semester.series && (() => {
-                  // Group attendance by month
-                  const monthlyData = {};
-                  historyData.semester.series.forEach((entry) => {
-                    const date = new Date(entry.date);
-                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                    const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-                    if (!monthlyData[monthKey]) {
-                      monthlyData[monthKey] = {
-                        monthName,
-                        present: 0,
-                        absent: 0,
-                        unmarked: 0,
-                        holidays: 0,
-                        total: 0
-                      };
-                    }
-
-                    if (entry.isHoliday) {
-                      monthlyData[monthKey].holidays++;
-                    } else if (entry.status === 'present') {
-                      monthlyData[monthKey].present++;
-                    } else if (entry.status === 'absent') {
-                      monthlyData[monthKey].absent++;
-                    } else {
-                      monthlyData[monthKey].unmarked++;
-                    }
-                    monthlyData[monthKey].total++;
-                  });
-
-                  const months = Object.keys(monthlyData).sort().map(key => ({
-                    key,
-                    ...monthlyData[key]
-                  }));
-
-                  return (
-                    <section>
-                      <h3 className="text-sm font-semibold text-gray-800 mb-3">
-                        Monthly Breakdown (Semester: {historyData.semester.startDate} → {historyData.semester.endDate})
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {months.map((month) => {
-                          const totalWorkingDays = month.total - month.holidays;
-                          const percentage = totalWorkingDays > 0
-                            ? ((month.present / totalWorkingDays) * 100).toFixed(1)
-                            : '0.0';
-
-                          return (
-                            <div
-                              key={month.key}
-                              className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow"
-                            >
-                              <h4 className="text-sm font-semibold text-gray-800 mb-3">{month.monthName}</h4>
-                              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                                <div>
-                                  <p className="text-xs text-gray-500">Present</p>
-                                  <p className="text-base font-semibold text-green-600">{month.present}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500">Absent</p>
-                                  <p className="text-base font-semibold text-red-500">{month.absent}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500">Unmarked</p>
-                                  <p className="text-base font-semibold text-gray-600">{month.unmarked}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500">Holidays</p>
-                                  <p className="text-base font-semibold text-amber-600">{month.holidays}</p>
-                                </div>
-                              </div>
-                              <div className="pt-3 border-t border-gray-200">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-600">Attendance:</span>
-                                  <span className={`text-sm font-bold ${parseFloat(percentage) >= 75 ? 'text-green-600' :
-                                    parseFloat(percentage) >= 50 ? 'text-yellow-600' :
-                                      'text-red-600'
-                                    }`}>
-                                    {percentage}%
-                                  </span>
-                                </div>
-                                <div className="mt-1 text-xs text-gray-500">
-                                  Total Days: {month.total} (Working: {totalWorkingDays})
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })()}
-
-                <section>
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">Daily Breakdown (Last 7 days)</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                    {historyData.weekly?.series?.map((entry) => (
-                      <div
-                        key={entry.date}
-                        className={`rounded-xl border px-3 py-2 text-center ${entry.status === 'present'
-                          ? 'border-green-200 bg-green-50 text-green-700'
-                          : entry.status === 'absent'
-                            ? 'border-red-200 bg-red-50 text-red-600'
-                            : entry.status === 'holiday'
-                              ? 'border-amber-200 bg-amber-50 text-amber-700'
-                              : 'border-gray-200 bg-gray-50 text-gray-600'
-                          }`}
-                      >
-                        <p className="text-xs font-semibold">{entry.date}</p>
-                        <p className="text-xs capitalize">
-                          {entry.status === 'holiday' ? 'Holiday' : entry.status}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    </div >
   );
 };
 

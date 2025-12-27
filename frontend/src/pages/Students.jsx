@@ -19,10 +19,15 @@ import {
   FileSpreadsheet,
   FileText,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Book,
+  Calendar,
+  History
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
+import StudentHistoryTab from '../components/Students/StudentHistoryTab';
+import StudentAttendanceTab from '../components/Students/StudentAttendanceTab';
 import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
@@ -104,6 +109,7 @@ const Students = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [activeStudentTab, setActiveStudentTab] = useState('details');
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState({});
   const [showFilters, setShowFilters] = useState(false);
@@ -2765,6 +2771,7 @@ const Students = () => {
             // Close modal when clicking on backdrop
             if (e.target === e.currentTarget) {
               setShowModal(false);
+              setActiveStudentTab('details');
             }
           }}
           onWheel={(e) => {
@@ -2810,6 +2817,7 @@ const Students = () => {
                 )}
                 <button onClick={() => {
                   setShowModal(false);
+                  setActiveStudentTab('details');
                   setViewingPassword(false);
                   setStudentPassword(null);
                 }} className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-lg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center">
@@ -3229,8 +3237,37 @@ const Students = () => {
               </div>
 
               {/* Right Side - All Student Data */}
-              <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto min-w-0">
-                <div className="space-y-4 sm:space-y-6">
+              <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto min-w-0 flex flex-col">
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg mb-6 shrink-0">
+                  <button
+                    onClick={() => setActiveStudentTab('details')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-all ${activeStudentTab === 'details' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <Book size={16} /> Details
+                  </button>
+                  <button
+                    onClick={() => setActiveStudentTab('attendance')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-all ${activeStudentTab === 'attendance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <Calendar size={16} /> Attendance
+                  </button>
+                  <button
+                    onClick={() => setActiveStudentTab('history')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-all ${activeStudentTab === 'history' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <History size={16} /> History
+                  </button>
+                </div>
+
+                {activeStudentTab === 'attendance' && (
+                  <StudentAttendanceTab student={selectedStudent} />
+                )}
+
+                {activeStudentTab === 'history' && (
+                  <StudentHistoryTab student={selectedStudent} />
+                )}
+
+                <div className={`space-y-4 sm:space-y-6 ${activeStudentTab !== 'details' ? 'hidden' : ''}`}>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
 
                     {/* Column 1 */}

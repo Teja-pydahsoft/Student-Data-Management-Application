@@ -4,6 +4,8 @@ import { ArrowLeft, Save, FileText } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
+import SearchableSelect from '../components/SearchableSelect';
+import { addressData } from '../data/addressData';
 
 // Dropdown options for student fields
 const STUDENT_TYPE_OPTIONS = ['CONV', 'LATER', 'LSPOT', 'MANG'];
@@ -50,7 +52,7 @@ const AddStudent = () => {
     branch: '',
     stud_type: '',
     student_name: '',
-    student_status: '',
+    student_status: 'Regular',
     scholar_status: 'Eligible',
     fee_status: 'due',
     registration_status: 'Pending',
@@ -63,6 +65,8 @@ const AddStudent = () => {
     dob: '',
     adhar_no: '',
     admission_no: '',
+    pincode: '',
+    state: '',
     student_address: '',
     city_village: '',
     mandal_name: '',
@@ -429,6 +433,239 @@ const AddStudent = () => {
     generateAdmissionNumber();
   }, [studentData.batch, isAdmissionNumberManual]);
 
+
+
+  // Address Data Management
+  const [districts, setDistricts] = useState([]);
+  const [mandals, setMandals] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [villagesLoading, setVillagesLoading] = useState(false);
+  const [isMandalInputVisible, setIsMandalInputVisible] = useState(false);
+  const [isVillageInputVisible, setIsVillageInputVisible] = useState(false);
+
+  // Reset custom input visibility when district changes
+  useEffect(() => {
+    setIsMandalInputVisible(false);
+    setIsVillageInputVisible(false);
+  }, [studentData.district]);
+
+  // Filter districts when state changes
+  useEffect(() => {
+    if (studentData.state && addressData[studentData.state]) {
+      setDistricts(Object.keys(addressData[studentData.state]).sort());
+    } else {
+      setDistricts([]);
+    }
+  }, [studentData.state]);
+
+  // Filter mandals when district changes
+  useEffect(() => {
+    if (studentData.state && studentData.district && addressData[studentData.state] && addressData[studentData.state][studentData.district]) {
+      // If mandals are already set (e.g. from Pincode), we merge or keep them
+      // But usually, we want the full list from local data + matches
+      // For now, let's just reset to the full list from addressData to ensure completeness
+      // unless we want to restrict to what the pincode says.
+      // Better approach: Use addressData list as base.
+      setMandals(addressData[studentData.state][studentData.district].sort());
+    } else if (!pincodeLoading) {
+      // Only clear if not currently loading from pincode (which might set custom mandals)
+      // Actually pincode sets the state values, which triggers this effect.
+      // So this effect should just provide the options.
+      setMandals([]);
+    }
+  }, [studentData.state, studentData.district]);
+
+  // Fetch villages when Mandal changes (and matches a valid Mandal)
+  useEffect(() => {
+    const fetchVillages = async () => {
+      const currentMandal = studentData.mandal_name;
+      const currentDistrict = studentData.district;
+      const currentState = studentData.state;
+
+      // Only fetch if we have a valid Mandal selected (present in the mandals list)
+      // and we are NOT currently loading from Pincode (to avoid conflict)
+      if (
+        currentMandal &&
+        mandals.includes(currentMandal) &&
+        !pincodeLoading
+      ) {
+        try {
+          setVillagesLoading(true);
+          const response = await fetch(`https://api.postalpincode.in/postoffice/${currentMandal}`);
+          const data = await response.json();
+
+          if (data && data[0] && data[0].Status === 'Success') {
+            const postOffices = data[0].PostOffice;
+
+            // Filter POs that belong to the selected District/State to avoid name collisions
+            const relevantVillages = postOffices
+              .filter(po => {
+                const poDistrict = (po.District || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const poState = (po.Circle || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                const selectedDistrict = (currentDistrict || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const selectedState = (currentState || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                const districtMatch = poDistrict.includes(selectedDistrict) || selectedDistrict.includes(poDistrict);
+                const stateMatch = poState.includes(selectedState) || selectedState.includes(poState);
+
+                return districtMatch && stateMatch;
+              })
+              .map(po => po.Name);
+
+            const uniqueVillages = [...new Set(relevantVillages)].sort();
+            setVillages(uniqueVillages.length > 0 ? uniqueVillages : []);
+          } else {
+            setVillages([]);
+          }
+        } catch (error) {
+          console.error("Failed to fetch villages by mandal:", error);
+          setVillages([]);
+        } finally {
+          setVillagesLoading(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchVillages, 300);
+    return () => clearTimeout(timer);
+  }, [studentData.mandal_name, mandals, studentData.district, studentData.state, pincodeLoading]);
+
+  const fetchPincodeDetails = async (pincode) => {
+    if (!pincode || pincode.length !== 6) return;
+
+    try {
+      setPincodeLoading(true);
+      const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      const data = await response.json();
+
+      if (data && data[0] && data[0].Status === 'Success') {
+        const postOffices = data[0].PostOffice;
+        if (postOffices && postOffices.length > 0) {
+          const details = postOffices[0];
+
+          // Data from API
+          const apiState = details.Circle; // e.g., 'Andhra Pradesh'
+          const apiDistrict = details.District; // e.g., 'Chittoor'
+          const apiBlock = details.Block; // Often corresponds to Mandal
+
+          // 1. Match State
+          // We need to match 'Andhra Pradesh' to our keys in addressData
+          // our keys: "Andhra Pradesh", "Telangana"
+          let matchedState = '';
+          const stateKeys = Object.keys(addressData);
+          const normalizedApiState = apiState.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          for (const key of stateKeys) {
+            if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedApiState) {
+              matchedState = key;
+              break;
+            }
+          }
+
+          // 2. Match District
+          let matchedDistrict = '';
+          if (matchedState) {
+            const districtKeys = Object.keys(addressData[matchedState]);
+            const normalizedApiDistrict = apiDistrict.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            // Try exact or fuzzy match
+            for (const key of districtKeys) {
+              const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (normalizedKey === normalizedApiDistrict || normalizedKey.includes(normalizedApiDistrict) || normalizedApiDistrict.includes(normalizedKey)) {
+                matchedDistrict = key;
+                break;
+              }
+            }
+          }
+
+          // Collect all potential villages/cities from the Post Office names
+          const villageList = postOffices.map(po => po.Name).sort();
+          setVillages(villageList);
+
+          setStudentData(prev => ({
+            ...prev,
+            pincode: pincode,
+            state: matchedState || prev.state || apiState, // Fallback to API value if no match
+            district: matchedDistrict || prev.district || apiDistrict,
+            mandal_name: apiBlock || prev.mandal_name,
+            // If the current city is empty, maybe auto-select the first one? No, let user choose.
+          }));
+
+          toast.success(`Address details found for Pincode: ${pincode}`);
+        } else {
+          toast.error('Invalid Pincode or no data found.');
+        }
+      } else {
+        toast.error('Invalid Pincode');
+      }
+    } catch (error) {
+      console.error('Pincode fetch error:', error);
+      toast.error('Failed to fetch address details');
+    } finally {
+      setPincodeLoading(false);
+    }
+  };
+
+  const handlePincodeChange = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setStudentData(prev => ({ ...prev, pincode: value }));
+
+    if (value.length === 6) {
+      fetchPincodeDetails(value);
+    }
+  };
+
+  const handleStateChange = (e) => {
+    const newState = e.target.value;
+    setStudentData(prev => ({
+      ...prev,
+      state: newState,
+      district: '',
+      mandal_name: '',
+      city_village: '',
+      pincode: '' // Reset pincode if manually navigating
+    }));
+    setVillages([]); // Clear village suggestions
+  };
+
+  const handleDistrictChange = (e) => {
+    const newDistrict = e.target.value;
+    setStudentData(prev => ({
+      ...prev,
+      district: newDistrict,
+      mandal_name: '',
+      city_village: '',
+      pincode: '' // Reset pincode if manually navigating
+    }));
+    setVillages([]); // Clear village suggestions
+    setIsMandalInputVisible(false);
+  };
+
+  const handleMandalSelectChange = (e) => {
+    const value = e.target.value;
+    if (value === 'Other') {
+      setIsMandalInputVisible(true);
+      setStudentData(prev => ({ ...prev, mandal_name: '' }));
+      setVillages([]); // Clear villages since custom mandal likely won't have mapped villages
+    } else {
+      setIsMandalInputVisible(false);
+      setStudentData(prev => ({ ...prev, mandal_name: value, city_village: '' }));
+    }
+  };
+
+  const handleVillageSelectChange = (e) => {
+    const value = e.target.value;
+    if (value === 'Other') {
+      setIsVillageInputVisible(true);
+      setStudentData(prev => ({ ...prev, city_village: '' }));
+    } else {
+      setIsVillageInputVisible(false);
+      setStudentData(prev => ({ ...prev, city_village: value }));
+    }
+  };
+
   // Auto-calculate current year based on batch year
   useEffect(() => {
     if (!studentData.batch || !activeStructure) {
@@ -619,6 +856,8 @@ const AddStudent = () => {
         current_semester: Number(studentData.current_semester)
       }).forEach(([key, value]) => {
         if (value !== null && value !== undefined && value !== '') {
+          // Add pincode to address if not empty (since there is no DB column for it yet, we can append it or rely on address text)
+          // For now, let's keep it separate in formdata, handled by backend if column exists or ignored
           formData.append(key, value);
         }
       });
@@ -917,20 +1156,19 @@ const AddStudent = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   current year <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="current_year"
-                  value={studentData.current_year}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Year</option>
-                  {yearOptions.map((year) => (
-                    <option key={year} value={year}>
-                      Year {year}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={`Year ${studentData.current_year || '-'}`}
+                    disabled
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
+                  />
+                  {!studentData.batch && (
+                    <p className="absolute -bottom-5 left-0 text-xs text-orange-500 whitespace-nowrap">
+                      Select batch to calculate
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* 6. Current Semester */}
@@ -938,20 +1176,12 @@ const AddStudent = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Current Semester <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="current_semester"
-                  value={studentData.current_semester}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Semester</option>
-                  {semesterOptions.map((semester) => (
-                    <option key={semester} value={semester}>
-                      Semester {semester}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={`Semester ${studentData.current_semester || '-'}`}
+                  disabled
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
+                />
               </div>
 
               {/* 7. Student Type */}
@@ -980,20 +1210,13 @@ const AddStudent = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Student Status <span className="text-red-500">*</span>
                 </label>
-                <select
+                <input
+                  type="text"
                   name="student_status"
-                  value={studentData.student_status}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                >
-                  <option value="">Select Status</option>
-                  {STUDENT_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                  value="Regular"
+                  disabled
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
+                />
               </div>
 
 
@@ -1137,42 +1360,154 @@ const AddStudent = () => {
                 ></textarea>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+              {/* Pincode Input */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  City/Village Name
+                  Pincode
                 </label>
-                <input
-                  type="text"
-                  name="city_village"
-                  value={studentData.city_village}
-                  onChange={handleChange}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="pincode"
+                    value={studentData.pincode}
+                    onChange={handlePincodeChange}
+                    placeholder="Enter 6-digit Pincode"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                  />
+                  {pincodeLoading && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* State Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mandal Name
+                  State
                 </label>
-                <input
-                  type="text"
-                  name="mandal_name"
-                  value={studentData.mandal_name}
-                  onChange={handleChange}
+                <select
+                  name="state"
+                  value={studentData.state}
+                  onChange={handleStateChange}
                   className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                />
+                >
+                  <option value="">Select State</option>
+                  {Object.keys(addressData).sort().map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* District Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   District
                 </label>
-                <input
-                  type="text"
+                <select
                   name="district"
                   value={studentData.district}
-                  onChange={handleChange}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                />
+                  onChange={handleDistrictChange}
+                  disabled={!studentData.state}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px] disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <option value="">Select District</option>
+                  {districts.map((district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mandal Hybrid Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mandal Name
+                </label>
+                {!isMandalInputVisible ? (
+                  <select
+                    name="mandal_name"
+                    value={studentData.mandal_name}
+                    onChange={handleMandalSelectChange}
+                    disabled={!studentData.district}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px] disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    <option value="">{studentData.district ? "Select Mandal" : "Select District first"}</option>
+                    {mandals.map((mandal) => (
+                      <option key={mandal} value={mandal}>{mandal}</option>
+                    ))}
+                    <option value="Other">Other (Enter Manually)</option>
+                  </select>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="mandal_name"
+                      value={studentData.mandal_name}
+                      onChange={handleChange}
+                      placeholder="Enter Mandal Name"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsMandalInputVisible(false)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Show List
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* City/Village Hybrid Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  City/Village Name
+                </label>
+                {!isVillageInputVisible ? (
+                  <select
+                    name="city_village"
+                    value={studentData.city_village}
+                    onChange={handleVillageSelectChange}
+                    disabled={(!studentData.mandal_name && !isMandalInputVisible) && villages.length === 0}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px] disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    <option value="">
+                      {villagesLoading
+                        ? "Loading villages/POs..."
+                        : "Select City/Village"}
+                    </option>
+                    {villages.map((village, idx) => (
+                      <option key={`${village}-${idx}`} value={village}>{village}</option>
+                    ))}
+                    <option value="Other">Other (Enter Manually)</option>
+                  </select>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="city_village"
+                      value={studentData.city_village}
+                      onChange={handleChange}
+                      placeholder="Enter City/Village Name"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsVillageInputVisible(false)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Show List
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
