@@ -111,6 +111,23 @@ exports.uploadStudentPhoto = async (req, res) => {
   }
 };
 
+// Helper to ensure previous college exists in the lookup table
+const ensurePreviousCollegeExists = async (collegeName) => {
+  if (!collegeName || !String(collegeName).trim()) return;
+  const name = String(collegeName).trim();
+  try {
+    // Check if exists
+    const [rows] = await masterPool.query('SELECT id FROM previous_colleges WHERE name = ?', [name]);
+    if (rows.length === 0) {
+      await masterPool.query('INSERT INTO previous_colleges (name) VALUES (?)', [name]);
+    }
+  } catch (error) {
+    // Ignore duplicate errors or other non-critical failures
+    // Table might not exist yet if migration failed, or race condition
+    // silently fail
+  }
+};
+
 // Helper function to safely parse JSON fields
 const parseJSON = (data) => {
   if (typeof data === 'string') {
@@ -2706,6 +2723,13 @@ exports.updateStudent = async (req, res) => {
 
     applyStageToPayload(mutableStudentData, resolvedStage);
 
+    // Ensure previous college is added to the list if manually entered
+    if (mutableStudentData.previous_college) {
+      await ensurePreviousCollegeExists(mutableStudentData.previous_college);
+    } else if (mutableStudentData['Previous College Name']) {
+      await ensurePreviousCollegeExists(mutableStudentData['Previous College Name']);
+    }
+
     const updatedColumns = new Set();
     // Allow clearing statuses (set to NULL) via inline dropdowns
     const allowEmptyUpdates = new Set([
@@ -3393,6 +3417,13 @@ exports.createStudent = async (req, res) => {
     }
 
     applyStageToPayload(incomingData, resolvedStage);
+
+    // Ensure previous college is added to the list if manually entered
+    if (incomingData.previous_college) {
+      await ensurePreviousCollegeExists(incomingData.previous_college);
+    } else if (incomingData['Previous College Name']) {
+      await ensurePreviousCollegeExists(incomingData['Previous College Name']);
+    }
 
     // Handle photo - store as base64 data URL directly in database (works with hosted environments)
     let photoDataUrl = null;

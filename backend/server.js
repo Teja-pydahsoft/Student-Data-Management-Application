@@ -135,6 +135,7 @@ app.use('/api/sms-templates', require('./routes/smsTemplateRoutes'));
 app.use('/api/notifications', require('./routes/pushRoutes'));
 app.use('/api/clubs', require('./routes/clubRoutes'));
 app.use('/api/payments', paymentRoutes);
+app.use('/api/previous-colleges', require('./routes/previousCollegeRoutes'));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use('/auth', authRoutes);

@@ -5,6 +5,7 @@ import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
 import SearchableSelect from '../components/SearchableSelect';
+import ManagePreviousCollegesModal from '../components/ManagePreviousCollegesModal';
 import { addressData } from '../data/addressData';
 
 // Dropdown options for student fields
@@ -443,6 +444,40 @@ const AddStudent = () => {
   const [villagesLoading, setVillagesLoading] = useState(false);
   const [isMandalInputVisible, setIsMandalInputVisible] = useState(false);
   const [isVillageInputVisible, setIsVillageInputVisible] = useState(false);
+
+  // Previous College Management
+  const [previousColleges, setPreviousColleges] = useState([]);
+  const [previousCollegesLoading, setPreviousCollegesLoading] = useState(false);
+  const [isPreviousCollegeInputVisible, setIsPreviousCollegeInputVisible] = useState(false);
+  const [isManageCollegesModalOpen, setIsManageCollegesModalOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchPreviousColleges = async () => {
+      try {
+        setPreviousCollegesLoading(true);
+        const response = await api.get('/previous-colleges');
+        if (response.data.success) {
+          setPreviousColleges(response.data.data);
+        }
+      } catch (error) {
+        console.error('Failed to load previous colleges', error);
+      } finally {
+        setPreviousCollegesLoading(false);
+      }
+    };
+    fetchPreviousColleges();
+  }, []);
+
+  const handlePreviousCollegeSelectChange = (e) => {
+    const value = e.target.value;
+    if (value === 'Other') {
+      setIsPreviousCollegeInputVisible(true);
+      setStudentData(prev => ({ ...prev, previous_college: '' }));
+    } else {
+      setIsPreviousCollegeInputVisible(false);
+      setStudentData(prev => ({ ...prev, previous_college: value }));
+    }
+  };
 
   // Reset custom input visibility when district changes
   useEffect(() => {
@@ -1227,16 +1262,82 @@ const AddStudent = () => {
 
               {/* 10. Previous College Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Previous College Name
-                </label>
-                <input
-                  type="text"
-                  name="previous_college"
-                  value={studentData.previous_college}
-                  onChange={handleChange}
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Previous College Name
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsManageCollegesModalOpen(true)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Manage List
+                  </button>
+                </div>
+                {!isPreviousCollegeInputVisible ? (
+                  <select
+                    name="previous_college"
+                    value={studentData.previous_college}
+                    onChange={handlePreviousCollegeSelectChange}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                  >
+                    <option value="">
+                      {previousCollegesLoading ? "Loading..." : "Select Previous College"}
+                    </option>
+                    {(() => {
+                      // Determine filter based on selected course and year
+                      let targetCategory = 'All';
+                      const courseName = selectedCourseName ? selectedCourseName.toLowerCase() : '';
+                      const currentYear = parseInt(studentData.current_year) || 1;
+
+                      if (courseName.includes('diploma')) {
+                        targetCategory = '10th/School';
+                      } else if (courseName.includes('b.tech') || courseName.includes('btech')) {
+                        if (currentYear === 1) {
+                          targetCategory = 'Inter/Junior College';
+                        } else {
+                          targetCategory = 'Diploma College';
+                        }
+                      }
+
+                      // Filter colleges
+                      const filteredList = previousColleges.filter(col => {
+                        if (targetCategory === 'All') return true;
+                        // Strict filtering as per requirement: "show the tenth school lists only"
+                        return col.category === targetCategory;
+                      });
+
+                      // If list is empty after filter, show empty (don't fallback to all)
+                      const listToShow = targetCategory === 'All' ? previousColleges : filteredList;
+
+                      return listToShow.map((col) => (
+                        <option key={col.id} value={col.name}>
+                          {col.name} {col.category && col.category !== 'Other' ? `(${col.category})` : ''}
+                        </option>
+                      ));
+                    })()}
+                    <option value="Other">Other (Enter Manually)</option>
+                  </select>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="previous_college"
+                      value={studentData.previous_college}
+                      onChange={handleChange}
+                      placeholder="Enter College Name"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsPreviousCollegeInputVisible(false)}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Show List
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1684,6 +1785,27 @@ const AddStudent = () => {
           </div>
         </form>
       </div>
+      <ManagePreviousCollegesModal
+        isOpen={isManageCollegesModalOpen}
+        onClose={() => {
+          setIsManageCollegesModalOpen(false);
+          // Refetch list when closed in case changes were made
+          const fetchPreviousColleges = async () => {
+            try {
+              setPreviousCollegesLoading(true);
+              const response = await api.get('/previous-colleges');
+              if (response.data.success) {
+                setPreviousColleges(response.data.data);
+              }
+            } catch (error) {
+              console.error('Failed to load previous colleges', error);
+            } finally {
+              setPreviousCollegesLoading(false);
+            }
+          };
+          fetchPreviousColleges();
+        }}
+      />
     </div>
   );
 };
