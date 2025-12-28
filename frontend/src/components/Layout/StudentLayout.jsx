@@ -20,6 +20,7 @@ import {
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import NotificationPermissionModal from '../NotificationPermissionModal';
+import NotificationIcon from '../Notifications/NotificationIcon';
 import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../../services/pushService';
 
 const StudentLayout = ({ children }) => {
@@ -98,15 +99,8 @@ const StudentLayout = ({ children }) => {
             />
 
             {/* Mobile Menu Button */}
-            <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2">
-                {!isSubscribed && (
-                    <button
-                        className={`p-2.5 rounded-xl shadow-sm border transition-all ${isSubscribed ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-gray-400 border-gray-200'}`}
-                        onClick={() => !isSubscribed && setNotificationModalOpen(true)}
-                    >
-                        {isSubscribed ? <Bell size={22} fill="currentColor" /> : <BellOff size={22} />}
-                    </button>
-                )}
+            <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2 items-center">
+                <NotificationIcon />
                 <button
                     className="p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
                     onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -226,6 +220,12 @@ const StudentLayout = ({ children }) => {
 
             {/* Main Content */}
             <main className={`flex-1 h-screen overflow-y-auto p-4 lg:p-8 relative z-10 transition-all duration-300 ${desktopSidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}`}>
+
+                {/* Desktop Header for Notifications */}
+                <div className="hidden lg:block fixed bottom-8 right-8 z-50">
+                    <NotificationIcon />
+                </div>
+
                 <div className="w-full">
                     <Outlet />
                 </div>

@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 const { sendAbsenceNotification } = require('../services/smsService');
+const { createNotification } = require('../services/notificationService');
 const { getNotificationSetting } = require('./settingsController');
 const { sendBrevoEmail } = require('../utils/emailService');
 const { sendAttendanceReportNotifications } = require('../services/attendanceNotificationService');
@@ -1300,6 +1301,15 @@ exports.markAttendance = async (req, res) => {
               ...payload,
               notificationSettings
             });
+
+            // Send Web Notification
+            createNotification({
+              studentId: student.id,
+              title: 'Attendance Alert',
+              message: `You were marked absent for ${normalizedDate}.`,
+              category: 'Attendance',
+              type: 'WEB'
+            }).catch(e => console.error('Web notification failed:', e));
             result.smsSent = !!smsResult?.success;
             result.smsError = smsResult?.reason || null;
             result.sentTo = smsResult?.sentTo || studentDetails.parentMobile;
@@ -2366,6 +2376,15 @@ exports.retrySms = async (req, res) => {
       attendanceDate: normalizedDate,
       notificationSettings
     });
+
+    // Send Web Notification
+    createNotification({
+      studentId: student.id,
+      title: 'Attendance Alert',
+      message: `You were marked absent for ${normalizedDate}.`,
+      category: 'Attendance',
+      type: 'WEB'
+    }).catch(e => console.error('Web notification failed:', e));
 
     // Update SMS status in database if SMS was sent successfully
     if (result?.success) {

@@ -7,6 +7,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.10",
     "axios": "^1.5.0",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
     "jspdf": "^2.5.1",
     "lottie-react": "^2.4.1",
@@ -17,7 +18,7 @@
     "react-qr-code": "^2.0.12",
     "react-router-dom": "^6.16.0",
     "recharts": "^2.10.4",
-    "zustand": "^4.4.1"
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.1.0",

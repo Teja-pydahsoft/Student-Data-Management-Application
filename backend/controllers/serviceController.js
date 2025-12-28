@@ -1,6 +1,7 @@
 const { masterPool } = require('../config/database');
 const { buildScopeConditions } = require('../utils/scoping');
 const { sendNotificationToUser } = require('./pushController');
+const { createNotification } = require('../services/notificationService');
 const pdfService = require('../services/pdfService');
 const fs = require('fs');
 
@@ -374,6 +375,15 @@ exports.updateRequestStatus = async (req, res) => {
                     url: '/student/services'
                 }
             }).catch(e => console.error('Service notification failed:', e));
+
+            // Send Web Notification
+            createNotification({
+                studentId: studentId,
+                title: 'Service Request Update',
+                message: `Your request for ${serviceName || 'Service'} is now ${status}.`,
+                category: 'Service',
+                data: { requestId: id, url: '/student/services' }
+            }).catch(e => console.error('Web notification failed:', e));
         }
 
         res.json({ success: true, message: 'Request updated successfully' });

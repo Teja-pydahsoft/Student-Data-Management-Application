@@ -1,5 +1,6 @@
 const { masterPool } = require('../config/database');
 const { sendNotificationToUser } = require('./pushController');
+const { createBroadcastNotification } = require('../services/notificationService');
 
 const serializeTarget = (target) => {
     if (Array.isArray(target) && target.length > 0) {
@@ -271,6 +272,14 @@ const notifyTargetedStudents = async (event) => {
             url: 'https://pydahgroup.com/student/events'
         }
     };
+
+    // Send Web Notifications
+    const studentIds = students.map(s => s.id);
+    await createBroadcastNotification(studentIds, {
+        title: `New Event: ${event.title}`,
+        message: event.description ? event.description.substring(0, 100) : 'Check event calendar',
+        category: 'Event'
+    });
 
     // Send in batches to avoid overwhelming (basic batching is handled by Node event loop naturally here for simple map)
     const promises = students.map(student => sendNotificationToUser(student.id, payload));

@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { API_URL } from '../config/api';
 
-const VAPID_PUBLIC_KEY_URL = `${API_URL}/notifications/vapid-public-key`;
-const SUBSCRIBE_URL = `${API_URL}/notifications/subscribe`;
+const VAPID_PUBLIC_KEY_URL = `${API_URL}/push/vapid-public-key`;
+const SUBSCRIBE_URL = `${API_URL}/push/subscribe`;
 
 // Check subscription status
 export const getSubscriptionStatus = async () => {
