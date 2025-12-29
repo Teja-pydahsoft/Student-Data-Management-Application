@@ -10,6 +10,7 @@ const { attachUserScope } = require('../middleware/rbac');
 router.post('/login', authController.login);
 router.post('/unified-login', authController.unifiedLogin);
 router.post('/rbac/forgot-password', rbacUserController.forgotPassword);
+router.get('/login-stats', authController.getStudentLoginStats); // Currently public for testing
 
 
 // Protected routes

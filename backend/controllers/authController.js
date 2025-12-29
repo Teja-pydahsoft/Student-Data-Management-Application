@@ -173,6 +173,19 @@ exports.unifiedLogin = async (req, res) => {
             student_photo: s.student_photo,
             role: 'student'
           };
+
+          // Update last_login and login_count (Fire and forget, don't block login)
+          masterPool.query(
+            `UPDATE student_credentials 
+             SET last_login = NOW(), 
+                 login_count = COALESCE(login_count, 0) + 1 
+             WHERE student_id = ?`,
+            [studentCred.student_id]
+          ).catch(err => {
+            // Silently fail if columns don't exist yet (migration pending)
+            // console.warn('Failed to update login stats (columns might be missing):', err.message);
+          });
+
           return res.json({ success: true, message: 'Login successful', token, user });
         }
       }
@@ -510,3 +523,43 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+// Get Student Login Statistics
+exports.getStudentLoginStats = async (req, res) => {
+  try {
+    // Check if columns exist first (to avoid SQL error if migration not run)
+    try {
+      const [stats] = await masterPool.query(`
+        SELECT 
+          COUNT(*) as total_students_who_logged_in,
+          SUM(login_count) as total_login_events
+        FROM student_credentials
+        WHERE last_login IS NOT NULL
+      `);
+
+      res.json({
+        success: true,
+        data: {
+          uniqueDetail: stats[0].total_students_who_logged_in || 0,
+          totalLogins: stats[0].total_login_events || 0
+        }
+      });
+    } catch (sqlError) {
+      if (sqlError.code === 'ER_BAD_FIELD_ERROR') {
+        // Table hasn't been migrated yet
+        return res.json({
+          success: true,
+          data: {
+            uniqueDetail: 0,
+            totalLogins: 0,
+            note: 'Tracking columns not yet initialized'
+          }
+        });
+      }
+      throw sqlError;
+    }
+
+  } catch (error) {
+    console.error('Get login stats error:', error);
+    res.status(500).json({ success: false, message: 'Server error getting stats' });
+  }
+};
