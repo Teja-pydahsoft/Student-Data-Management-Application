@@ -34,6 +34,7 @@ import toast from 'react-hot-toast';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
+import RejoinModal from '../components/RejoinModal';
 import LoadingAnimation from '../components/LoadingAnimation';
 import { SkeletonTable, SkeletonStudentsTable } from '../components/SkeletonLoader';
 import { formatDate } from '../utils/dateUtils';
@@ -191,6 +192,8 @@ const Students = () => {
   const [permitRemarks, setPermitRemarks] = useState('');
   const [pendingFeeStatusChange, setPendingFeeStatusChange] = useState(null);
   const [pendingPermitAdmissionNumber, setPendingPermitAdmissionNumber] = useState(null);
+  const [showRejoinModal, setShowRejoinModal] = useState(false);
+  const [rejoinStudent, setRejoinStudent] = useState(null);
   const [editingCell, setEditingCell] = useState(null); // { studentId, field }
   const [cellEditValue, setCellEditValue] = useState('');
   const [inlineEditChanges, setInlineEditChanges] = useState(new Map()); // Track changes before saving
@@ -1208,6 +1211,16 @@ const Students = () => {
       return;
     }
 
+    // Special handling for student_status -> 'Rejoined' (requires batch selection)
+    if (field === 'student_status' && newValue === 'Rejoined') {
+      // Open rejoin modal
+      setRejoinStudent(student);
+      setShowRejoinModal(true);
+      setEditingCell(null);
+      setCellEditValue('');
+      return;
+    }
+
     // Special handling for fee_status -> 'permitted' (requires permit details)
     if (field === 'fee_status' && newValue === 'permitted') {
       // Store which student is being permitted so we can save after modal confirmation
@@ -1472,6 +1485,14 @@ const Students = () => {
 
   const handleSaveEdit = async () => {
     if (savingEdit) return; // Prevent double submission
+
+    // Check if student status is being changed to "Rejoined"
+    if (editData.student_status === 'Rejoined' && selectedStudent.student_status !== 'Rejoined') {
+      // Open rejoin modal instead of saving directly
+      setRejoinStudent(selectedStudent);
+      setShowRejoinModal(true);
+      return;
+    }
 
     setSavingEdit(true);
     try {
@@ -4305,6 +4326,35 @@ const Students = () => {
         onClose={() => setShowManualRollNumber(false)}
         onUpdateComplete={() => refreshStudents()}
       />
+
+      {/* Rejoin Modal */}
+      <RejoinModal
+        isOpen={showRejoinModal}
+        onClose={() => {
+          setShowRejoinModal(false);
+          setRejoinStudent(null);
+          // Reset the student status in editData back to original
+          if (selectedStudent) {
+            setEditData(prev => ({
+              ...prev,
+              student_status: selectedStudent.student_status
+            }));
+          }
+        }}
+        student={rejoinStudent}
+        onRejoinComplete={(updatedStudent) => {
+          // Refresh the student list
+          invalidateStudents();
+          // Close the modal
+          setShowRejoinModal(false);
+          setRejoinStudent(null);
+          // Close the student details modal if it's open
+          setShowModal(false);
+          setEditMode(false);
+          setSelectedStudent(null);
+        }}
+      />
+
       {/* Bulk Password Results Modal */}
       {bulkPasswordState.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

@@ -5633,3 +5633,135 @@ exports.getStudentSmsLogs = async (req, res) => {
     });
   }
 };
+
+// Handle student rejoin - move student from one batch to another with rejoined status
+exports.rejoinStudent = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+    const { fromBatch, toBatch, remarks } = req.body;
+    const adminId = req.user?.id;
+
+    // Validation
+    if (!fromBatch || !toBatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both fromBatch and toBatch are required'
+      });
+    }
+
+    if (!remarks || !remarks.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Remarks are required for rejoining'
+      });
+    }
+
+    if (fromBatch === toBatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student is already in the selected batch'
+      });
+    }
+
+    // Fetch student
+    const [students] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const student = students[0];
+
+    // Parse student_data if it's a string
+    let studentData = student.student_data;
+    if (typeof studentData === 'string') {
+      try {
+        studentData = JSON.parse(studentData);
+      } catch (e) {
+        studentData = {};
+      }
+    }
+
+    // Update student with new batch and rejoined status
+    const updatedStudentData = {
+      ...studentData,
+      batch: toBatch,
+      student_status: 'Regular',
+      rejoin_status: 'Rejoined',
+      rejoin_from_batch: fromBatch,
+      rejoin_to_batch: toBatch,
+      rejoin_date: new Date().toISOString().split('T')[0],
+      rejoin_remarks: remarks
+    };
+
+    // Update the student record
+    await masterPool.query(
+      `UPDATE students 
+       SET batch = ?, 
+           student_status = ?, 
+           student_data = ?,
+           remarks = CONCAT(COALESCE(remarks, ''), '\\n[Rejoin] ', ?)
+       WHERE admission_number = ?`,
+      [
+        toBatch,
+        'Regular',
+        JSON.stringify(updatedStudentData),
+        `Rejoined from ${fromBatch} to ${toBatch} on ${new Date().toISOString().split('T')[0]}. ${remarks}`,
+        admissionNumber
+      ]
+    );
+
+    // Record in student history
+    try {
+      await masterPool.query(
+        `INSERT INTO student_history 
+         (student_id, admission_number, action_type, action_details, performed_by, performed_at)
+         VALUES (?, ?, ?, ?, ?, NOW())`,
+        [
+          student.id,
+          admissionNumber,
+          'rejoin',
+          JSON.stringify({
+            fromBatch,
+            toBatch,
+            remarks,
+            previousStatus: student.student_status,
+            newStatus: 'Regular (Rejoined)'
+          }),
+          adminId
+        ]
+      );
+    } catch (historyError) {
+      console.error('Failed to record rejoin in history:', historyError);
+      // Continue even if history recording fails
+    }
+
+    // Clear cache
+    clearStudentsCache();
+
+    // Fetch updated student
+    const [updatedStudents] = await masterPool.query(
+      'SELECT * FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    res.json({
+      success: true,
+      message: `Student successfully rejoined from ${fromBatch} to ${toBatch}`,
+      data: updatedStudents[0]
+    });
+
+  } catch (error) {
+    console.error('Failed to process student rejoin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while processing rejoin'
+    });
+  }
+};

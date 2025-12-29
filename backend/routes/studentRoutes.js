@@ -220,4 +220,14 @@ router.post(
   studentController.bulkResendPasswords
 );
 
+// Student rejoin endpoint
+router.post(
+  '/:admissionNumber/rejoin',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
+  attachUserScope,
+  studentController.rejoinStudent
+);
+
+
 module.exports = router;

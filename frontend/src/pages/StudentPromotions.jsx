@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import LoadingAnimation from '../components/LoadingAnimation';
+import RejoinModal from '../components/RejoinModal';
 import { SkeletonTable } from '../components/SkeletonLoader';
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useInvalidateStudents } from '../hooks/useStudents';
@@ -68,6 +69,8 @@ const StudentPromotions = () => {
   const [leftOutModalOpen, setLeftOutModalOpen] = useState(false);
   const [leftOutStudentData, setLeftOutStudentData] = useState({});
   const [detectedLeftOutStudents, setDetectedLeftOutStudents] = useState([]);
+  const [showRejoinModal, setShowRejoinModal] = useState(false);
+  const [rejoinStudent, setRejoinStudent] = useState(null);
 
   const selectedCount = selectedAdmissionNumbers.size;
 
@@ -90,7 +93,7 @@ const StudentPromotions = () => {
       // Include course only if course is not being changed and branch is not being changed
       if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
       // Don't pass branch, year, semester to get all available options
-      
+
       const queryString = params.toString();
       const url = `/students/quick-filters${queryString ? `?${queryString}` : ''}`;
       const response = await api.get(url);
@@ -117,12 +120,12 @@ const StudentPromotions = () => {
         ...prev,
         [key]: value || '' // Clear filter if empty value
       };
-      
+
       // Remove empty filters
       if (!newFilters[key] || newFilters[key] === '') {
         delete newFilters[key];
       }
-      
+
       // Clear dependent filters when parent filter changes
       if (key === 'batch') {
         // When batch changes, clear course, branch, year, and semester
@@ -143,17 +146,17 @@ const StudentPromotions = () => {
         // When year changes, clear semester
         delete newFilters.semester;
       }
-      
+
       // Refresh filter options for cascading
       fetchQuickFilterOptions(newFilters).catch(err => {
         console.warn('Failed to refresh filter options:', err);
       });
-      
+
       // Reset to first page when filters change
       setCurrentPage(1);
       // Reset auto-select tracking
       lastAutoSelectRef.current = '';
-      
+
       return newFilters;
     });
   };
@@ -184,11 +187,11 @@ const StudentPromotions = () => {
   // Use React Query to fetch paginated students with filters
   // Only show students with status "Regular" on promotions page
   const hasActiveFilters = Object.values(filters).some(value => value) || searchTerm.trim().length > 0;
-  const { 
-    data: studentsData, 
-    isLoading: loadingStudents, 
+  const {
+    data: studentsData,
+    isLoading: loadingStudents,
     isFetching: isFetchingStudents,
-    refetch: refetchStudents 
+    refetch: refetchStudents
   } = useStudents({
     page: currentPage,
     pageSize: pageSize,
@@ -213,7 +216,7 @@ const StudentPromotions = () => {
   useEffect(() => {
     if (hasActiveFilters && currentPage === 1 && totalStudents > 0) {
       const filterKey = `${filters.batch}-${filters.course}-${filters.branch}-${filters.year}-${filters.semester}-${searchTerm}`;
-      
+
       if (lastAutoSelectRef.current !== filterKey) {
         // Fetch and select all students matching current filters (only Regular status)
         const selectAllMatching = async () => {
@@ -227,7 +230,7 @@ const StudentPromotions = () => {
             if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
             queryParams.append('filter_student_status', 'Regular'); // Only Regular students
             queryParams.append('limit', 'all');
-            
+
             const response = await api.get(`/students?${queryParams.toString()}`);
             const allStudents = response.data?.data || [];
             const allAdmissionNumbers = allStudents.map(s => s.admission_number);
@@ -245,7 +248,7 @@ const StudentPromotions = () => {
             lastAutoSelectRef.current = filterKey;
           }
         };
-        
+
         selectAllMatching();
       }
     }
@@ -281,7 +284,7 @@ const StudentPromotions = () => {
         if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
         queryParams.append('filter_student_status', 'Regular'); // Only Regular students
         queryParams.append('limit', 'all'); // Fetch all matching students
-        
+
         const response = await api.get(`/students?${queryParams.toString()}`);
         const allStudents = response.data?.data || [];
         const allAdmissionNumbers = allStudents.map(s => s.admission_number);
@@ -410,7 +413,7 @@ const StudentPromotions = () => {
       courseConfig && Number.isInteger(Number(courseConfig.totalYears)) && Number(courseConfig.totalYears) > 0
         ? Number(courseConfig.totalYears)
         : null;
-    
+
     if (courseConfig) {
       // Check for per-year semester configuration (prioritize this)
       if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig) && courseConfig.yearSemesterConfig.length > 0) {
@@ -456,7 +459,7 @@ const StudentPromotions = () => {
     // Fetch student data for all selected admission numbers (they might be on different pages)
     const selectedIds = Array.from(selectedAdmissionNumbers);
     setLoadingPromotionPlan(true);
-    
+
     try {
       // Fetch all selected students in parallel to get their current stage info
       const studentPromises = selectedIds.map(async (admissionNumber) => {
@@ -545,7 +548,7 @@ const StudentPromotions = () => {
           const totalYears = courseConfig.totalYears || 4;
           const DEFAULT_SEMESTERS_PER_YEAR = 2;
           let semestersForFinalYear = DEFAULT_SEMESTERS_PER_YEAR;
-          
+
           if (courseConfig.yearSemesterConfig && Array.isArray(courseConfig.yearSemesterConfig)) {
             const yearConfig = courseConfig.yearSemesterConfig.find(y => Number(y.year) === totalYears);
             if (yearConfig && yearConfig.semesters) {
@@ -556,7 +559,7 @@ const StudentPromotions = () => {
           } else if (courseConfig.semestersPerYear) {
             semestersForFinalYear = Number(courseConfig.semestersPerYear) || DEFAULT_SEMESTERS_PER_YEAR;
           }
-          
+
           if (currentStage.year === totalYears && currentStage.semester === semestersForFinalYear) {
             isCourseCompleted = true;
             infoNotes.push('Student has completed all years and semesters. Will be marked as "Course Completed".');
@@ -577,7 +580,7 @@ const StudentPromotions = () => {
 
       setPromotionPlan(plan);
       setHasStageConflicts(plan.some((item) => item.hasConflict));
-      
+
       // Check for left-out students early (students matching filters but not selected)
       try {
         const allMatchingStudents = await fetchAllMatchingStudents();
@@ -585,7 +588,7 @@ const StudentPromotions = () => {
           (student) => !selectedIds.includes(student.admission_number)
         );
         setDetectedLeftOutStudents(leftOut);
-        
+
         // Pre-initialize left-out student data if any
         if (leftOut.length > 0) {
           const initialData = {};
@@ -601,7 +604,7 @@ const StudentPromotions = () => {
         console.warn('Failed to check for left-out students:', error);
         setDetectedLeftOutStudents([]);
       }
-      
+
       setConfirmationOpen(true);
     } catch (error) {
       toast.error('Failed to load student data for promotion plan');
@@ -614,8 +617,8 @@ const StudentPromotions = () => {
   const executePromotion = async () => {
     // Include students who can be promoted OR students who have completed the course
     const promotableStudents = promotionPlan.filter(
-      (item) => (item.nextStage && item.issues.length === 0) || 
-                 (item.isCourseCompleted && item.issues.length === 0)
+      (item) => (item.nextStage && item.issues.length === 0) ||
+        (item.isCourseCompleted && item.issues.length === 0)
     );
 
     if (promotableStudents.length === 0) {
@@ -649,7 +652,7 @@ const StudentPromotions = () => {
       if (searchTerm.trim()) queryParams.append('search', searchTerm.trim());
       queryParams.append('filter_student_status', 'Regular'); // Only Regular students
       queryParams.append('limit', 'all');
-      
+
       const response = await api.get(`/students?${queryParams.toString()}`);
       return response.data?.data || [];
     } catch (error) {
@@ -674,7 +677,7 @@ const StudentPromotions = () => {
       const successCount = results.filter((result) => result.status === 'success').length;
       const completedCount = results.filter((result) => result.status === 'completed').length;
       const leftOutSuccessCount = leftOutResults.filter((result) => result.status === 'success').length;
-      
+
       if (successCount > 0 || completedCount > 0 || leftOutSuccessCount > 0) {
         const messages = [];
         if (successCount > 0) {
@@ -1327,8 +1330,8 @@ const StudentPromotions = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
                       {promotionPlan.map((item) => {
-                        const isEligible = (item.nextStage && item.issues.length === 0) || 
-                                          (item.isCourseCompleted && item.issues.length === 0);
+                        const isEligible = (item.nextStage && item.issues.length === 0) ||
+                          (item.isCourseCompleted && item.issues.length === 0);
                         const issueText = item.issues.filter(Boolean).join(', ');
                         const infoText = Array.isArray(item.infoNotes) ? item.infoNotes.filter(Boolean).join('. ') : '';
                         const conflictText = item.hasConflict
@@ -1336,13 +1339,12 @@ const StudentPromotions = () => {
                           : '';
                         const noteText = [issueText, conflictText, infoText].filter(Boolean).join('. ');
                         return (
-                          <tr 
-                            key={item.admissionNumber} 
-                            className={`transition-colors ${
-                              isEligible 
-                                ? 'hover:bg-indigo-50/50' 
-                                : 'bg-red-50/30 hover:bg-red-50/50'
-                            }`}
+                          <tr
+                            key={item.admissionNumber}
+                            className={`transition-colors ${isEligible
+                              ? 'hover:bg-indigo-50/50'
+                              : 'bg-red-50/30 hover:bg-red-50/50'
+                              }`}
                           >
                             <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
                               {item.admissionNumber}
@@ -1480,7 +1482,7 @@ const StudentPromotions = () => {
                 <div>
                   <p className="text-sm font-semibold text-amber-900">Action Required</p>
                   <p className="text-xs text-amber-700 mt-1">
-                    Please add remarks and update the status for students who were not promoted. 
+                    Please add remarks and update the status for students who were not promoted.
                     Common statuses include: Regular, Detained, Discontinued, etc.
                   </p>
                 </div>
@@ -1523,13 +1525,20 @@ const StudentPromotions = () => {
                               <select
                                 value={studentData.student_status}
                                 onChange={(e) => {
-                                  setLeftOutStudentData((prev) => ({
-                                    ...prev,
-                                    [student.admission_number]: {
-                                      ...prev[student.admission_number],
-                                      student_status: e.target.value
-                                    }
-                                  }));
+                                  const newStatus = e.target.value;
+                                  if (newStatus === 'Rejoined') {
+                                    setRejoinStudent(student);
+                                    setShowRejoinModal(true);
+                                    // Don't update local state yet, wait for modal completion
+                                  } else {
+                                    setLeftOutStudentData((prev) => ({
+                                      ...prev,
+                                      [student.admission_number]: {
+                                        ...prev[student.admission_number],
+                                        student_status: newStatus
+                                      }
+                                    }));
+                                  }
                                 }}
                                 className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm font-medium bg-white"
                                 disabled={submitting}
@@ -1630,6 +1639,25 @@ const StudentPromotions = () => {
           </div>
         </div>
       )}
+      {/* Rejoin Modal */}
+      <RejoinModal
+        isOpen={showRejoinModal}
+        onClose={() => {
+          setShowRejoinModal(false);
+          setRejoinStudent(null);
+        }}
+        student={rejoinStudent}
+        onRejoinComplete={(updatedStudent) => {
+          // Remove the student from the left-out list as they have been moved to another batch
+          setLeftOutStudents((prev) => prev.filter(s => s.admission_number !== updatedStudent.admission_number));
+
+          setShowRejoinModal(false);
+          setRejoinStudent(null);
+          toast.success('Student rejoin processed successfully');
+          // Invalidate to refresh main lists
+          invalidateStudents();
+        }}
+      />
     </div>
   );
 };
