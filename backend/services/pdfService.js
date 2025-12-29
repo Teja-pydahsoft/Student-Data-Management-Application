@@ -837,22 +837,7 @@ const generateAttendanceReportPDF = async ({
     }
   } // End of statsOnly check
 
-  // Footer with better styling
-  const footerY = doc.page.height - 30;
-  doc.rect(leftMargin, footerY - 5, contentWidth, 1)
-    .fillColor('#E2E8F0') // Slate-200
-    .fill();
-
-  doc.fontSize(8).font('Helvetica').fillColor('#64748B'); // Slate-500
-  doc.text(
-    `Generated on ${new Date().toLocaleString('en-IN')} | Pydah Student Database Management System`,
-    leftMargin,
-    footerY + 5,
-    {
-      width: contentWidth,
-      align: 'center'
-    }
-  );
+  // Footer removed as per request
 
   // Finalize PDF
   doc.end();
