@@ -57,36 +57,10 @@ exports.unifiedLogin = async (req, res) => {
       });
     }
 
-    // Run all lookups in parallel for maximum speed
-    const adminPromise = masterPool.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [username]);
+    // Optimization: Run checks sequentially to fail fast and avoid unnecessary expensive queries.
+    // 1. Check Admin (Fastest, Smallest Table)
+    const [admins] = await masterPool.query('SELECT * FROM admins WHERE username = ? LIMIT 1', [username]);
 
-    const rbacPromise = masterPool.query(
-      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, college_ids, course_ids, branch_ids, permissions, is_active
-       FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
-      [username, username]
-    );
-
-    const staffPromise = masterPool.query(
-      'SELECT id, username, email, password_hash, assigned_modules, is_active FROM staff_users WHERE username = ? LIMIT 1',
-      [username]
-    );
-
-    const studentPromise = masterPool.query(
-      `SELECT sc.*, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
-       FROM student_credentials sc
-       JOIN students s ON sc.student_id = s.id
-       WHERE sc.username = ? OR sc.admission_number = ? OR s.admission_number = ?`,
-      [username, username, username]
-    );
-
-    const [
-      [admins],
-      [rbacRows],
-      [staffRows],
-      [credentials]
-    ] = await Promise.all([adminPromise, rbacPromise, staffPromise, studentPromise]);
-
-    // --- 1. Check Admin ---
     if (admins && admins.length > 0) {
       const adminAccount = admins[0];
       if (await bcrypt.compare(password, adminAccount.password)) {
@@ -116,12 +90,18 @@ exports.unifiedLogin = async (req, res) => {
       }
     }
 
-    // --- 2. Check RBAC User ---
+    // 2. Check RBAC User (Fast, Indexed)
+    const [rbacRows] = await masterPool.query(
+      `SELECT id, name, username, email, phone, password, role, college_id, course_id, branch_id, college_ids, course_ids, branch_ids, permissions, is_active
+       FROM rbac_users WHERE username = ? OR email = ? LIMIT 1`,
+      [username, username]
+    );
+
     if (rbacRows && rbacRows.length > 0) {
       const rbacUser = rbacRows[0];
-      if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
-
       if (await bcrypt.compare(password, rbacUser.password)) {
+        if (!rbacUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
+
         const rbacResponse = buildRBACUserResponse(rbacUser);
         const token = jwt.sign({
           id: rbacUser.id, username: rbacUser.username, role: rbacUser.role,
@@ -133,12 +113,17 @@ exports.unifiedLogin = async (req, res) => {
       }
     }
 
-    // --- 3. Check Staff User ---
+    // 3. Check Staff User (Fast, Indexed)
+    const [staffRows] = await masterPool.query(
+      'SELECT id, username, email, password_hash, assigned_modules, is_active FROM staff_users WHERE username = ? LIMIT 1',
+      [username]
+    );
+
     if (staffRows && staffRows.length > 0) {
       const staffUser = staffRows[0];
-      if (!staffUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
-
       if (await bcrypt.compare(password, staffUser.password_hash)) {
+        if (!staffUser.is_active) return res.status(403).json({ success: false, message: 'Account deactivated' });
+
         const staffResponse = buildStaffResponse(staffUser);
         const token = jwt.sign({
           id: staffUser.id, username: staffUser.username, role: 'staff', modules: staffResponse.modules
@@ -147,32 +132,49 @@ exports.unifiedLogin = async (req, res) => {
       }
     }
 
-    // --- 4. Check Student User ---
+    // 4. Check Student User (Optimized)
+    // First query ONLY the credentials table which is small and indexed.
+    // Avoids massive JOIN with students table for every login attempt.
+    const [credentials] = await masterPool.query(
+      `SELECT id, student_id, admission_number, username, password_hash 
+       FROM student_credentials 
+       WHERE username = ? OR admission_number = ? 
+       LIMIT 1`,
+      [username, username]
+    );
+
     if (credentials && credentials.length > 0) {
-      const studentValid = credentials[0];
-      // Note: Student creation script might set password_hash.
-      if (!studentValid.password_hash) {
-        return res.status(401).json({ success: false, message: 'Account not initialized.' });
-      }
+      const studentCred = credentials[0];
 
-      if (await bcrypt.compare(password, studentValid.password_hash)) {
-        const token = jwt.sign({
-          id: studentValid.student_id, admissionNumber: studentValid.admission_number, role: 'student'
-        }, process.env.JWT_SECRET, { expiresIn: '24h' });
+      if (studentCred.password_hash && await bcrypt.compare(password, studentCred.password_hash)) {
+        // Validation Passed! NOW fetch the heavy student profile details.
+        const [studentDetails] = await masterPool.query(
+          `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+           FROM students s
+           WHERE s.id = ? LIMIT 1`,
+          [studentCred.student_id]
+        );
 
-        const user = {
-          admission_number: studentValid.admission_number,
-          username: studentValid.username,
-          name: studentValid.student_name,
-          current_year: studentValid.current_year,
-          current_semester: studentValid.current_semester,
-          course: studentValid.course,
-          branch: studentValid.branch,
-          college: studentValid.college,
-          student_photo: studentValid.student_photo,
-          role: 'student'
-        };
-        return res.json({ success: true, message: 'Login successful', token, user });
+        if (studentDetails && studentDetails.length > 0) {
+          const s = studentDetails[0];
+          const token = jwt.sign({
+            id: studentCred.student_id, admissionNumber: studentCred.admission_number, role: 'student'
+          }, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+          const user = {
+            admission_number: studentCred.admission_number,
+            username: studentCred.username,
+            name: s.student_name,
+            current_year: s.current_year,
+            current_semester: s.current_semester,
+            course: s.course,
+            branch: s.branch,
+            college: s.college,
+            student_photo: s.student_photo,
+            role: 'student'
+          };
+          return res.json({ success: true, message: 'Login successful', token, user });
+        }
       }
     }
 

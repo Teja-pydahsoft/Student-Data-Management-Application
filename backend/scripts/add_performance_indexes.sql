@@ -52,6 +52,24 @@ ALTER TABLE audit_logs
 ADD INDEX idx_admin_created (admin_id, created_at),
 ADD INDEX idx_entity_created (entity_type, entity_id, created_at);
 
+-- ==========================================
+-- LOGIN PERFORMANCE INDEXES (CRITICAL)
+-- ==========================================
+
+-- Indexes for Admin Login
+ALTER TABLE admins ADD INDEX idx_admin_username (username);
+
+-- Indexes for RBAC/Staff Login
+ALTER TABLE rbac_users ADD INDEX idx_rbac_username (username);
+ALTER TABLE rbac_users ADD INDEX idx_rbac_email (email);
+ALTER TABLE staff_users ADD INDEX idx_staff_username (username);
+
+-- Indexes for Student Login and Credentials
+ALTER TABLE student_credentials ADD INDEX idx_sc_username (username);
+ALTER TABLE student_credentials ADD INDEX idx_sc_admission_number (admission_number);
+
+-- Ensure Students table has admission_number index (often unique, but good to ensure)
+ALTER TABLE students ADD INDEX idx_std_admission_number (admission_number);
+
 -- Full-text search index for student search (optional, for better search performance)
 -- ALTER TABLE students ADD FULLTEXT INDEX ft_student_search (student_name, admission_number, pin_no, student_data);
-
