@@ -385,22 +385,47 @@ const sanitizeCellValue = (value) => {
   if (value === undefined || value === null) {
     return '';
   }
+
+  // Helper to format any valid Date object/timestamp to IST YYYY-MM-DD
+  const toISTDateString = (dateObj) => {
+    return dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  };
+
   if (value instanceof Date) {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return toISTDateString(value);
   }
+
   if (typeof value === 'number') {
     if (Number.isInteger(value)) {
       return value.toString();
     }
     return value.toString();
   }
-  if (typeof value === 'string') {
-    return value.trim();
+
+  const str = value.toString().trim();
+  if (str === '') return '';
+
+  // Attempt to parse string as date matches first (specific formats)
+  // standard YYYY-MM-DD
+  const yyyymmdd = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (yyyymmdd) {
+    return `${yyyymmdd[1]}-${yyyymmdd[2].padStart(2, '0')}-${yyyymmdd[3].padStart(2, '0')}`;
   }
-  return value.toString().trim();
+
+  // Indian format DD-MM-YYYY
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (ddmmyyyy) {
+    return `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`;
+  }
+
+  // Try generic parsing last
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    // Force IST conversion for generic parsed dates (e.g. ISO strings with time)
+    return toISTDateString(parsed);
+  }
+
+  return str;
 };
 
 const normalizeAdmissionNumber = (value) => {
@@ -2489,6 +2514,8 @@ exports.getAllStudents = async (req, res) => {
         ...student,
         current_year: stage.year,
         current_semester: stage.semester,
+        dob: sanitizeCellValue(student.dob),
+        admission_date: sanitizeCellValue(student.admission_date),
         student_data: parsedData,
         fee_status: resolvedFeeStatus,
         registration_status: resolvedRegistrationStatus
@@ -2556,6 +2583,8 @@ exports.getStudentByAdmission = async (req, res) => {
       current_semester: stage.semester,
       student_data: parsedData,
       // Ensure top-level fee/registration statuses are available even if columns are empty
+      dob: sanitizeCellValue(students[0].dob),
+      admission_date: sanitizeCellValue(students[0].admission_date),
       fee_status: (students[0].fee_status && String(students[0].fee_status).trim().length > 0)
         ? students[0].fee_status
         : (parsedData?.fee_status || parsedData?.['Fee Status'] || null),
