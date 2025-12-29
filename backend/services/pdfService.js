@@ -123,7 +123,7 @@ const generateAttendanceReportPDF = async ({
   const contentWidth = pageWidth - leftMargin - rightMargin; // 515 points
 
   // Header height - enough for logo + college info + report title
-  const headerHeight = 120;
+  const headerHeight = 90; // Reduced from 120 for tighter header
 
   // Logo section (left side) - 80 points wide
   const logoWidth = 80;
@@ -264,12 +264,12 @@ const generateAttendanceReportPDF = async ({
 
   // Reset color
   doc.fillColor('#000000');
-  doc.y = headerTop + headerHeight + 15;
+  doc.y = headerTop + headerHeight + 5; // Reduced gap from 15 to 5
 
   // ============================================
   // SECTION 1: ATTENDANCE SUMMARY REPORT
   // ============================================
-  doc.moveDown(0.5);
+  doc.moveDown(0.2); // Reduced from 0.5
 
   // Summary Information Box with better styling
   const summaryBoxTop = doc.y;
@@ -373,8 +373,23 @@ const generateAttendanceReportPDF = async ({
     return student && r.status === 'absent';
   }).length;
   const attendancePercentage = totalStudents > 0
-    ? ((presentCount / totalStudents) * 100).toFixed(2)
-    : '0.00';
+    ? ((presentCount / totalStudents) * 100).toFixed(2) + '%'
+    : '0.00%';
+
+  // Calculate Present Percentage based on Total / Absent relationship requested by user
+  // "insted of the present show the persentage of the attendance based upon the total / absent"
+  // This seems to imply showing the Attendance % AGAIN or emphasizing it. 
+  // Standard logic: Present % = (Present / Total) * 100
+  // Absent % = (Absent / Total) * 100
+  // The user request is slightly ambiguous: "based upon the total / absent which gives the present students percentage"
+  // I will replace the raw 'Present' count display with the calculated percentage in the summary section as well, or just keep the Att% at bottom.
+  // The user specifically asked to "remove the present column ... and instead show the percentage".
+  // This likely applies to the TABLE (checked below), but for this summary box, let's keep it standard but maybe formatted better.
+
+  // Actually, looking at the request "remove the present column for the attendance day end reports and insted of the present show the persentage"
+  // This likely refers to the Detailed Table or the Summary Table.
+  // In the 'Summary Information' box, we have 'Attendance %' at the bottom already.
+  // Let's proceed to the Summary Table (Section 2) for that specific column change.
 
   // Right column values
   doc.font('Helvetica');
@@ -434,15 +449,18 @@ const generateAttendanceReportPDF = async ({
 
     if (isGlobalReport) {
       // Global Report: Added College Column
-      // College, Course, Branch, Year, Sem, Tot, Pre, Abs, %
-      summaryColWidths = [75, 65, 60, 40, 40, 45, 45, 45, 60];
-      summaryHeaders = ['College', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Pres', 'Abs', 'Att %'];
+      // College, Course, Branch, Year, Sem, Tot, Abs, Att %
+      // REMOVED 'Pres' column
+      summaryColWidths = [85, 70, 65, 45, 45, 50, 50, 65]; // Re-distributed width
+      summaryHeaders = ['College', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Absent', 'Att %'];
     } else if (excludeCourse) {
-      summaryColWidths = [70, 70, 55, 55, 60, 60, 60, 70]; // Batch, Branch, Year, Sem, Total, Present, Absent, Att %
-      summaryHeaders = ['Batch', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+      // Batch, Branch, Year, Sem, Total, Absent, Att %
+      summaryColWidths = [80, 80, 60, 60, 70, 70, 80];
+      summaryHeaders = ['Batch', 'Branch', 'Year', 'Sem', 'Total', 'Absent', 'Att %'];
     } else {
-      summaryColWidths = [60, 80, 60, 50, 50, 50, 50, 50, 60]; // Batch, Course, Branch, Year, Sem, Total, Present, Absent, %
-      summaryHeaders = ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Present', 'Absent', 'Att %'];
+      // Batch, Course, Branch, Year, Sem, Total, Absent, Att %
+      summaryColWidths = [70, 90, 70, 55, 55, 55, 55, 65];
+      summaryHeaders = ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Total', 'Absent', 'Att %'];
     }
 
     const summaryHeaderHeight = 25;
@@ -548,23 +566,20 @@ const generateAttendanceReportPDF = async ({
         doc.text(String(totalVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[5] - 3, ellipsis: true });
         summaryXPos += summaryColWidths[5];
 
-        // Present
-        doc.fillColor('#10B981'); // Green
-        const presVal = group.present || group.statistics?.presentCount || 0;
-        doc.text(String(presVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[6] - 3, ellipsis: true });
-        summaryXPos += summaryColWidths[6];
+        // REMOVED Present Column
 
         // Absent
         doc.fillColor('#EF4444'); // Red
         const absVal = group.absent || group.statistics?.absentCount || 0;
-        doc.text(String(absVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[7] - 3, ellipsis: true });
-        summaryXPos += summaryColWidths[7];
+        doc.text(String(absVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[6] - 3, ellipsis: true });
+        summaryXPos += summaryColWidths[6];
 
-        // %
+        // % (Att %)
         doc.fillColor('#1E40AF'); // Blue
         doc.font('Helvetica-Bold');
+        const presVal = group.present || group.statistics?.presentCount || 0;
         const attP = totalVal > 0 ? ((presVal / totalVal) * 100).toFixed(1) : '0.0';
-        doc.text(`${attP}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[8] - 3, ellipsis: true });
+        doc.text(`${attP}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[7] - 3, ellipsis: true });
 
       } else {
         // Standard Report Logic
@@ -596,26 +611,23 @@ const generateAttendanceReportPDF = async ({
 
         // Total
         const totalColIdx = excludeCourse ? 4 : 5;
-        doc.text(String(group.total || group.statistics?.totalStudents || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[totalColIdx] - 3, ellipsis: true });
+        const totalVal = group.total || group.statistics?.totalStudents || 0;
+        doc.text(String(totalVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[totalColIdx] - 3, ellipsis: true });
         summaryXPos += summaryColWidths[totalColIdx];
 
-        // Present
-        const presentColIdx = excludeCourse ? 5 : 6;
-        doc.fillColor('#10B981'); // Green
-        doc.text(String(group.present || group.statistics?.presentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[presentColIdx] - 3, ellipsis: true });
-        summaryXPos += summaryColWidths[presentColIdx];
+        // REMOVED Present Column
 
         // Absent
-        const absentColIdx = excludeCourse ? 6 : 7;
+        const absentColIdx = excludeCourse ? 5 : 6;
         doc.fillColor('#EF4444'); // Red
-        doc.text(String(group.absent || group.statistics?.absentCount || 0), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[absentColIdx] - 3, ellipsis: true });
+        const absVal = group.absent || group.statistics?.absentCount || 0;
+        doc.text(String(absVal), summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[absentColIdx] - 3, ellipsis: true });
         summaryXPos += summaryColWidths[absentColIdx];
 
         // Attendance %
-        const attPercentColIdx = excludeCourse ? 7 : 8;
-        const totalForPercent = group.total || group.statistics?.totalStudents || 0;
+        const attPercentColIdx = excludeCourse ? 6 : 7;
         const presentForPercent = group.present || group.statistics?.presentCount || 0;
-        const attPercent = totalForPercent > 0 ? ((presentForPercent / totalForPercent) * 100).toFixed(1) : '0.0';
+        const attPercent = totalVal > 0 ? ((presentForPercent / totalVal) * 100).toFixed(1) : '0.0';
         doc.fillColor('#1E40AF'); // Blue
         doc.font('Helvetica-Bold');
         doc.text(`${attPercent}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[attPercentColIdx] - 3, ellipsis: true });

@@ -2917,9 +2917,9 @@ const Attendance = () => {
                             </select>
                           </th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Students</th>
-                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Present</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Absent</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Marked</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Percentage %</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Pending</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">No Class Work</th>
                           <th className="px-2 py-2 text-right align-top text-xs font-semibold">Time Stamp</th>
@@ -2972,14 +2972,17 @@ const Attendance = () => {
                                 <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
                                   {row.totalStudents ?? 0}
                                 </td>
-                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
-                                  {row.presentToday ?? 0}
-                                </td>
                                 <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
                                   {row.absentToday ?? 0}
                                 </td>
                                 <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
                                   {row.markedToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
+                                  {row.totalStudents > 0
+                                    ? ((row.presentToday / row.totalStudents) * 100).toFixed(1) + '%'
+                                    : '0.0%'
+                                  }
                                 </td>
                                 <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
                                   {row.pendingToday ?? 0}
