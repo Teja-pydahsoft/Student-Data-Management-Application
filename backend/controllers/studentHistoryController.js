@@ -7,6 +7,8 @@ const getCategoryFromRole = (role) => {
         case 'college_ao': return 'AO';
         case 'branch_hod': return 'HOD';
         case 'cashier': return 'Accountant';
+        case 'super_admin':
+        case 'admin': return 'Admin';
         default: return 'Other';
     }
 };
@@ -18,7 +20,7 @@ exports.getStudentsForHistory = async (req, res) => {
 
         let query = `
             SELECT id, admission_number, student_name, student_photo, 
-                   college, course, branch, batch, current_year, current_semester 
+                   college, course, branch, batch, current_year, current_semester, student_status
             FROM students 
             WHERE student_status = 'Regular'
         `;
@@ -60,15 +62,31 @@ exports.addRemark = async (req, res) => {
             });
         }
 
+        // Get student's current year and semester
+        const [studentRows] = await masterPool.query(
+            'SELECT current_year, current_semester FROM students WHERE admission_number = ?',
+            [admission_number]
+        );
+
+        if (studentRows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student not found'
+            });
+        }
+
+        const student = studentRows[0];
+
         // Get user info from request (populated by auth middleware)
         const createdBy = req.user.id;
         const createdByName = req.user.username;
         const remarkCategory = getCategoryFromRole(req.user.role);
 
         const [result] = await masterPool.query(
-            `INSERT INTO student_remarks (admission_number, remark, remark_category, created_by, created_by_name) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [admission_number, remark, remarkCategory, createdBy, createdByName]
+            `INSERT INTO student_remarks 
+             (admission_number, remark, remark_category, student_year, student_semester, created_by, created_by_name) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [admission_number, remark, remarkCategory, student.current_year, student.current_semester, createdBy, createdByName]
         );
 
         res.status(201).json({
@@ -79,6 +97,9 @@ exports.addRemark = async (req, res) => {
                 admission_number,
                 remark,
                 remark_category: remarkCategory,
+                student_year: student.current_year,
+                student_semester: student.current_semester,
+                created_by: createdBy,
                 created_by_name: createdByName,
                 created_at: new Date()
             }
@@ -89,6 +110,118 @@ exports.addRemark = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to add remark'
+        });
+    }
+};
+
+// Update a remark (only by the creator or super admin)
+exports.updateRemark = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { remark } = req.body;
+
+        if (!remark) {
+            return res.status(400).json({
+                success: false,
+                message: 'Remark content is required'
+            });
+        }
+
+        // Get the existing remark
+        const [existingRemarks] = await masterPool.query(
+            'SELECT * FROM student_remarks WHERE id = ?',
+            [id]
+        );
+
+        if (existingRemarks.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Remark not found'
+            });
+        }
+
+        const existingRemark = existingRemarks[0];
+
+        // Check if user has permission to edit
+        const isSuperAdmin = req.user.role === 'super_admin' || req.user.role === 'admin';
+        const isCreator = existingRemark.created_by === req.user.id;
+
+        if (!isSuperAdmin && !isCreator) {
+            return res.status(403).json({
+                success: false,
+                message: 'You can only edit your own remarks'
+            });
+        }
+
+        // Update the remark
+        await masterPool.query(
+            `UPDATE student_remarks 
+             SET remark = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = ?`,
+            [remark, req.user.username, id]
+        );
+
+        res.json({
+            success: true,
+            message: 'Remark updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update remark error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update remark'
+        });
+    }
+};
+
+// Delete a remark (only by the creator or super admin)
+exports.deleteRemark = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get the existing remark
+        const [existingRemarks] = await masterPool.query(
+            'SELECT * FROM student_remarks WHERE id = ?',
+            [id]
+        );
+
+        if (existingRemarks.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Remark not found'
+            });
+        }
+
+        const existingRemark = existingRemarks[0];
+
+        // Check if user has permission to delete
+        const isSuperAdmin = req.user.role === 'super_admin' || req.user.role === 'admin';
+        const isCreator = existingRemark.created_by === req.user.id;
+
+        if (!isSuperAdmin && !isCreator) {
+            return res.status(403).json({
+                success: false,
+                message: 'You can only delete your own remarks'
+            });
+        }
+
+        // Delete the remark
+        await masterPool.query(
+            'DELETE FROM student_remarks WHERE id = ?',
+            [id]
+        );
+
+        res.json({
+            success: true,
+            message: 'Remark deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Delete remark error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete remark'
         });
     }
 };

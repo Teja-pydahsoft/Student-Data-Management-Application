@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     Search, User, Clock, Plus, Loader2, Filter,
-    ChevronDown, Eye, X, MessageSquare
+    ChevronDown, Eye, X, MessageSquare, Edit2, Trash2, Check
 } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import TargetSelector from '../components/TargetSelector';
+import useAuthStore from '../store/authStore';
 
 const StudentHistory = () => {
     // Selection state
@@ -212,6 +213,12 @@ const StudentHistoryModal = ({ student, onClose }) => {
     const [loadingRemarks, setLoadingRemarks] = useState(false);
     const [newRemark, setNewRemark] = useState('');
     const [addingRemark, setAddingRemark] = useState(false);
+    const [editingRemarkId, setEditingRemarkId] = useState(null);
+    const [editingRemarkText, setEditingRemarkText] = useState('');
+    const [updatingRemark, setUpdatingRemark] = useState(false);
+    const [deletingRemarkId, setDeletingRemarkId] = useState(null);
+
+    const user = useAuthStore((state) => state.user);
 
     useEffect(() => {
         fetchRemarks();
@@ -252,6 +259,62 @@ const StudentHistoryModal = ({ student, onClose }) => {
         } finally {
             setAddingRemark(false);
         }
+    };
+
+    const handleEditRemark = (remark) => {
+        setEditingRemarkId(remark.id);
+        setEditingRemarkText(remark.remark);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingRemarkId(null);
+        setEditingRemarkText('');
+    };
+
+    const handleUpdateRemark = async (remarkId) => {
+        if (!editingRemarkText.trim()) return;
+
+        setUpdatingRemark(true);
+        try {
+            const response = await api.put(`/student-history/remarks/${remarkId}`, {
+                remark: editingRemarkText
+            });
+
+            if (response.data.success) {
+                toast.success('Remark updated');
+                setEditingRemarkId(null);
+                setEditingRemarkText('');
+                fetchRemarks();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to update remark');
+        } finally {
+            setUpdatingRemark(false);
+        }
+    };
+
+    const handleDeleteRemark = async (remarkId) => {
+        if (!window.confirm('Are you sure you want to delete this remark?')) return;
+
+        setDeletingRemarkId(remarkId);
+        try {
+            const response = await api.delete(`/student-history/remarks/${remarkId}`);
+
+            if (response.data.success) {
+                toast.success('Remark deleted');
+                fetchRemarks();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to delete remark');
+        } finally {
+            setDeletingRemarkId(null);
+        }
+    };
+
+    const canEditRemark = (remark) => {
+        const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+        const isCreator = remark.created_by === user?.id;
+        return isSuperAdmin || isCreator;
     };
 
     return (
@@ -308,11 +371,97 @@ const StudentHistoryModal = ({ student, onClose }) => {
                         {loadingRemarks ? (
                             <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" /></div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <RemarkSection title="Principal Remarks" category="Principal" remarks={remarks} icon="🎓" color="blue" />
-                                <RemarkSection title="AO Remarks" category="AO" remarks={remarks} icon="📋" color="purple" />
-                                <RemarkSection title="HOD Remarks" category="HOD" remarks={remarks} icon="👨‍🏫" color="amber" />
-                                <RemarkSection title="Accountant Remarks" category="Accountant" remarks={remarks} icon="💰" color="green" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <RemarkSection
+                                    title="Admin Remarks"
+                                    category="Admin"
+                                    remarks={remarks}
+                                    icon="⚙️"
+                                    color="red"
+                                    user={user}
+                                    editingRemarkId={editingRemarkId}
+                                    editingRemarkText={editingRemarkText}
+                                    setEditingRemarkText={setEditingRemarkText}
+                                    updatingRemark={updatingRemark}
+                                    deletingRemarkId={deletingRemarkId}
+                                    onEdit={handleEditRemark}
+                                    onCancelEdit={handleCancelEdit}
+                                    onUpdate={handleUpdateRemark}
+                                    onDelete={handleDeleteRemark}
+                                    canEdit={canEditRemark}
+                                />
+                                <RemarkSection
+                                    title="Principal Remarks"
+                                    category="Principal"
+                                    remarks={remarks}
+                                    icon="🎓"
+                                    color="blue"
+                                    user={user}
+                                    editingRemarkId={editingRemarkId}
+                                    editingRemarkText={editingRemarkText}
+                                    setEditingRemarkText={setEditingRemarkText}
+                                    updatingRemark={updatingRemark}
+                                    deletingRemarkId={deletingRemarkId}
+                                    onEdit={handleEditRemark}
+                                    onCancelEdit={handleCancelEdit}
+                                    onUpdate={handleUpdateRemark}
+                                    onDelete={handleDeleteRemark}
+                                    canEdit={canEditRemark}
+                                />
+                                <RemarkSection
+                                    title="AO Remarks"
+                                    category="AO"
+                                    remarks={remarks}
+                                    icon="📋"
+                                    color="purple"
+                                    user={user}
+                                    editingRemarkId={editingRemarkId}
+                                    editingRemarkText={editingRemarkText}
+                                    setEditingRemarkText={setEditingRemarkText}
+                                    updatingRemark={updatingRemark}
+                                    deletingRemarkId={deletingRemarkId}
+                                    onEdit={handleEditRemark}
+                                    onCancelEdit={handleCancelEdit}
+                                    onUpdate={handleUpdateRemark}
+                                    onDelete={handleDeleteRemark}
+                                    canEdit={canEditRemark}
+                                />
+                                <RemarkSection
+                                    title="HOD Remarks"
+                                    category="HOD"
+                                    remarks={remarks}
+                                    icon="👨‍🏫"
+                                    color="amber"
+                                    user={user}
+                                    editingRemarkId={editingRemarkId}
+                                    editingRemarkText={editingRemarkText}
+                                    setEditingRemarkText={setEditingRemarkText}
+                                    updatingRemark={updatingRemark}
+                                    deletingRemarkId={deletingRemarkId}
+                                    onEdit={handleEditRemark}
+                                    onCancelEdit={handleCancelEdit}
+                                    onUpdate={handleUpdateRemark}
+                                    onDelete={handleDeleteRemark}
+                                    canEdit={canEditRemark}
+                                />
+                                <RemarkSection
+                                    title="Accountant Remarks"
+                                    category="Accountant"
+                                    remarks={remarks}
+                                    icon="💰"
+                                    color="green"
+                                    user={user}
+                                    editingRemarkId={editingRemarkId}
+                                    editingRemarkText={editingRemarkText}
+                                    setEditingRemarkText={setEditingRemarkText}
+                                    updatingRemark={updatingRemark}
+                                    deletingRemarkId={deletingRemarkId}
+                                    onEdit={handleEditRemark}
+                                    onCancelEdit={handleCancelEdit}
+                                    onUpdate={handleUpdateRemark}
+                                    onDelete={handleDeleteRemark}
+                                    canEdit={canEditRemark}
+                                />
                             </div>
                         )}
 
@@ -335,7 +484,7 @@ const StudentHistoryModal = ({ student, onClose }) => {
                                 </button>
                             </form>
                             <p className="text-xs text-gray-400 mt-2">
-                                Remark will be logged under your current role automatically.
+                                Remark will be logged under your current role automatically with Year {student.current_year}, Semester {student.current_semester}.
                             </p>
                         </div>
                     </div>
@@ -345,9 +494,27 @@ const StudentHistoryModal = ({ student, onClose }) => {
     );
 };
 
-const RemarkSection = ({ title, category, remarks, icon, color }) => {
+const RemarkSection = ({
+    title,
+    category,
+    remarks,
+    icon,
+    color,
+    user,
+    editingRemarkId,
+    editingRemarkText,
+    setEditingRemarkText,
+    updatingRemark,
+    deletingRemarkId,
+    onEdit,
+    onCancelEdit,
+    onUpdate,
+    onDelete,
+    canEdit
+}) => {
     const categoryRemarks = remarks.filter(r => r.remark_category === category);
     const colorClasses = {
+        red: 'bg-red-50 border-red-100 text-red-800',
         blue: 'bg-blue-50 border-blue-100 text-blue-800',
         purple: 'bg-purple-50 border-purple-100 text-purple-800',
         amber: 'bg-amber-50 border-amber-100 text-amber-800',
@@ -355,7 +522,7 @@ const RemarkSection = ({ title, category, remarks, icon, color }) => {
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col h-72">
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col h-96">
             <div className={`px-4 py-2.5 border-b font-bold flex items-center gap-2 text-sm ${colorClasses[color]}`}>
                 <span>{icon}</span> {title}
             </div>
@@ -363,14 +530,80 @@ const RemarkSection = ({ title, category, remarks, icon, color }) => {
                 {categoryRemarks.length > 0 ? (
                     categoryRemarks.map(remark => (
                         <div key={remark.id} className="bg-gray-50 p-3 rounded-lg border text-sm group">
-                            <p className="text-gray-800 whitespace-pre-wrap">{remark.remark}</p>
-                            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-                                <span className="font-medium text-gray-500">{remark.created_by_name}</span>
-                                <span className="flex items-center gap-1">
-                                    <Clock size={10} />
-                                    {new Date(remark.created_at).toLocaleDateString()}
-                                </span>
-                            </div>
+                            {editingRemarkId === remark.id ? (
+                                <div className="space-y-2">
+                                    <textarea
+                                        value={editingRemarkText}
+                                        onChange={(e) => setEditingRemarkText(e.target.value)}
+                                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                                        rows={3}
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => onUpdate(remark.id)}
+                                            disabled={updatingRemark}
+                                            className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-xs"
+                                        >
+                                            {updatingRemark ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={onCancelEdit}
+                                            disabled={updatingRemark}
+                                            className="flex items-center gap-1 px-3 py-1 bg-gray-400 text-white rounded hover:bg-gray-500 disabled:opacity-50 text-xs"
+                                        >
+                                            <X size={12} /> Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-gray-800 whitespace-pre-wrap">{remark.remark}</p>
+                                    <div className="mt-2 flex items-center justify-between text-xs">
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="font-medium text-gray-600">{remark.created_by_name}</span>
+                                            <span className="text-gray-400 flex items-center gap-1">
+                                                <Clock size={10} />
+                                                {new Date(remark.created_at).toLocaleString()}
+                                                {remark.student_year && remark.student_semester && (
+                                                    <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
+                                                        Y{remark.student_year} S{remark.student_semester}
+                                                    </span>
+                                                )}
+                                            </span>
+                                            {remark.updated_at && (
+                                                <span className="text-gray-400 italic text-[10px]">
+                                                    Edited: {new Date(remark.updated_at).toLocaleString()}
+                                                    {remark.updated_by && ` by ${remark.updated_by}`}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {canEdit(remark) && (
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => onEdit(remark)}
+                                                    className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                                                    title="Edit remark"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => onDelete(remark.id)}
+                                                    disabled={deletingRemarkId === remark.id}
+                                                    className="p-1 hover:bg-red-100 rounded text-red-600 disabled:opacity-50"
+                                                    title="Delete remark"
+                                                >
+                                                    {deletingRemarkId === remark.id ? (
+                                                        <Loader2 size={14} className="animate-spin" />
+                                                    ) : (
+                                                        <Trash2 size={14} />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ))
                 ) : (

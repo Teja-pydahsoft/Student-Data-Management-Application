@@ -13,5 +13,7 @@ const protect = require('../middleware/auth');
 router.get('/', protect, studentHistoryController.getStudentsForHistory);
 router.post('/remarks', protect, studentHistoryController.addRemark);
 router.get('/remarks/:admission_number', protect, studentHistoryController.getRemarks);
+router.put('/remarks/:id', protect, studentHistoryController.updateRemark);
+router.delete('/remarks/:id', protect, studentHistoryController.deleteRemark);
 
 module.exports = router;
