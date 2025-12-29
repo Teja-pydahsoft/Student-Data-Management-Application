@@ -1403,8 +1403,8 @@ exports.markAttendance = async (req, res) => {
 
     // Process each Principal
     for (const principal of principals) {
-      console.log(`\n👤 Checking Principal: ${principal.name} (${principal.email})`);
-      console.log(`   Scope: Colleges: ${principal.collegeNames.join(', ') || 'All'}, Courses: ${principal.allCourses ? 'All' : principal.courseNames.join(', ') || 'None'}, Branches: ${principal.allBranches ? 'All' : principal.branchNames.join(', ') || 'None'}`);
+      // console.log(`\n👤 Checking Principal: ${principal.name} (${principal.email})`);
+      // console.log(`   Scope: Colleges: ${principal.collegeNames.join(', ') || 'All'}, Courses: ${principal.allCourses ? 'All' : principal.courseNames.join(', ') || 'None'}, Branches: ${principal.allBranches ? 'All' : principal.branchNames.join(', ') || 'None'}`);
 
       // Filter attendance data by principal's scope
       const filteredGroups = filterAttendanceByUserScope(allAttendanceData, principal);
@@ -1568,8 +1568,8 @@ exports.markAttendance = async (req, res) => {
 
     // Process each HOD
     for (const hod of hods) {
-      console.log(`\n👤 Checking HOD: ${hod.name} (${hod.email})`);
-      console.log(`   Scope: Colleges: ${hod.collegeNames.join(', ') || 'All'}, Courses: ${hod.allCourses ? 'All' : hod.courseNames.join(', ') || 'None'}, Branches: ${hod.branchNames.join(', ') || 'None'}`);
+      // console.log(`\n👤 Checking HOD: ${hod.name} (${hod.email})`);
+      // console.log(`   Scope: Colleges: ${hod.collegeNames.join(', ') || 'All'}, Courses: ${hod.allCourses ? 'All' : hod.courseNames.join(', ') || 'None'}, Branches: ${hod.branchNames.join(', ') || 'None'}`);
 
       // Filter attendance data by HOD's scope
       const filteredGroups = filterAttendanceByUserScope(allAttendanceData, hod);
