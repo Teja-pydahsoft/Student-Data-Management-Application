@@ -2678,6 +2678,35 @@ exports.updateStudent = async (req, res) => {
     const { admissionNumber } = req.params;
     const { studentData } = req.body;
 
+    // SECURITY: Define protected columns that cannot be updated via this generic endpoint.
+    // These fields must be updated via their dedicated endpoints or are immutable/system-managed.
+    const PROTECTED_COLUMNS = [
+      'admission_number',
+      'admission_no',
+      'id',
+      'fee_status',
+      'registration_status',
+      'pin_no',
+      'created_at',
+      'updated_at'
+    ];
+
+    // Sanitize studentData: remove any protected fields from the input to prevent mass assignment.
+    // This ensures that even the JSON blob (student_data) doesn't get updated with malicious values.
+    if (studentData && typeof studentData === 'object') {
+      const protectedSet = new Set(PROTECTED_COLUMNS);
+      Object.keys(studentData).forEach((key) => {
+        // Check if the key maps to a protected column or is itself a protected column name
+        const mappedColumn = FIELD_MAPPING[key];
+        if (protectedSet.has(mappedColumn) || protectedSet.has(key)) {
+          console.warn(
+            `⚠️ Security: Blocked attempt to update protected field '${key}' (maps to '${mappedColumn || key}') for admission ${admissionNumber}`
+          );
+          delete studentData[key];
+        }
+      });
+    }
+
     // Sanitize studentData for logging (remove large base64 image data)
     const sanitizedDataForLog = { ...studentData };
     if (sanitizedDataForLog.student_photo && typeof sanitizedDataForLog.student_photo === 'string') {
@@ -2797,6 +2826,14 @@ exports.updateStudent = async (req, res) => {
             // Still stored into student_data JSON later; skip column update
             continue;
           }
+        }
+
+        // SECURITY: Block updates to sensitive/protected fields via this generic endpoint
+        // These fields must be updated via their dedicated endpoints (e.g., updateFeeStatus, updateRegistrationStatus)
+        // or are immutable (admission_number)
+        if (PROTECTED_COLUMNS.includes(columnName)) {
+          // Skip silently or with verbose logging if needed (sanitization occurred earlier)
+          continue;
         }
 
         // Convert values for specific column types
@@ -3462,6 +3499,24 @@ exports.createStudent = async (req, res) => {
     }
 
     applyStageToPayload(incomingData, resolvedStage);
+
+    // SECURITY: Sanitize incomingData to remove protected fields.
+    // This prevents manual setting of sensitive statuses (fee, registration) during creation.
+    // They will default to NULL/System Default.
+    // Allowed: admission_number (required)
+    // Blocked: id, created_at, updated_at, fee_status, registration_status
+    // Note: pin_no is allowed as it may be migrated/assigned during creation.
+    const PROTECTED_COLUMNS_CREATE = ['id', 'created_at', 'updated_at', 'fee_status', 'registration_status'];
+    const protectedCreateSet = new Set(PROTECTED_COLUMNS_CREATE);
+
+    Object.keys(incomingData).forEach(key => {
+      // Check both direct key and mapped column
+      const columnName = FIELD_MAPPING[key];
+      if (protectedCreateSet.has(columnName) || protectedCreateSet.has(key)) {
+        console.warn(`⚠️ Create Student: Removed protected field '${key}' (maps to '${columnName || key}')`);
+        delete incomingData[key];
+      }
+    });
 
     // Ensure previous college is added to the list if manually entered
     if (incomingData.previous_college) {
