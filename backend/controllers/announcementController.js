@@ -412,109 +412,113 @@ exports.sendSMSAnnouncement = async (req, res) => {
             return res.json({ success: true, message: 'No students found matching criteria', count: 0 });
         }
 
-        // 2. Process and Send
-        let sentCount = 0;
-        let failedCount = 0;
+        // Return response immediately to prevent timeout
+        res.json({
+            success: true,
+            message: `SMS broadcast started for ${students.length} recipients. System will process them in the background.`,
+            count: students.length
+        });
 
-        // Process in chunks
-        const chunkSize = 50;
-        for (let i = 0; i < students.length; i += chunkSize) {
-            const chunk = students.slice(i, i + chunkSize);
-            await Promise.all(chunk.map(async (student) => {
-                try {
-                    // Resolve variables
-                    let message = template_content;
-                    if (Array.isArray(variable_mappings)) {
-                        let varIndex = 0;
-                        // Assuming frontend validates matching count
-                        message = message.replace(/\{#var#\}/g, () => {
-                            const mapping = variable_mappings[varIndex];
-                            varIndex++;
+        // 2. Process and Send (Background)
+        (async () => {
+            console.log(`🚀 Starting background SMS broadcast for ${students.length} students...`);
+            let sentCount = 0;
+            let failedCount = 0;
+            const startTime = Date.now();
 
-                            if (!mapping) return '';
+            // Process in chunks
+            const chunkSize = 50;
+            for (let i = 0; i < students.length; i += chunkSize) {
+                const chunk = students.slice(i, i + chunkSize);
+                await Promise.all(chunk.map(async (student) => {
+                    try {
+                        // Resolve variables
+                        let message = template_content;
+                        if (Array.isArray(variable_mappings)) {
+                            let varIndex = 0;
+                            message = message.replace(/\{#var#\}/g, () => {
+                                const mapping = variable_mappings[varIndex];
+                                varIndex++;
 
-                            if (mapping.type === 'static') {
-                                return mapping.value || '';
-                            } else if (mapping.type === 'field') {
-                                const key = mapping.value;
-                                if (key === 'current_date') {
-                                    return new Date().toLocaleDateString('en-IN');
-                                }
-                                if (key === 'login_link') {
-                                    return process.env.LOGIN_LINK || 'pydahgroup.com';
-                                }
-                                if (key === 'default_password') {
-                                    // Default Password: First 4 letters of name + Last 4 digits of student mobile
-                                    const namePart = (student.student_name || '').substring(0, 4);
-                                    const mobileStr = String(student.student_mobile || '');
-                                    const mobilePart = mobileStr.length >= 4 ? mobileStr.slice(-4) : mobileStr;
-                                    return namePart + mobilePart;
-                                }
-                                // Handle data stored in student_data JSON or direct columns
-                                const val = student[key] || (student.student_data && student.student_data[key]) || '';
-                                return String(val).trim();
-                            }
-                            return '';
-                        });
-                    }
+                                if (!mapping) return '';
 
-                    // Determine mobile number
-                    // Priority: Parent 1 > Parent 2 > Student
-                    // Actually, for "Announcements", parents are usually the target for school comms.
-                    // But maybe student too. 
-                    // Let's grab all available and unique them? Or just stick to Primary Parent?
-                    // User said "sms for the selected audiences". Usually implies parents/students.
-                    // I will check smsService behavior. It sends to resolved parent contact.
-                    // I'll stick to resolving parent contact primarily as per existing logic, or if missing, try student?
-
-                    let mobile = student.parent_mobile1 || student.parent_mobile2;
-                    if (!mobile && student.student_data) {
-                        mobile = student.student_data['Parent Mobile Number 1'] || student.student_data['Parent Mobile Number 2'];
-                    }
-                    if (!mobile) mobile = student.student_mobile;
-
-                    if (mobile) {
-                        const cleanMobile = String(mobile).replace(/[^0-9]/g, '');
-                        if (cleanMobile.length >= 10) {
-                            await smsService.sendSms({
-                                to: cleanMobile,
-                                message: message,
-                                templateId: template_id,
-                                peId: process.env.SMS_PE_ID,
-                                meta: {
-                                    category: 'Announcement',
-                                    student: {
-                                        id: student.id,
-                                        admissionNumber: student.admission_number,
-                                        currentYear: student.current_year,
-                                        currentSemester: student.current_semester
+                                if (mapping.type === 'static') {
+                                    return mapping.value || '';
+                                } else if (mapping.type === 'field') {
+                                    const key = mapping.value;
+                                    if (key === 'current_date') {
+                                        return new Date().toLocaleDateString('en-IN');
                                     }
+                                    if (key === 'login_link') {
+                                        return process.env.LOGIN_LINK || 'pydahgroup.com';
+                                    }
+                                    if (key === 'default_password') {
+                                        const namePart = (student.student_name || '').substring(0, 4);
+                                        const mobileStr = String(student.student_mobile || '');
+                                        const mobilePart = mobileStr.length >= 4 ? mobileStr.slice(-4) : mobileStr;
+                                        return namePart + mobilePart;
+                                    }
+                                    const val = student[key] || (student.student_data && student.student_data[key]) || '';
+                                    return String(val).trim();
                                 }
+                                return '';
                             });
-                            sentCount++;
+                        }
+
+                        let mobile = student.parent_mobile1 || student.parent_mobile2;
+                        if (!mobile && student.student_data) {
+                            mobile = student.student_data['Parent Mobile Number 1'] || student.student_data['Parent Mobile Number 2'];
+                        }
+                        if (!mobile) mobile = student.student_mobile;
+
+                        if (mobile) {
+                            const cleanMobile = String(mobile).replace(/[^0-9]/g, '');
+                            if (cleanMobile.length >= 10) {
+                                await smsService.sendSms({
+                                    to: cleanMobile,
+                                    message: message,
+                                    templateId: template_id,
+                                    peId: process.env.SMS_PE_ID,
+                                    meta: {
+                                        category: 'Announcement',
+                                        student: {
+                                            id: student.id,
+                                            admissionNumber: student.admission_number,
+                                            currentYear: student.current_year,
+                                            currentSemester: student.current_semester
+                                        }
+                                    }
+                                });
+                                sentCount++;
+                            } else {
+                                failedCount++;
+                            }
                         } else {
                             failedCount++;
                         }
-                    } else {
+
+                    } catch (e) {
+                        console.error(`Failed to send SMS to student ${student.admission_number}:`, e);
                         failedCount++;
                     }
+                }));
 
-                } catch (e) {
-                    console.error(`Failed to send SMS to student ${student.admission_number}:`, e);
-                    failedCount++;
-                }
-            }));
-        }
+                // Optional: small delay between chunks to be nice to the SMS provider/Database?
+                // await new Promise(r => setTimeout(r, 100));
+            }
 
-        res.json({
-            success: true,
-            message: `SMS sending initiated. Sent: ${sentCount}, Failed/Skipped: ${failedCount}`,
-            sentCount,
-            failedCount
+            const duration = (Date.now() - startTime) / 1000;
+            console.log(`✅ Background SMS broadcast completed in ${duration}s. Sent: ${sentCount}, Failed: ${failedCount}`);
+        })().catch(err => {
+            console.error('❌ Background SMS broadcast critical failure:', err);
         });
 
     } catch (error) {
         console.error('SMS Announcement Error:', error);
-        res.status(500).json({ success: false, message: 'Failed to process SMS announcement' });
+        // Only verify if headers sent? No, because we send res.json early in the happy path.
+        // But if error occurs BEFORE res.json (in fetch phase), we must send error.
+        if (!res.headersSent) {
+            res.status(500).json({ success: false, message: 'Failed to process SMS announcement' });
+        }
     }
 };
