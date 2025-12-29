@@ -2805,6 +2805,10 @@ exports.updateStudent = async (req, res) => {
           convertedValue = parseInt(value, 10) || 1;
         }
 
+        if (columnName === 'branch_code' || columnName === 'course_code') {
+          continue; // Skip these as they are stored in student_data JSON only
+        }
+
         updateFields.push(`${columnName} = ?`);
         updateValues.push(convertedValue);
         updatedColumns.add(columnName);
