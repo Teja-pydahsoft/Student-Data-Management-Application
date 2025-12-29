@@ -1445,11 +1445,48 @@ exports.markAttendance = async (req, res) => {
             allBatchesData.push(group);
           }
 
-          // Get college ID
+          // Get college ID based on name match
           let collegeId = null;
-          if (principal.collegeNames.includes(collegeName)) {
-            const collegeIndex = principal.collegeNames.indexOf(collegeName);
-            collegeId = principal.collegeIds[collegeIndex] || null;
+          // Note context: principal.collegeNames and principal.collegeIds are parallel arrays
+          const colIndex = principal.collegeNames.findIndex(name => name === collegeName);
+          if (colIndex !== -1) {
+            collegeId = principal.collegeIds[colIndex];
+          }
+
+          // Generate Unique Report ID using ID first, fallback to sanitized name
+          const colIdentifier = collegeId ? collegeId : (collegeName || 'ALL').replace(/[^a-zA-Z0-9]/g, '_');
+          const reportUniqueId = `REPORT_${principal.id}_${colIdentifier}_${normalizedDate}`;
+
+          // RACE CONDITION HANDLING: Insert 'PENDING' state first
+          // If insert fails (duplicate), request is already being processed or sent
+          try {
+            // Check if already sent or pending
+            const [checkLogs] = await masterPool.query(
+              'SELECT id, status FROM sms_logs WHERE message_id = ? LIMIT 1',
+              [reportUniqueId]
+            );
+
+            if (checkLogs.length > 0) {
+              // Determine log level - only log if status is pending (to debug stuck jobs) or sent (info)
+              // To obey user request "dont needed to check r send... again", we SILENTLY skip.
+              if (checkLogs[0].status === 'PENDING') {
+                console.log(`   ⏳ Report for ${principal.name} (${collegeName}) is currently PENDING. Skipping.`);
+              }
+              // If SENT, we silently skip or log debug only
+              // console.log(\`   Detailed report already sent today to Principal \${principal.name} for \${collegeName}. Skipping.\`);
+              continue;
+            }
+
+            // Try to insert PENDING lock
+            await masterPool.query(
+              `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
+                 VALUES (?, 'ATTENDANCE_REPORT', ?, 'PENDING', NOW(), ?)`,
+              [principal.id, `Attendance Report Generating for ${collegeName}`, reportUniqueId]
+            );
+
+          } catch (lockError) {
+            console.warn('   ⚠️ Failed to acquire report lock (likely race condition):', lockError.message);
+            continue; // Skip if we can't lock
           }
 
           // Determine report scope description for this college
@@ -1461,28 +1498,7 @@ exports.markAttendance = async (req, res) => {
                 ? `${principal.courseNames.join(', ')} - All Branches`
                 : `${principal.courseNames.join(', ')}${principal.branchNames.length > 0 ? ` - ${principal.branchNames.join(', ')}` : ''}`;
 
-          // Check if report already sent for this college/user/date
-          const reportUniqueId = `REPORT_${principal.id}_${collegeId || 'ALL'}_${normalizedDate}`;
-          try {
-            const [existingLogs] = await masterPool.query(
-              'SELECT id FROM sms_logs WHERE message_id = ? LIMIT 1',
-              [reportUniqueId]
-            );
 
-            if (existingLogs.length > 0) {
-              console.log(`   Detailed report already sent today to Principal ${principal.name} for ${collegeName}. Skipping.`);
-              reportResults.push({
-                user: principal.name,
-                userEmail: principal.email,
-                role: 'Principal',
-                college: collegeName,
-                status: 'Skipped - Already Sent'
-              });
-              continue;
-            }
-          } catch (err) {
-            console.warn('Error checking existing logs:', err);
-          }
 
           try {
             const result = await sendAttendanceReportNotifications({
@@ -1513,18 +1529,28 @@ exports.markAttendance = async (req, res) => {
             processedUsers.add(principal.email);
             console.log(`   📧 Report sent to Principal: ${principal.name} (${principal.email}) for ${collegeName}`);
 
-            // Log successful report sending
+            // UPDATE log status to 'Sent'
             try {
               await masterPool.query(
-                `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
-                 VALUES (?, 'ATTENDANCE_REPORT', ?, 'Sent', NOW(), ?)`,
-                [principal.id, `Attendance Report for ${collegeName} - ${normalizedDate}`, reportUniqueId]
+                `UPDATE sms_logs SET status = 'Sent', message = ? WHERE message_id = ?`,
+                [`Attendance Report for ${collegeName} - ${normalizedDate}`, reportUniqueId]
               );
             } catch (logError) {
-              console.warn('Failed to log report sending:', logError.message);
+              console.warn('Failed to update report log to Sent:', logError.message);
             }
           } catch (error) {
             console.error(`   ❌ Error sending report to Principal ${principal.name} for ${collegeName}:`, error);
+
+            // Revert PENDING status to 'FAILED' so it can be retried if needed, or stick to 'Failed'
+            try {
+              await masterPool.query(
+                `UPDATE sms_logs SET status = 'Failed', error_details = ? WHERE message_id = ?`,
+                [error.message, reportUniqueId]
+              );
+            } catch (revertError) {
+              // ignore
+            }
+
             reportResults.push({
               user: principal.name,
               userEmail: principal.email,
@@ -1595,26 +1621,36 @@ exports.markAttendance = async (req, res) => {
         const branchName = hod.allBranches ? 'All Branches' : (hod.branchNames[0] || 'Unknown');
 
         // Check if report already sent for this HOD/date
+        // Check if report already sent for this HOD/date
         const reportUniqueId = `REPORT_HOD_${hod.id}_${normalizedDate}`;
         try {
-          const [existingLogs] = await masterPool.query(
-            'SELECT id FROM sms_logs WHERE message_id = ? LIMIT 1',
+          // Check if already sent or pending
+          const [checkLogs] = await masterPool.query(
+            'SELECT id, status FROM sms_logs WHERE message_id = ? LIMIT 1',
             [reportUniqueId]
           );
 
-          if (existingLogs.length > 0) {
-            console.log(`   Detailed report already sent today to HOD ${hod.name}. Skipping.`);
-            reportResults.push({
-              user: hod.name,
-              userEmail: hod.email,
-              role: 'HOD',
-              status: 'Skipped - Already Sent'
-            });
+          if (checkLogs.length > 0) {
+            // If PENDING, log it
+            if (checkLogs[0].status === 'PENDING') {
+              console.log(`   ⏳ Report for HOD ${hod.name} is currently PENDING. Skipping.`);
+            }
+            // Silently skip if SENT
             continue;
           }
+
+          // Try to insert PENDING lock
+          await masterPool.query(
+            `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
+                 VALUES (?, 'ATTENDANCE_REPORT', ?, 'PENDING', NOW(), ?)`,
+            [hod.id, `Attendance Report Generating for HOD`, reportUniqueId]
+          );
         } catch (err) {
-          console.warn('Error checking existing logs:', err);
+          console.warn('   ⚠️ Failed to acquire HOD report lock:', err.message);
+          continue;
         }
+
+
 
         try {
           const result = await sendAttendanceReportNotifications({
@@ -1645,18 +1681,28 @@ exports.markAttendance = async (req, res) => {
           processedUsers.add(hod.email);
           console.log(`   📧 Report sent to HOD: ${hod.name} (${hod.email})`);
 
-          // Log successful report sending
+          // UPDATE status to Sent
           try {
             await masterPool.query(
-              `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
-               VALUES (?, 'ATTENDANCE_REPORT', ?, 'Sent', NOW(), ?)`,
-              [hod.id, `Attendance Report for ${courseName} - ${normalizedDate}`, reportUniqueId]
+              `UPDATE sms_logs SET status = 'Sent', message = ? WHERE message_id = ?`,
+              [`Attendance Report for ${courseName} - ${normalizedDate}`, reportUniqueId]
             );
           } catch (logError) {
-            console.warn('Failed to log report sending:', logError.message);
+            console.warn('Failed to update HOD report log:', logError.message);
           }
         } catch (error) {
           console.error(`   ❌ Error sending report to HOD ${hod.name}:`, error);
+
+          // Revert PENDING to Failed
+          try {
+            await masterPool.query(
+              `UPDATE sms_logs SET status = 'Failed', error_details = ? WHERE message_id = ?`,
+              [error.message, reportUniqueId]
+            );
+          } catch (revertError) {
+            // ignore
+          }
+
           reportResults.push({
             user: hod.name,
             userEmail: hod.email,
