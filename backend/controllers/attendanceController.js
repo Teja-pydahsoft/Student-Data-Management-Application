@@ -1461,6 +1461,29 @@ exports.markAttendance = async (req, res) => {
                 ? `${principal.courseNames.join(', ')} - All Branches`
                 : `${principal.courseNames.join(', ')}${principal.branchNames.length > 0 ? ` - ${principal.branchNames.join(', ')}` : ''}`;
 
+          // Check if report already sent for this college/user/date
+          const reportUniqueId = `REPORT_${principal.id}_${collegeId || 'ALL'}_${normalizedDate}`;
+          try {
+            const [existingLogs] = await masterPool.query(
+              'SELECT id FROM sms_logs WHERE message_id = ? LIMIT 1',
+              [reportUniqueId]
+            );
+
+            if (existingLogs.length > 0) {
+              console.log(`   Detailed report already sent today to Principal ${principal.name} for ${collegeName}. Skipping.`);
+              reportResults.push({
+                user: principal.name,
+                userEmail: principal.email,
+                role: 'Principal',
+                college: collegeName,
+                status: 'Skipped - Already Sent'
+              });
+              continue;
+            }
+          } catch (err) {
+            console.warn('Error checking existing logs:', err);
+          }
+
           try {
             const result = await sendAttendanceReportNotifications({
               collegeId,
@@ -1489,6 +1512,17 @@ exports.markAttendance = async (req, res) => {
 
             processedUsers.add(principal.email);
             console.log(`   📧 Report sent to Principal: ${principal.name} (${principal.email}) for ${collegeName}`);
+
+            // Log successful report sending
+            try {
+              await masterPool.query(
+                `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
+                 VALUES (?, 'ATTENDANCE_REPORT', ?, 'Sent', NOW(), ?)`,
+                [principal.id, `Attendance Report for ${collegeName} - ${normalizedDate}`, reportUniqueId]
+              );
+            } catch (logError) {
+              console.warn('Failed to log report sending:', logError.message);
+            }
           } catch (error) {
             console.error(`   ❌ Error sending report to Principal ${principal.name} for ${collegeName}:`, error);
             reportResults.push({
@@ -1560,6 +1594,28 @@ exports.markAttendance = async (req, res) => {
         const courseName = hod.allCourses ? 'All Courses' : (hod.courseNames[0] || 'Unknown');
         const branchName = hod.allBranches ? 'All Branches' : (hod.branchNames[0] || 'Unknown');
 
+        // Check if report already sent for this HOD/date
+        const reportUniqueId = `REPORT_HOD_${hod.id}_${normalizedDate}`;
+        try {
+          const [existingLogs] = await masterPool.query(
+            'SELECT id FROM sms_logs WHERE message_id = ? LIMIT 1',
+            [reportUniqueId]
+          );
+
+          if (existingLogs.length > 0) {
+            console.log(`   Detailed report already sent today to HOD ${hod.name}. Skipping.`);
+            reportResults.push({
+              user: hod.name,
+              userEmail: hod.email,
+              role: 'HOD',
+              status: 'Skipped - Already Sent'
+            });
+            continue;
+          }
+        } catch (err) {
+          console.warn('Error checking existing logs:', err);
+        }
+
         try {
           const result = await sendAttendanceReportNotifications({
             collegeId,
@@ -1588,6 +1644,17 @@ exports.markAttendance = async (req, res) => {
 
           processedUsers.add(hod.email);
           console.log(`   📧 Report sent to HOD: ${hod.name} (${hod.email})`);
+
+          // Log successful report sending
+          try {
+            await masterPool.query(
+              `INSERT INTO sms_logs (student_id, category, message, status, sent_at, message_id)
+               VALUES (?, 'ATTENDANCE_REPORT', ?, 'Sent', NOW(), ?)`,
+              [hod.id, `Attendance Report for ${courseName} - ${normalizedDate}`, reportUniqueId]
+            );
+          } catch (logError) {
+            console.warn('Failed to log report sending:', logError.message);
+          }
         } catch (error) {
           console.error(`   ❌ Error sending report to HOD ${hod.name}:`, error);
           reportResults.push({

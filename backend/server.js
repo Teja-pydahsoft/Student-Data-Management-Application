@@ -272,6 +272,10 @@ app.use((err, req, res, next) => {
 
 // Scheduled Tasks
 const { checkAndSendBirthdayNotifications } = require('./services/birthdayNotificationService');
+const { initScheduledJobs } = require('./services/schedulerService');
+
+// Initialize 4 PM Daily Report Scheduler
+initScheduledJobs();
 
 const scheduleDailyBirthdayCheck = () => {
   const now = new Date();
