@@ -39,7 +39,7 @@ import { SkeletonTable, SkeletonStudentsTable } from '../components/SkeletonLoad
 import { formatDate } from '../utils/dateUtils';
 import { useStudents, useUpdateStudent, useDeleteStudent, useBulkDeleteStudents, useInvalidateStudents } from '../hooks/useStudents';
 import useAuthStore from '../store/authStore';
-import { BACKEND_MODULES, hasPermission as hasModulePermission, USER_ROLES } from '../constants/rbac';
+import { BACKEND_MODULES, hasPermission as hasModulePermission, USER_ROLES, hasModuleAccess, FRONTEND_MODULES } from '../constants/rbac';
 
 // Student status options
 const STUDENT_STATUS_OPTIONS = [
