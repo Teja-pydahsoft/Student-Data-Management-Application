@@ -101,7 +101,14 @@ const Announcements = () => {
     };
 
     const handleFileChange = (e) => {
-        if (e.target.files[0]) setFormData({ ...formData, image: e.target.files[0] });
+        if (e.target.files[0]) {
+            const file = e.target.files[0];
+            setFormData({
+                ...formData,
+                image: file,
+                previewUrl: URL.createObjectURL(file) // Create local preview URL
+            });
+        }
     };
 
     const openCreateModal = (type = 'announcements') => {
@@ -784,8 +791,17 @@ const Announcements = () => {
                                                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:bg-gray-50 transition-colors relative">
                                                             <input type="file" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
                                                             <div className="flex flex-col items-center gap-2 text-gray-500">
-                                                                <ImageIcon size={24} />
-                                                                <span className="text-sm">{formData.image ? formData.image.name : 'Click to update image'}</span>
+                                                                {formData.previewUrl ? (
+                                                                    <div className="relative w-full h-48 mb-2">
+                                                                        <img src={formData.previewUrl} alt="Preview" className="w-full h-full object-contain rounded-md" />
+                                                                        <div className="text-xs mt-1 text-blue-600 font-semibold">Click to change</div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <ImageIcon size={24} />
+                                                                        <span className="text-sm">{formData.image ? formData.image.name : 'Click to update image'}</span>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>

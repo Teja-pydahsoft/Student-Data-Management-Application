@@ -55,7 +55,7 @@ const NotificationIcon = () => {
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
                     p-3 rounded-full transition-all duration-300 relative group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-white/50 backdrop-blur-sm
-                    ${isOpen ? 'bg-blue-600 text-white rotate-180' : 'bg-white text-blue-600 hover:text-blue-700 hover:scale-110'}
+                    ${isOpen ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:text-blue-700 hover:scale-110'}
                 `}
                 title="Notifications"
             >

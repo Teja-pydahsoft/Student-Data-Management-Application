@@ -141,3 +141,50 @@ exports.broadcastNotification = async (req, res) => {
         res.status(500).json({ success: false, message: 'Broadcast failed' });
     }
 };
+
+// Batch Notification (Internal)
+exports.sendBatchNotification = async (userIds, payload) => {
+    if (!userIds || userIds.length === 0) return { success: true, sent: 0 };
+
+    let conn = null;
+    try {
+        conn = await masterPool.getConnection();
+
+        // Handle large lists by chunking if necessary, but for now specific IN clause
+        // userIds might be large, so ideally we process in chunks or use a temp table, 
+        // but let's assume reasonable size for now (< 2000?)
+
+        const [subscriptions] = await conn.query(
+            'SELECT * FROM push_subscriptions WHERE user_id IN (?)',
+            [userIds]
+        );
+        conn.release();
+
+        if (subscriptions.length === 0) return { success: true, sent: 0 };
+
+        const notifications = subscriptions.map(sub => {
+            const pushSubscription = {
+                endpoint: sub.endpoint,
+                keys: {
+                    auth: sub.keys_auth,
+                    p256dh: sub.keys_p256dh
+                }
+            };
+            return webpush.sendNotification(pushSubscription, JSON.stringify(payload))
+                .catch(err => {
+                    if (err.statusCode === 410 || err.statusCode === 404) {
+                        // Expired
+                    }
+                    // console.error('Push error:', err);
+                });
+        });
+
+        await Promise.all(notifications);
+        return { success: true, sent: notifications.length };
+
+    } catch (error) {
+        console.error('Batch push error:', error);
+        if (conn) conn.release();
+        return { success: false, error };
+    }
+};

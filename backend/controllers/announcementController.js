@@ -1,6 +1,7 @@
 const { masterPool } = require('../config/database');
 
 const smsService = require('../services/smsService');
+const pushController = require('./pushController');
 const fs = require('fs');
 
 // Helper to delete local file
@@ -54,6 +55,48 @@ exports.createAnnouncement = async (req, res) => {
                 createdBy
             ]
         );
+
+        // Trigger Push Notifications (Background)
+        (async () => {
+            try {
+                let query = 'SELECT id FROM students WHERE student_status = "Regular"';
+                const params = [];
+
+                const parseParam = (val) => {
+                    if (!val) return null;
+                    if (Array.isArray(val)) return val.length ? val : null;
+                    try { const parsed = JSON.parse(val); return parsed.length ? parsed : null; } catch (e) { return null; }
+                };
+
+                const colleges = parseParam(target_college);
+                const batches = parseParam(target_batch);
+                const courses = parseParam(target_course);
+                const branches = parseParam(target_branch);
+                const years = parseParam(target_year);
+                const semesters = parseParam(target_semester);
+
+                if (colleges) { query += ' AND college IN (?)'; params.push(colleges); }
+                if (batches) { query += ' AND batch IN (?)'; params.push(batches); }
+                if (courses) { query += ' AND course IN (?)'; params.push(courses); }
+                if (branches) { query += ' AND branch IN (?)'; params.push(branches); }
+                if (years) { query += ' AND current_year IN (?)'; params.push(years); }
+                if (semesters) { query += ' AND current_semester IN (?)'; params.push(semesters); }
+
+                const [students] = await masterPool.query(query, params);
+                const userIds = students.map(s => s.id);
+
+                if (userIds.length > 0) {
+                    await pushController.sendBatchNotification(userIds, {
+                        title: `New Announcement: ${title}`,
+                        body: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+                        icon: '/icon-192x192.png',
+                        data: { url: '/student/announcements' }
+                    });
+                }
+            } catch (err) {
+                console.error('Push notification trigger error:', err);
+            }
+        })();
 
         res.status(201).json({
             success: true,
