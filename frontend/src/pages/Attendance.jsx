@@ -3450,77 +3450,11 @@ const Attendance = () => {
                                   const raw = (student.registration_status || '').toLowerCase();
                                   const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
                                   const label = isCompleted ? 'Completed' : 'Pending';
-                                  const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-                                  const handleDoubleClick = async () => {
-                                    const admissionNumber = student.admissionNumber || student.admission_number;
-                                    if (!admissionNumber) {
-                                      toast.error('Missing admission number for update');
-                                      return;
-                                    }
-                                    const targetStatus = isCompleted ? 'pending' : 'completed';
-                                    try {
-                                      const response = await api.put(`/students/${admissionNumber}/registration-status`, {
-                                        registration_status: targetStatus
-                                      });
-                                      if (response.data?.success) {
-                                        setStudents((prev) => prev.map((s) =>
-                                          s.id === student.id ? { ...s, registration_status: targetStatus } : s
-                                        ));
-
-                                        // Update cache if it exists for current view
-                                        const cacheKey = buildCacheKey(currentPage);
-                                        const cached = attendanceCache.current.get(cacheKey);
-                                        if (cached && cached.students) {
-                                          cached.students = cached.students.map((s) =>
-                                            s.id === student.id ? { ...s, registration_status: targetStatus } : s
-                                          );
-                                          attendanceCache.current.set(cacheKey, cached);
-                                        }
-
-                                        toast.success(`Registration marked as ${targetStatus}`);
-                                        invalidateStudents();
-                                      } else {
-                                        throw new Error(response.data?.message || 'Failed to update status');
-                                      }
-                                    } catch (error) {
-                                      // Fallback to generic student update (JSON student_data)
-                                      try {
-                                        const fallback = await api.put(`/students/${admissionNumber}`, {
-                                          studentData: {
-                                            'Registration Status': targetStatus,
-                                            registration_status: targetStatus
-                                          }
-                                        });
-                                        if (fallback.data?.success) {
-                                          setStudents((prev) => prev.map((s) =>
-                                            s.id === student.id ? { ...s, registration_status: targetStatus } : s
-                                          ));
-
-                                          // Update cache if it exists for current view
-                                          const cacheKey = buildCacheKey(currentPage);
-                                          const cached = attendanceCache.current.get(cacheKey);
-                                          if (cached && cached.students) {
-                                            cached.students = cached.students.map((s) =>
-                                              s.id === student.id ? { ...s, registration_status: targetStatus } : s
-                                            );
-                                            attendanceCache.current.set(cacheKey, cached);
-                                          }
-
-                                          toast.success(`Registration marked as ${targetStatus}`);
-                                          invalidateStudents();
-                                        } else {
-                                          toast.error(fallback.data?.message || (error.response?.data?.message || 'Update failed'));
-                                        }
-                                      } catch (fallbackError) {
-                                        toast.error(fallbackError.response?.data?.message || (error.response?.data?.message || 'Update failed'));
-                                      }
-                                    }
-                                  };
+                                  const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800';
                                   return (
                                     <span
-                                      onDoubleClick={handleDoubleClick}
-                                      title={!isCompleted ? 'Double-click to mark as completed' : undefined}
-                                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls} select-none cursor-pointer`}
+                                      title="Registration status is updated when student completes registration on student portal"
+                                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls}`}
                                     >
                                       {label}
                                     </span>
