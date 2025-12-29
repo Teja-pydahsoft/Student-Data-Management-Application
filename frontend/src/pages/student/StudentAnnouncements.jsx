@@ -187,35 +187,14 @@ const StudentAnnouncements = () => {
                                         </div>
 
                                         {poll.has_voted ? (
-                                            <div className="space-y-5 animate-scale-in">
-                                                {poll.options.map((opt, idx) => {
-                                                    const votes = poll.vote_counts?.[idx] || 0;
-                                                    const total = poll.total_votes || 1;
-                                                    const percent = Math.round((votes / total) * 100);
-                                                    const isUserChoice = poll.selected_option === idx;
-
-                                                    return (
-                                                        <div key={idx} className="group cursor-default">
-                                                            <div className="flex justify-between text-sm mb-2">
-                                                                <span className={`font-semibold ${isUserChoice ? 'text-blue-700' : 'text-gray-700'}`}>
-                                                                    {opt}
-                                                                    {isUserChoice && <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded ml-2">You</span>}
-                                                                </span>
-                                                                <span className="font-bold text-gray-900">{percent}%</span>
-                                                            </div>
-                                                            <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden shadow-inner">
-                                                                <div
-                                                                    className={`h-full rounded-full transition-all duration-1000 ease-out ${isUserChoice ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gray-400 group-hover:bg-gray-500'}`}
-                                                                    style={{ width: `${percent}%` }}
-                                                                ></div>
-                                                            </div>
-                                                            <div className="text-xs text-gray-400 text-right mt-1 font-medium">{votes} votes</div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                <div className="text-center pt-2 text-sm text-gray-400 font-medium">
-                                                    Total votes: {poll.total_votes}
+                                            <div className="flex flex-col items-center justify-center py-10 text-center animate-fade-in bg-gray-50/50 rounded-xl border border-gray-100/50">
+                                                <div className="w-16 h-16 bg-gradient-to-tr from-green-400 to-green-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200 mb-4 transform hover:scale-105 transition-transform duration-300">
+                                                    <CheckCircle size={32} strokeWidth={2.5} />
                                                 </div>
+                                                <h3 className="text-xl font-bold text-gray-800 mb-2">Participated</h3>
+                                                <p className="text-gray-500 font-medium">
+                                                    You have successfully voted in this poll.
+                                                </p>
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
