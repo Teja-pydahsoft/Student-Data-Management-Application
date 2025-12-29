@@ -2268,10 +2268,8 @@ exports.getAllStudents = async (req, res) => {
         OR admission_no LIKE ? 
         OR pin_no LIKE ? 
         OR student_name LIKE ?
-        OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."Student Name"')) LIKE ?
-        OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."student_name"')) LIKE ?
       )`;
-      params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     // Date range filter
@@ -2382,10 +2380,9 @@ exports.getAllStudents = async (req, res) => {
         admission_number LIKE ? 
         OR admission_no LIKE ? 
         OR pin_no LIKE ? 
-        OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."Student Name"')) LIKE ?
-        OR JSON_UNQUOTE(JSON_EXTRACT(student_data, '$."student_name"')) LIKE ?
+        OR student_name LIKE ?
       )`;
-      countParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      countParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     // Apply same filters to count query

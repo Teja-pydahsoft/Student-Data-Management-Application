@@ -362,7 +362,7 @@ const Students = () => {
     searchTermRef.current = searchTerm;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm);
-    }, 400); // 400ms debounce delay
+    }, 100); // 100ms debounce delay for immediate fetch
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
