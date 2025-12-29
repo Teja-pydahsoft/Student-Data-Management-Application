@@ -16,6 +16,7 @@ import PublicForm from './pages/PublicForm';
 import Attendance from './pages/Attendance';
 
 import UserManagement from './pages/UserManagement';
+import StudentFieldPermissions from './pages/StudentFieldPermissions';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
 import TicketManagement from './pages/TicketManagement';
@@ -144,6 +145,7 @@ function App() {
           <Route path="attendance" element={<Attendance />} />
 
           <Route path="users" element={<UserManagement />} />
+          <Route path="users/field-permissions/:userId" element={<StudentFieldPermissions />} />
           <Route path="reports" element={<Reports />} />
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />

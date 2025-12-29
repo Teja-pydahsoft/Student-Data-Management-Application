@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
   UserPlus,
@@ -24,11 +25,14 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Edit3,
   Send,
   AlertCircle,
   KeyRound,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Save,
+  Shield
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -298,8 +302,20 @@ const SelectionModal = ({
   );
 };
 
+// Icon mapping for field categories
+const ICON_MAP = {
+  User,
+  Phone,
+  GraduationCap,
+  Users: UsersIcon,
+  FileText: BookOpen,
+  BookOpen,
+  Shield
+};
+
 const UserManagement = () => {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [modules, setModules] = useState([]);
   const [users, setUsers] = useState([]);
   const [colleges, setColleges] = useState([]);
@@ -347,6 +363,13 @@ const UserManagement = () => {
   const [showModuleAccessModal, setShowModuleAccessModal] = useState(false);
   const [moduleAccessUser, setModuleAccessUser] = useState(null);
   const [selectedModuleKey, setSelectedModuleKey] = useState(null);
+
+  // Field-level permissions modal state
+  const [showFieldPermissionsModal, setShowFieldPermissionsModal] = useState(false);
+  const [fieldCategories, setFieldCategories] = useState([]);
+  const [loadingFields, setLoadingFields] = useState(false);
+  const [activeFieldCategory, setActiveFieldCategory] = useState('');
+  const [fieldPermissions, setFieldPermissions] = useState({});
 
   const hasUserManagementAccess = useMemo(() => {
     if (isFullAccessRole(user?.role)) return true;
@@ -456,6 +479,131 @@ const UserManagement = () => {
       toast.error('Failed to load users');
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const loadStudentFields = async () => {
+    setLoadingFields(true);
+    try {
+      // Load field schema
+      const response = await api.get('/rbac/users/student-fields');
+      if (response.data?.success) {
+        const categories = response.data.data.categories || [];
+
+        // Map icon strings to components
+        const categoriesWithIcons = categories.map(cat => ({
+          ...cat,
+          icon: ICON_MAP[cat.icon] || Shield
+        }));
+
+        setFieldCategories(categoriesWithIcons);
+
+        // Set first category as active
+        if (categoriesWithIcons.length > 0 && !activeFieldCategory) {
+          setActiveFieldCategory(categoriesWithIcons[0].id);
+        }
+
+        // Load existing field permissions for this user
+        if (moduleAccessUser?.permissions?.student_management?.field_permissions) {
+          setFieldPermissions(moduleAccessUser.permissions.student_management.field_permissions);
+        } else {
+          // If no permissions exist, default to ALL VISIBLE to match the app's default behavior
+          // This prevents "Strict Mode" kicking in and hiding everything else when a single field is saved
+          const allPerms = {};
+          categoriesWithIcons.forEach(category => {
+            category.fields.forEach(field => {
+              allPerms[field.key] = { view: true, edit: false };
+            });
+          });
+          setFieldPermissions(allPerms);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading student fields:', error);
+      toast.error('Failed to load student fields');
+    } finally {
+      setLoadingFields(false);
+    }
+  };
+
+  // Field permission toggle functions
+  const toggleFieldPermission = (fieldKey, permissionType) => {
+    setFieldPermissions(prev => {
+      const current = prev[fieldKey] || { view: false, edit: false };
+      const updated = {
+        ...current,
+        [permissionType]: !current[permissionType]
+      };
+
+      // If edit is enabled, automatically enable view
+      if (permissionType === 'edit' && updated.edit) {
+        updated.view = true;
+      }
+
+      // If view is disabled, automatically disable edit
+      if (permissionType === 'view' && !updated.view) {
+        updated.edit = false;
+      }
+
+      return {
+        ...prev,
+        [fieldKey]: updated
+      };
+    });
+  };
+
+  const grantAllViewPermissions = () => {
+    const allPerms = {};
+    fieldCategories.forEach(category => {
+      category.fields.forEach(field => {
+        allPerms[field.key] = { view: true, edit: false };
+      });
+    });
+    setFieldPermissions(allPerms);
+    toast.success('View permission granted to all fields!');
+  };
+
+  const saveFieldPermissions = async () => {
+    if (!moduleAccessUser) {
+      console.error("No user selected for module access");
+      return;
+    }
+
+    try {
+      // Update the permissions object
+      const updatedPermissions = {
+        ...(moduleAccessUser.permissions || {}),
+        student_management: {
+          ...(moduleAccessUser.permissions?.student_management || {}),
+          field_permissions: fieldPermissions
+        }
+      };
+
+      // Update the moduleAccessUser state
+      setModuleAccessUser(prev => ({
+        ...prev,
+        permissions: updatedPermissions
+      }));
+
+      // Update the users list to reflect changes immediately
+      setUsers(prevUsers => prevUsers.map(u =>
+        u.id === moduleAccessUser.id
+          ? { ...u, permissions: updatedPermissions }
+          : u
+      ));
+
+      // Update the editForm state if likely open/active
+      setEditForm(prev =>
+        prev && prev.id === moduleAccessUser.id
+          ? { ...prev, permissions: updatedPermissions }
+          : prev
+      );
+
+      toast.success('Field permissions configured! Click "Save Module Access" to apply changes.');
+      setShowFieldPermissionsModal(false);
+    } catch (error) {
+      console.error('Error configuring field permissions:', error);
+      toast.error('Failed to configure field permissions');
     }
   };
 
@@ -1805,8 +1953,8 @@ const UserManagement = () => {
                         type="button"
                         onClick={() => setSelectedModuleKey(moduleKey)}
                         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm text-left transition-all ${isActive
-                            ? 'bg-white text-blue-700 border border-blue-200 shadow-sm'
-                            : 'bg-transparent text-slate-700 hover:bg-white'
+                          ? 'bg-white text-blue-700 border border-blue-200 shadow-sm'
+                          : 'bg-transparent text-slate-700 hover:bg-white'
                           }`}
                       >
                         <span className="truncate font-medium">{moduleLabel}</span>
@@ -1983,40 +2131,61 @@ const UserManagement = () => {
                           {modulePerms.permissions.map((permKey) => {
                             const enabled = permsForUser[permKey] === true;
                             const label = modulePerms.labels[permKey] || permKey;
+                            const isStudentMgmtView = effectiveModuleKey === BACKEND_MODULES.STUDENT_MANAGEMENT && permKey === 'view';
+
                             return (
-                              <button
-                                key={permKey}
-                                type="button"
-                                onClick={() => toggleSinglePermission(permKey)}
-                                className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs text-left transition-all ${enabled
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
-                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                                  }`}
-                              >
-                                <span className="flex items-center gap-2">
-                                  <span
-                                    className={`w-5 h-5 rounded-md flex items-center justify-center border ${enabled
-                                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                                        : 'bg-slate-50 border-slate-300 text-slate-400'
+                              <div key={permKey} className={isStudentMgmtView ? "sm:col-span-2" : ""}>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSinglePermission(permKey)}
+                                    className={`flex-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs text-left transition-all ${enabled
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                                       }`}
                                   >
-                                    {enabled ? (
-                                      <Check size={13} />
-                                    ) : (
-                                      <X size={13} />
-                                    )}
-                                  </span>
-                                  <span className="font-medium truncate">{label}</span>
-                                </span>
-                                <span
-                                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${enabled
-                                      ? 'bg-emerald-100 text-emerald-700'
-                                      : 'bg-slate-100 text-slate-500'
-                                    }`}
-                                >
-                                  {enabled ? 'Allowed' : 'Disabled'}
-                                </span>
-                              </button>
+                                    <span className="flex items-center gap-2">
+                                      <span
+                                        className={`w-5 h-5 rounded-md flex items-center justify-center border ${enabled
+                                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                                          : 'bg-slate-50 border-slate-300 text-slate-400'
+                                          }`}
+                                      >
+                                        {enabled ? (
+                                          <Check size={13} />
+                                        ) : (
+                                          <X size={13} />
+                                        )}
+                                      </span>
+                                      <span className="font-medium truncate">{label}</span>
+                                    </span>
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${enabled
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-slate-100 text-slate-500'
+                                        }`}
+                                    >
+                                      {enabled ? 'Allowed' : 'Disabled'}
+                                    </span>
+                                  </button>
+
+                                  {/* Add Configure Fields button for Student Management View permission */}
+                                  {isStudentMgmtView && enabled && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowFieldPermissionsModal(true);
+                                        // Always load fields to ensure correct initialization logic runs (including default permissions)
+                                        loadStudentFields();
+                                      }}
+                                      className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap"
+                                    >
+                                      <Settings size={14} />
+                                      Configure Fields
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
@@ -2707,6 +2876,182 @@ const UserManagement = () => {
                       Delete Permanently
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Field Permissions Modal */}
+      {showFieldPermissionsModal && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Shield className="text-blue-600" size={20} />
+                  Configure Field-Level Access
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Set view/edit permissions for individual student data fields
+                </p>
+              </div>
+              <button
+                onClick={() => setShowFieldPermissionsModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X size={20} className="text-slate-600" />
+              </button>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={grantAllViewPermissions}
+                  className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Eye size={14} />
+                  Grant All View
+                </button>
+                <button
+                  onClick={() => {
+                    setFieldPermissions({});
+                    toast.success('All permissions revoked!');
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+                >
+                  <X size={14} />
+                  Revoke All
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-hidden flex">
+              {/* Categories Sidebar */}
+              <div className="w-64 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                <div className="p-3">
+                  {loadingFields ? (
+                    <div className="text-center py-8">
+                      <RefreshCw className="animate-spin mx-auto text-slate-400" size={24} />
+                      <p className="text-sm text-slate-500 mt-2">Loading fields...</p>
+                    </div>
+                  ) : (
+                    fieldCategories.map(category => {
+                      const Icon = category.icon;
+                      const isActive = activeFieldCategory === category.id;
+
+                      // Count permissions for this category
+                      let viewCount = 0;
+                      let editCount = 0;
+                      category.fields.forEach(field => {
+                        const perms = fieldPermissions[field.key] || { view: false, edit: false };
+                        if (perms.view) viewCount++;
+                        if (perms.edit) editCount++;
+                      });
+
+                      return (
+                        <button
+                          key={category.id}
+                          onClick={() => setActiveFieldCategory(category.id)}
+                          className={`w-full flex items-center justify-between gap-2 p-3 rounded-lg text-left transition-all mb-2 ${isActive
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-white text-slate-700 hover:bg-white/80'
+                            }`}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Icon size={16} />
+                            <span className="text-sm font-medium truncate">{category.label}</span>
+                          </div>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-[10px] opacity-75">
+                              {viewCount}/{category.fields.length} view
+                            </span>
+                            <span className="text-[10px] opacity-75">
+                              {editCount}/{category.fields.length} edit
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Fields List */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-6">
+                  {fieldCategories.find(c => c.id === activeFieldCategory)?.fields.map(field => {
+                    const perms = fieldPermissions[field.key] || { view: false, edit: false };
+
+                    return (
+                      <div
+                        key={field.key}
+                        className="flex items-center justify-between gap-4 p-3 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors mb-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-medium text-slate-800 truncate">
+                            {field.label}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            Field: <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">{field.key}</code>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* View Toggle */}
+                          <button
+                            onClick={() => toggleFieldPermission(field.key, 'view')}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${perms.view
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                          >
+                            {perms.view ? <Eye size={14} /> : <EyeOff size={14} />}
+                            View
+                          </button>
+
+                          {/* Edit Toggle */}
+                          <button
+                            onClick={() => toggleFieldPermission(field.key, 'edit')}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${perms.edit
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            disabled={!perms.view}
+                          >
+                            {perms.edit ? <Edit3 size={14} /> : <Lock size={14} />}
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+              <p className="text-sm text-slate-600">
+                Configure field permissions, then click Save to apply
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowFieldPermissionsModal(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveFieldPermissions}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <Save size={16} />
+                  Save Field Permissions
                 </button>
               </div>
             </div>

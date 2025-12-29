@@ -81,7 +81,7 @@ const MODULE_PERMISSIONS = {
     }
   },
   [MODULES.STUDENT_MANAGEMENT]: {
-    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export'],
+    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export', 'view_details', 'edit_details'],
     labels: {
       view: 'View Students',
       add_student: 'Add Student',
@@ -89,7 +89,9 @@ const MODULE_PERMISSIONS = {
       edit_student: 'Edit Students',
       delete_student: 'Delete Students',
       update_pin: 'Update PIN Number',
-      export: 'Export Students'
+      export: 'Export Students',
+      view_details: 'View Student Details (Full Profile)',
+      edit_details: 'Edit Student Details (Individual Fields)'
     }
   },
   [MODULES.PROMOTIONS]: {
@@ -349,6 +351,12 @@ const parsePermissions = (permissionsJson) => {
             moduleDef.permissions.forEach(perm => {
               permissions[module][perm] = !!parsed[module]?.[perm];
             });
+
+            // Preserve field_permissions for student_management
+            // This is critical for field-level access control persistence
+            if (module === MODULES.STUDENT_MANAGEMENT && parsed[module]?.field_permissions) {
+              permissions[module].field_permissions = parsed[module].field_permissions;
+            }
           }
         }
       }

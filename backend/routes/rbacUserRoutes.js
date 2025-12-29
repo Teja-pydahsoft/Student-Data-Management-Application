@@ -4,9 +4,13 @@ const authMiddleware = require('../middleware/auth');
 const { verifyRole, verifyPermission, verifyCanCreateRole, verifyCanManageUser } = require('../middleware/rbac');
 const { USER_ROLES } = require('../constants/rbac');
 const rbacUserController = require('../controllers/rbacUserController');
+const studentFieldsController = require('../controllers/studentFieldsController');
 
 // All routes require authentication
 router.use(authMiddleware);
+
+// Get available student fields (for field-level permissions)
+router.get('/student-fields', studentFieldsController.getStudentFields);
 
 // Get available roles and modules (for user creation form)
 router.get('/roles/available', rbacUserController.getAvailableRoles);
