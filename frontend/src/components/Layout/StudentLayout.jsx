@@ -100,7 +100,6 @@ const StudentLayout = ({ children }) => {
 
             {/* Mobile Menu Button */}
             <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2 items-center">
-                <NotificationIcon />
                 <button
                     className="p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
                     onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -221,8 +220,8 @@ const StudentLayout = ({ children }) => {
             {/* Main Content */}
             <main className={`flex-1 h-screen overflow-y-auto p-4 lg:p-8 relative z-10 transition-all duration-300 ${desktopSidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}`}>
 
-                {/* Desktop Header for Notifications */}
-                <div className="hidden lg:block fixed bottom-8 right-8 z-50">
+                {/* Notification Icon - Bottom Right for ALL devices */}
+                <div className="fixed bottom-8 right-8 z-50">
                     <NotificationIcon />
                 </div>
 

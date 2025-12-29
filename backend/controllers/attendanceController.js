@@ -1258,6 +1258,33 @@ exports.markAttendance = async (req, res) => {
     await Promise.allSettled(pushPromises);
     console.log('Push notifications dispatch completed.');
 
+    // Dispatch Web Notifications (Persistent in DB for Bell Icon)
+    console.log(`Dispatching Web Notifications for ${normalizedRecords.length} records...`);
+    const webNotificationPromises = normalizedRecords.map(async (record) => {
+      // Only notify for present/absent statuses
+      if (!['present', 'absent'].includes(record.status)) return;
+
+      try {
+        await createNotification({
+          studentId: record.studentId,
+          title: 'Attendance Update',
+          message: `You have been marked ${record.status.toUpperCase()} for ${normalizedDate}.`,
+          category: 'Attendance',
+          type: 'WEB',
+          data: {
+            date: normalizedDate,
+            status: record.status
+          }
+        });
+      } catch (err) {
+        console.error(`Failed to create web notification for student ${record.studentId}`, err);
+      }
+    });
+
+    // Process web notifications (non-blocking but we wait for completion to log)
+    await Promise.allSettled(webNotificationPromises);
+    console.log('Web notifications dispatch completed.');
+
     // Get connection again for updating SMS status
     const updateConnection = await masterPool.getConnection();
 
@@ -1302,14 +1329,7 @@ exports.markAttendance = async (req, res) => {
               notificationSettings
             });
 
-            // Send Web Notification
-            createNotification({
-              studentId: student.id,
-              title: 'Attendance Alert',
-              message: `You were marked absent for ${normalizedDate}.`,
-              category: 'Attendance',
-              type: 'WEB'
-            }).catch(e => console.error('Web notification failed:', e));
+            // Web notification is now handled separately for all statuses
             result.smsSent = !!smsResult?.success;
             result.smsError = smsResult?.reason || null;
             result.sentTo = smsResult?.sentTo || studentDetails.parentMobile;

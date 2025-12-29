@@ -6,14 +6,6 @@ const { masterPool } = require('../config/database');
  */
 exports.getNotifications = async (req, res) => {
     try {
-        // Determine student ID from auth user
-        // The auth middleware puts user details in req.user
-        // For students, req.user will contain the student data including 'id' (from previous middleware analysis)
-        // Wait, let's double check auth middleware details in step 28.
-        // In auth middleware (step 28), it decodes token.
-        // In authController (step 33), unifiedLogin signs: { id: studentValid.student_id, role: 'student' ... }
-        // So req.user.id is the student_id.
-
         const studentId = req.user.id;
         const { role } = req.user;
 
@@ -26,20 +18,44 @@ exports.getNotifications = async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        const [notifications] = await masterPool.query(
-            `SELECT id, title, message, is_read, sent_at as created_at, category, message_id as data 
+        // Fetch notifications where mobile_number = 'WEB'
+        // Map status 'Sent' -> Unread, 'Read' -> Read
+        const [rows] = await masterPool.query(
+            `SELECT id, message, status, sent_at as created_at, category, message_id as data
        FROM sms_logs 
-       WHERE student_id = ? AND type = 'WEB'
+       WHERE student_id = ? AND mobile_number = 'WEB'
        ORDER BY sent_at DESC
        LIMIT ? OFFSET ?`,
             [studentId, limit, offset]
         );
 
+        const notifications = rows.map(row => {
+            // Extract title from message (format: **Title**\nMessage)
+            let title = 'Notification';
+            let message = row.message;
+
+            const titleMatch = row.message.match(/^\*\*(.*?)\*\*\n/);
+            if (titleMatch) {
+                title = titleMatch[1];
+                message = row.message.substring(titleMatch[0].length);
+            }
+
+            return {
+                id: row.id,
+                title,
+                message,
+                is_read: row.status === 'Read' ? 1 : 0,
+                created_at: row.created_at,
+                category: row.category,
+                data: row.data
+            };
+        });
+
         const [countResult] = await masterPool.query(
             `SELECT COUNT(*) as total, 
-       SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_count
+       SUM(CASE WHEN status != 'Read' THEN 1 ELSE 0 END) as unread_count
        FROM sms_logs 
-       WHERE student_id = ? AND type = 'WEB'`,
+       WHERE student_id = ? AND mobile_number = 'WEB'`,
             [studentId]
         );
 
@@ -74,8 +90,8 @@ exports.markAsRead = async (req, res) => {
 
         await masterPool.query(
             `UPDATE sms_logs 
-       SET is_read = 1 
-       WHERE id = ? AND student_id = ? AND type = 'WEB'`,
+       SET status = 'Read' 
+       WHERE id = ? AND student_id = ? AND mobile_number = 'WEB'`,
             [notificationId, studentId]
         );
 
@@ -95,8 +111,8 @@ exports.markAllAsRead = async (req, res) => {
 
         await masterPool.query(
             `UPDATE sms_logs 
-       SET is_read = 1 
-       WHERE student_id = ? AND type = 'WEB' AND is_read = 0`,
+       SET status = 'Read' 
+       WHERE student_id = ? AND mobile_number = 'WEB' AND status != 'Read'`,
             [studentId]
         );
 
@@ -115,10 +131,9 @@ exports.deleteNotification = async (req, res) => {
         const studentId = req.user.id;
         const notificationId = req.params.id;
 
-        // Hard delete or Soft delete? Using Hard delete for now as per "remove" requirement.
         await masterPool.query(
             `DELETE FROM sms_logs 
-       WHERE id = ? AND student_id = ? AND type = 'WEB'`,
+       WHERE id = ? AND student_id = ? AND mobile_number = 'WEB'`,
             [notificationId, studentId]
         );
 
@@ -138,7 +153,7 @@ exports.clearAllNotifications = async (req, res) => {
 
         await masterPool.query(
             `DELETE FROM sms_logs 
-       WHERE student_id = ? AND type = 'WEB'`,
+       WHERE student_id = ? AND mobile_number = 'WEB'`,
             [studentId]
         );
 

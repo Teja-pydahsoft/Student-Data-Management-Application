@@ -2,14 +2,44 @@ import React, { useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 import useNotificationStore from '../../store/notificationStore';
 import NotificationDropdown from './NotificationDropdown';
+import toast from 'react-hot-toast';
 
 const NotificationIcon = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const { unreadCount, fetchNotifications } = useNotificationStore();
+    const { unreadCount, fetchNotifications, hasShownLoginToast, setHasShownLoginToast } = useNotificationStore();
 
     // Initial fetch to get count
     useEffect(() => {
-        fetchNotifications(1);
+        fetchNotifications(1).then(() => {
+            const currentUnreadCount = useNotificationStore.getState().unreadCount;
+            const currentHasShownLoginToast = useNotificationStore.getState().hasShownLoginToast;
+
+            if (currentUnreadCount > 0 && !currentHasShownLoginToast) {
+                toast((t) => (
+                    <div
+                        onClick={() => {
+                            setIsOpen(true);
+                            toast.dismiss(t.id);
+                        }}
+                        className="cursor-pointer flex items-center gap-2"
+                    >
+                        <span className="flex-1"> You have {currentUnreadCount} new notifications!</span>
+                    </div>
+                ), {
+                    duration: 3000,
+                    position: 'top-center',
+                    style: {
+                        background: '#333',
+                        color: '#fff',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                    },
+                    icon: '🔔'
+                });
+                setHasShownLoginToast(true);
+            }
+        });
 
         // Optional: Poll for new notifications every minute
         const interval = setInterval(() => {
@@ -17,7 +47,7 @@ const NotificationIcon = () => {
         }, 60000);
 
         return () => clearInterval(interval);
-    }, [fetchNotifications]);
+    }, []);
 
     return (
         <div className="relative">
@@ -33,7 +63,9 @@ const NotificationIcon = () => {
 
                 {/* Badge */}
                 {unreadCount > 0 && (
-                    <span className="absolute top-2 right-2 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white transform translate-x-1/2 -translate-y-1/2 shadow-sm animate-pulse"></span>
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white shadow-sm animate-pulse">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
                 )}
             </button>
 

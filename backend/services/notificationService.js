@@ -11,10 +11,19 @@ const { masterPool } = require('../config/database');
  */
 exports.createNotification = async ({ studentId, title, message, category = 'General', type = 'WEB', data = null }) => {
     try {
+        // Use existing sms_logs columns. Mapping:
+        // mobile_number -> 'WEB' (to identify it)
+        // message -> title + \n + message (since there's no title column)
+        // status -> 'Sent' (Unread) / 'Read' (Read)
+        // category -> category
+        // message_id -> JSON string of data (if any)
+
+        const fullMessage = title ? `**${title}**\n${message}` : message;
+
         await masterPool.query(
-            `INSERT INTO sms_logs (student_id, title, message, category, type, status, message_id)
-       VALUES (?, ?, ?, ?, ?, 'Sent', ?)`,
-            [studentId, title, message, category, type, data ? JSON.stringify(data) : null]
+            `INSERT INTO sms_logs (student_id, mobile_number, message, category, status, message_id)
+       VALUES (?, 'WEB', ?, ?, 'Sent', ?)`,
+            [studentId, fullMessage, category, data ? JSON.stringify(data) : null]
         );
         console.log(`🔔 Notification created for Student ${studentId}: ${title}`);
         return true;

@@ -1,7 +1,7 @@
 const { masterPool } = require('../config/database');
 
 async function createSmsLogsTable() {
-    const createTableQuery = `
+  const createTableQuery = `
     CREATE TABLE IF NOT EXISTS sms_logs (
       id INT AUTO_INCREMENT PRIMARY KEY,
       student_id INT NOT NULL,
@@ -19,16 +19,16 @@ async function createSmsLogsTable() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `;
 
-    try {
-        const connection = await masterPool.getConnection();
-        await connection.query(createTableQuery);
-        console.log('✅ sms_logs table created or already exists.');
-        connection.release();
-        process.exit(0);
-    } catch (error) {
-        console.error('❌ Failed to create sms_logs table:', error);
-        process.exit(1);
-    }
+  try {
+    const connection = await masterPool.getConnection();
+    await connection.query(createTableQuery);
+    console.log('✅ sms_logs table created or already exists.');
+    connection.release();
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Failed to create sms_logs table:', error);
+    process.exit(1);
+  }
 }
 
 createSmsLogsTable();

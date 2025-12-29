@@ -8,6 +8,9 @@ const useNotificationStore = create((set, get) => ({
     error: null,
     page: 1,
     hasMore: true,
+    hasShownLoginToast: false,
+
+    setHasShownLoginToast: (value) => set({ hasShownLoginToast: value }),
 
     fetchNotifications: async (page = 1) => {
         set({ isLoading: true, error: null });
