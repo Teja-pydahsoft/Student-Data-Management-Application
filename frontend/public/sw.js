@@ -33,25 +33,40 @@ self.addEventListener('notificationclick', function (event) {
     event.notification.close();
 
     // Get URL from notification data
-    const urlToOpen = event.notification.data.url || self.location.origin;
+    const urlToOpen = event.notification.data.url;
+
+    if (!urlToOpen) return;
 
     event.waitUntil(
         clients.matchAll({
             type: 'window',
             includeUncontrolled: true
         }).then(function (windowClients) {
-            // Check if there is already a window open with this URL
+            let matchingClient = null;
+
             for (let i = 0; i < windowClients.length; i++) {
                 const client = windowClients[i];
-                // Check if the client matches the origin and is focused/focusable
-                // We compare the origin and path roughly, or just focus the first available window and navigate
-                if (client.url === urlToOpen && 'focus' in client) {
-                    return client.focus();
+                // Check if we have a match on the exact URL or base URL
+                // Mobile browsers might append query params or behave differently, so basic matching first
+                if (client.url === urlToOpen || client.url.includes(urlToOpen)) {
+                    matchingClient = client;
+                    break;
                 }
             }
-            // If not found, open a new window
-            if (clients.openWindow) {
-                return clients.openWindow(urlToOpen);
+
+            if (matchingClient) {
+                return matchingClient.focus().then(client => {
+                    // Optional: Navigate to key URL if it's different?
+                    // return client.navigate(urlToOpen);
+                    return client;
+                }).catch(() => {
+                    // Fallback if focus fails
+                    if (clients.openWindow) return clients.openWindow(urlToOpen);
+                });
+            } else {
+                if (clients.openWindow) {
+                    return clients.openWindow(urlToOpen);
+                }
             }
         })
     );
