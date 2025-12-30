@@ -27,11 +27,18 @@ exports.createOrder = async (req, res) => {
 
         const student = students[0];
         let collegeName = 'Pydah Group';
+        let studentEmail = '';
+        let studentContact = '';
+
         if (student.student_data) {
             try {
                 const sd = typeof student.student_data === 'string' ? JSON.parse(student.student_data) : student.student_data;
                 if (sd.college) collegeName = sd.college;
                 else if (sd.College) collegeName = sd.College;
+
+                // Extract email and contact if available (gracefully)
+                studentEmail = sd.email || sd.Email || sd.student_email || '';
+                studentContact = sd.student_mobile || sd.student_mobile_number || sd.mobile || sd.contact || '';
             } catch (e) {
                 console.error('Error parsing student_data:', e);
             }
@@ -46,6 +53,7 @@ exports.createOrder = async (req, res) => {
         });
 
         if (!paymentConfig) {
+            console.warn(`Payment config not found for student: ${studentId}, College: ${collegeName}, Course: ${student.course}`);
             return res.status(404).json({ success: false, message: 'Online payment not configured for this college/course' });
         }
 
@@ -71,14 +79,16 @@ exports.createOrder = async (req, res) => {
 
         const order = await razorpay.orders.create(options);
 
+        console.log(`✓ Razorpay Order Created: ${order.id} for Student: ${studentId}, Amount: ${amount}`);
+
         res.json({
             success: true,
             order,
             key_id: paymentConfig.razorpay_key_id,
             studentDetails: {
                 name: student.student_name,
-                email: '', // Could fetch from user model if needed
-                contact: '' // Could fetch from student_data if needed
+                email: studentEmail,
+                contact: studentContact
             }
         });
 
@@ -141,10 +151,38 @@ exports.verifyPayment = async (req, res) => {
             .digest("hex");
 
         if (razorpay_signature !== expectedSign) {
+            console.error(`X Invalid signature for payment: ${razorpay_payment_id}, Order: ${razorpay_order_id}`);
             return res.status(400).json({ success: false, message: "Invalid payment signature" });
         }
 
-        // 3. Record Transaction in MongoDB
+        // 3. Prevent Duplicate Processing
+        const existingTx = await Transaction.findOne({ referenceNo: razorpay_payment_id });
+        if (existingTx) {
+            console.warn(`! Duplicate payment verification attempt: ${razorpay_payment_id}`);
+            return res.status(400).json({ success: false, message: "This payment has already been processed" });
+        }
+
+        // 4. Server-Side Verification with Razorpay (Verify Amount and Status)
+        const razorpay = new Razorpay({
+            key_id: paymentConfig.razorpay_key_id,
+            key_secret: paymentConfig.razorpay_key_secret
+        });
+
+        const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
+
+        if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
+            console.error(`X Payment status check failed for ${razorpay_payment_id}. Status: ${paymentDetails.status}`);
+            return res.status(400).json({ success: false, message: `Payment is not in a successful state (Status: ${paymentDetails.status})` });
+        }
+
+        // Verify Amount (Razorpay amount is in paise)
+        const razorpayAmount = paymentDetails.amount / 100;
+        if (Math.abs(razorpayAmount - Number(amount)) > 0.01) {
+            console.error(`X Amount mismatch for ${razorpay_payment_id}. Expected: ${amount}, Actual: ${razorpayAmount}`);
+            return res.status(400).json({ success: false, message: "Payment amount mismatch. Please contact support." });
+        }
+
+        // 5. Record Transaction in MongoDB
         // Note: transactionType 'DEBIT' is used for payments in this system (inverted logic confirmed earlier)
         const newTransaction = new Transaction({
             studentId,

@@ -117,17 +117,24 @@ const FeeManagement = () => {
                         });
 
                         if (verifyRes.data.success) {
-                            alert('Payment successful!');
+                            alert('Payment successful! Your transaction has been recorded.');
                             fetchFeeDetails(); // Refresh data
                             setIsPaymentModalOpen(false);
                         } else {
-                            alert('Payment verification failed.');
+                            alert(verifyRes.data.message || 'Payment verification failed. Please contact the administrator.');
                         }
                     } catch (err) {
                         console.error('Verification error:', err);
-                        alert('Something went wrong during verification.');
+                        const errorMsg = err.response?.data?.message || 'Something went wrong during verification. Please contact support.';
+                        alert(errorMsg);
                     } finally {
                         setPaymentLoading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        setPaymentLoading(false);
+                        console.log('Razorpay modal closed by user');
                     }
                 },
                 prefill: {
@@ -141,11 +148,19 @@ const FeeManagement = () => {
             };
 
             const paymentObject = new window.Razorpay(options);
+
+            // Add extra protection for modal closing
+            paymentObject.on('payment.failed', function (response) {
+                console.error('Razorpay Payment Failed:', response.error);
+                setPaymentLoading(false);
+            });
+
             paymentObject.open();
 
         } catch (err) {
             console.error('Payment error:', err);
-            alert('Failed to initiate payment. Please try again.');
+            const errorMsg = err.response?.data?.message || 'Failed to initiate payment. Please try again.';
+            alert(errorMsg);
         } finally {
             setPaymentLoading(false);
         }
