@@ -620,7 +620,7 @@ const FeeManagement = () => {
                                                             {tx.paymentMode || 'Unknown'}
                                                         </span>
                                                         <span className="text-xs text-gray-400">
-                                                            #{tx.receiptNumber || 'Ref N/A'}
+                                                            #{tx.receiptNumber || tx.referenceNo || 'Ref N/A'}
                                                         </span>
                                                     </div>
                                                 </div>
