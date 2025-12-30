@@ -72,6 +72,7 @@ exports.createOrder = async (req, res) => {
             receipt: `rcpt_${Date.now()}_${studentId.replace(/\s+/g, '')}`,
             notes: {
                 studentId,
+                studentName: student.student_name,
                 feeHeadId: feeHeadId || '',
                 studentYear: studentYear || '',
                 semester: semester || '',
@@ -120,7 +121,7 @@ exports.verifyPayment = async (req, res) => {
         }
 
         // 1. Uniqueness Check: Prevent duplicate recording of the same payment ID
-        const existingTx = await Transaction.findOne({ referenceNo: razorpay_payment_id });
+        const existingTx = await Transaction.findOne({ gatewayPaymentId: razorpay_payment_id });
         if (existingTx) {
             console.log(`[PAYMENT] Duplicate payment verification attempt: ${razorpay_payment_id}`);
             return res.status(400).json({ 
@@ -211,13 +212,20 @@ exports.verifyPayment = async (req, res) => {
         }
 
         // 8. Record Transaction in MongoDB only after all validations pass
+        // Extract Bank RRN (Retrieval Reference Number) from acquirer_data
+        let bankRRN = '';
+        if (paymentDetails.acquirer_data) {
+            bankRRN = paymentDetails.acquirer_data.rrn || paymentDetails.acquirer_data.bank_transaction_id || paymentDetails.acquirer_data.upi_transaction_id || '';
+        }
+
         const newTransaction = new Transaction({
             studentId,
             studentName: student.student_name,
             amount: Number(amount),
             transactionType: 'DEBIT', // Payment Received (System specific: DEBIT=Payment)
             paymentMode: paymentMode,
-            referenceNo: razorpay_payment_id,
+            referenceNo: bankRRN || razorpay_payment_id, // Store Bank RRN as primary reference, fallback to pay_id if not found
+            gatewayPaymentId: razorpay_payment_id, // Store Razorpay Payment ID specifically
             referenceOrderId: razorpay_order_id,
             remarks: remarks || `Online Payment via Razorpay (${razorpay_payment_id})`,
             feeHead: feeHeadId || null,

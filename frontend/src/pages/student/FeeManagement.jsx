@@ -620,7 +620,12 @@ const FeeManagement = () => {
                                                             {tx.paymentMode || 'Unknown'}
                                                         </span>
                                                         <span className="text-xs text-gray-400">
-                                                            #{tx.receiptNumber || tx.referenceNo || 'Ref N/A'}
+                                                            {tx.receiptNumber ? `#${tx.receiptNumber}` : (tx.referenceNo ? `Bank RRN: ${tx.referenceNo}` : 'Ref N/A')}
+                                                            {tx.gatewayPaymentId && (
+                                                                <span className="block text-[10px] opacity-75 mt-0.5">
+                                                                    ID: {tx.gatewayPaymentId}
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     </div>
                                                 </div>
