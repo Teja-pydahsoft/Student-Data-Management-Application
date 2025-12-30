@@ -15,7 +15,7 @@ exports.createOrder = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Student ID and amount are required' });
         }
 
-        // 1. Fetch Student Details to get College/Course
+        // 1. Fetch Student Details to get College/Course and Prefill Data
         const [students] = await masterPool.query(
             'SELECT s.student_name, s.course, s.branch, s.student_data FROM students s WHERE s.admission_number = ?',
             [studentId]
@@ -33,12 +33,15 @@ exports.createOrder = async (req, res) => {
         if (student.student_data) {
             try {
                 const sd = typeof student.student_data === 'string' ? JSON.parse(student.student_data) : student.student_data;
+                
+                // College handling
                 if (sd.college) collegeName = sd.college;
                 else if (sd.College) collegeName = sd.College;
 
-                // Extract email and contact if available (gracefully)
-                studentEmail = sd.email || sd.Email || sd.student_email || '';
-                studentContact = sd.student_mobile || sd.student_mobile_number || sd.mobile || sd.contact || '';
+                // Safe Prefill Data Extraction
+                // Normalizing keys based on common exports/imports
+                studentEmail = sd.student_email || sd.email || sd.Student_Email || '';
+                studentContact = sd.student_mobile || sd.mobile || sd.parent_mobile1 || sd.Student_Mobile || '';
             } catch (e) {
                 console.error('Error parsing student_data:', e);
             }
@@ -53,7 +56,6 @@ exports.createOrder = async (req, res) => {
         });
 
         if (!paymentConfig) {
-            console.warn(`Payment config not found for student: ${studentId}, College: ${collegeName}, Course: ${student.course}`);
             return res.status(404).json({ success: false, message: 'Online payment not configured for this college/course' });
         }
 
@@ -79,7 +81,7 @@ exports.createOrder = async (req, res) => {
 
         const order = await razorpay.orders.create(options);
 
-        console.log(`✓ Razorpay Order Created: ${order.id} for Student: ${studentId}, Amount: ${amount}`);
+        console.log(`[PAYMENT] Order created: ${order.id} for student ${studentId} (Amount: ${amount})`);
 
         res.json({
             success: true,
@@ -113,16 +115,28 @@ exports.verifyPayment = async (req, res) => {
             remarks
         } = req.body;
 
-        console.log(`[Verify] Starting verification for Order: ${razorpay_order_id}, Payment: ${razorpay_payment_id}`);
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({ success: false, message: 'Missing required payment verification details' });
+        }
 
-        // 1. Fetch Student/Config to get secret for verification
+        // 1. Uniqueness Check: Prevent duplicate recording of the same payment ID
+        const existingTx = await Transaction.findOne({ referenceNo: razorpay_payment_id });
+        if (existingTx) {
+            console.log(`[PAYMENT] Duplicate payment verification attempt: ${razorpay_payment_id}`);
+            return res.status(400).json({ 
+                success: false, 
+                message: 'This payment has already been recorded',
+                transaction: existingTx 
+            });
+        }
+
+        // 2. Fetch Student/Config to get secret for verification
         const [students] = await masterPool.query(
             'SELECT s.student_name, s.course, s.current_year, s.current_semester, s.student_data FROM students s WHERE s.admission_number = ?',
             [studentId]
         );
 
         if (!students || students.length === 0) {
-            console.error(`[Verify] Student not found: ${studentId}`);
             return res.status(404).json({ success: false, message: 'Student not found during verification' });
         }
 
@@ -143,11 +157,16 @@ exports.verifyPayment = async (req, res) => {
         });
 
         if (!paymentConfig) {
-            console.error(`[Verify] Payment config not found for College: ${collegeName}, Course: ${student.course}`);
             return res.status(404).json({ success: false, message: 'Payment configuration lost' });
         }
 
-        // 2. Verify Signature
+        // 3. Initialize Razorpay for fetch verification
+        const razorpay = new Razorpay({
+            key_id: paymentConfig.razorpay_key_id,
+            key_secret: paymentConfig.razorpay_key_secret
+        });
+
+        // 4. Verify Signature (Internal verification)
         const sign = razorpay_order_id + "|" + razorpay_payment_id;
         const expectedSign = crypto
             .createHmac("sha256", paymentConfig.razorpay_key_secret)
@@ -155,64 +174,51 @@ exports.verifyPayment = async (req, res) => {
             .digest("hex");
 
         if (razorpay_signature !== expectedSign) {
-            console.error(`[Verify] Invalid signature for payment: ${razorpay_payment_id}. Signature Mismatch.`);
+            console.error(`[PAYMENT] Invalid signature for order ${razorpay_order_id}`);
             return res.status(400).json({ success: false, message: "Invalid payment signature" });
         }
-        console.log(`[Verify] Signature match confirmed for ${razorpay_payment_id}`);
 
-        // 3. Prevent Duplicate Processing
-        const existingTx = await Transaction.findOne({ referenceNo: razorpay_payment_id });
-        if (existingTx) {
-            console.warn(`[Verify] Duplicate attempt for ${razorpay_payment_id}. Already processed.`);
-            return res.status(400).json({ success: false, message: "This payment has already been processed" });
-        }
-
-        // 4. Server-Side Verification with Razorpay (Verify Amount and Status)
-        const razorpay = new Razorpay({
-            key_id: paymentConfig.razorpay_key_id,
-            key_secret: paymentConfig.razorpay_key_secret
-        });
-
+        // 5. Server-Side Truth Verification: Fetch payment details from Razorpay directly
         const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
-        console.log(`[Verify] Fetched payment details for ${razorpay_payment_id}. Status: ${paymentDetails.status}, Amount: ${paymentDetails.amount / 100}`);
-
+        
         if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
-            console.error(`[Verify] Status check failed for ${razorpay_payment_id}. Expected: captured/authorized, Actual: ${paymentDetails.status}`);
-            return res.status(400).json({ success: false, message: `Payment is not in a successful state (Status: ${paymentDetails.status})` });
+            console.error(`[PAYMENT] Payment not successful in Razorpay record: ${paymentDetails.status}`);
+            return res.status(400).json({ success: false, message: `Payment status is ${paymentDetails.status}. Transaction not recorded.` });
         }
 
-        // Verify Amount (Razorpay amount is in paise)
-        const razorpayAmount = paymentDetails.amount / 100;
-        if (Math.abs(razorpayAmount - Number(amount)) > 0.01) {
-            console.error(`[Verify] Amount mismatch for ${razorpay_payment_id}. Expected: ${amount}, Actual: ${razorpayAmount}`);
-            return res.status(400).json({ success: false, message: "Payment amount mismatch. Please contact support." });
+        // 6. Verify Amount (Razorpay amount is in paise)
+        const expectedPaise = Math.round(Number(amount) * 100);
+        if (paymentDetails.amount !== expectedPaise) {
+            console.error(`[PAYMENT] Amount mismatch! Expected: ${expectedPaise}, Actual: ${paymentDetails.amount}`);
+            return res.status(400).json({ success: false, message: "Payment amount mismatch. Security verification failed." });
         }
 
-        // Verify Order ID
-        if (paymentDetails.order_id !== razorpay_order_id) {
-            console.error(`[Verify] Order ID mismatch for ${razorpay_payment_id}. Expected: ${razorpay_order_id}, Actual: ${paymentDetails.order_id}`);
-            return res.status(400).json({ success: false, message: "Payment order mismatch." });
+        // 7. Map Razorpay Method to Model Enum
+        // Enum: ['Cash', 'UPI', 'Cheque', 'DD', 'Card', 'Net Banking', 'Adjustment', 'Waiver', 'Refund', 'Credit']
+        let paymentMode = 'UPI'; // Default
+        const rpMethod = paymentDetails.method?.toLowerCase();
+        
+        if (rpMethod === 'upi') {
+            paymentMode = 'UPI';
+        } else if (rpMethod === 'card') {
+            paymentMode = 'Card';
+        } else if (rpMethod === 'netbanking') {
+            paymentMode = 'Net Banking';
+        } else {
+            // Fallback for wallet, emi, paylater, etc.
+            paymentMode = 'UPI'; 
+            console.log(`[PAYMENT] Mapping unknown Razorpay method "${rpMethod}" to UPI`);
         }
-        console.log(`[Verify] Server-side verification all passed for ${razorpay_payment_id}`);
 
-        // Extract Payment Method
-        let method = paymentDetails.method ? paymentDetails.method.toUpperCase() : 'ONLINE';
-        if (method === 'UPI' && paymentDetails.vpa) {
-            method = `UPI (${paymentDetails.vpa})`;
-        } else if (method === 'CARD' && paymentDetails.card) {
-            method = `CARD (${paymentDetails.card.network} ${paymentDetails.card.last4})`;
-        }
-
-        // 5. Record Transaction in MongoDB
-        // Note: transactionType 'DEBIT' is used for payments in this system (inverted logic confirmed earlier)
+        // 8. Record Transaction in MongoDB only after all validations pass
         const newTransaction = new Transaction({
             studentId,
             studentName: student.student_name,
             amount: Number(amount),
-            transactionType: 'DEBIT', // Payment Received
-            paymentMode: method,
+            transactionType: 'DEBIT', // Payment Received (System specific: DEBIT=Payment)
+            paymentMode: paymentMode,
             referenceNo: razorpay_payment_id,
-            referenceOrderId: razorpay_order_id, // Custom field if needed, or put in remarks
+            referenceOrderId: razorpay_order_id,
             remarks: remarks || `Online Payment via Razorpay (${razorpay_payment_id})`,
             feeHead: feeHeadId || null,
             studentYear: (studentYear || student.current_year)?.toString(),
@@ -225,6 +231,7 @@ exports.verifyPayment = async (req, res) => {
         });
 
         await newTransaction.save();
+        console.log(`[PAYMENT] Transaction successfully recorded: ${newTransaction._id} for student ${studentId}`);
 
         res.json({
             success: true,
@@ -234,6 +241,6 @@ exports.verifyPayment = async (req, res) => {
 
     } catch (error) {
         console.error('Error verifying Razorpay payment:', error);
-        res.status(500).json({ success: false, message: 'Failed to verify payment' });
+        res.status(500).json({ success: false, message: 'An internal error occurred during payment verification' });
     }
 };

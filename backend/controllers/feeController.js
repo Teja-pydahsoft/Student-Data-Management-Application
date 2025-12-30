@@ -167,7 +167,7 @@ exports.getStudentsWithFees = async (req, res) => {
     // Fetch payments for these students to calculate paid/due
     const studentIds = studentsData.map(s => s._id);
     const payments = await Transaction.aggregate([
-      { $match: { studentId: { $in: studentIds }, transactionType: 'CREDIT' } }, // Assuming CREDIT is payment
+      { $match: { studentId: { $in: studentIds }, transactionType: 'DEBIT' } }, // DEBIT is payment
       { $group: { _id: '$studentId', totalPaid: { $sum: '$amount' } } }
     ]);
 

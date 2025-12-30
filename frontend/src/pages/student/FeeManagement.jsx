@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { CreditCard, Clock, CheckCircle, AlertCircle, FileText, ArrowDownLeft, ArrowUpRight, Filter, Bus, BookOpen, Zap, X } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
-import { toast } from 'react-hot-toast';
 
 const FeeManagement = () => {
     const { user } = useAuthStore();
@@ -63,7 +62,7 @@ const FeeManagement = () => {
     const initiateTransaction = async () => {
         const amountToPay = parseFloat(payAmount);
         if (!amountToPay || amountToPay <= 0) {
-            toast.error("Please enter a valid amount");
+            alert("Please enter a valid amount");
             return;
         }
 
@@ -74,7 +73,7 @@ const FeeManagement = () => {
             const resScript = await loadRazorpayScript();
 
             if (!resScript) {
-                toast.error('Razorpay SDK failed to load. Are you online?');
+                alert('Razorpay SDK failed to load. Are you online?');
                 return;
             }
 
@@ -89,7 +88,7 @@ const FeeManagement = () => {
             });
 
             if (!orderResponse.data.success) {
-                toast.error(orderResponse.data.message || 'Failed to initialize payment');
+                alert(orderResponse.data.message || 'Failed to initialize payment');
                 return;
             }
 
@@ -104,20 +103,8 @@ const FeeManagement = () => {
                 description: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'Fee Payment',
                 order_id: order.id,
                 handler: async (response) => {
-                    console.log('Razorpay Response Received:', response);
-
-                    // Extra safety: Check if we have the critical bits
-                    if (!response.razorpay_payment_id || !response.razorpay_signature) {
-                        console.error('Incomplete Razorpay response:', response);
-                        toast.error('Payment was not completed correctly by the gateway.');
-                        setPaymentLoading(false);
-                        return;
-                    }
-
                     try {
                         setPaymentLoading(true);
-                        const toastId = toast.loading('Verifying payment status...');
-
                         // 3. Verify Payment
                         const verifyRes = await api.post('/payments/verify', {
                             ...response,
@@ -129,19 +116,17 @@ const FeeManagement = () => {
                             remarks: feeItem ? `Online Payment: ${feeItem.feeHead?.name}` : 'Online Lumpsum Payment'
                         });
 
-                        toast.dismiss(toastId);
-
                         if (verifyRes.data.success) {
-                            toast.success('Payment successful! Your transaction has been recorded.');
+                            alert('Payment successful!');
                             fetchFeeDetails(); // Refresh data
                             setIsPaymentModalOpen(false);
                             setPayAmount('');
                         } else {
-                            toast.error(verifyRes.data.message || 'Payment verification failed. Please contact support.');
+                            alert(verifyRes.data.message || 'Payment verification failed.');
                         }
                     } catch (err) {
                         console.error('Verification error:', err);
-                        toast.error(err.response?.data?.message || 'Something went wrong during verification. Please contact support.');
+                        alert(err.response?.data?.message || 'Something went wrong during verification.');
                     } finally {
                         setPaymentLoading(false);
                     }
@@ -153,7 +138,7 @@ const FeeManagement = () => {
                     }
                 },
                 prefill: {
-                    name: orderStudentDetails?.name,
+                    name: orderStudentDetails?.name || user?.name || '',
                     email: orderStudentDetails?.email || '',
                     contact: orderStudentDetails?.contact || ''
                 },
@@ -163,19 +148,11 @@ const FeeManagement = () => {
             };
 
             const paymentObject = new window.Razorpay(options);
-
-            // Add extra protection for modal closing
-            paymentObject.on('payment.failed', function (response) {
-                console.error('Razorpay Payment Failed:', response.error);
-                setPaymentLoading(false);
-            });
-
             paymentObject.open();
 
         } catch (err) {
             console.error('Payment error:', err);
-            const errorMsg = err.response?.data?.message || 'Failed to initiate payment. Please try again.';
-            alert(errorMsg);
+            alert('Failed to initiate payment. Please try again.');
         } finally {
             setPaymentLoading(false);
         }
