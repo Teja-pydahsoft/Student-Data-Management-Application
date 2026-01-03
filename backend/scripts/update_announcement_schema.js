@@ -6,22 +6,35 @@ const updateSchema = async () => {
     try {
         console.log('Updating announcements table schema...');
 
-        // Alter columns to support JSON/Text arrays
-        // Drop index first to avoid BLOB/TEXT key error
+        // 1. Drop index if exists (it uses old columns)
         try {
             await masterPool.query('DROP INDEX idx_targets ON announcements');
+            console.log('Dropped old index idx_targets');
         } catch (e) {
-            console.log('Index might not exist, continuing...');
+            // Ignore if index doesn't exist
         }
 
-        // Alter columns to support JSON/Text arrays
+        // 2. Add target_batch column if it doesn't exist
+        try {
+            const [columns] = await masterPool.query("SHOW COLUMNS FROM announcements LIKE 'target_batch'");
+            if (columns.length === 0) {
+                await masterPool.query('ALTER TABLE announcements ADD COLUMN target_batch TEXT DEFAULT NULL AFTER target_college');
+                console.log('Added target_batch column');
+            }
+        } catch (e) {
+            console.error('Error checking/adding target_batch:', e);
+        }
+
+        // 3. Modify all target columns to TEXT to support JSON arrays
+        console.log('Modifying column types to TEXT...');
         await masterPool.query(`
             ALTER TABLE announcements 
             MODIFY COLUMN target_college TEXT DEFAULT NULL,
+            MODIFY COLUMN target_batch TEXT DEFAULT NULL,
             MODIFY COLUMN target_course TEXT DEFAULT NULL,
             MODIFY COLUMN target_branch TEXT DEFAULT NULL,
-            MODIFY COLUMN target_year VARCHAR(255) DEFAULT NULL,
-            MODIFY COLUMN target_semester VARCHAR(255) DEFAULT NULL;
+            MODIFY COLUMN target_year TEXT DEFAULT NULL,
+            MODIFY COLUMN target_semester TEXT DEFAULT NULL
         `);
 
         console.log('✅ Announcements table schema updated successfully.');
