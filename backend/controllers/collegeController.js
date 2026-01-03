@@ -1,6 +1,9 @@
 const collegeService = require('../services/collegeService');
 const { masterPool } = require('../config/database');
 const { filterCollegesByScope } = require('../utils/scoping');
+const upload = require('../config/uploadConfig');
+const path = require('path');
+const fs = require('fs');
 
 /**
  * GET /api/colleges/public
@@ -12,7 +15,7 @@ exports.getPublicColleges = async (req, res) => {
 
     // Add cache headers for better performance (cache for 5 minutes)
     res.set('Cache-Control', 'public, max-age=300');
-    
+
     res.json({
       success: true,
       data: colleges
@@ -33,7 +36,7 @@ exports.getPublicColleges = async (req, res) => {
 exports.getColleges = async (req, res) => {
   try {
     const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
-    
+
     let colleges = await collegeService.fetchColleges({ includeInactive });
 
     // Apply user scope filtering
@@ -92,6 +95,194 @@ exports.getCollege = async (req, res) => {
 };
 
 /**
+ * POST /api/colleges/:id/upload-header
+ * Upload header image for college (stores in database)
+ */
+exports.uploadHeaderImage = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.id, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    // Check if college exists
+    const college = await collegeService.fetchCollegeById(collegeId);
+    if (!college) {
+      return res.status(404).json({
+        success: false,
+        message: 'College not found'
+      });
+    }
+
+    // Read file buffer
+    const imageBuffer = req.file.buffer;
+    const imageType = req.file.mimetype;
+
+    // Update college with new header image (stored as BLOB)
+    await masterPool.execute(
+      'UPDATE colleges SET header_image = ?, header_image_type = ? WHERE id = ?',
+      [imageBuffer, imageType, collegeId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Header image uploaded successfully',
+      imageUrl: `/api/colleges/${collegeId}/header-image`
+    });
+  } catch (error) {
+    console.error('uploadHeaderImage error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload header image'
+    });
+  }
+};
+
+/**
+ * POST /api/colleges/:id/upload-footer
+ * Upload footer image for college (stores in database)
+ */
+exports.uploadFooterImage = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.id, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    // Check if college exists
+    const college = await collegeService.fetchCollegeById(collegeId);
+    if (!college) {
+      return res.status(404).json({
+        success: false,
+        message: 'College not found'
+      });
+    }
+
+    // Read file buffer
+    const imageBuffer = req.file.buffer;
+    const imageType = req.file.mimetype;
+
+    // Update college with new footer image (stored as BLOB)
+    await masterPool.execute(
+      'UPDATE colleges SET footer_image = ?, footer_image_type = ? WHERE id = ?',
+      [imageBuffer, imageType, collegeId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Footer image uploaded successfully',
+      imageUrl: `/api/colleges/${collegeId}/footer-image`
+    });
+  } catch (error) {
+    console.error('uploadFooterImage error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload footer image'
+    });
+  }
+};
+
+/**
+ * GET /api/colleges/:id/header-image
+ * Get header image for college
+ */
+exports.getHeaderImage = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.id, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    const [rows] = await masterPool.execute(
+      'SELECT header_image, header_image_type FROM colleges WHERE id = ?',
+      [collegeId]
+    );
+
+    if (rows.length === 0 || !rows[0].header_image) {
+      return res.status(404).json({
+        success: false,
+        message: 'Header image not found'
+      });
+    }
+
+    res.set('Content-Type', rows[0].header_image_type || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    res.send(rows[0].header_image);
+  } catch (error) {
+    console.error('getHeaderImage error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve header image'
+    });
+  }
+};
+
+/**
+ * GET /api/colleges/:id/footer-image
+ * Get footer image for college
+ */
+exports.getFooterImage = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.id, 10);
+
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid college ID'
+      });
+    }
+
+    const [rows] = await masterPool.execute(
+      'SELECT footer_image, footer_image_type FROM colleges WHERE id = ?',
+      [collegeId]
+    );
+
+    if (rows.length === 0 || !rows[0].footer_image) {
+      return res.status(404).json({
+        success: false,
+        message: 'Footer image not found'
+      });
+    }
+
+    res.set('Content-Type', rows[0].footer_image_type || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    res.send(rows[0].footer_image);
+  } catch (error) {
+    console.error('getFooterImage error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve footer image'
+    });
+  }
+};
+
+/**
  * POST /api/colleges
  * Create new college
  */
@@ -127,7 +318,7 @@ exports.createCollege = async (req, res) => {
     });
   } catch (error) {
     console.error('createCollege error:', error);
-    
+
     if (error.message.includes('already exists')) {
       return res.status(409).json({
         success: false,
@@ -290,14 +481,14 @@ exports.getCollegeCourses = async (req, res) => {
     }
 
     const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === true;
-    
+
     let courses = await collegeService.getCollegeCourses(collegeId, { includeInactive });
 
     // Apply user scope filtering for courses
     if (req.userScope && !req.userScope.unrestricted && !req.userScope.allCourses) {
       const { filterCoursesByScope, filterBranchesByScope } = require('../utils/scoping');
       courses = filterCoursesByScope(courses, req.userScope);
-      
+
       // Also filter branches within each course
       if (!req.userScope.allBranches) {
         courses = courses.map(course => ({
@@ -384,4 +575,3 @@ exports.getAffectedStudentsByCollege = async (req, res) => {
     });
   }
 };
-

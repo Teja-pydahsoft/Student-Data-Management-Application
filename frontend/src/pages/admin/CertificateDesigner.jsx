@@ -1,801 +1,1349 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { serviceService } from '../../services/serviceService';
-import { toast } from 'react-hot-toast';
-import { Save, ArrowLeft, Type, Image as ImageIcon, Minus, Square, Circle, Trash2, MousePointer, LayoutTemplate } from 'lucide-react';
-import { getTCTemplate } from './templates/certificates/tcTemplate';
-import { getStudyConductTemplate } from './templates/certificates/studyConductTemplate';
-import { getBonafideTemplate } from './templates/certificates/bonafideTemplate';
-import { getCustodianTemplate } from './templates/certificates/custodianTemplate';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "react-hot-toast";
+import { Mention, MentionsInput } from "react-mentions";
+import {
+  Save,
+  Eye,
+  ArrowLeft,
+  Image as ImageIcon,
+  X,
+  Plus,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+} from "lucide-react";
+import { certificateTemplateService } from "../../services/certificateTemplateService";
+import { serviceService } from "../../services/serviceService";
+import api from "../../config/api";
 
-const CertificateDesigner = () => {
-    const { serviceId } = useParams();
-    const navigate = useNavigate();
-    const [service, setService] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [elements, setElements] = useState([]);
-    const [selectedElementId, setSelectedElementId] = useState(null);
-    const [canvasSize, setCanvasSize] = useState({ width: 595, height: 842 }); // Default A4 Portrait
+const CertificateDesigner = ({
+  initialData,
+  onUpdate,
+  isWizard = false,
+  serviceName = "",
+  collegeName = "",
+  mode = "full", // 'full', 'content', 'styling'
+}) => {
+  const { serviceId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-    // Drag & Drop State
-    const [draggingId, setDraggingId] = useState(null);
-    const dragOffset = useRef({ x: 0, y: 0 });
+  // State
+  const [loading, setLoading] = useState(!isWizard);
+  const [colleges, setColleges] = useState([]);
+  const [service, setService] = useState(null);
+  const [variables, setVariables] = useState([]);
 
-    // Resize State
-    const [resizingId, setResizingId] = useState(null);
-    const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0, radius: 0 });
+  // Form state
+  const [formData, setFormData] = useState({
+    service_id: serviceId,
+    college_id: null,
+    top_content: "",
+    middle_content: "",
+    bottom_content: "",
+    top_alignment: "center",
+    middle_alignment: "center",
+    bottom_alignment: "center",
+    padding_left: 40,
+    padding_right: 40,
+    padding_top: 40,
+    padding_bottom: 40,
+    top_section_padding: 10,
+    middle_section_padding: 20,
+    bottom_section_padding: 10,
+    header_height: 80,
+    footer_height: 60,
+    font_size: 12,
+    line_spacing: 2,
+    top_spacing: 15,
+    middle_spacing: 15,
+    bottom_spacing: 15,
+    blank_variables: [],
+    page_size: "A4",
+    page_orientation: "portrait",
+    ...initialData,
+  });
 
-    // Image Upload State
-    const fileInputRef = useRef(null);
-    const replacingImageId = useRef(null);
+  const [headerPreview, setHeaderPreview] = useState(null);
+  const [footerPreview, setFooterPreview] = useState(null);
 
-    // Inline Edit State
-    const [editingId, setEditingId] = useState(null);
+  // Preview Modal State
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState(null);
 
-    useEffect(() => {
-        fetchService();
+  // Blank variable modal
+  const [showBlankModal, setShowBlankModal] = useState(false);
+  const [newBlankVar, setNewBlankVar] = useState({
+    name: "",
+    label: "",
+    type: "text",
+  });
 
-        const handleMouseUp = () => {
-            setDraggingId(null);
-            setResizingId(null);
-        };
+  const [loadedCollegeId, setLoadedCollegeId] = useState(null);
 
-        const handleMouseMove = (e) => {
-            const canvas = document.getElementById('canvas-area');
-            if (!canvas) return;
-            const rect = canvas.getBoundingClientRect();
+  useEffect(() => {
+    if (!isWizard) {
+      fetchData();
+    } else {
+      // In wizard mode, load generic data
+      loadWizardData();
+    }
+  }, [serviceId, isWizard]);
 
-            // --- Resizing Logic ---
-            if (resizingId) {
-                const deltaX = e.clientX - resizeStart.current.x;
-                const deltaY = e.clientY - resizeStart.current.y;
-
-                setElements(prev => prev.map(el => {
-                    if (el.id === resizingId) {
-                        if (el.type === 'circle') {
-                            const newRadius = Math.max(10, resizeStart.current.radius + deltaX / 2);
-                            return { ...el, radius: newRadius };
-                        } else {
-                            const newWidth = Math.max(10, resizeStart.current.width + deltaX);
-                            const newHeight = Math.max(10, resizeStart.current.height + deltaY);
-                            return { ...el, width: newWidth, height: newHeight };
-                        }
-                    }
-                    return el;
-                }));
-                return;
-            }
-
-            // --- Dragging Logic ---
-            if (draggingId) {
-                const x = e.clientX - rect.left - dragOffset.current.x;
-                const y = e.clientY - rect.top - dragOffset.current.y;
-
-                setElements(prev => prev.map(el => {
-                    if (el.id === draggingId) {
-                        return { ...el, x, y };
-                    }
-                    return el;
-                }));
-            }
-        };
-
-        window.addEventListener('mouseup', handleMouseUp);
-        window.addEventListener('mousemove', handleMouseMove);
-
-        return () => {
-            window.removeEventListener('mouseup', handleMouseUp);
-            window.removeEventListener('mousemove', handleMouseMove);
-        };
-    }, [draggingId, resizingId, serviceId]);
-
-    // Keyboard Navigation
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (!selectedElementId || editingId) return; // Don't move if typing in text
-
-            // Grid size for movement (1px usually, maybe shift for 10px)
-            const step = e.shiftKey ? 10 : 1;
-
-            switch (e.key) {
-                case 'ArrowUp':
-                    e.preventDefault();
-                    setElements(prev => prev.map(el => el.id === selectedElementId ? { ...el, y: el.y - step } : el));
-                    break;
-                case 'ArrowDown':
-                    e.preventDefault();
-                    setElements(prev => prev.map(el => el.id === selectedElementId ? { ...el, y: el.y + step } : el));
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    setElements(prev => prev.map(el => el.id === selectedElementId ? { ...el, x: el.x - step } : el));
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    setElements(prev => prev.map(el => el.id === selectedElementId ? { ...el, x: el.x + step } : el));
-                    break;
-                case 'Delete':
-                case 'Backspace':
-                    if (selectedElementId && !editingId) {
-                        // Optional: Allow delete key
-                        // removeElement(selectedElementId); // Need to move removeElement out or refs
-                    }
-                    break;
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedElementId, editingId]); // Re-bind when selection changes if using state directly (better to use functional state updates which we did)
-
-    const fetchService = async () => {
-        try {
-            const response = await serviceService.getAllServices();
-            const foundService = response.data.find(s => s.id === parseInt(serviceId));
-            if (foundService) {
-                setService(foundService);
-                if (foundService.template_config) {
-                    try {
-                        const config = typeof foundService.template_config === 'string'
-                            ? JSON.parse(foundService.template_config)
-                            : foundService.template_config;
-
-                        if (config.elements) {
-                            setElements(config.elements.map((el, idx) => ({ ...el, id: idx + Date.now() })));
-                        }
-
-                        // Load saved canvas size or fallback to legacy logic
-                        if (config.canvasWidth && config.canvasHeight) {
-                            setCanvasSize({ width: config.canvasWidth, height: config.canvasHeight });
-                        } else {
-                            // Legacy fallback
-                            if (config.size === 'A4' && config.layout === 'landscape') {
-                                setCanvasSize({ width: 842, height: 595 });
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Config parse error", e);
-                    }
-                }
-            } else {
-                toast.error('Service not found');
-                navigate('/services/config');
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error('Failed to load service');
-        } finally {
-            setLoading(false);
+  // Separate effect to handle initialData updates in wizard mode
+  useEffect(() => {
+    if (isWizard && initialData) {
+      setFormData((prev) => {
+        // Only update if there's actual data in initialData
+        const hasData =
+          initialData.middle_content ||
+          initialData.top_content ||
+          initialData.bottom_content;
+        if (hasData) {
+          return { ...prev, ...initialData };
         }
-    };
+        return prev;
+      });
 
-    // --- Element Creators ---
-    const addText = (props = {}) => {
-        const newEl = {
-            id: Date.now(),
-            type: 'text',
-            content: 'Double Click to Edit',
-            x: 297, y: 421, // Center of A4
-            fontSize: 16,
-            font: 'Helvetica',
-            color: '#000000',
-            width: 200,
-            height: 30, // Default height for easier editing
-            align: 'left',
-            ...props
-        };
-        setElements(prev => [...prev, newEl]);
-        setSelectedElementId(newEl.id);
-        return newEl;
-    };
+      // Load college images if college_id is provided and we haven't loaded it yet
+      if (
+        initialData.college_id &&
+        initialData.college_id !== loadedCollegeId
+      ) {
+        handleCollegeSelect(initialData.college_id);
+        setLoadedCollegeId(initialData.college_id);
+      }
+    }
+  }, [isWizard, initialData?.middle_content, initialData?.college_id]); // Only re-run when actual content changes
 
-    const addRect = (props = {}) => {
-        const newEl = {
-            id: Date.now(),
-            type: 'rect',
-            x: 250, y: 370,
-            width: 100, height: 100,
-            stroke: true, fill: null,
-            color: '#000000', lineWidth: 1,
-            ...props
-        };
-        setElements(prev => [...prev, newEl]);
-        setSelectedElementId(newEl.id);
-    };
+  const loadWizardData = async () => {
+    try {
+      // Fetch colleges for dropdown
+      const collegesRes = await api.get("/colleges");
+      setColleges(collegesRes.data.data || []);
 
-    const addCircle = (props = {}) => {
-        const newEl = {
-            id: Date.now(),
-            type: 'circle',
-            x: 250, y: 370,
-            radius: 50,
-            stroke: true, fill: null,
-            color: '#000000', lineWidth: 1,
-            ...props
-        };
-        setElements(prev => [...prev, newEl]);
-        setSelectedElementId(newEl.id);
-    };
+      // Fetch available variables
+      const varsRes = await certificateTemplateService.getVariables();
+      setVariables(varsRes.data.systemVariables || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-    const addLine = (props = {}) => {
-        const newEl = {
-            id: Date.now(),
-            type: 'line',
-            x: 200, y: 400,
-            width: 200, height: 2,
-            color: '#000000', lineWidth: 1,
-            x1: 50, y1: 50, x2: 250, y2: 50,
-            ...props
-        };
-        setElements(prev => [...prev, newEl]);
-        setSelectedElementId(newEl.id);
-    };
+  const fetchData = async () => {
+    try {
+      setLoading(true);
 
-    const addImage = (type = 'logo', props = {}) => {
-        const newEl = {
-            id: Date.now(),
-            type: 'image',
-            content: type,
-            x: 250, y: 370,
-            width: 100, height: 100,
-            ...props
-        };
-        setElements(prev => [...prev, newEl]);
-        setSelectedElementId(newEl.id);
-    };
+      // Fetch service details
+      const services = await serviceService.getAllServices();
+      const currentService = services.data.find((s) => s.id == serviceId);
+      setService(currentService);
 
-    const loadTCTemplate = () => {
-        if (!window.confirm("This will replace your current design. Continue?")) return;
+      // Fetch colleges
+      const collegesRes = await api.get("/colleges");
+      setColleges(collegesRes.data.data || []);
 
-        const tcElements = getTCTemplate();
-        // Regenerate IDs to be unique timestamps
-        const finalElements = tcElements.map((el, i) => ({ ...el, id: Date.now() + i }));
-        setElements(finalElements);
-        setCanvasSize({ width: 595, height: 842 }); // Force A4
-    };
+      // Fetch available variables
+      const varsRes = await certificateTemplateService.getVariables();
+      setVariables(varsRes.data.systemVariables || []);
 
-    const loadStudyConductTemplate = () => {
-        if (!window.confirm("This will replace your current design. Continue?")) return;
-
-        const scElements = getStudyConductTemplate();
-        // Regenerate IDs
-        const finalElements = scElements.map((el, i) => ({ ...el, id: Date.now() + i }));
-        setElements(finalElements);
-        setCanvasSize({ width: 595, height: 420 }); // Force A5 Landscape (595x420)
-    };
-
-    const loadBonafideTemplate = () => {
-        if (!window.confirm("This will replace your current design. Continue?")) return;
-        const bElements = getBonafideTemplate();
-        const finalElements = bElements.map((el, i) => ({ ...el, id: Date.now() + i }));
-        setElements(finalElements);
-        setCanvasSize({ width: 595, height: 842 }); // Force A4
-    };
-
-    const loadCustodianTemplate = () => {
-        if (!window.confirm("This will replace your current design. Continue?")) return;
-        const cElements = getCustodianTemplate();
-        const finalElements = cElements.map((el, i) => ({ ...el, id: Date.now() + i }));
-        setElements(finalElements);
-        setCanvasSize({ width: 595, height: 842 }); // Force A4
-    };
-
-    // --- Updates ---
-    const updateElement = (id, updates) => {
-        setElements(elements.map(el => el.id === id ? { ...el, ...updates } : el));
-    };
-
-    const removeElement = (id) => {
-        setElements(elements.filter(el => el.id !== id));
-        if (selectedElementId === id) setSelectedElementId(null);
-    };
-
-    const saveConfig = async () => {
-        if (!service) return;
-        try {
-            const cleanElements = elements.map(({ id, ...rest }) => rest);
-            const config = {
-                canvasWidth: canvasSize.width,
-                canvasHeight: canvasSize.height,
-                elements: cleanElements
-            };
-
-            await serviceService.updateService(service.id, {
-                ...service,
-                template_config: config,
-                template_type: 'dynamic'
-            });
-            toast.success('Certificate design saved successfully');
-        } catch (error) {
-            console.error(error);
-            toast.error('Failed to save design');
-        }
-    };
-
-    // --- Mouse Interactions ---
-    const handleMouseDown = (e, el) => {
-        e.stopPropagation();
-        // If we are already editing this one, don't reset
-        if (editingId === el.id) return;
-
-        // Clear editing state if switching elements
-        if (editingId) setEditingId(null);
-
-        setSelectedElementId(el.id);
-        // If it's text, we can optionally enable editing on click if desired, 
-        // but usually single click = properties, double click = inline text.
-        // Let's stick to properties on click.
-
-        const canvas = document.getElementById('canvas-area');
-        const rect = canvas.getBoundingClientRect();
-        const xOffset = e.clientX - rect.left - el.x;
-        const yOffset = e.clientY - rect.top - el.y;
-        dragOffset.current = { x: xOffset, y: yOffset };
-        setDraggingId(el.id);
-    };
-
-    const handleResizeMouseDown = (e, el) => {
-        e.stopPropagation();
-        resizeStart.current = { x: e.clientX, y: e.clientY, width: el.width, height: el.height, radius: el.radius };
-        setResizingId(el.id);
-    };
-
-    const handleDoubleClick = (e, el) => {
-        e.stopPropagation();
-        if (el.type === 'text') {
-            setEditingId(el.id);
-        } else if (el.type === 'image') {
-            replacingImageId.current = el.id;
-            fileInputRef.current?.click();
-        }
-        setSelectedElementId(el.id);
-    };
-
-
-
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (file && replacingImageId.current) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                updateElement(replacingImageId.current, { content: ev.target.result });
-                replacingImageId.current = null;
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const activeElement = elements.find(el => el.id === (editingId || selectedElementId));
-
-    const variables = [
-        'student_name', 'admission_number', 'pin_no', 'course', 'branch',
-        'current_year', 'current_semester', 'dob', 'email', 'phone_number',
-        'college_name', 'college_address', 'college_email', 'college_website', 'date', 'parent_name', 'religion',
-        'gender', 'caste', 'admission_date', 'serial_no', 'mole_1', 'mole_2',
-        'reason', 'conduct', 'date_of_leaving', 'promoted', 'current_year_text', 'academic_year',
-        'custody_list', 'purpose'
-    ];
-
-    // Mock Data for Preview
-    const previewData = {
-        // College details removed to show variables directly
-        current_year: '2024-25',
-        date: new Date().toLocaleDateString('en-GB'),
-        student_name: '___________________________________',
-        parent_name: '____________________',
-        pin_no: '__________',
-        academic_year: '__________',
-        course: '__________',
-        branch: '____________________',
-        current_year_text: '____',
-        current_semester: '__',
-        custody_list: '1. S.S.C Certificate\n2. Diploma Certificate',
-        purpose: 'Passport Verification'
-    };
-
-    const replaceVariables = (text) => {
-        if (!text) return '';
-        return text.replace(/{{(.*?)}}/g, (match, p1) => {
-            const key = p1.trim();
-            return previewData[key] !== undefined ? previewData[key] : match;
+      // Try to fetch existing template
+      const templatesRes = await certificateTemplateService.getTemplates({
+        service_id: serviceId,
+      });
+      if (templatesRes.data && templatesRes.data.length > 0) {
+        const existingTemplate = templatesRes.data[0];
+        setFormData({
+          service_id: serviceId,
+          college_id: existingTemplate.college_id,
+          top_content: existingTemplate.top_content || "",
+          middle_content: existingTemplate.middle_content || "",
+          bottom_content: existingTemplate.bottom_content || "",
+          padding_left: existingTemplate.padding_left || 40,
+          padding_right: existingTemplate.padding_right || 40,
+          padding_top: existingTemplate.padding_top || 40,
+          padding_bottom: existingTemplate.padding_bottom || 40,
+          top_spacing: existingTemplate.top_spacing || 15,
+          middle_spacing: existingTemplate.middle_spacing || 15,
+          bottom_spacing: existingTemplate.bottom_spacing || 15,
+          blank_variables: existingTemplate.blank_variables || [],
+          page_size: existingTemplate.page_size || "A4",
+          page_orientation: existingTemplate.page_orientation || "portrait",
         });
-    };
 
-    const paperSizes = [
-        { name: 'A3', width: 842, height: 1190 },
-        { name: 'A4', width: 595, height: 842 },
-        { name: 'A5', width: 420, height: 595 },
-        { name: 'Letter', width: 612, height: 792 },
-        { name: 'Legal', width: 612, height: 1008 }
-    ];
+        if (existingTemplate.header_image_url) {
+          const url = existingTemplate.header_image_url;
+          setHeaderPreview(
+            url.startsWith("http")
+              ? url
+              : `${baseURL}${url.startsWith("/") ? "" : "/"}${url}`,
+          );
+        }
+        if (existingTemplate.footer_image_url) {
+          const url = existingTemplate.footer_image_url;
+          setFooterPreview(
+            url.startsWith("http")
+              ? url
+              : `${baseURL}${url.startsWith("/") ? "" : "/"}${url}`,
+          );
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    if (loading) return <div className="p-10 text-center">Loading designer...</div>;
+  // Update parent when formData changes (in wizard mode)
+  useEffect(() => {
+    if (isWizard && onUpdate) {
+      onUpdate(formData);
+    }
+  }, [formData, isWizard]);
 
+  const handleCollegeSelect = async (collegeId) => {
+    setFormData((prev) => ({ ...prev, college_id: collegeId || null }));
+    setLoadedCollegeId(collegeId); // Track the loaded college
+
+    if (collegeId) {
+      try {
+        // Fetch college details to get header/footer images
+        const response = await api.get(`/colleges/${collegeId}`);
+        const college = response.data.data;
+
+        // The URLs from backend are relative paths, prepend baseURL
+        const baseURL = (
+          api.defaults.baseURL || "http://localhost:5000/api"
+        ).replace(/\/api$/, "");
+
+        // Set header preview if exists
+        if (college.header_image_url) {
+          const url = college.header_image_url;
+          setHeaderPreview(
+            url.startsWith("http")
+              ? url
+              : `${baseURL}${url.startsWith("/") ? "" : "/"}${url}`,
+          );
+        } else {
+          setHeaderPreview(null);
+        }
+
+        // Set footer preview if exists
+        if (college.footer_image_url) {
+          const url = college.footer_image_url;
+          setFooterPreview(
+            url.startsWith("http")
+              ? url
+              : `${baseURL}${url.startsWith("/") ? "" : "/"}${url}`,
+          );
+        } else {
+          setFooterPreview(null);
+        }
+      } catch (error) {
+        console.error("Error fetching college details:", error);
+        toast.error("Failed to load college images");
+      }
+    } else {
+      setHeaderPreview(null);
+      setFooterPreview(null);
+    }
+  };
+
+  // Format variables for react-mentions
+  const mentionData = [
+    ...variables.map((v) => ({ id: v.name, display: `@${v.name}` })),
+    ...formData.blank_variables.map((v) => ({
+      id: `blank_${v.name}`,
+      display: `@blank_${v.name}`,
+    })),
+  ];
+
+  const handleAddBlankVariable = () => {
+    if (!newBlankVar.name || !newBlankVar.label) {
+      toast.error("Name and label are required");
+      return;
+    }
+
+    setFormData({
+      ...formData,
+      blank_variables: [...formData.blank_variables, { ...newBlankVar }],
+    });
+
+    setNewBlankVar({ name: "", label: "", type: "text" });
+    setShowBlankModal(false);
+    toast.success("Blank variable added");
+  };
+
+  const handleRemoveBlankVariable = (index) => {
+    const newVars = formData.blank_variables.filter((_, i) => i !== index);
+    setFormData({ ...formData, blank_variables: newVars });
+  };
+
+  const handlePreview = async () => {
+    if (!formData.middle_content) {
+      toast.error("Middle section content is required to preview");
+      return;
+    }
+
+    setShowPreviewModal(true);
+    setPreviewLoading(true);
+
+    try {
+      // Generate a temporary preview
+      const dataToPreview = {
+        template_type: "dynamic",
+        service_name: serviceName || service?.name || "Preview Service",
+        template_config: {
+          ...formData,
+          // If URLs are relative, make absolute for preview if needed,
+          // but the backend usually handles resolving.
+        },
+      };
+
+      // If we have local state for images (e.g. from college select), we might need to pass URLs.
+      // The template_config usually expects fields that match the DB schema.
+
+      const blob = await serviceService.previewTemplate(dataToPreview);
+      const url = URL.createObjectURL(blob);
+      setPreviewHtml(url);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate preview");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData.middle_content) {
+      toast.error("Middle section content is required");
+      return;
+    }
+
+    // In wizard mode, "Save" just triggers the preview popup as requested
+    if (isWizard) {
+      handlePreview();
+      return;
+    }
+
+    try {
+      const toastId = toast.loading("Saving template...");
+
+      // Create or update template (no image uploads here)
+      const templatesRes = await certificateTemplateService.getTemplates({
+        service_id: serviceId,
+      });
+      const existingTemplate =
+        templatesRes.data && templatesRes.data.length > 0
+          ? templatesRes.data[0]
+          : null;
+
+      if (existingTemplate) {
+        await certificateTemplateService.updateTemplate(
+          existingTemplate.id,
+          formData,
+        );
+      } else {
+        await certificateTemplateService.createTemplate(formData);
+      }
+
+      toast.dismiss(toastId);
+      toast.success("Template saved successfully");
+
+      handlePreview();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to save template");
+    }
+  };
+
+  // Base mention style - alignment will be applied dynamically
+  const getMentionStyle = (alignment = "center") => ({
+    control: {
+      backgroundColor: "#fff",
+      fontSize: 14,
+      fontFamily: "inherit",
+      minHeight: 100,
+      border: "1px solid #e5e7eb",
+      borderRadius: "0.5rem",
+      padding: "0.75rem",
+      textAlign: alignment,
+    },
+    highlighter: {
+      overflow: "hidden",
+      padding: "0.75rem",
+      textAlign: alignment,
+    },
+    input: {
+      margin: 0,
+      padding: 0,
+      border: 0,
+      outline: 0,
+      textAlign: alignment,
+    },
+    suggestions: {
+      list: {
+        backgroundColor: "white",
+        border: "1px solid #e5e7eb",
+        borderRadius: "0.5rem",
+        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+        maxHeight: 200,
+        overflow: "auto",
+        zIndex: 1000,
+      },
+      item: {
+        padding: "8px 12px",
+        borderBottom: "1px solid #f3f4f6",
+        "&focused": {
+          backgroundColor: "#eff6ff",
+        },
+      },
+    },
+  });
+
+  if (loading) {
     return (
-        <div className="h-screen flex flex-col bg-gray-50 overflow-hidden text-sm">
-            {/* Header */}
-            <div className="h-14 bg-white border-b flex items-center justify-between px-4 shadow-sm z-20 shrink-0">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => navigate('/services/config')} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div>
-                        <h1 className="font-bold text-gray-800">{service?.name}</h1>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">Certificate Designer</p>
-                    </div>
-                </div>
-
-                {/* Toolbar */}
-                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-                    <ToolButton icon={<Type size={16} />} label="Text" onClick={() => addText()} />
-                    <ToolButton icon={<Square size={16} />} label="Rect" onClick={() => addRect()} />
-                    <ToolButton icon={<Circle size={16} />} label="Circle" onClick={() => addCircle()} />
-                    <ToolButton icon={<Minus size={16} />} label="Line" onClick={() => addLine()} />
-                    <ToolButton icon={<ImageIcon size={16} />} label="Logo" onClick={() => addImage('logo')} />
-                    <div className="w-px h-8 bg-gray-300 mx-1"></div>
-                    <ToolButton icon={<LayoutTemplate size={16} />} label="TC Template" onClick={loadTCTemplate} />
-                    <ToolButton icon={<LayoutTemplate size={16} />} label="S&C Template" onClick={loadStudyConductTemplate} />
-                    <ToolButton icon={<LayoutTemplate size={16} />} label="Bonafide" onClick={loadBonafideTemplate} />
-                    <ToolButton icon={<LayoutTemplate size={16} />} label="Custodian" onClick={loadCustodianTemplate} />
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
-                        {Math.round(canvasSize.width)} x {Math.round(canvasSize.height)} px
-                    </span>
-                    <button onClick={saveConfig} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium shadow-sm transition-colors">
-                        <Save size={16} /> Save
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Workspace */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Canvas Area */}
-                <div className="flex-1 overflow-auto bg-gray-200/50 p-8 flex justify-center items-start relative scroll-smooth">
-                    <div
-                        id="canvas-area"
-                        className="bg-white shadow-xl relative transition-shadow duration-300 ease-in-out shrink-0"
-                        style={{
-                            width: canvasSize.width,
-                            height: canvasSize.height,
-                        }}
-                        onClick={() => {
-                            setSelectedElementId(null);
-                            setEditingId(null);
-                        }}
-                    >
-                        {/* Grid Lines (Visual Aid) */}
-                        <div className="absolute inset-0 pointer-events-none opacity-5" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-
-                        {elements.map(el => (
-                            <div
-                                key={el.id}
-                                className={`absolute group select-none ${selectedElementId === el.id ? 'ring-2 ring-indigo-500 z-10' : 'hover:ring-1 hover:ring-indigo-300'}`}
-                                style={{
-                                    left: el.x,
-                                    top: el.y,
-                                    width: el.type === 'circle' ? el.radius * 2 : el.width,
-                                    height: el.type === 'circle' ? el.radius * 2 : (el.type === 'line' ? el.lineWidth + 10 : el.height),
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: el.type === 'text' ? (el.align === 'center' ? 'center' : (el.align === 'right' ? 'flex-end' : 'flex-start')) : 'center',
-                                    cursor: resizingId ? 'se-resize' : (draggingId ? 'grabbing' : 'move')
-                                }}
-                                onMouseDown={(e) => handleMouseDown(e, el)}
-                                onDoubleClick={(e) => handleDoubleClick(e, el)}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {/* Content Render */}
-
-                                {el.type === 'text' && (
-                                    editingId === el.id ? (
-                                        <textarea
-                                            autoFocus
-                                            className="w-full h-full bg-white bg-opacity-90 outline-none resize-none overflow-hidden text-black px-1"
-                                            style={{
-                                                fontSize: el.fontSize,
-                                                fontFamily: (el.font === 'Bold' || el.font === 'Helvetica-Bold') ? 'sans-serif' : 'sans-serif',
-                                                fontWeight: (el.font === 'Bold' || el.font === 'Helvetica-Bold') ? 'bold' : 'normal',
-                                                textAlign: el.align
-                                            }}
-                                            value={el.content}
-                                            onChange={(e) => updateElement(el.id, { content: e.target.value })}
-                                            onBlur={() => setEditingId(null)}
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                        />
-                                    ) : (
-                                        <span style={{
-                                            fontSize: el.fontSize,
-                                            fontFamily: (el.font === 'Bold' || el.font === 'Helvetica-Bold') ? 'sans-serif' : 'sans-serif',
-                                            fontWeight: (el.font === 'Bold' || el.font === 'Helvetica-Bold') ? 'bold' : 'normal',
-                                            color: el.color,
-                                            width: '100%',
-                                            textAlign: el.align,
-                                            whiteSpace: 'pre-wrap',
-                                            pointerEvents: 'none'
-                                        }}>
-                                            {replaceVariables(el.content)}
-                                        </span>
-                                    )
-                                )}
-                                {/* Edit Hint Overlay */}
-                                {el.type === 'text' && !editingId && (
-                                    <div
-                                        className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-500 text-white rounded-bl shadow-sm cursor-pointer z-50"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingId(el.id);
-                                            setSelectedElementId(el.id);
-                                        }}
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                        title="Click to Edit Text"
-                                    >
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                        </svg>
-                                    </div>
-                                )}
-                                {el.type === 'rect' && (
-                                    <div style={{
-                                        width: '100%', height: '100%',
-                                        border: el.stroke ? `${el.lineWidth}px solid ${el.color}` : 'none',
-                                        backgroundColor: el.fill || 'transparent'
-                                    }} />
-                                )}
-                                {el.type === 'circle' && (
-                                    <div style={{
-                                        width: '100%', height: '100%', borderRadius: '50%',
-                                        border: el.stroke ? `${el.lineWidth}px solid ${el.color}` : 'none',
-                                        backgroundColor: el.fill || 'transparent'
-                                    }} />
-                                )}
-                                {el.type === 'line' && (
-                                    <div style={{
-                                        width: '100%', height: el.lineWidth,
-                                        backgroundColor: el.color
-                                    }} />
-                                )}
-                                {el.type === 'image' && (
-                                    <div className="w-full h-full bg-gray-100 flex items-center justify-center overflow-hidden border border-dashed border-gray-300">
-                                        {el.content === 'logo' ? <span className="text-xs text-gray-400 font-bold">LOGO</span> : <img src={el.content} alt="" className="w-full h-full object-contain" draggable={false} />}
-                                    </div>
-                                )}
-
-                                {/* Resize Handles */}
-                                {selectedElementId === el.id && (
-                                    <div
-                                        className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-white border-2 border-indigo-500 rounded-full cursor-se-resize z-30 shadow-md hover:scale-110 transition-transform"
-                                        onMouseDown={(e) => handleResizeMouseDown(e, el)}
-                                    ></div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Properties Panel */}
-                <div className="w-80 bg-white border-l shadow-xl z-20 overflow-y-auto shrink-0 transition-all">
-                    {activeElement ? (
-                        <div className="p-5 space-y-6">
-                            {activeElement.type === 'text' && (
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content</h3>
-                                    <textarea
-                                        className="w-full border rounded-lg p-3 text-xs min-h-[120px] focus:ring-2 ring-indigo-500 outline-none bg-gray-50 focus:bg-white transition"
-                                        value={activeElement.content}
-                                        onChange={(e) => updateElement(activeElement.id, { content: e.target.value })}
-                                        placeholder="Type content here..."
-                                    ></textarea>
-
-                                    <div className="mt-3">
-                                        <div className="text-[10px] font-bold text-gray-400 mb-2">INSERT VARIABLE</div>
-                                        <div className="flex flex-wrap gap-2 text-gray-500 max-h-32 overflow-y-auto custom-scrollbar">
-                                            {variables.map(v => (
-                                                <button
-                                                    key={v}
-                                                    onClick={() => updateElement(activeElement.id, { content: activeElement.content + ` {{${v}}}` })}
-                                                    className="px-2 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 rounded text-[10px] font-medium transition"
-                                                >
-                                                    {v}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <hr className="border-gray-100 mt-6" />
-                                </div>
-                            )}
-
-                            <div>
-                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Position & Size</h3>
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <InputGroup label="X" value={activeElement.x} onChange={v => updateElement(activeElement.id, { x: Number(v) })} type="number" />
-                                        <InputGroup label="Y" value={activeElement.y} onChange={v => updateElement(activeElement.id, { y: Number(v) })} type="number" />
-                                    </div>
-                                    <div className="flex justify-center gap-2 p-2 bg-gray-50 rounded">
-                                        <button onClick={() => updateElement(activeElement.id, { x: activeElement.x - 1 })} className="p-1.5 bg-white border rounded hover:bg-gray-100" title="Left"><ArrowLeft size={14} /></button>
-                                        <div className="flex flex-col gap-1">
-                                            <button onClick={() => updateElement(activeElement.id, { y: activeElement.y - 1 })} className="p-1.5 bg-white border rounded hover:bg-gray-100" title="Up"><ArrowLeft size={14} className="rotate-90" /></button>
-                                            <button onClick={() => updateElement(activeElement.id, { y: activeElement.y + 1 })} className="p-1.5 bg-white border rounded hover:bg-gray-100" title="Down"><ArrowLeft size={14} className="-rotate-90" /></button>
-                                        </div>
-                                        <button onClick={() => updateElement(activeElement.id, { x: activeElement.x + 1 })} className="p-1.5 bg-white border rounded hover:bg-gray-100" title="Right"><ArrowLeft size={14} className="rotate-180" /></button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {activeElement.type === 'circle' ? (
-                                            <InputGroup label="Radius" value={activeElement.radius} onChange={v => updateElement(activeElement.id, { radius: Number(v) })} type="number" />
-                                        ) : (
-                                            <>
-                                                <InputGroup label="Width" value={activeElement.width} onChange={v => updateElement(activeElement.id, { width: Number(v) })} type="number" />
-                                                {activeElement.type !== 'line' && <InputGroup label="Height" value={activeElement.height} onChange={v => updateElement(activeElement.id, { height: Number(v) })} type="number" />}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <hr className="border-gray-100" />
-
-                            <div>
-                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Styling</h3>
-                                <div className="space-y-3">
-                                    <InputGroup label="Color" value={activeElement.color} onChange={v => updateElement(activeElement.id, { color: v })} type="color" />
-
-                                    {(activeElement.type === 'rect' || activeElement.type === 'circle') && (
-                                        <InputGroup label="Fill Color" value={activeElement.fill || '#ffffff'} onChange={v => updateElement(activeElement.id, { fill: v })} type="color" />
-                                    )}
-
-                                    {activeElement.type === 'text' && (
-                                        <>
-                                            <InputGroup label="Font Size" value={activeElement.fontSize} onChange={v => updateElement(activeElement.id, { fontSize: Number(v) })} type="number" />
-                                            <div>
-                                                <label className="text-[10px] text-gray-500 font-medium">Font Weight</label>
-                                                <select
-                                                    className="w-full mt-1 border rounded p-1.5 text-xs bg-gray-50 focus:bg-white focus:ring-2 ring-indigo-100 outline-none transition"
-                                                    value={activeElement.font}
-                                                    onChange={(e) => updateElement(activeElement.id, { font: e.target.value })}
-                                                >
-                                                    <option value="Helvetica">Normal</option>
-                                                    <option value="Helvetica-Bold">Bold</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] text-gray-500 font-medium">Align</label>
-                                                <div className="flex bg-gray-100 rounded p-1 mt-1">
-                                                    {['left', 'center', 'right'].map(a => (
-                                                        <button
-                                                            key={a}
-                                                            onClick={() => updateElement(activeElement.id, { align: a })}
-                                                            className={`flex-1 py-1 text-xs capitalize rounded ${activeElement.align === a ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
-                                                        >
-                                                            {a}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {(activeElement.type !== 'text' && activeElement.type !== 'image') && (
-                                        <InputGroup label="Line Width" value={activeElement.lineWidth} onChange={v => updateElement(activeElement.id, { lineWidth: Number(v) })} type="number" />
-                                    )}
-                                </div>
-                            </div>
-
-
-
-                            <div className="pt-6">
-                                <button
-                                    onClick={() => removeElement(activeElement.id)}
-                                    className="w-full py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
-                                >
-                                    <Trash2 size={14} /> Delete Element
-                                </button>
-                            </div>
-
-                            <hr className="border-gray-100" />
-                            <div className="text-center">
-                                <button
-                                    onClick={() => { setSelectedElementId(null); setEditingId(null); }}
-                                    className="text-xs text-indigo-500 hover:text-indigo-700 underline"
-                                >
-                                    Back to Canvas Settings
-                                </button>
-                            </div>
-
-                        </div>
-                    ) : (
-                        <div className="p-5 space-y-6">
-                            <div>
-                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Canvas Settings</h3>
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <InputGroup
-                                            label="Width (px)"
-                                            value={canvasSize.width}
-                                            onChange={v => setCanvasSize(prev => ({ ...prev, width: Number(v) }))}
-                                            type="number"
-                                        />
-                                        <InputGroup
-                                            label="Height (px)"
-                                            value={canvasSize.height}
-                                            onChange={v => setCanvasSize(prev => ({ ...prev, height: Number(v) }))}
-                                            type="number"
-                                        />
-                                    </div>
-
-                                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-700">
-                                        <p className="font-semibold mb-2">Standard Sizes:</p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {paperSizes.map(size => (
-                                                <React.Fragment key={size.name}>
-                                                    <button
-                                                        onClick={() => setCanvasSize({ width: size.width, height: size.height })}
-                                                        className="bg-white border text-blue-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 text-center"
-                                                    >
-                                                        {size.name} (P)
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setCanvasSize({ width: size.height, height: size.width })}
-                                                        className="bg-white border text-blue-600 px-2 py-1 rounded shadow-sm hover:bg-blue-50 text-center"
-                                                    >
-                                                        {size.name} (L)
-                                                    </button>
-                                                </React.Fragment>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <hr className="border-gray-100" />
-
-                            <div className="flex flex-col items-center justify-center py-10 text-gray-400 text-center opacity-60">
-                                <MousePointer size={32} className="mb-3" />
-                                <p className="text-sm">Select an element to edit properties</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-            {/* Hidden File Input */}
-            <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/*"
-                onChange={handleImageUpload}
-            />
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading designer...</p>
         </div>
+      </div>
     );
-};
+  }
 
-const ToolButton = ({ icon, label, onClick }) => (
-    <button onClick={onClick} className="flex flex-col items-center justify-center p-2 hover:bg-white hover:shadow-sm rounded transition w-14 text-gray-600 hover:text-indigo-600 shrink-0">
-        {icon}
-        <span className="text-[9px] mt-1 font-medium text-center leading-tight">{label}</span>
-    </button>
-);
-
-const InputGroup = ({ label, value, onChange, type = "text" }) => (
-    <div>
-        <label className="text-[10px] text-gray-500 font-medium block truncate-ellipsis">{label}</label>
-        <div className="flex items-center mt-1 relative">
-            {type === 'color' && (
-                <div
-                    className="w-6 h-6 rounded border mr-2 shadow-sm shrink-0"
-                    style={{ backgroundColor: value }}
-                ></div>
-            )}
-            <input
-                type={type}
-                className={`w-full border rounded p-1.5 text-xs bg-gray-50 focus:bg-white focus:ring-2 ring-indigo-100 outline-none transition ${type === 'color' ? 'opacity-0 absolute w-8 h-8 cursor-pointer' : ''}`}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-            />
+  return (
+    <div
+      className={`${isWizard ? "space-y-4" : "space-y-6 p-6 max-w-7xl mx-auto"} animate-fade-in`}
+    >
+      {/* Header - Only show if not embedded/wizard */}
+      {!isWizard && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/services/config")}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Certificate Designer
+              </h1>
+              <p className="text-gray-500">{service?.name}</p>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Actions Bar - Only show when not in wizard mode */}
+      {!isWizard && (
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold uppercase tracking-wider">
+              Type: Dynamic Certificate
+            </div>
+            {formData.college_id ? (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <ImageIcon size={16} />
+                {colleges.find((c) => c.id === formData.college_id)?.name}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 italic">
+                Global Template
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePreview}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm font-medium"
+            >
+              <Eye size={16} /> Preview
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+            >
+              <Save size={16} /> Save Template
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={isWizard ? "" : "grid grid-cols-1 lg:grid-cols-4 gap-8"}>
+        {/* Left Panel - Settings (Styling Mode) */}
+        {(mode === "full" || mode === "styling") && (
+          <div className={isWizard ? "space-y-4" : "lg:col-span-1 space-y-6"}>
+            {/* College Selection */}
+            {mode === "full" && (
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">
+                  College Selection
+                </h3>
+                <select
+                  className="w-full px-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  value={formData.college_id || ""}
+                  onChange={(e) => handleCollegeSelect(e.target.value)}
+                >
+                  <option value="">Global Template (All Colleges)</option>
+                  {colleges.map((college) => (
+                    <option key={college.id} value={college.id}>
+                      {college.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Collateral Previews (Images) */}
+            <div
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isWizard ? "p-3" : "p-4"}`}
+            >
+              <h3
+                className={`font-bold text-gray-900 mb-3 uppercase tracking-wider ${isWizard ? "text-xs" : "text-sm"}`}
+              >
+                Header & Footer Images
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  {headerPreview ? (
+                    <div className="relative group">
+                      <img
+                        src={headerPreview}
+                        alt="Header"
+                        className="w-full h-16 object-contain rounded border"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition rounded flex items-center justify-center text-[10px] text-white font-medium">
+                        Header
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center w-full h-16 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+                      <ImageIcon className="text-gray-300" size={16} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {footerPreview ? (
+                    <div className="relative group">
+                      <img
+                        src={footerPreview}
+                        alt="Footer"
+                        className="w-full h-16 object-contain rounded border"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition rounded flex items-center justify-center text-[10px] text-white font-medium">
+                        Footer
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center w-full h-16 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+                      <ImageIcon className="text-gray-300" size={16} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p
+                className={`text-gray-500 italic text-center ${isWizard ? "text-[9px] mt-1.5" : "text-[10px] mt-2"}`}
+              >
+                Managed in College Configuration
+              </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">
+                Vertical Layout (px)
+              </h3>
+              <div
+                className={`grid grid-cols-2 ${isWizard ? "gap-2" : "gap-3"}`}
+              >
+                <div>
+                  <label
+                    className={`block font-semibold text-gray-500 mb-1 uppercase ${isWizard ? "text-[10px]" : "text-[11px]"}`}
+                  >
+                    Header
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+                    value={formData.header_height || 80}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        header_height: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-semibold text-gray-500 mb-1 uppercase ${isWizard ? "text-[10px]" : "text-[11px]"}`}
+                  >
+                    Footer
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+                    value={formData.footer_height || 60}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        footer_height: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-semibold text-gray-500 mb-1 uppercase ${isWizard ? "text-[10px]" : "text-[11px]"}`}
+                  >
+                    Top Spacing
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+                    value={formData.top_spacing || 15}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        top_spacing: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-semibold text-gray-500 mb-1 uppercase ${isWizard ? "text-[10px]" : "text-[11px]"}`}
+                  >
+                    Mid Spacing
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+                    value={formData.middle_spacing || 15}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        middle_spacing: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label
+                    className={`block font-semibold text-gray-500 mb-1 uppercase ${isWizard ? "text-[10px]" : "text-[11px]"}`}
+                  >
+                    Bottom Spacing
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+                    value={formData.bottom_spacing || 15}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        bottom_spacing: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Typography Settings */}
+            <div
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isWizard ? "p-3" : "p-6"}`}
+            >
+              <h3
+                className={`font-bold text-gray-900 ${isWizard ? "text-xs mb-3" : "text-lg mb-4"}`}
+              >
+                Typography
+              </h3>
+              <div className={isWizard ? "space-y-3" : "space-y-4"}>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Font Size (px)
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.font_size || 12}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        font_size: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Line Spacing
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.line_spacing || 2}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        line_spacing: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Padding Controls */}
+            <div
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isWizard ? "p-3" : "p-6"}`}
+            >
+              <h3
+                className={`font-bold text-gray-900 ${isWizard ? "text-xs mb-3" : "text-lg mb-4"}`}
+              >
+                Content Padding (px)
+              </h3>
+              <div
+                className={`grid grid-cols-2 ${isWizard ? "gap-2" : "gap-4"}`}
+              >
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Left
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.padding_left}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        padding_left: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Right
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.padding_right}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        padding_right: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Top
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.padding_top}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        padding_top: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Bottom
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.padding_bottom}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        padding_bottom: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section-Specific Padding Controls */}
+            <div
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isWizard ? "p-3" : "p-6"}`}
+            >
+              <h3
+                className={`font-bold text-gray-900 ${isWizard ? "text-xs mb-3" : "text-lg mb-4"}`}
+              >
+                Section Padding (px)
+              </h3>
+              <div className={isWizard ? "space-y-3" : "space-y-4"}>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Top Section Padding
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.top_section_padding || 10}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        top_section_padding: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Middle Section Padding
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.middle_section_padding || 20}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        middle_section_padding: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Bottom Section Padding
+                  </label>
+                  <input
+                    type="number"
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.bottom_section_padding || 10}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        bottom_section_padding: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Page Settings */}
+            <div
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 ${isWizard ? "p-3" : "p-6"}`}
+            >
+              <h3
+                className={`font-bold text-gray-900 ${isWizard ? "text-xs mb-3" : "text-lg mb-4"}`}
+              >
+                Page Settings
+              </h3>
+              <div className={isWizard ? "space-y-3" : "space-y-4"}>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Size
+                  </label>
+                  <select
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.page_size}
+                    onChange={(e) =>
+                      setFormData({ ...formData, page_size: e.target.value })
+                    }
+                  >
+                    <option value="A4">A4</option>
+                    <option value="A5">A5</option>
+                    <option value="Letter">Letter</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className={`block font-medium text-gray-700 mb-1 ${isWizard ? "text-[10px]" : "text-sm"}`}
+                  >
+                    Orientation
+                  </label>
+                  <select
+                    className={`w-full border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${isWizard ? "px-2 py-1 text-xs" : "px-3 py-2"}`}
+                    value={formData.page_orientation}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        page_orientation: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Designer Area (Content Mode) */}
+        {(mode === "full" || mode === "content") && (
+          <div
+            className={
+              mode === "full"
+                ? "lg:col-span-3 space-y-8"
+                : "lg:col-span-4 space-y-8"
+            }
+          >
+            {/* Top Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Top Section (Optional)
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Header or title content. Type @ to insert variables.
+              </p>
+
+              {/* Alignment Controls */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Text Alignment
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, top_alignment: "left" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.top_alignment === "left"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignLeft size={16} />
+                    Left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, top_alignment: "center" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.top_alignment === "center"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignCenter size={16} />
+                    Center
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, top_alignment: "right" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.top_alignment === "right"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignRight size={16} />
+                    Right
+                  </button>
+                </div>
+              </div>
+
+              <MentionsInput
+                value={formData.top_content}
+                onChange={(e) =>
+                  setFormData({ ...formData, top_content: e.target.value })
+                }
+                style={getMentionStyle(formData.top_alignment || "center")}
+                placeholder="Type @ to see available variables..."
+              >
+                <Mention
+                  trigger="@"
+                  data={mentionData}
+                  style={{ backgroundColor: "#dbeafe" }}
+                />
+              </MentionsInput>
+            </div>
+
+            {/* Middle Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Middle Section (Required) *
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Main certificate body. Type @ to insert variables.
+              </p>
+
+              {/* Alignment Controls */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Text Alignment
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, middle_alignment: "left" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.middle_alignment === "left"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignLeft size={16} />
+                    Left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, middle_alignment: "center" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.middle_alignment === "center"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignCenter size={16} />
+                    Center
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, middle_alignment: "right" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.middle_alignment === "right"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignRight size={16} />
+                    Right
+                  </button>
+                </div>
+              </div>
+
+              <MentionsInput
+                value={formData.middle_content}
+                onChange={(e) =>
+                  setFormData({ ...formData, middle_content: e.target.value })
+                }
+                style={{
+                  ...getMentionStyle(formData.middle_alignment || "center"),
+                  control: {
+                    ...getMentionStyle(formData.middle_alignment || "center")
+                      .control,
+                    minHeight: 200,
+                  },
+                }}
+                placeholder="Type @ to see available variables..."
+              >
+                <Mention
+                  trigger="@"
+                  data={mentionData}
+                  style={{ backgroundColor: "#dbeafe" }}
+                />
+              </MentionsInput>
+            </div>
+
+            {/* Bottom Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Bottom Section (Optional)
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Footer or signature content. Type @ to insert variables.
+              </p>
+
+              {/* Alignment Controls */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Text Alignment
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, bottom_alignment: "left" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.bottom_alignment === "left"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignLeft size={16} />
+                    Left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, bottom_alignment: "center" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.bottom_alignment === "center"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignCenter size={16} />
+                    Center
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, bottom_alignment: "right" })
+                    }
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-2 ${
+                      formData.bottom_alignment === "right"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <AlignRight size={16} />
+                    Right
+                  </button>
+                </div>
+              </div>
+
+              <MentionsInput
+                value={formData.bottom_content}
+                onChange={(e) =>
+                  setFormData({ ...formData, bottom_content: e.target.value })
+                }
+                style={getMentionStyle(formData.bottom_alignment || "center")}
+                placeholder="Type @ to see available variables..."
+              >
+                <Mention
+                  trigger="@"
+                  data={mentionData}
+                  style={{ backgroundColor: "#dbeafe" }}
+                />
+              </MentionsInput>
+            </div>
+
+            {/* Blank Variables */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Admin-Fillable Fields (@blank)
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Fields that admin will fill when issuing certificate
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowBlankModal(true)}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-1"
+                >
+                  <Plus size={16} /> Add Field
+                </button>
+              </div>
+
+              {formData.blank_variables.length > 0 ? (
+                <div className="space-y-2">
+                  {formData.blank_variables.map((blankVar, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div>
+                        <span className="font-mono text-sm text-blue-600">
+                          @blank_{blankVar.name}
+                        </span>
+                        <span className="text-gray-500 text-sm ml-2">
+                          - {blankVar.label}
+                        </span>
+                        <span className="text-gray-400 text-xs ml-2">
+                          ({blankVar.type})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveBlankVariable(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm text-center py-4">
+                  No blank fields defined
+                </p>
+              )}
+            </div>
+
+            {/* Variable Reference */}
+            <div className="bg-blue-50 p-6 rounded-xl border border-blue-100">
+              <h3 className="text-sm font-bold text-blue-900 mb-3">
+                Available Variables
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {variables.slice(0, 20).map((v) => (
+                  <code
+                    key={v.name}
+                    className="text-xs bg-white px-2 py-1 rounded border border-blue-200 text-blue-700"
+                  >
+                    @{v.name}
+                  </code>
+                ))}
+                {variables.length > 20 && (
+                  <span className="text-xs text-blue-500 self-center">
+                    +{variables.length - 20} more...
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Blank Variable Modal */}
+      {showBlankModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <h2 className="text-xl font-bold mb-4">Add Admin-Fillable Field</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Field Name
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="e.g., conduct"
+                  value={newBlankVar.name}
+                  onChange={(e) =>
+                    setNewBlankVar({
+                      ...newBlankVar,
+                      name: e.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9_]/g, ""),
+                    })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Will be used as @blank_{newBlankVar.name || "fieldname"}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Label
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="e.g., Conduct"
+                  value={newBlankVar.label}
+                  onChange={(e) =>
+                    setNewBlankVar({ ...newBlankVar, label: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                </label>
+                <select
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={newBlankVar.type}
+                  onChange={(e) =>
+                    setNewBlankVar({ ...newBlankVar, type: e.target.value })
+                  }
+                >
+                  <option value="text">Text</option>
+                  <option value="date">Date</option>
+                  <option value="number">Number</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowBlankModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddBlankVariable}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Add Field
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-lg font-bold">Certificate Preview</h2>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  if (previewHtml) URL.revokeObjectURL(previewHtml);
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="flex-1 bg-gray-100 p-4 rounded-b-2xl overflow-hidden">
+              {previewLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <iframe
+                  src={previewHtml}
+                  className="w-full h-full rounded bg-white shadow-sm border border-gray-200"
+                  title="Certificate Preview"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-);
+  );
+};
 
 export default CertificateDesigner;

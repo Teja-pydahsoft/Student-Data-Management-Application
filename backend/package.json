@@ -12,7 +12,9 @@
     "migrate-academic-stage": "node scripts/addAcademicStageColumns.js",
     "migrate-document-requirements": "node scripts/create_document_requirements_table.js",
     "migrate-supabase-to-mysql": "node scripts/migrate_supabase_to_mysql.js",
-    "add-performance-indexes": "node scripts/runPerformanceIndexes.js"
+    "add-performance-indexes": "node scripts/runPerformanceIndexes.js",
+    "verify-db": "node scripts/verifyDatabase.js",
+    "run-migrations": "node -e \"const { runMigrations } = require('./scripts/runMigrations'); runMigrations().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });\""
   },
   "keywords": [
     "student",
@@ -41,6 +43,7 @@
     "pdfkit": "^0.14.0",
     "qrcode": "^1.5.3",
     "razorpay": "^2.9.2",
+    "sharp": "^0.34.5",
     "uuid": "^9.0.1",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5"

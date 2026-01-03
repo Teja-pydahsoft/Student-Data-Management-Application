@@ -1,5 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Outlet,
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -19,61 +25,125 @@ import {
   Ticket,
   FolderTree,
   Megaphone,
-  Briefcase
-} from 'lucide-react';
-import useAuthStore from '../../store/authStore';
+  Briefcase,
+} from "lucide-react";
+import useAuthStore from "../../store/authStore";
 import {
   MODULE_ROUTE_MAP,
   getModuleKeyForPath,
   hasModuleAccess,
   getAllowedFrontendModules,
   isFullAccessRole,
-  FRONTEND_MODULES
-} from '../../constants/rbac';
-import toast from 'react-hot-toast';
+  FRONTEND_MODULES,
+} from "../../constants/rbac";
+import toast from "react-hot-toast";
 
 // Navigation items with frontend module keys as permissions
 const NAV_ITEMS = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard', permission: FRONTEND_MODULES.DASHBOARD },
-  { path: '/announcements', icon: Megaphone, label: 'Announcements', permission: FRONTEND_MODULES.ANNOUNCEMENTS },
-  { path: '/clubs', icon: Users, label: 'Clubs', permission: FRONTEND_MODULES.ANNOUNCEMENTS }, // Reusing announcement permission for now, or use a new one if available.
+  {
+    path: "/",
+    icon: LayoutDashboard,
+    label: "Dashboard",
+    permission: FRONTEND_MODULES.DASHBOARD,
+  },
+  {
+    path: "/announcements",
+    icon: Megaphone,
+    label: "Announcements",
+    permission: FRONTEND_MODULES.ANNOUNCEMENTS,
+  },
+  {
+    path: "/clubs",
+    icon: Users,
+    label: "Clubs",
+    permission: FRONTEND_MODULES.ANNOUNCEMENTS,
+  }, // Reusing announcement permission for now, or use a new one if available.
 
   {
-    path: '/students',
+    path: "/students",
     icon: Users,
-    label: 'Student Management',
+    label: "Student Management",
     permission: FRONTEND_MODULES.STUDENTS,
     subItems: [
-      { path: '/students', label: 'Students Database', permission: FRONTEND_MODULES.STUDENTS },
-      { path: '/students/self-registration', label: 'Self Registration', permission: FRONTEND_MODULES.SUBMISSIONS }
-    ]
+      {
+        path: "/students",
+        label: "Students Database",
+        permission: FRONTEND_MODULES.STUDENTS,
+      },
+      {
+        path: "/students/self-registration",
+        label: "Self Registration",
+        permission: FRONTEND_MODULES.SUBMISSIONS,
+      },
+    ],
   },
-  { path: '/promotions', icon: TrendingUp, label: 'Promotions', permission: FRONTEND_MODULES.PROMOTIONS },
-  { path: '/attendance', icon: CalendarCheck, label: 'Attendance', permission: FRONTEND_MODULES.ATTENDANCE },
-
-  { path: '/courses', icon: Settings, label: 'Settings', permission: FRONTEND_MODULES.COURSES },
-  { path: '/users', icon: ShieldCheck, label: 'User Management', permission: FRONTEND_MODULES.USERS },
-  { path: '/reports', icon: BarChart3, label: 'Reports', permission: FRONTEND_MODULES.REPORTS },
   {
-    path: '/tickets',
+    path: "/promotions",
+    icon: TrendingUp,
+    label: "Promotions",
+    permission: FRONTEND_MODULES.PROMOTIONS,
+  },
+  {
+    path: "/attendance",
+    icon: CalendarCheck,
+    label: "Attendance",
+    permission: FRONTEND_MODULES.ATTENDANCE,
+  },
+
+  {
+    path: "/courses",
+    icon: Settings,
+    label: "Settings",
+    permission: FRONTEND_MODULES.COURSES,
+  },
+  {
+    path: "/users",
+    icon: ShieldCheck,
+    label: "User Management",
+    permission: FRONTEND_MODULES.USERS,
+  },
+  {
+    path: "/reports",
+    icon: BarChart3,
+    label: "Reports",
+    permission: FRONTEND_MODULES.REPORTS,
+  },
+  {
+    path: "/tickets",
     icon: Ticket,
-    label: 'Ticket Management',
+    label: "Ticket Management",
     permission: FRONTEND_MODULES.TICKETS,
     subItems: [
-      { path: '/tickets', label: 'Tickets', permission: FRONTEND_MODULES.TICKETS },
-      { path: '/task-management', label: 'Task Management', permission: FRONTEND_MODULES.TASK_MANAGEMENT }
-    ]
+      {
+        path: "/tickets",
+        label: "Tickets",
+        permission: FRONTEND_MODULES.TICKETS,
+      },
+      {
+        path: "/task-management",
+        label: "Task Management",
+        permission: FRONTEND_MODULES.TASK_MANAGEMENT,
+      },
+    ],
   },
   {
-    path: '/services',
+    path: "/services",
     icon: Briefcase,
-    label: 'Services',
+    label: "Services",
     permission: FRONTEND_MODULES.SERVICES,
     subItems: [
-      { path: '/services/requests', label: 'Service Requests', permission: FRONTEND_MODULES.SERVICES },
-      { path: '/services/config', label: 'Configuration', permission: FRONTEND_MODULES.SERVICES }
-    ]
-  }
+      {
+        path: "/services/requests",
+        label: "Service Requests",
+        permission: FRONTEND_MODULES.SERVICES,
+      },
+      {
+        path: "/services/config",
+        label: "Configuration",
+        permission: FRONTEND_MODULES.SERVICES,
+      },
+    ],
+  },
 ];
 
 const AdminLayout = () => {
@@ -86,8 +156,8 @@ const AdminLayout = () => {
 
   const handleLogout = () => {
     logout();
-    toast.success('Logged out successfully');
-    navigate('/login');
+    toast.success("Logged out successfully");
+    navigate("/login");
   };
 
   // Get allowed modules based on user role and permissions
@@ -146,15 +216,15 @@ const AdminLayout = () => {
 
   // Check if a route is active (including sub-routes)
   const isRouteActive = (path) => {
-    if (path === '/') {
-      return location.pathname === '/';
+    if (path === "/") {
+      return location.pathname === "/";
     }
     return location.pathname.startsWith(path);
   };
 
   // Toggle submenu expansion
   const toggleSubmenu = (path) => {
-    setExpandedItems(prev => {
+    setExpandedItems((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(path)) {
         newSet.delete(path);
@@ -169,9 +239,11 @@ const AdminLayout = () => {
   useEffect(() => {
     filteredNavItems.forEach((item) => {
       if (item.subItems) {
-        const hasActiveSubItem = item.subItems.some(subItem => location.pathname === subItem.path);
+        const hasActiveSubItem = item.subItems.some(
+          (subItem) => location.pathname === subItem.path,
+        );
         if (hasActiveSubItem && !expandedItems.has(item.path)) {
-          setExpandedItems(prev => new Set([...prev, item.path]));
+          setExpandedItems((prev) => new Set([...prev, item.path]));
         }
       }
     });
@@ -189,18 +261,30 @@ const AdminLayout = () => {
     // Check if user has access to current module
     if (currentModuleKey && !allowedModules.includes(currentModuleKey)) {
       // Redirect to first allowed route or dashboard
-      const firstAllowedRoute = allowedModules.length > 0
-        ? MODULE_ROUTE_MAP[allowedModules[0]]
-        : '/';
+      const firstAllowedRoute =
+        allowedModules.length > 0 ? MODULE_ROUTE_MAP[allowedModules[0]] : "/";
       navigate(firstAllowedRoute, { replace: true });
     }
   }, [user, allowedModules, location.pathname, navigate]);
+
+  const [searchParams] = useSearchParams();
+  const isEmbedded = searchParams.get("embedded") === "true";
+
+  if (isEmbedded) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm sticky top-0 z-30">
-        <h1 className="text-lg sm:text-xl font-bold text-gray-900 heading-font">Admin Panel</h1>
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900 heading-font">
+          Admin Panel
+        </h1>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-2.5 rounded-lg hover:bg-blue-100 active:bg-blue-200 text-gray-700 hover:text-blue-700 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -215,21 +299,24 @@ const AdminLayout = () => {
         className={`
           fixed top-0 left-0 z-40 h-screen bg-white border-r border-gray-200
           transition-[width,transform] duration-300 ease-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0
-          ${sidebarCollapsed ? 'w-16' : 'w-64'}
+          ${sidebarCollapsed ? "w-16" : "w-64"}
+          flex flex-col
         `}
-        style={{ willChange: 'width, transform' }}
+        style={{ willChange: "width, transform" }}
       >
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
           {/* Logo and Close Button */}
-          <div className={`border-b border-gray-200 flex items-center transition-[padding,justify-content] duration-300 ease-out ${sidebarCollapsed ? 'justify-center p-3 lg:p-4' : 'justify-between p-4 lg:p-6'}`}>
+          <div
+            className={`border-b border-gray-200 flex items-center transition-[padding,justify-content] duration-300 ease-out ${sidebarCollapsed ? "justify-center p-3 lg:p-4" : "justify-between p-4 lg:p-6"}`}
+          >
             <img
               src="/logo.png"
               alt="Pydah DB Logo"
               className={`
                 h-10 sm:h-12 w-auto max-w-full object-contain transition-opacity duration-300 ease-out
-                ${sidebarCollapsed ? 'opacity-0 w-0 h-0 overflow-hidden' : 'opacity-100'}
+                ${sidebarCollapsed ? "opacity-0 w-0 h-0 overflow-hidden" : "opacity-100"}
               `}
               loading="lazy"
             />
@@ -250,14 +337,20 @@ const AdminLayout = () => {
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="hidden lg:flex p-2 rounded-lg hover:bg-gray-100 text-gray-700 hover:text-gray-900 transition-colors flex-shrink-0"
-              title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               <X size={20} />
             </button>
           </div>
 
           {/* Navigation */}
-          <nav className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+          <nav
+            className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400 ${sidebarCollapsed ? "p-2" : "p-3 sm:p-4"}`}
+            style={{
+              scrollBehavior: "smooth",
+              maxHeight: "calc(100vh - 180px)",
+            }}
+          >
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const hasSubItems = item.subItems && item.subItems.length > 0;
@@ -266,7 +359,9 @@ const AdminLayout = () => {
 
               if (hasSubItems && !sidebarCollapsed) {
                 // Auto-expand if any sub-item is active
-                const shouldAutoExpand = item.subItems.some(subItem => location.pathname === subItem.path);
+                const shouldAutoExpand = item.subItems.some(
+                  (subItem) => location.pathname === subItem.path,
+                );
                 const isActuallyExpanded = isExpanded || shouldAutoExpand;
 
                 return (
@@ -279,29 +374,41 @@ const AdminLayout = () => {
                       className={`
                         w-full flex items-center justify-between rounded-lg transition-all duration-200 touch-manipulation
                         gap-3 px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px]
-                        ${isActive && !isActuallyExpanded
-                          ? 'bg-blue-600 text-white font-semibold shadow-md'
-                          : isActuallyExpanded
-                            ? 'bg-gray-50 text-gray-900 font-medium'
-                            : 'text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900'
+                        ${
+                          isActive && !isActuallyExpanded
+                            ? "bg-blue-600 text-white font-semibold shadow-md"
+                            : isActuallyExpanded
+                              ? "bg-gray-50 text-gray-900 font-medium"
+                              : "text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900"
                         }
                       `}
-                      aria-label={isActuallyExpanded ? 'Collapse menu' : 'Expand menu'}
+                      aria-label={
+                        isActuallyExpanded ? "Collapse menu" : "Expand menu"
+                      }
                     >
                       <div className="flex items-center gap-3 flex-1">
                         <Icon size={20} className="flex-shrink-0" />
-                        <span className="whitespace-nowrap font-medium">{item.label}</span>
+                        <span className="whitespace-nowrap font-medium">
+                          {item.label}
+                        </span>
                       </div>
                       {isActuallyExpanded ? (
-                        <ChevronDown size={18} className="flex-shrink-0 transition-transform duration-200" />
+                        <ChevronDown
+                          size={18}
+                          className="flex-shrink-0 transition-transform duration-200"
+                        />
                       ) : (
-                        <ChevronRight size={18} className="flex-shrink-0 transition-transform duration-200" />
+                        <ChevronRight
+                          size={18}
+                          className="flex-shrink-0 transition-transform duration-200"
+                        />
                       )}
                     </button>
                     {isActuallyExpanded && (
                       <div className="ml-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
                         {item.subItems.map((subItem, index) => {
-                          const isSubActive = location.pathname === subItem.path;
+                          const isSubActive =
+                            location.pathname === subItem.path;
                           return (
                             <Link
                               key={subItem.path}
@@ -310,20 +417,27 @@ const AdminLayout = () => {
                                 setSidebarOpen(false);
                                 // Keep expanded when clicking sub-items
                                 if (!expandedItems.has(item.path)) {
-                                  setExpandedItems(prev => new Set([...prev, item.path]));
+                                  setExpandedItems(
+                                    (prev) => new Set([...prev, item.path]),
+                                  );
                                 }
                               }}
                               className={`
                                 flex items-center rounded-md transition-all duration-200 touch-manipulation
                                 gap-2.5 px-3 py-2.5 text-sm font-medium relative min-h-[44px]
-                                ${isSubActive
-                                  ? 'bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400'
-                                  : 'text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm'
+                                ${
+                                  isSubActive
+                                    ? "bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400"
+                                    : "text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
                                 }
                               `}
                             >
-                              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isSubActive ? 'bg-white' : 'bg-blue-500'}`}></div>
-                              <span className="whitespace-nowrap">{subItem.label}</span>
+                              <div
+                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isSubActive ? "bg-white" : "bg-blue-500"}`}
+                              ></div>
+                              <span className="whitespace-nowrap">
+                                {subItem.label}
+                              </span>
                               {isSubActive && (
                                 <div className="absolute right-2 w-1 h-1 bg-white rounded-full"></div>
                               )}
@@ -339,7 +453,9 @@ const AdminLayout = () => {
               // Handle collapsed sidebar - show as simple link for items with sub-items
               if (hasSubItems && sidebarCollapsed) {
                 // If on a sub-route, show parent as active
-                const hasActiveSubItem = item.subItems?.some(subItem => location.pathname === subItem.path);
+                const hasActiveSubItem = item.subItems?.some(
+                  (subItem) => location.pathname === subItem.path,
+                );
                 const isActiveState = isActive || hasActiveSubItem;
 
                 return (
@@ -350,9 +466,10 @@ const AdminLayout = () => {
                     className={`
                       flex items-center justify-center rounded-md transition-colors
                       px-2 py-3
-                      ${isActiveState
-                        ? 'bg-blue-600 text-white font-semibold shadow-md'
-                        : 'text-gray-800 hover:bg-blue-100 hover:text-blue-700'
+                      ${
+                        isActiveState
+                          ? "bg-blue-600 text-white font-semibold shadow-md"
+                          : "text-gray-800 hover:bg-blue-100 hover:text-blue-700"
                       }
                     `}
                     title={item.label}
@@ -369,20 +486,21 @@ const AdminLayout = () => {
                   onClick={() => setSidebarOpen(false)}
                   className={`
                     flex items-center rounded-md transition-colors touch-manipulation
-                    ${sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 sm:px-4 py-2.5 sm:py-3'}
+                    ${sidebarCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 sm:px-4 py-2.5 sm:py-3"}
                     min-h-[44px]
-                    ${isActive
-                      ? 'bg-blue-600 text-white font-semibold shadow-md'
-                      : 'text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700'
+                    ${
+                      isActive
+                        ? "bg-blue-600 text-white font-semibold shadow-md"
+                        : "text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700"
                     }
                   `}
-                  title={sidebarCollapsed ? item.label : ''}
+                  title={sidebarCollapsed ? item.label : ""}
                 >
                   <Icon size={20} className="flex-shrink-0" />
                   <span
                     className={`
                       transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
-                      ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                      ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
                     `}
                   >
                     {item.label}
@@ -394,11 +512,13 @@ const AdminLayout = () => {
 
           {/* User Info & Logout */}
           {/* User Info & Logout */}
-          <div className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? 'p-2' : 'p-3 sm:p-4'}`}>
+          <div
+            className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? "p-2" : "p-3 sm:p-4"}`}
+          >
             <div
               className={`
                 flex items-center gap-3 mb-2 transition-opacity duration-300 ease-out overflow-hidden
-                ${sidebarCollapsed ? 'opacity-0 h-0 mb-0' : 'opacity-100 h-auto mb-2'}
+                ${sidebarCollapsed ? "opacity-0 h-0 mb-0" : "opacity-100 h-auto mb-2"}
               `}
             >
               <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
@@ -408,10 +528,13 @@ const AdminLayout = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.name || user?.username || 'User'}
+                  {user?.name || user?.username || "User"}
                 </p>
                 <p className="text-xs text-gray-600 truncate">
-                  {user?.email || (isFullAccessRole(user?.role) ? 'Administrator' : 'Team Member')}
+                  {user?.email ||
+                    (isFullAccessRole(user?.role)
+                      ? "Administrator"
+                      : "Team Member")}
                 </p>
               </div>
             </div>
@@ -422,15 +545,18 @@ const AdminLayout = () => {
               onClick={() => {
                 if (window.innerWidth < 1024) setSidebarOpen(false);
               }}
-              className={`w-full flex items-center rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors duration-200 touch-manipulation min-h-[44px] mb-2 ${sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
-                }`}
-              title={sidebarCollapsed ? 'Profile' : ''}
+              className={`w-full flex items-center rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors duration-200 touch-manipulation min-h-[44px] mb-2 ${
+                sidebarCollapsed
+                  ? "justify-center p-3"
+                  : "gap-3 px-4 py-2.5 sm:py-3"
+              }`}
+              title={sidebarCollapsed ? "Profile" : ""}
             >
               <Users size={20} className="flex-shrink-0" />
               <span
                 className={`
                   transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
-                  ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                  ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
                 `}
               >
                 Profile
@@ -439,15 +565,18 @@ const AdminLayout = () => {
 
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${sidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-2.5 sm:py-3'
-                }`}
-              title={sidebarCollapsed ? 'Logout' : ''}
+              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${
+                sidebarCollapsed
+                  ? "justify-center p-3"
+                  : "gap-3 px-4 py-2.5 sm:py-3"
+              }`}
+              title={sidebarCollapsed ? "Logout" : ""}
             >
               <LogOut size={20} className="flex-shrink-0" />
               <span
                 className={`
                   transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
-                  ${sidebarCollapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto'}
+                  ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
                 `}
               >
                 Logout
@@ -458,22 +587,22 @@ const AdminLayout = () => {
       </aside>
 
       {/* Overlay for mobile */}
-      {
-        sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )
-      }
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Main Content */}
-      <main className={`min-h-screen bg-white transition-[margin-left] duration-300 ease-out ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
+      <main
+        className={`min-h-screen bg-white transition-[margin-left] duration-300 ease-out ${sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"}`}
+      >
         <div className="p-3 sm:p-4 lg:p-6">
           <Outlet />
         </div>
       </main>
-    </div >
+    </div>
   );
 };
 

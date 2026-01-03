@@ -9,6 +9,8 @@ const serializeCollegeRow = (row) => ({
   code: row.code || null,
   isActive: row.is_active === 1 || row.is_active === true,
   metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : null,
+  header_image_url: row.header_image ? `/api/colleges/${row.id}/header-image` : null,
+  footer_image_url: row.footer_image ? `/api/colleges/${row.id}/footer-image` : null,
   createdAt: row.created_at,
   updatedAt: row.updated_at
 });
@@ -21,12 +23,12 @@ const serializeCollegeRow = (row) => ({
  */
 const fetchColleges = async (options = {}) => {
   const { includeInactive = false } = options;
-  
+
   try {
     const whereClause = includeInactive
       ? ''
       : 'WHERE is_active = 1';
-    
+
     const [rows] = await masterPool.query(
       `SELECT * FROM colleges ${whereClause} ORDER BY name ASC`,
       []
@@ -322,7 +324,7 @@ const deleteCollege = async (collegeId, options = {}) => {
   }
 
   const connection = await masterPool.getConnection();
-  
+
   try {
     await connection.beginTransaction();
 
@@ -451,14 +453,14 @@ const getCollegeCourses = async (collegeId, options = {}) => {
     // Format courses (similar to courseController)
     const { formatCourse } = require('../controllers/courseController');
     const courses = [];
-    
+
     for (const courseRow of rows) {
       // Fetch branches for this course
       const [branchRows] = await masterPool.query(
         'SELECT * FROM course_branches WHERE course_id = ? ORDER BY name ASC',
         [courseRow.id]
       );
-      
+
       courses.push(formatCourse(courseRow, branchRows));
     }
 

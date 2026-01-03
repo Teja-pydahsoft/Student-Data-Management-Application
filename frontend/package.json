@@ -14,8 +14,11 @@
     "lucide-react": "^0.284.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-dropzone": "^14.3.8",
     "react-hot-toast": "^2.4.1",
+    "react-mentions": "^4.4.10",
     "react-qr-code": "^2.0.12",
+    "react-quill": "^2.0.0",
     "react-router-dom": "^6.16.0",
     "recharts": "^2.10.4",
     "zustand": "^4.5.7"

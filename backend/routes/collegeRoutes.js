@@ -4,24 +4,33 @@ const router = express.Router();
 const collegeController = require('../controllers/collegeController');
 const authMiddleware = require('../middleware/auth');
 const { attachUserScope } = require('../middleware/rbac');
+const upload = require('../config/uploadConfig');
 
-// Public route for forms (no auth required) - must be BEFORE auth middleware
+// Public routes (no auth required)
 router.get('/public', collegeController.getPublicColleges);
+
+// Image retrieval routes - PUBLIC (no auth) so they can be embedded in img tags
+router.get('/:id/header-image', collegeController.getHeaderImage);
+router.get('/:id/footer-image', collegeController.getFooterImage);
 
 // All routes below require admin authentication
 router.use(authMiddleware);
 
-// College CRUD operations - with scope filtering for list
+// Image upload routes (require auth)
+router.post('/:id/upload-header', upload.single('header'), collegeController.uploadHeaderImage);
+router.post('/:id/upload-footer', upload.single('footer'), collegeController.uploadFooterImage);
+
+// College list (no param)
 router.get('/', attachUserScope, collegeController.getColleges);
 router.post('/', collegeController.createCollege);
+
+// Specific named routes before :collegeId
+router.get('/:collegeId/courses', attachUserScope, collegeController.getCollegeCourses);
+router.get('/:collegeId/affected-students', collegeController.getAffectedStudentsByCollege);
+
+// Generic :collegeId routes LAST
 router.get('/:collegeId', collegeController.getCollege);
 router.put('/:collegeId', collegeController.updateCollege);
 router.delete('/:collegeId', collegeController.deleteCollege);
-
-// College courses - with scope filtering
-router.get('/:collegeId/courses', attachUserScope, collegeController.getCollegeCourses);
-
-// Preview affected students
-router.get('/:collegeId/affected-students', collegeController.getAffectedStudentsByCollege);
 
 module.exports = router;

@@ -26,6 +26,8 @@ import StudentHistory from './pages/StudentHistory';
 import ServicesConfig from './pages/ServicesConfig';
 import ServiceRequests from './pages/ServiceRequests';
 import CertificateDesigner from './pages/admin/CertificateDesigner';
+import CollegeConfiguration from './pages/admin/CollegeConfiguration';
+import AddServiceWizard from './pages/admin/AddServiceWizard';
 import Profile from './pages/Profile';
 import Clubs from './pages/Clubs';
 
@@ -153,7 +155,10 @@ function App() {
           <Route path="student-history" element={<StudentHistory />} />
           <Route path="events" element={<EventCalendar />} />
           <Route path="services/config" element={<ServicesConfig />} />
+          <Route path="services/add" element={<AddServiceWizard />} />
+          <Route path="services/edit/:id" element={<AddServiceWizard />} />
           <Route path="services/design/:serviceId" element={<CertificateDesigner />} />
+          <Route path="college-configuration" element={<CollegeConfiguration />} />
           <Route path="services/requests" element={<ServiceRequests />} />
           <Route path="clubs" element={<Clubs />} />
         </Route>
