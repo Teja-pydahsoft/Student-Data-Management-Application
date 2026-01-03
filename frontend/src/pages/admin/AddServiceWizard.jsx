@@ -485,7 +485,7 @@ const AddServiceWizard = () => {
       display: `@${v.name}`,
     }));
 
-    // Mention style for autocomplete
+    // Mention style for autocomplete with whitespace preservation
     const getMentionStyle = (alignment = "center") => ({
       control: {
         backgroundColor: "#fff",
@@ -496,11 +496,13 @@ const AddServiceWizard = () => {
         borderRadius: "0.5rem",
         padding: "0.5rem",
         textAlign: alignment,
+        whiteSpace: "pre-wrap", // Preserve spaces and line breaks
       },
       highlighter: {
         overflow: "hidden",
         padding: "0.5rem",
         textAlign: alignment,
+        whiteSpace: "pre-wrap", // Preserve spaces and line breaks
       },
       input: {
         margin: 0,
@@ -508,6 +510,7 @@ const AddServiceWizard = () => {
         border: 0,
         outline: 0,
         textAlign: alignment,
+        whiteSpace: "pre-wrap", // Preserve spaces and line breaks
       },
       suggestions: {
         list: {
@@ -533,9 +536,15 @@ const AddServiceWizard = () => {
     const processContentForPreview = (content, alignment = "center") => {
       if (!content) return "";
 
-      let processed = content;
+      // Escape HTML but preserve spaces and line breaks
+      let processed = content
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/ /g, "&nbsp;") // Preserve spaces
+        .replace(/\n/g, "<br/>"); // Preserve line breaks
 
-      // Replace @variable with styled variable
+      // Replace @variable with styled variable (after HTML escaping)
       processed = processed.replace(/@(\w+)/g, (match, varName) => {
         return `<span class="inline-block bg-green-100 text-green-800 px-2 py-0.5 rounded text-sm font-mono">${match}</span>`;
       });
@@ -1310,7 +1319,7 @@ const AddServiceWizard = () => {
             <h1 className="text-2xl font-bold text-gray-900">
               {isEditing ? "Edit Service" : "Add New Service"}
             </h1>
-            <p className="text-gray-500">Step {currentStep} of 4</p>
+            <p className="text-gray-500">Step {currentStep} of 3</p>
           </div>
         </div>
       )}

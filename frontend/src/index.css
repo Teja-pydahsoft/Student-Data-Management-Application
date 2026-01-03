@@ -397,3 +397,32 @@ nav:hover::-webkit-scrollbar-thumb {
         width: 12px;
     }
 }
+
+/* Certificate content whitespace preservation */
+.certificate-content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.certificate-content * {
+    white-space: pre-wrap;
+}
+
+/* Ensure MentionsInput preserves whitespace */
+.mentions__control,
+.mentions__highlighter,
+.mentions__input {
+    white-space: pre-wrap !important;
+    font-family: inherit !important;
+}
+
+.mentions__highlighter__substring {
+    white-space: pre-wrap !important;
+}
+
+/* Certificate preview content rendering */
+.whitespace-pre-wrap {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
