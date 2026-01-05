@@ -66,7 +66,7 @@ const TicketManagement = () => {
       if (filters.search) params.append('search', filters.search);
       params.append('page', '1');
       params.append('limit', '100');
-      
+
       const response = await api.get(`/tickets?${params.toString()}`);
       return response.data;
     }
@@ -231,7 +231,7 @@ const TicketManagement = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

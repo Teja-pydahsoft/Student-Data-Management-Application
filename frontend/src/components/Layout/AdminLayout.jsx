@@ -301,7 +301,7 @@ const AdminLayout = () => {
           transition-[width,transform] duration-300 ease-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0
-          ${sidebarCollapsed ? "w-16" : "w-64"}
+          ${sidebarCollapsed ? "w-16" : "w-56"}
           flex flex-col
         `}
         style={{ willChange: "width, transform" }}
@@ -348,7 +348,6 @@ const AdminLayout = () => {
             className={`flex-1 space-y-1 transition-[padding] duration-300 ease-out overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400 ${sidebarCollapsed ? "p-2" : "p-3 sm:p-4"}`}
             style={{
               scrollBehavior: "smooth",
-              maxHeight: "calc(100vh - 180px)",
             }}
           >
             {filteredNavItems.map((item) => {
@@ -374,21 +373,20 @@ const AdminLayout = () => {
                       className={`
                         w-full flex items-center justify-between rounded-lg transition-all duration-200 touch-manipulation
                         gap-3 px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px]
-                        ${
-                          isActive && !isActuallyExpanded
-                            ? "bg-blue-600 text-white font-semibold shadow-md"
-                            : isActuallyExpanded
-                              ? "bg-gray-50 text-gray-900 font-medium"
-                              : "text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900"
+                        ${isActive && !isActuallyExpanded
+                          ? "bg-blue-600 text-white font-semibold shadow-md"
+                          : isActuallyExpanded
+                            ? "bg-gray-50 text-gray-900 font-medium"
+                            : "text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900"
                         }
                       `}
                       aria-label={
                         isActuallyExpanded ? "Collapse menu" : "Expand menu"
                       }
                     >
-                      <div className="flex items-center gap-3 flex-1">
-                        <Icon size={20} className="flex-shrink-0" />
-                        <span className="whitespace-nowrap font-medium">
+                      <div className="flex items-center gap-2 flex-1">
+                        <Icon size={18} className="flex-shrink-0" />
+                        <span className="whitespace-nowrap font-medium text-xs">
                           {item.label}
                         </span>
                       </div>
@@ -424,11 +422,10 @@ const AdminLayout = () => {
                               }}
                               className={`
                                 flex items-center rounded-md transition-all duration-200 touch-manipulation
-                                gap-2.5 px-3 py-2.5 text-sm font-medium relative min-h-[44px]
-                                ${
-                                  isSubActive
-                                    ? "bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400"
-                                    : "text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                                gap-2 px-2 py-1.5 text-[11px] font-medium relative min-h-[36px]
+                                ${isSubActive
+                                  ? "bg-blue-600 text-white font-semibold shadow-lg transform scale-[1.02] border-l-2 border-blue-400"
+                                  : "text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
                                 }
                               `}
                             >
@@ -466,10 +463,9 @@ const AdminLayout = () => {
                     className={`
                       flex items-center justify-center rounded-md transition-colors
                       px-2 py-3
-                      ${
-                        isActiveState
-                          ? "bg-blue-600 text-white font-semibold shadow-md"
-                          : "text-gray-800 hover:bg-blue-100 hover:text-blue-700"
+                      ${isActiveState
+                        ? "bg-blue-600 text-white font-semibold shadow-md"
+                        : "text-gray-800 hover:bg-blue-100 hover:text-blue-700"
                       }
                     `}
                     title={item.label}
@@ -485,21 +481,20 @@ const AdminLayout = () => {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-center rounded-md transition-colors touch-manipulation
-                    ${sidebarCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 sm:px-4 py-2.5 sm:py-3"}
-                    min-h-[44px]
-                    ${
-                      isActive
-                        ? "bg-blue-600 text-white font-semibold shadow-md"
-                        : "text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700"
+                    flex items-center rounded-md transition-all duration-200 touch-manipulation
+                    ${sidebarCollapsed ? "justify-center px-1.5 py-2.5" : "gap-2 px-2.5 py-1.5"}
+                    min-h-[36px]
+                    ${isActive
+                      ? "bg-blue-600 text-white font-semibold shadow-md"
+                      : "text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700"
                     }
                   `}
                   title={sidebarCollapsed ? item.label : ""}
                 >
-                  <Icon size={20} className="flex-shrink-0" />
+                  <Icon size={18} className="flex-shrink-0" />
                   <span
                     className={`
-                      transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden
+                      transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden text-xs
                       ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
                     `}
                   >
@@ -545,11 +540,10 @@ const AdminLayout = () => {
               onClick={() => {
                 if (window.innerWidth < 1024) setSidebarOpen(false);
               }}
-              className={`w-full flex items-center rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors duration-200 touch-manipulation min-h-[44px] mb-2 ${
-                sidebarCollapsed
-                  ? "justify-center p-3"
-                  : "gap-3 px-4 py-2.5 sm:py-3"
-              }`}
+              className={`w-full flex items-center rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors duration-200 touch-manipulation min-h-[44px] mb-2 ${sidebarCollapsed
+                ? "justify-center p-3"
+                : "gap-3 px-4 py-2.5 sm:py-3"
+                }`}
               title={sidebarCollapsed ? "Profile" : ""}
             >
               <Users size={20} className="flex-shrink-0" />
@@ -565,11 +559,10 @@ const AdminLayout = () => {
 
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${
-                sidebarCollapsed
-                  ? "justify-center p-3"
-                  : "gap-3 px-4 py-2.5 sm:py-3"
-              }`}
+              className={`w-full flex items-center rounded-md bg-gray-100 text-gray-700 hover:bg-red-100 active:bg-red-200 hover:text-red-700 transition-colors duration-200 touch-manipulation min-h-[44px] ${sidebarCollapsed
+                ? "justify-center p-3"
+                : "gap-3 px-4 py-2.5 sm:py-3"
+                }`}
               title={sidebarCollapsed ? "Logout" : ""}
             >
               <LogOut size={20} className="flex-shrink-0" />
@@ -596,9 +589,9 @@ const AdminLayout = () => {
 
       {/* Main Content */}
       <main
-        className={`min-h-screen bg-white transition-[margin-left] duration-300 ease-out ${sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"}`}
+        className={`h-screen bg-white transition-[margin-left] duration-300 ease-out flex flex-col ${sidebarCollapsed ? "lg:ml-16" : "lg:ml-56"}`}
       >
-        <div className="p-3 sm:p-4 lg:p-6">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto p-2 sm:p-2 lg:p-3 flex flex-col">
           <Outlet />
         </div>
       </main>

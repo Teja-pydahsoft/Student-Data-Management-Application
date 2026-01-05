@@ -90,7 +90,7 @@ const Reports = () => {
       // Include course only if course is not being changed and branch is not being changed
       if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
       if (currentFilters.branch && excludeField !== 'branch') params.append('branch', currentFilters.branch);
-      
+
       const queryString = params.toString();
       const response = await api.get(`/students/quick-filters${queryString ? `?${queryString}` : ''}`);
       if (response.data?.success) {
@@ -127,12 +127,12 @@ const Reports = () => {
         ...prev,
         [field]: value || '' // Clear filter if empty value
       };
-      
+
       // Remove empty filters
       if (!newFilters[field] || newFilters[field] === '') {
         delete newFilters[field];
       }
-      
+
       // Clear dependent filters when parent filter changes
       if (field === 'batch') {
         // When batch changes, clear course, branch, year, and semester
@@ -153,7 +153,7 @@ const Reports = () => {
         // When year changes, clear semester
         delete newFilters.semester;
       }
-      
+
       return newFilters;
     });
   };
@@ -239,7 +239,7 @@ const Reports = () => {
   }, [summary]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="rounded-full bg-blue-100 p-3 text-blue-600">
@@ -256,11 +256,10 @@ const Reports = () => {
           type="button"
           onClick={() => loadSummary(filters)}
           disabled={loading}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-md border transition-colors ${
-            loading
-              ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-              : 'border-gray-300 text-gray-600 hover:bg-gray-100'
-          }`}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-md border transition-colors ${loading
+            ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+            : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+            }`}
         >
           {loading ? (
             <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -393,11 +392,10 @@ const Reports = () => {
               type="button"
               onClick={clearFilters}
               disabled={!hasActiveFilters}
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${
-                hasActiveFilters
-                  ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
-                  : 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-              }`}
+              className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${hasActiveFilters
+                ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
+                : 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
+                }`}
             >
               Clear Filters
             </button>

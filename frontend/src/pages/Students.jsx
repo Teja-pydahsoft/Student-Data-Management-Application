@@ -1994,8 +1994,8 @@ const Students = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 lg:p-6 lg:p-8">
-      <div className="flex flex-col gap-4">
+    <div className="h-full flex flex-col overflow-hidden space-y-2 sm:space-y-3 lg:space-y-2">
+      <div className="flex flex-col gap-2">
         {/* Search Bar with Action Buttons Inline */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
           <div className="flex-1 relative">
@@ -2005,24 +2005,24 @@ const Students = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLocalSearch()}
-              className="w-full pl-10 pr-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-              placeholder="Search by student name, PIN number, or admission number..."
+              className="w-full pl-10 pr-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-xs touch-manipulation min-h-[36px]"
+              placeholder="Search students..."
             />
           </div>
           <button
             onClick={handleLocalSearch}
-            className="bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[44px] font-medium whitespace-nowrap"
+            className="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[36px] text-xs font-medium whitespace-nowrap"
           >
             Search
           </button>
           {/* Action Buttons Inline - respect RBAC permissions */}
-          <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {canAddStudent && (
               <Link
                 to="/students/add"
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] whitespace-nowrap flex-shrink-0"
               >
-                <Plus size={18} />
+                <Plus size={16} />
                 <span>Add Student</span>
               </Link>
             )}
@@ -2033,21 +2033,21 @@ const Students = () => {
                   await fetchForms();
                   setShowBulkStudentUpload(true);
                 }}
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
                 disabled={loadingForms}
               >
-                <Upload size={18} />
-                <span>{loadingForms ? 'Loading Forms...' : 'Bulk Upload Students'}</span>
+                <Upload size={16} />
+                <span>{loadingForms ? '...' : 'Bulk Upload'}</span>
               </button>
             )}
 
             {canUpdatePin && (
               <button
                 onClick={() => setShowManualRollNumber(true)}
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-700 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] whitespace-nowrap flex-shrink-0"
               >
-                <UserCog size={18} />
-                <span>Update PIN Numbers</span>
+                <UserCog size={16} />
+                <span>Update PIN</span>
               </button>
             )}
 
@@ -2055,10 +2055,10 @@ const Students = () => {
               <button
                 onClick={handleBulkDelete}
                 disabled={selectedCount === 0 || bulkDeleteMutation.isPending}
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-red-600 to-red-700 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
               >
-                <Trash2 size={18} />
-                <span>{bulkDeleteMutation.isPending ? 'Deleting...' : `Delete Selected${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+                <Trash2 size={16} />
+                <span>{bulkDeleteMutation.isPending ? '...' : `Delete (${selectedCount})`}</span>
               </button>
             )}
 
@@ -2066,19 +2066,19 @@ const Students = () => {
               <button
                 onClick={handleBulkResendPasswords}
                 disabled={selectedCount === 0 || bulkPasswordState.processing}
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-teal-600 to-teal-700 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-teal-600 to-teal-700 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
               >
-                <Key size={18} />
-                <span>{bulkPasswordState.processing ? 'Sending...' : `Send Passwords${selectedCount > 0 ? ` (${selectedCount})` : ''}`}</span>
+                <Key size={16} />
+                <span>{bulkPasswordState.processing ? '...' : `Resend Pass`}</span>
               </button>
             )}
 
             {canExportStudents && (
               <button
                 onClick={handleExportCSV}
-                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-white text-sm font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-md hover:shadow-lg active:scale-95 transition-all duration-300 touch-manipulation min-h-[44px] whitespace-nowrap flex-shrink-0"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-white text-xs font-medium bg-gradient-to-r from-blue-500 to-blue-600 border border-transparent shadow-sm hover:shadow active:scale-95 transition-all duration-300 touch-manipulation min-h-[34px] whitespace-nowrap flex-shrink-0"
               >
-                <Download size={18} />
+                <Download size={16} />
                 <span>Export CSV</span>
               </button>
             )}
@@ -2088,51 +2088,51 @@ const Students = () => {
 
       {/* Statistics Cards */}
       {students.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1">Total Students</p>
-                <p className="text-xl font-bold text-blue-600">{totalStudents.toLocaleString()}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {filters.student_status === 'Regular' ? 'Regular students' : 'Across current filters'}
+                <p className="text-[10px] font-medium text-gray-500 mb-0.5 uppercase tracking-wider">Total Students</p>
+                <p className="text-base font-bold text-blue-600 leading-tight">{totalStudents.toLocaleString()}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5">
+                  {filters.student_status === 'Regular' ? 'Regular' : 'Filtered'}
                 </p>
               </div>
-              <div className="bg-blue-100 p-2 rounded-lg">
-                <Users className="text-blue-600" size={18} />
+              <div className="bg-blue-50 p-1.5 rounded-lg">
+                <Users className="text-blue-500" size={14} />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1">Completed Profiles</p>
-                <p className="text-xl font-bold text-blue-600">{stats.completed}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}% of total
+                <p className="text-[10px] font-medium text-gray-500 mb-0.5 uppercase tracking-wider">Profiles Done</p>
+                <p className="text-base font-bold text-blue-600 leading-tight">{stats.completed}</p>
+                <p className="text-[9px] text-gray-400 mt-0.5">
+                  {stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}% completion
                 </p>
               </div>
-              <div className="bg-blue-100 p-2 rounded-lg">
-                <CheckCircle className="text-blue-600" size={18} />
+              <div className="bg-blue-50 p-1.5 rounded-lg">
+                <CheckCircle className="text-blue-500" size={14} />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1">Average Completion</p>
-                <p className="text-xl font-bold text-blue-600">{stats.averageCompletion}%</p>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                <p className="text-[10px] font-medium text-gray-500 mb-0.5 uppercase tracking-wider">Avg Completion</p>
+                <p className="text-base font-bold text-blue-600 leading-tight">{stats.averageCompletion}%</p>
+                <div className="w-full bg-gray-100 rounded-full h-1 mt-1">
                   <div
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                    className="bg-blue-500 h-1 rounded-full transition-all duration-300"
                     style={{ width: `${stats.averageCompletion}%` }}
                   ></div>
                 </div>
               </div>
-              <div className="bg-blue-100 p-2 rounded-lg">
-                <TrendingUp className="text-blue-600" size={18} />
+              <div className="bg-blue-50 p-1.5 rounded-lg">
+                <TrendingUp className="text-blue-500" size={14} />
               </div>
             </div>
           </div>
@@ -2141,18 +2141,18 @@ const Students = () => {
 
       {/* Filter Section - Always Visible and Expandable */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+        <div className="bg-gray-50 border-b border-gray-200 px-3 py-1.5">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setFiltersExpanded(!filtersExpanded)}
-              className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-2 text-[11px] font-bold text-gray-700 uppercase tracking-wider hover:text-gray-900 transition-colors"
             >
-              <Filter size={18} />
+              <Filter size={14} />
               <span>Filters</span>
               {filtersExpanded ? (
-                <ChevronUp size={18} className="text-gray-500" />
+                <ChevronUp size={14} className="text-gray-500" />
               ) : (
-                <ChevronDown size={18} className="text-gray-500" />
+                <ChevronDown size={14} className="text-gray-500" />
               )}
             </button>
             <div className="flex items-center gap-3">
@@ -2167,7 +2167,7 @@ const Students = () => {
                     return (
                       <span
                         key={key}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded"
                       >
                         {displayKey}: {value}
                       </span>
@@ -2187,15 +2187,15 @@ const Students = () => {
           </div>
         </div>
         {filtersExpanded && (
-          <div className="px-4 py-4 border-t border-gray-200">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="px-2.5 py-2 border-t border-gray-200">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">College</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">College</label>
                 <select
                   value={filters.college || ''}
                   onChange={(e) => handleFilterChange('college', e.target.value)}
                   disabled={collegesLoading}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">All</option>
                   {colleges.filter(c => c.isActive !== false).map((college) => (
@@ -2204,7 +2204,7 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Batch</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Batch</label>
                 <select
                   value={filters.batch || ''}
                   onChange={(e) => handleFilterChange('batch', e.target.value)}
@@ -2217,7 +2217,7 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Course</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Course</label>
                 <select
                   value={filters.course || ''}
                   onChange={(e) => handleFilterChange('course', e.target.value)}
@@ -2243,7 +2243,7 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Branch</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Branch</label>
                 <select
                   value={filters.branch || ''}
                   onChange={(e) => handleFilterChange('branch', e.target.value)}
@@ -2260,7 +2260,7 @@ const Students = () => {
                       console.warn('Failed to refresh branch options:', err);
                     });
                   }}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(quickFilterOptions.branches || []).map((branch) => (
@@ -2269,11 +2269,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Student Type</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Student Type</label>
                 <select
                   value={filters.stud_type || ''}
                   onChange={(e) => handleFilterChange('stud_type', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.stud_type || []).map((type) => (
@@ -2282,11 +2282,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Status</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Status</label>
                 <select
                   value={filters.student_status || ''}
                   onChange={(e) => handleFilterChange('student_status', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.student_status || []).map((status) => (
@@ -2295,11 +2295,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Scholar Status</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Scholar Status</label>
                 <select
                   value={filters.scholar_status || ''}
                   onChange={(e) => handleFilterChange('scholar_status', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.scholar_status && dropdownFilterOptions.scholar_status.length > 0
@@ -2311,11 +2311,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Caste</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Caste</label>
                 <select
                   value={filters.caste || ''}
                   onChange={(e) => handleFilterChange('caste', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.caste || []).map((caste) => (
@@ -2324,11 +2324,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Gender</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Gender</label>
                 <select
                   value={filters.gender || ''}
                   onChange={(e) => handleFilterChange('gender', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.gender || []).map((gender) => (
@@ -2338,11 +2338,11 @@ const Students = () => {
               </div>
 
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Fee Status</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Fee Status</label>
                 <select
                   value={filters.fee_status || ''}
                   onChange={(e) => handleFilterChange('fee_status', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   <option value="pending">Pending</option>
@@ -2351,11 +2351,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Registration Status</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Registration Status</label>
                 <select
                   value={filters.registration_status || ''}
                   onChange={(e) => handleFilterChange('registration_status', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   <option value="pending">Pending</option>
@@ -2363,11 +2363,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Year</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Year</label>
                 <select
                   value={filters.year || ''}
                   onChange={(e) => handleFilterChange('year', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(quickFilterOptions.years || []).map((year) => (
@@ -2376,11 +2376,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Semester</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Semester</label>
                 <select
                   value={filters.semester || ''}
                   onChange={(e) => handleFilterChange('semester', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(quickFilterOptions.semesters || []).map((sem) => (
@@ -2389,11 +2389,11 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-xs font-medium text-gray-600 mb-1">Remarks</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Remarks</label>
                 <select
                   value={filters.remarks || ''}
                   onChange={(e) => handleFilterChange('remarks', e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
                   {(dropdownFilterOptions.remarks || []).map((remark) => (
@@ -2425,182 +2425,329 @@ const Students = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
-          {/* Show loading overlay only when table is fetching (not on initial page load) */}
-          {tableFetching && (
-            <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 rounded-xl">
-              <div className="text-center space-y-2">
-                <LoadingAnimation
-                  width={24}
-                  height={24}
-                  message=""
-                  showMessage={false}
-                />
-                <p className="text-sm text-gray-600">Updating table...</p>
+        <div className="flex-1 min-h-0 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative flex flex-col">
+          {/* Table Container */}
+          <div className="flex-1 overflow-auto no-scrollbar">
+            {/* Show loading overlay only when table is fetching (not on initial page load) */}
+            {tableFetching && (
+              <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 rounded-xl">
+                <div className="text-center space-y-2">
+                  <LoadingAnimation
+                    width={24}
+                    height={24}
+                    message=""
+                    showMessage={false}
+                  />
+                  <p className="text-sm text-gray-600">Updating table...</p>
+                </div>
               </div>
-            </div>
-          )}
-          {/* Desktop Table View */}
-          <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'auto' }}>
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="py-2 px-3 text-xs font-semibold text-gray-700 text-center w-12 sticky left-0 bg-gray-50 z-20 border-r border-gray-200">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded"
-                      disabled={students.length === 0 || bulkDeleteMutation.isPending}
-                      checked={isAllSelected}
-                      onChange={(e) => toggleSelectAllStudents(e.target.checked)}
-                    />
-                  </th>
-                  {canViewField('student_photo') && (
-                    <th className="py-2 px-3 text-xs font-semibold text-gray-700 text-left min-w-[80px] sticky left-12 bg-gray-50 z-20 border-r border-gray-200">
-                      <div className="font-semibold">Photo</div>
+            )}
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full" style={{ tableLayout: 'auto' }}>
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="py-1 px-1.5 text-xs font-semibold text-gray-700 text-center w-10 sticky left-0 bg-gray-50 z-20 border-r border-gray-200">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded"
+                        disabled={students.length === 0 || bulkDeleteMutation.isPending}
+                        checked={isAllSelected}
+                        onChange={(e) => toggleSelectAllStudents(e.target.checked)}
+                      />
                     </th>
-                  )}
-                  {canViewField('student_name') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Student Name</div>
-                    </th>
-                  )}
-                  {canViewField('pin_no') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <button
-                        onClick={() => handleSort('pinNumber')}
-                        className="flex items-center gap-1 hover:text-gray-900 transition-colors"
-                      >
-                        <div className="font-semibold whitespace-nowrap">PIN Number</div>
-                        {sortConfig.field === 'pinNumber' && (
-                          <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                    {canViewField('student_photo') && (
+                      <th className="py-2 px-1.5 text-[10px] font-semibold text-gray-700 text-left min-w-[40px] sticky left-10 bg-gray-50 z-20 border-r border-gray-200">
+                        <div className="font-semibold">Photo</div>
+                      </th>
+                    )}
+                    {canViewField('student_name') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left max-w-[80px]">
+                        <div className="font-semibold truncate">Student Name</div>
+                      </th>
+                    )}
+                    {canViewField('pin_no') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left max-w-[40px]">
+                        <button
+                          onClick={() => handleSort('pinNumber')}
+                          className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                        >
+                          <div className="font-semibold truncate">PIN</div>
+                        </button>
+                      </th>
+                    )}
+                    {canViewField('admission_number') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left max-w-[50px]">
+                        <div className="font-semibold truncate">Adm No</div>
+                      </th>
+                    )}
+                    {canViewField('batch') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left">
+                        <div className="font-semibold">Batch</div>
+                      </th>
+                    )}
+                    {canViewField('college') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left max-w-[80px]">
+                        <div className="font-semibold truncate">College</div>
+                      </th>
+                    )}
+                    {canViewField('course') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left">
+                        <div className="font-semibold">Course</div>
+                      </th>
+                    )}
+                    {canViewField('branch') && (
+                      <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left max-w-[60px]">
+                        <div className="font-semibold truncate">Branch</div>
+                      </th>
+                    )}
+                    {!isCashier && (
+                      <>
+                        {canViewField('stud_type') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                            <div className="font-semibold">Type</div>
+                          </th>
                         )}
-                      </button>
-                    </th>
-                  )}
-                  {canViewField('admission_number') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Admission Number</div>
-                    </th>
-                  )}
-                  {canViewField('batch') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Batch</div>
-                    </th>
-                  )}
-                  {canViewField('college') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">College</div>
-                    </th>
-                  )}
-                  {canViewField('course') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Course</div>
-                    </th>
-                  )}
-                  {canViewField('branch') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Branch</div>
-                    </th>
-                  )}
-                  {!isCashier && (
-                    <>
-                      {canViewField('stud_type') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                          <div className="font-semibold whitespace-nowrap">Student Type</div>
-                        </th>
-                      )}
-                      {canViewField('caste') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                          <div className="font-semibold whitespace-nowrap">Caste</div>
-                        </th>
-                      )}
-                      {canViewField('gender') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                          <div className="font-semibold whitespace-nowrap">Gender</div>
-                        </th>
-                      )}
-                      {canViewField('student_status') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                          <div className="font-semibold whitespace-nowrap">Status</div>
-                        </th>
-                      )}
-                      {canViewField('certificates_status') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                          <div className="font-semibold whitespace-nowrap">Certificate Status</div>
-                        </th>
-                      )}
-                    </>
-                  )}
-                  {canViewField('fee_status') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Fee Status</div>
-                    </th>
-                  )}
-                  {canViewField('current_year') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Year</div>
-                    </th>
-                  )}
-                  {canViewField('current_semester') && (
-                    <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                      <div className="font-semibold whitespace-nowrap">Sem</div>
-                    </th>
-                  )}
-                  {!isCashier && (
-                    <>
-                      {canViewField('scholar_status') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                          <div className="font-semibold whitespace-nowrap">Scholar Status</div>
-                        </th>
-                      )}
-                      {canViewField('registration_status') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
-                          <div className="font-semibold whitespace-nowrap">Registration Status</div>
-                        </th>
-                      )}
-                      {canViewField('remarks') && (
-                        <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
-                          <div className="font-semibold whitespace-nowrap">Remarks</div>
-                        </th>
-                      )}
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedStudents.map((student) => {
-                  return (
-                    <tr
-                      key={student.admission_number}
-                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                      onClick={(e) => {
-                        // Don't trigger view modal if interacting with inputs/selects/inline editors
-                        if (
-                          e.target.type === 'checkbox' ||
-                          e.target.closest('input[type="checkbox"]') ||
-                          e.target.closest('select') ||
-                          e.target.closest('input') ||
-                          e.target.closest('textarea')
-                        ) {
-                          return;
-                        }
-                        if (!isCashier) {
-                          handleViewDetails(student);
-                        }
-                      }}
-                    >
-                      <td className="py-2 px-3 text-center sticky left-0 bg-white z-10 border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded"
-                          disabled={bulkDeleteMutation.isPending}
-                          checked={selectedAdmissionNumbers.has(student.admission_number)}
-                          onChange={() => toggleSelectStudent(student.admission_number)}
-                        />
-                      </td>
-                      {canViewField('student_photo') && (
-                        <td className="py-2 px-3 sticky left-12 bg-white z-10 border-r border-gray-200">
-                          <div className="flex items-center justify-center w-10 h-10">
+                        {canViewField('caste') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                            <div className="font-semibold">Caste</div>
+                          </th>
+                        )}
+                        {canViewField('gender') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                            <div className="font-semibold">Gen</div>
+                          </th>
+                        )}
+                        {canViewField('student_status') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                            <div className="font-semibold">Status</div>
+                          </th>
+                        )}
+                        {canViewField('certificates_status') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                            <div className="font-semibold">Certs</div>
+                          </th>
+                        )}
+                      </>
+                    )}
+                    {canViewField('fee_status') && (
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold">Fees</div>
+                      </th>
+                    )}
+                    {canViewField('current_year') && (
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold">Yr</div>
+                      </th>
+                    )}
+                    {canViewField('current_semester') && (
+                      <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                        <div className="font-semibold">Sem</div>
+                      </th>
+                    )}
+                    {!isCashier && (
+                      <>
+                        {canViewField('scholar_status') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                            <div className="font-semibold">Scholar</div>
+                          </th>
+                        )}
+                        {canViewField('registration_status') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left">
+                            <div className="font-semibold">Reg</div>
+                          </th>
+                        )}
+                        {canViewField('remarks') && (
+                          <th className="py-2 px-1.5 text-xs font-semibold text-gray-700 text-left max-w-[120px]">
+                            <div className="font-semibold">Remarks</div>
+                          </th>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedStudents.map((student) => {
+                    return (
+                      <tr
+                        key={student.admission_number}
+                        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        onClick={(e) => {
+                          // Don't trigger view modal if interacting with inputs/selects/inline editors
+                          if (
+                            e.target.type === 'checkbox' ||
+                            e.target.closest('input[type="checkbox"]') ||
+                            e.target.closest('select') ||
+                            e.target.closest('input') ||
+                            e.target.closest('textarea')
+                          ) {
+                            return;
+                          }
+                          if (!isCashier) {
+                            handleViewDetails(student);
+                          }
+                        }}
+                      >
+                        <td className="py-1 px-1.5 text-center sticky left-0 bg-white z-10 border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded"
+                            disabled={bulkDeleteMutation.isPending}
+                            checked={selectedAdmissionNumbers.has(student.admission_number)}
+                            onChange={() => toggleSelectStudent(student.admission_number)}
+                          />
+                        </td>
+                        {canViewField('student_photo') && (
+                          <td className="py-1 px-1.5 sticky left-10 bg-white z-10 border-r border-gray-200">
+                            <div className="flex items-center justify-center w-7 h-7 mx-auto">
+                              {student.student_photo &&
+                                student.student_photo !== '{}' &&
+                                student.student_photo !== null &&
+                                student.student_photo !== '' &&
+                                student.student_photo !== '{}' ? (
+                                <img
+                                  src={getStaticFileUrlDirect(student.student_photo)}
+                                  alt="Student Photo"
+                                  className="w-7 h-7 rounded-full object-cover border border-gray-200 shadow-sm"
+                                  onError={(e) => {
+                                    if (e.target && e.target.style) {
+                                      e.target.style.display = 'none';
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center">
+                                  <span className="text-gray-400 text-[8px]">No</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                        {canViewField('student_name') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-900 leading-tight max-w-[80px]">
+                            <div className="truncate" title={student.student_name}>
+                              {student.student_name || '-'}
+                            </div>
+                          </td>
+                        )}
+                        {canViewField('pin_no') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-600">
+                            {student.pin_no ? (
+                              <span className="inline-flex items-center px-1 py-0.5 rounded bg-green-50 text-green-700 text-[10px] font-medium border border-green-100">
+                                {student.pin_no}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        )}
+                        {canViewField('admission_number') && (
+                          <td className="py-1 px-1 text-[10px] font-medium text-gray-900">{student.admission_number || '-'}</td>
+                        )}
+                        {canViewField('batch') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700">{student.batch || '-'}</td>
+                        )}
+                        {canViewField('college') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[80px]">
+                            <div className="truncate" title={student.college}>
+                              {student.college || '-'}
+                            </div>
+                          </td>
+                        )}
+                        {canViewField('course') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700">{student.course || '-'}</td>
+                        )}
+                        {canViewField('branch') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[60px]">
+                            <div className="truncate" title={student.branch}>
+                              {student.branch || '-'}
+                            </div>
+                          </td>
+                        )}
+                        {!isCashier && (
+                          <>
+                            {canViewField('stud_type') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700">{student.stud_type || '-'}</td>
+                            )}
+                            {canViewField('caste') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                <div className="max-w-[80px]">{renderEditableCell(student, 'caste', 'text')}</div>
+                              </td>
+                            )}
+                            {canViewField('gender') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
+                              </td>
+                            )}
+                            {canViewField('student_status') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[100px] truncate" onClick={(e) => e.stopPropagation()}>
+                                {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
+                              </td>
+                            )}
+                            {canViewField('certificates_status') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[100px] truncate">
+                                {student.certificates_status || 'Pending'}
+                              </td>
+                            )}
+                          </>
+                        )}
+                        {canViewField('fee_status') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                            {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
+                          </td>
+                        )}
+                        {canViewField('current_year') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700">{student.current_year || '-'}</td>
+                        )}
+                        {canViewField('current_semester') && (
+                          <td className="py-1 px-1 text-[10px] text-gray-700">{student.current_semester || '-'}</td>
+                        )}
+                        {!isCashier && (
+                          <>
+                            {canViewField('scholar_status') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[100px] truncate" onClick={(e) => e.stopPropagation()}>
+                                {renderEditableCell(student, 'scholar_status', 'select', SCHOLAR_STATUS_OPTIONS)}
+                              </td>
+                            )}
+                            {canViewField('registration_status') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700">{student.registration_status || '-'}</td>
+                            )}
+                            {canViewField('remarks') && (
+                              <td className="py-1 px-1 text-[10px] text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
+                                {renderEditableCell(student, 'remarks', 'remark_select')}
+                              </td>
+                            )}
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-3 p-3 sm:p-4">
+              {sortedStudents.map((student) => {
+                return (
+                  <div
+                    key={student.admission_number}
+                    className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="p-4 space-y-3">
+                      {/* Header with Photo and Checkbox */}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 text-blue-600 border-gray-300 rounded mt-1"
+                            disabled={bulkDeleteMutation.isPending}
+                            checked={selectedAdmissionNumbers.has(student.admission_number)}
+                            onChange={() => toggleSelectStudent(student.admission_number)}
+                          />
+                        </div>
+                        {canViewField('student_photo') && (
+                          <div className="flex-shrink-0">
                             {student.student_photo &&
                               student.student_photo !== '{}' &&
                               student.student_photo !== null &&
@@ -2609,7 +2756,7 @@ const Students = () => {
                               <img
                                 src={getStaticFileUrlDirect(student.student_photo)}
                                 alt="Student Photo"
-                                className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 shadow-sm"
+                                className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-sm"
                                 onError={(e) => {
                                   if (e.target && e.target.style) {
                                     e.target.style.display = 'none';
@@ -2617,277 +2764,140 @@ const Students = () => {
                                 }}
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
+                              <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
                                 <span className="text-gray-400 text-xs">No Photo</span>
                               </div>
                             )}
                           </div>
-                        </td>
-                      )}
-                      {canViewField('student_name') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-900">{student.student_name || '-'}</td>
-                      )}
-                      {canViewField('pin_no') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-600">
-                          {student.pin_no ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
-                              {student.pin_no}
+                        )}
+                        <div className="flex-1 min-w-0" onClick={() => !isCashier && handleViewDetails(student)}>
+                          {canViewField('student_name') && (
+                            <h3 className="font-semibold text-gray-900 text-base truncate">{student.student_name || '-'}</h3>
+                          )}
+                          {canViewField('admission_number') && (
+                            <p className="text-sm text-gray-600 mt-1">{student.admission_number || '-'}</p>
+                          )}
+                          {canViewField('pin_no') && student.pin_no && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium mt-1">
+                              PIN: {student.pin_no}
                             </span>
-                          ) : (
-                            <span className="text-gray-400 text-xs">-</span>
-                          )}
-                        </td>
-                      )}
-                      {canViewField('admission_number') && (
-                        <td className="py-2 px-1.5 text-xs font-medium text-gray-900">{student.admission_number || '-'}</td>
-                      )}
-                      {canViewField('batch') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.batch || '-'}</td>
-                      )}
-                      {canViewField('college') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.college || '-'}</td>
-                      )}
-                      {canViewField('course') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.course || '-'}</td>
-                      )}
-                      {canViewField('branch') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.branch || '-'}</td>
-                      )}
-                      {!isCashier && (
-                        <>
-                          {canViewField('stud_type') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700">{student.stud_type || '-'}</td>
-                          )}
-                          {canViewField('caste') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {renderEditableCell(student, 'caste', 'text')}
-                            </td>
-                          )}
-                          {canViewField('gender') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {renderEditableCell(student, 'gender', 'select', ['M', 'F', 'Other'])}
-                            </td>
-                          )}
-                          {canViewField('student_status') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                              {renderEditableCell(student, 'student_status', 'select', STUDENT_STATUS_OPTIONS)}
-                            </td>
-                          )}
-                          {canViewField('certificates_status') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate">
-                              {student.certificates_status || 'Pending'}
-                            </td>
-                          )}
-                        </>
-                      )}
-                      {canViewField('fee_status') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                          {renderEditableCell(student, 'fee_status', 'select', FEE_STATUS_OPTIONS)}
-                        </td>
-                      )}
-                      {canViewField('current_year') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_year || '-'}</td>
-                      )}
-                      {canViewField('current_semester') && (
-                        <td className="py-2 px-1.5 text-xs text-gray-700">{student.current_semester || '-'}</td>
-                      )}
-                      {!isCashier && (
-                        <>
-                          {canViewField('scholar_status') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" onClick={(e) => e.stopPropagation()}>
-                              {renderEditableCell(student, 'scholar_status', 'select', scholarStatusOptions)}
-                            </td>
-                          )}
-                          {canViewField('registration_status') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                              {renderEditableCell(student, 'registration_status', 'select', REGISTRATION_STATUS_OPTIONS)}
-                            </td>
-                          )}
-                          {canViewField('remarks') && (
-                            <td className="py-2 px-1.5 text-xs text-gray-700 max-w-[120px] truncate" title={student.remarks || ''}>
-                              <span className="block truncate">{student.remarks || '-'}</span>
-                            </td>
-                          )}
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="lg:hidden space-y-3 p-3 sm:p-4">
-            {sortedStudents.map((student) => {
-              return (
-                <div
-                  key={student.admission_number}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="p-4 space-y-3">
-                    {/* Header with Photo and Checkbox */}
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="w-5 h-5 text-blue-600 border-gray-300 rounded mt-1"
-                          disabled={bulkDeleteMutation.isPending}
-                          checked={selectedAdmissionNumbers.has(student.admission_number)}
-                          onChange={() => toggleSelectStudent(student.admission_number)}
-                        />
-                      </div>
-                      {canViewField('student_photo') && (
-                        <div className="flex-shrink-0">
-                          {student.student_photo &&
-                            student.student_photo !== '{}' &&
-                            student.student_photo !== null &&
-                            student.student_photo !== '' &&
-                            student.student_photo !== '{}' ? (
-                            <img
-                              src={getStaticFileUrlDirect(student.student_photo)}
-                              alt="Student Photo"
-                              className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-sm"
-                              onError={(e) => {
-                                if (e.target && e.target.style) {
-                                  e.target.style.display = 'none';
-                                }
-                              }}
-                            />
-                          ) : (
-                            <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
-                              <span className="text-gray-400 text-xs">No Photo</span>
-                            </div>
                           )}
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0" onClick={() => !isCashier && handleViewDetails(student)}>
-                        {canViewField('student_name') && (
-                          <h3 className="font-semibold text-gray-900 text-base truncate">{student.student_name || '-'}</h3>
+                      </div>
+
+                      {/* Key Information Grid */}
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                        {canViewField('batch') && (
+                          <div>
+                            <p className="text-xs text-gray-500">Batch</p>
+                            <p className="text-sm font-medium text-gray-900">{student.batch || '-'}</p>
+                          </div>
                         )}
-                        {canViewField('admission_number') && (
-                          <p className="text-sm text-gray-600 mt-1">{student.admission_number || '-'}</p>
+                        {canViewField('college') && (
+                          <div>
+                            <p className="text-xs text-gray-500">College</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.college || ''}>{student.college || '-'}</p>
+                          </div>
                         )}
-                        {canViewField('pin_no') && student.pin_no && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium mt-1">
-                            PIN: {student.pin_no}
-                          </span>
+                        {canViewField('course') && (
+                          <div>
+                            <p className="text-xs text-gray-500">Course</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || '-'}</p>
+                          </div>
+                        )}
+                        {canViewField('branch') && (
+                          <div>
+                            <p className="text-xs text-gray-500">Branch</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || '-'}</p>
+                          </div>
+                        )}
+                        {!isCashier && (
+                          <>
+                            {canViewField('caste') && (
+                              <div>
+                                <p className="text-xs text-gray-500">Caste</p>
+                                <p className="text-sm font-medium text-gray-900 truncate" title={student.caste || ''}>{student.caste || '-'}</p>
+                              </div>
+                            )}
+                            {canViewField('gender') && (
+                              <div>
+                                <p className="text-xs text-gray-500">Gender</p>
+                                <p className="text-sm font-medium text-gray-900 truncate" title={student.gender || ''}>{student.gender || '-'}</p>
+                              </div>
+                            )}
+                            {canViewField('student_status') && (
+                              <div>
+                                <p className="text-xs text-gray-500">Status</p>
+                                <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {canViewField('fee_status') && (
+                          <div>
+                            <p className="text-xs text-gray-500">Fee Status</p>
+                            <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
+                          </div>
+                        )}
+                        {(canViewField('current_year') || canViewField('current_semester')) && (
+                          <div>
+                            <p className="text-xs text-gray-500">Year/Sem</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {canViewField('current_year') ? (student.current_year || '-') : '?'}
+                              /
+                              {canViewField('current_semester') ? (student.current_semester || '-') : '?'}
+                            </p>
+                          </div>
+                        )}
+
+                        {!isCashier && (
+                          <>
+                            {canViewField('scholar_status') && (
+                              <div>
+                                <p className="text-xs text-gray-500">Scholar Status</p>
+                                <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
+                              </div>
+                            )}
+                            {canViewField('registration_status') && (
+                              <div>
+                                <p className="text-xs text-gray-500">Registration Status</p>
+                                <p className="text-sm font-medium text-gray-900">{student.registration_status || 'pending'}</p>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
-                    </div>
 
-                    {/* Key Information Grid */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                      {canViewField('batch') && (
-                        <div>
-                          <p className="text-xs text-gray-500">Batch</p>
-                          <p className="text-sm font-medium text-gray-900">{student.batch || '-'}</p>
-                        </div>
-                      )}
-                      {canViewField('college') && (
-                        <div>
-                          <p className="text-xs text-gray-500">College</p>
-                          <p className="text-sm font-medium text-gray-900 truncate" title={student.college || ''}>{student.college || '-'}</p>
-                        </div>
-                      )}
-                      {canViewField('course') && (
-                        <div>
-                          <p className="text-xs text-gray-500">Course</p>
-                          <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || '-'}</p>
-                        </div>
-                      )}
-                      {canViewField('branch') && (
-                        <div>
-                          <p className="text-xs text-gray-500">Branch</p>
-                          <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || '-'}</p>
-                        </div>
-                      )}
+                      {/* Action Button */}
                       {!isCashier && (
-                        <>
-                          {canViewField('caste') && (
-                            <div>
-                              <p className="text-xs text-gray-500">Caste</p>
-                              <p className="text-sm font-medium text-gray-900 truncate" title={student.caste || ''}>{student.caste || '-'}</p>
-                            </div>
-                          )}
-                          {canViewField('gender') && (
-                            <div>
-                              <p className="text-xs text-gray-500">Gender</p>
-                              <p className="text-sm font-medium text-gray-900 truncate" title={student.gender || ''}>{student.gender || '-'}</p>
-                            </div>
-                          )}
-                          {canViewField('student_status') && (
-                            <div>
-                              <p className="text-xs text-gray-500">Status</p>
-                              <p className="text-sm font-medium text-gray-900 truncate" title={student.student_status || ''}>{student.student_status || '-'}</p>
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {canViewField('fee_status') && (
-                        <div>
-                          <p className="text-xs text-gray-500">Fee Status</p>
-                          <p className="text-sm font-medium text-gray-900">{student.fee_status || 'pending'}</p>
-                        </div>
-                      )}
-                      {(canViewField('current_year') || canViewField('current_semester')) && (
-                        <div>
-                          <p className="text-xs text-gray-500">Year/Sem</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {canViewField('current_year') ? (student.current_year || '-') : '?'}
-                            /
-                            {canViewField('current_semester') ? (student.current_semester || '-') : '?'}
-                          </p>
-                        </div>
-                      )}
-
-                      {!isCashier && (
-                        <>
-                          {canViewField('scholar_status') && (
-                            <div>
-                              <p className="text-xs text-gray-500">Scholar Status</p>
-                              <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
-                            </div>
-                          )}
-                          {canViewField('registration_status') && (
-                            <div>
-                              <p className="text-xs text-gray-500">Registration Status</p>
-                              <p className="text-sm font-medium text-gray-900">{student.registration_status || 'pending'}</p>
-                            </div>
-                          )}
-                        </>
+                        <button
+                          onClick={() => handleViewDetails(student)}
+                          className="w-full mt-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm"
+                        >
+                          View Details
+                        </button>
                       )}
                     </div>
-
-                    {/* Action Button */}
-                    {!isCashier && (
-                      <button
-                        onClick={() => handleViewDetails(student)}
-                        className="w-full mt-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation font-medium text-sm"
-                      >
-                        View Details
-                      </button>
-                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
-            <div className="text-xs sm:text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 border-t border-gray-100">
+            <div className="text-[11px] text-gray-600">
               {totalStudents === 0
                 ? 'No students to display'
                 : `Showing ${showingFrom.toLocaleString()}-${showingTo.toLocaleString()} of ${totalStudents.toLocaleString()}`}
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+              <label className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-gray-600">
                 <span className="hidden sm:inline">Rows per page</span>
                 <span className="sm:hidden">Per page</span>
                 <select
                   value={pageSize}
                   onChange={handlePageSizeChange}
-                  className="px-2 py-1.5 sm:py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
+                  className="px-1.5 py-0.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-[11px] touch-manipulation min-h-[28px] sm:min-h-[32px]"
                   disabled={isLoading || isFetching}
                 >
                   {pageSizeOptions.map(option => (
@@ -2900,18 +2910,18 @@ const Students = () => {
                   type="button"
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={isFirstPage || isLoading || isFetching || totalStudents === 0}
-                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px]"
+                  className="flex-1 sm:flex-none px-2 py-1 border border-gray-300 rounded-md text-[11px] text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[32px] font-semibold"
                 >
                   Previous
                 </button>
-                <span className="text-xs sm:text-sm text-gray-600 px-2">
+                <span className="text-[10px] sm:text-[11px] text-gray-600 px-1 text-center whitespace-nowrap">
                   Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
                 </span>
                 <button
                   type="button"
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={isLastPage || isLoading || isFetching || totalStudents === 0}
-                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px]"
+                  className="flex-1 sm:flex-none px-2 py-1 border border-gray-300 rounded-md text-[11px] text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[32px] font-semibold"
                 >
                   Next
                 </button>
@@ -3188,7 +3198,7 @@ const Students = () => {
                                 }
                               }}
                               placeholder="Enter PIN number"
-                              className="flex-1 px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
                               disabled={savingPinNumber}
                             />
                             <button

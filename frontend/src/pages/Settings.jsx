@@ -1992,29 +1992,29 @@ const Settings = () => {
         {activeSection === 'courses' && (
           <>
             {/* Quick Stats Bar */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-lg bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 px-3 sm:px-4 py-2 sm:py-3">
-              <div className="flex items-center gap-2">
-                <Landmark size={16} className="text-blue-600" />
-                <span className="text-sm text-gray-600">Colleges:</span>
-                <span className="font-semibold text-gray-900">{colleges.filter(c => c.isActive).length}</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3 bg-white p-2 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-1.5">
+                <Landmark size={14} className="text-blue-600" />
+                <span className="text-xs text-gray-500">Colleges:</span>
+                <span className="font-semibold text-gray-900 text-sm">{colleges.length}</span>
               </div>
-              <div className="h-4 w-px bg-gray-300" />
-              <div className="flex items-center gap-2">
-                <GraduationCap size={16} className="text-green-600" />
-                <span className="text-sm text-gray-600">Batches:</span>
-                <span className="font-semibold text-gray-900">{academicYears.filter(y => y.isActive).length}</span>
+              <div className="h-3 w-px bg-gray-300" />
+              <div className="flex items-center gap-1.5">
+                <GraduationCap size={14} className="text-green-600" />
+                <span className="text-xs text-gray-500">Batches:</span>
+                <span className="font-semibold text-gray-900 text-sm">{academicYears.filter(y => y.isActive).length}</span>
               </div>
-              <div className="h-4 w-px bg-gray-300" />
-              <div className="flex items-center gap-2">
-                <BookOpen size={16} className="text-purple-600" />
-                <span className="text-sm text-gray-600">Courses:</span>
-                <span className="font-semibold text-gray-900">{courseOptionsSummary.courseCount}</span>
+              <div className="h-3 w-px bg-gray-300" />
+              <div className="flex items-center gap-1.5">
+                <BookOpen size={14} className="text-purple-600" />
+                <span className="text-xs text-gray-500">Courses:</span>
+                <span className="font-semibold text-gray-900 text-sm">{courseOptionsSummary.courseCount}</span>
               </div>
-              <div className="h-4 w-px bg-gray-300" />
-              <div className="flex items-center gap-2">
-                <Layers size={16} className="text-orange-600" />
-                <span className="text-sm text-gray-600">Branches:</span>
-                <span className="font-semibold text-gray-900">{courseOptionsSummary.branchCount}</span>
+              <div className="h-3 w-px bg-gray-300" />
+              <div className="flex items-center gap-1.5">
+                <Layers size={14} className="text-orange-600" />
+                <span className="text-xs text-gray-500">Branches:</span>
+                <span className="font-semibold text-gray-900 text-sm">{courseOptionsSummary.branchCount}</span>
               </div>
             </div>
 
@@ -2023,32 +2023,32 @@ const Settings = () => {
               {/* Left Column */}
               <div className="space-y-4 min-w-0">
                 {/* Colleges Card */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-100 px-4 py-3">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="border-b border-gray-100 px-3 py-2 bg-slate-50">
                     <div className="flex items-center justify-between">
-                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-                        <Landmark size={16} className="text-blue-600" />
+                      <h3 className="flex items-center gap-1.5 font-bold text-gray-900 text-xs uppercase tracking-wider">
+                        <Landmark size={14} className="text-blue-600" />
                         Colleges
                       </h3>
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
                         {colleges.length}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3">
+                  <div className="p-2">
                     {/* Add College Button */}
                     <button
                       onClick={() => setIsAddCollegeModalOpen(true)}
-                      className="mb-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      className="mb-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                     >
-                      <Plus size={16} />
-                      Add New College
+                      <Plus size={14} />
+                      Add College
                     </button>
 
                     {/* College List */}
-                    <div className="space-y-1.5 max-h-[280px] overflow-y-auto min-h-0">
+                    <div className="space-y-1 max-h-[300px] overflow-y-auto">
                       {colleges.length === 0 && !loading ? (
-                        <p className="py-4 text-center text-sm text-gray-400">No colleges yet</p>
+                        <p className="py-3 text-center text-[11px] text-gray-400">No colleges</p>
                       ) : colleges.length === 0 ? (
                         <SkeletonList count={3} />
                       ) : (
@@ -2056,14 +2056,14 @@ const Settings = () => {
                           <div
                             key={college.id}
                             onClick={() => handleSelectCollege(college.id)}
-                            className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${selectedCollegeId === college.id
-                              ? 'bg-blue-50 border border-blue-200'
-                              : 'hover:bg-gray-50 border border-transparent'
+                            className={`group flex items-center justify-between rounded-md px-2 py-1.5 cursor-pointer transition-all border ${selectedCollegeId === college.id
+                              ? 'bg-blue-50 border-blue-200'
+                              : 'hover:bg-gray-50 border-transparent'
                               }`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <div className={`h-2 w-2 rounded-full flex-shrink-0 ${college.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                              <span className={`text-sm break-words ${selectedCollegeId === college.id ? 'font-medium text-blue-900' : 'text-gray-700'}`}>
+                              <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${college.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                              <span className={`text-[13px] truncate ${selectedCollegeId === college.id ? 'font-bold text-blue-900' : 'text-gray-700'}`}>
                                 {college.name}
                               </span>
                             </div>
@@ -2098,34 +2098,34 @@ const Settings = () => {
                 </div>
 
                 {/* Academic Years Card */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-100 px-4 py-3">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="border-b border-gray-100 px-3 py-2 bg-slate-50">
                     <div className="flex items-center justify-between">
-                      <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-                        <GraduationCap size={16} className="text-green-600" />
-                        Batches (Academic Years)
+                      <h3 className="flex items-center gap-1.5 font-bold text-gray-900 text-xs uppercase tracking-wider">
+                        <GraduationCap size={14} className="text-green-600" />
+                        Batches
                       </h3>
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-bold text-green-700">
                         {academicYears.filter(y => y.isActive).length}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3">
+                  <div className="p-2">
                     {/* Add Year Form */}
-                    <form onSubmit={handleCreateAcademicYear} className="mb-3 flex gap-2">
+                    <form onSubmit={handleCreateAcademicYear} className="mb-2 flex gap-1.5">
                       <input
                         type="text"
                         value={newAcademicYear.yearLabel}
                         onChange={(e) => setNewAcademicYear((prev) => ({ ...prev, yearLabel: e.target.value }))}
-                        placeholder="e.g., 2027"
-                        className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-green-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                        placeholder="e.g. 2027"
+                        className="flex-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs focus:border-green-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
                       />
                       <button
                         type="submit"
                         disabled={creatingAcademicYear || !newAcademicYear.yearLabel.trim()}
-                        className="rounded-lg bg-green-600 px-3 py-2 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="rounded-md bg-green-600 px-2.5 py-1.5 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
-                        <Plus size={16} />
+                        <Plus size={14} />
                       </button>
                     </form>
 
@@ -2143,7 +2143,7 @@ const Settings = () => {
                         academicYears.map((year) => (
                           <div
                             key={year.id}
-                            className={`group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 text-sm font-medium transition-all ${year.isActive
+                            className={`group inline-flex items-center gap-1 rounded-full pl-2 pr-1 py-0.5 text-[11px] font-semibold transition-all ${year.isActive
                               ? 'bg-green-100 text-green-800'
                               : 'bg-gray-100 text-gray-500'
                               }`}
@@ -2183,10 +2183,10 @@ const Settings = () => {
                 ) : (
                   <>
                     {/* Course List & Branches */}
-                    <div className="grid gap-4 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
+                    <div className="grid gap-3 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
                       {/* Course List */}
-                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 min-w-0 overflow-hidden">
-                        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Select Course</div>
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-2 min-w-0 overflow-hidden">
+                        <div className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Select Course</div>
                         <div className="space-y-1.5 max-h-[400px] overflow-y-auto min-w-0">
                           {coursesForSelectedCollege.length === 0 && !loading ? (
                             <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
@@ -2240,7 +2240,7 @@ const Settings = () => {
                         </div>
                         {/* Add Course Button Below List */}
                         {selectedCollege ? (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="mt-2 pt-2 border-t border-gray-200">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2248,7 +2248,7 @@ const Settings = () => {
                                 e.stopPropagation();
                                 setIsAddCourseModalOpen(true);
                               }}
-                              className="w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer"
+                              className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer"
                               style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
                             >
                               <Plus size={16} />
@@ -2266,25 +2266,25 @@ const Settings = () => {
                       <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden">
                         {selectedCourse ? (
                           <>
-                            <div className="border-b border-gray-100 px-4 py-3">
+                            <div className="border-b border-gray-100 px-3 py-2 bg-slate-50">
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <h4 className="font-semibold text-gray-900">{selectedCourse.name} - Branches</h4>
-                                  <p className="text-xs text-gray-500">{selectedCourse.totalYears} years · {selectedCourse.semestersPerYear} semesters/year</p>
+                                  <h4 className="font-bold text-gray-900 text-[13px]">{selectedCourse.name} - Branches</h4>
+                                  <p className="text-[10px] text-gray-500">{selectedCourse.totalYears}y · {selectedCourse.semestersPerYear}sem</p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                   <select
                                     value={branchBatchFilter}
                                     onChange={(e) => setBranchBatchFilter(e.target.value)}
-                                    className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                    className="rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] font-medium focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                                   >
                                     <option value="">All Batches</option>
                                     {academicYears.filter(y => y.isActive).map((year) => (
                                       <option key={year.id} value={year.id}>{year.yearLabel}</option>
                                     ))}
                                   </select>
-                                  <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-                                    {branchBatchFilter ? branchesForSelectedCourse.length : uniqueBranchCount} {branchBatchFilter ? 'shown' : 'branches'}
+                                  <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">
+                                    {branchBatchFilter ? branchesForSelectedCourse.length : uniqueBranchCount}
                                   </span>
                                 </div>
                               </div>
@@ -3188,22 +3188,22 @@ const Settings = () => {
                 // Form View Mode
                 <div className="p-4">
                   {/* Form Header */}
-                  <div className="flex items-start justify-between mb-4 pb-4 border-b border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-purple-100 p-2.5 rounded-lg">
-                        <FileText size={24} className="text-purple-600" />
+                  <div className="flex items-start justify-between mb-3 pb-3 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-purple-100 p-2 rounded-lg">
+                        <FileText size={20} className="text-purple-600" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-semibold text-gray-900">{form.form_name}</h2>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${form.is_active
+                        <div className="flex items-center gap-1.5">
+                          <h2 className="text-base font-bold text-gray-900">{form.form_name}</h2>
+                          <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${form.is_active
                             ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                             : 'bg-gray-100 text-gray-600 border border-gray-200'
                             }`}>
                             {form.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           {form.form_description || 'Student registration form'}
                         </p>
                       </div>
@@ -3231,22 +3231,22 @@ const Settings = () => {
                   </div>
 
                   {/* Stats */}
-                  <div className="grid grid-cols-4 gap-3 mb-4">
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                      <p className="text-2xl font-bold text-gray-900">{form.form_fields?.length || 0}</p>
-                      <p className="text-xs text-gray-500">Total Fields</p>
+                  <div className="grid grid-cols-4 gap-2 mb-4">
+                    <div className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-center">
+                      <p className="text-lg font-bold text-gray-900">{form.form_fields?.length || 0}</p>
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Total Fields</p>
                     </div>
-                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-center">
-                      <p className="text-2xl font-bold text-purple-600">{form.form_fields?.filter(f => f.isEnabled !== false).length || 0}</p>
-                      <p className="text-xs text-gray-500">Active Fields</p>
+                    <div className="rounded-lg border border-purple-100 bg-purple-50 p-2 text-center">
+                      <p className="text-lg font-bold text-purple-600">{form.form_fields?.filter(f => f.isEnabled !== false).length || 0}</p>
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Active</p>
                     </div>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
-                      <p className="text-2xl font-bold text-amber-600">{form.pending_count || 0}</p>
-                      <p className="text-xs text-gray-500">Pending</p>
+                    <div className="rounded-lg border border-amber-100 bg-amber-50 p-2 text-center">
+                      <p className="text-lg font-bold text-amber-600">{form.pending_count || 0}</p>
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Pending</p>
                     </div>
-                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
-                      <p className="text-2xl font-bold text-emerald-600">{form.approved_count || 0}</p>
-                      <p className="text-xs text-gray-500">Approved</p>
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-center">
+                      <p className="text-lg font-bold text-emerald-600">{form.approved_count || 0}</p>
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Approved</p>
                     </div>
                   </div>
 
@@ -3321,22 +3321,22 @@ const Settings = () => {
                     ].filter(section => section.fields.length > 0);
 
                     return (
-                      <div className="space-y-6">
+                      <div className="space-y-4">
                         {sections.map((section, sectionIndex) => (
-                          <div key={sectionIndex} className="border-b border-gray-200 pb-6 last:border-b-0">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                              <div className={`w-3 h-3 bg-${section.color} rounded-full`}></div>
+                          <div key={sectionIndex} className="border-b border-gray-100 pb-3 last:border-b-0">
+                            <h2 className="text-[13px] font-bold text-gray-900 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                              <div className={`w-2 h-2 bg-${section.color} rounded-full`}></div>
                               {section.title}
                             </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-1.5">
                               {section.fields.map((field, index) => (
                                 <div
                                   key={field.id || index}
-                                  className="flex items-center gap-2 text-sm"
+                                  className="flex items-center gap-1.5 text-[11px]"
                                 >
-                                  <span className="font-medium text-gray-700">{field.label}</span>
-                                  {field.required && <span className="text-red-500 text-xs">*</span>}
-                                  <span className="text-xs text-gray-400 capitalize">({field.type})</span>
+                                  <span className="font-semibold text-gray-700">{field.label}</span>
+                                  {field.required && <span className="text-red-500 font-bold">*</span>}
+                                  <span className="text-[10px] text-gray-400 capitalize">({field.type})</span>
                                 </div>
                               ))}
                             </div>
@@ -3349,28 +3349,23 @@ const Settings = () => {
                   )}
 
                   {/* Certificate Information Section */}
-                  <div className="border-t border-gray-200 pt-6 mt-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                      Certificate Information
+                  <div className="border-t border-gray-200 pt-4 mt-4">
+                    <h2 className="text-[13px] font-bold text-gray-900 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
+                      <div className="w-2 h-2 bg-teal-500 rounded-full"></div>
+                      Certificates
                     </h2>
-                    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                        <FileText size={16} className="text-gray-600" />
-                        Default Certification Fields
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="bg-gray-50 rounded-lg border border-gray-100 p-2.5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {['diploma', 'ug', 'pg'].map(type => (
-                          <div key={type} className="space-y-2">
-                            <h4 className="text-sm font-medium text-gray-800 uppercase border-b border-gray-200 pb-1 mb-2">
-                              {type === 'ug' ? 'UG Courses' : type === 'pg' ? 'PG Courses' : 'Diploma Courses'}
+                          <div key={type} className="min-w-0">
+                            <h4 className="text-[11px] font-bold text-gray-400 uppercase border-b border-gray-200 pb-1 mb-1.5">
+                              {type === 'ug' ? 'UG' : type === 'pg' ? 'PG' : 'Diploma'}
                             </h4>
-                            <ul className="space-y-1">
+                            <ul className="space-y-0.5">
                               {certificateConfig[type]?.map(cert => (
-                                <li key={cert.id} className="flex items-start gap-2 text-sm text-gray-600">
-                                  <div className={`mt-1 w-1.5 h-1.5 rounded-full ${cert.required ? 'bg-teal-500' : 'bg-gray-300'}`}></div>
-                                  <span className={cert.required ? 'font-medium text-gray-700' : ''}>
+                                <li key={cert.id} className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                                  <div className={`mt-1 h-1 w-1 rounded-full flex-shrink-0 ${cert.required ? 'bg-teal-500' : 'bg-gray-300'}`}></div>
+                                  <span className={`truncate ${cert.required ? 'font-semibold text-gray-700' : ''}`}>
                                     {cert.name}
                                     {cert.required && <span className="text-red-500 ml-0.5">*</span>}
                                   </span>

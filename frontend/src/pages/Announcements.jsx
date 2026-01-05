@@ -430,7 +430,7 @@ const Announcements = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50/50 p-6 space-y-6 animate-fade-in relative">
+        <div className="min-h-screen bg-gray-50/50 space-y-6 animate-fade-in relative">
             {/* Tabs & Actions */}
             <div className="flex justify-between items-center border-b border-gray-200 bg-white px-4 rounded-t-xl shadow-sm overflow-x-auto">
                 <div className="flex whitespace-nowrap">

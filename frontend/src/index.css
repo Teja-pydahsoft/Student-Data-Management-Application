@@ -11,6 +11,7 @@
     0% {
         background-position: -200px 0;
     }
+
     100% {
         background-position: calc(200px + 100%) 0;
     }
@@ -23,10 +24,12 @@
 }
 
 @keyframes pulse-glow {
+
     0%,
     100% {
         box-shadow: 0 0 5px rgba(37, 99, 235, 0.5);
     }
+
     50% {
         box-shadow: 0 0 20px rgba(37, 99, 235, 0.8);
     }
@@ -61,7 +64,8 @@ body {
         sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #ffffff; /* Pure White Background */
+    background-color: #ffffff;
+    /* Pure White Background */
     background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
     background-image: url('data:image/svg+xml,<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><defs><path id="wave" d="M0 300c50-50 100-50 200 0s150 50 200 0 150-50 200 0 150 50 200 0" fill="none" stroke="%232563EB" stroke-width="2" opacity="0.05"/></defs><use href="%23wave" transform="translate(0,50)"/><use href="%23wave" transform="translate(0,150)"/><use href="%23wave" transform="translate(0,250)"/></svg>');
     background-repeat: no-repeat;
@@ -77,21 +81,33 @@ code {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #f9fafb; /* Light Gray Background */
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #2563eb; /* Primary Blue */
-    border-radius: 4px;
+    background: #cbd5e1;
+    /* Slate 300 */
+    border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #1d4ed8; /* Darker blue on hover */
+    background: #94a3b8;
+    /* Slate 400 */
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 /* Animations */
@@ -99,9 +115,11 @@ code {
     0% {
         transform: translateY(0px);
     }
+
     50% {
         transform: translateY(-8px);
     }
+
     100% {
         transform: translateY(0px);
     }
@@ -117,9 +135,11 @@ code {
     0% {
         transform: translateX(0px);
     }
+
     50% {
         transform: translateX(-10px);
     }
+
     100% {
         transform: translateX(0px);
     }
@@ -141,13 +161,15 @@ code {
 .heading-font {
     font-family: "Poppins", "Nunito", sans-serif;
     font-weight: 600;
-    color: #111827; /* Near Black */
+    color: #111827;
+    /* Near Black */
 }
 
 .body-font {
     font-family: "Inter", "Nunito", sans-serif;
     font-weight: 400;
-    color: #374151; /* Dark Gray */
+    color: #374151;
+    /* Dark Gray */
 }
 
 /* Card hover effects */
@@ -213,18 +235,21 @@ code {
     -moz-appearance: none;
     appearance: none;
     border-radius: 8px;
-    font-size: 16px; /* Prevents zoom on iOS */
+    font-size: 16px;
+    /* Prevents zoom on iOS */
 }
 
 .mobile-optimized input[type="tel"],
 .mobile-optimized input[type="email"],
 .mobile-optimized input[type="text"],
 .mobile-optimized input[type="password"] {
-    font-size: 16px !important; /* Prevents zoom on iOS */
+    font-size: 16px !important;
+    /* Prevents zoom on iOS */
 }
 
 /* Improve touch targets for mobile */
 @media (max-width: 768px) {
+
     .mobile-optimized button,
     .mobile-optimized input,
     .mobile-optimized select,
@@ -347,6 +372,7 @@ code {
 
 /* Smooth scrolling behavior */
 @supports (scroll-behavior: smooth) {
+
     nav,
     .overflow-y-auto,
     .overflow-auto {

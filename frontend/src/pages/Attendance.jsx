@@ -17,7 +17,8 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  Mail
+  Mail,
+  Users
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -116,9 +117,9 @@ const Attendance = () => {
     };
     const safeValue = Number.isFinite(value) ? value : Number(value) || 0;
     return (
-      <div className={`border rounded-lg p-3 ${colorMap[color] || colorMap.gray}`}>
-        <p className="text-xs text-gray-600">{label}</p>
-        <p className="text-lg font-bold">{safeValue}</p>
+      <div className={`border rounded-lg p-2 ${colorMap[color] || colorMap.gray}`}>
+        <p className="text-[10px] text-gray-600 leading-tight whitespace-normal">{label}</p>
+        <p className="text-sm sm:text-base font-bold">{safeValue}</p>
       </div>
     );
   };
@@ -2379,20 +2380,20 @@ const Attendance = () => {
         <img
           src={src}
           alt={student.studentName || 'Student'}
-          className="w-12 h-12 rounded-full object-cover border border-gray-200"
+          className="w-7 h-7 rounded-full object-cover border border-gray-100"
         />
       );
     }
 
     const initials = (student.studentName || 'NA')
       .split(' ')
+      .slice(0, 1)
       .map((part) => part.charAt(0))
-      .slice(0, 2)
       .join('')
       .toUpperCase();
 
     return (
-      <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold">
+      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-semibold">
         {initials || 'NA'}
       </div>
     );
@@ -2536,16 +2537,16 @@ const Attendance = () => {
   const semesterChartSeries = historyData ? buildChartSeries(historyData.semester?.series) : [];
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
-      <header className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="rounded-full bg-blue-100 p-2 sm:p-3 text-blue-600 flex-shrink-0">
-            <CalendarCheck size={24} />
+    <div className="h-full flex flex-col overflow-hidden space-y-2 lg:space-y-3">
+      <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between py-1">
+        <div className="flex items-center gap-2">
+          <div className="rounded-full bg-blue-100 p-1.5 text-blue-600 flex-shrink-0">
+            <CalendarCheck size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 heading-font">Attendance</h1>
-            <p className="text-xs sm:text-sm text-gray-600">
-              Filter students and mark daily attendance. Absent students trigger an SMS alert to parents.
+            <h1 className="text-lg font-bold text-gray-900 heading-font">Attendance</h1>
+            <p className="text-[10px] sm:text-[11px] text-gray-600 leading-tight">
+              Mark daily attendance.
             </p>
           </div>
         </div>
@@ -2567,20 +2568,19 @@ const Attendance = () => {
         </div>
       </header>
 
-      <section className="bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm p-3 sm:p-4">
+      <section className="bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm p-2 sm:p-2.5">
         <div className="space-y-3">
-          {/* Filter Header */}
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-gray-600 flex-shrink-0" />
-            <h3 className="text-sm font-semibold text-gray-700">Filters</h3>
+          <div className="flex items-center gap-1.5 px-0.5">
+            <Filter size={14} className="text-gray-600 flex-shrink-0" />
+            <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Filters</h3>
           </div>
 
-          {/* Dropdown Filters - Grid Layout */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+          {/* Dropdown Filters and Buttons */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <select
               value={filters.batch}
               onChange={(event) => handleFilterChange('batch', event.target.value)}
-              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
             >
               <option value="">All Batches</option>
               {filterOptions.batches.map((batchOption) => (
@@ -2593,15 +2593,13 @@ const Attendance = () => {
               value={filters.course || ''}
               onChange={(event) => handleFilterChange('course', event.target.value)}
               onFocus={() => {
-                // When user focuses on course dropdown, refresh options excluding current course
-                // This shows all courses for the selected batch, allowing direct selection
                 const filtersForFetch = { ...filters };
                 if (filtersForFetch.course) {
                   delete filtersForFetch.course;
                 }
                 loadFilterOptions(filtersForFetch, 'course');
               }}
-              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
             >
               <option value="">All Courses</option>
               {filterOptions.courses
@@ -2616,15 +2614,13 @@ const Attendance = () => {
               value={filters.branch || ''}
               onChange={(event) => handleFilterChange('branch', event.target.value)}
               onFocus={() => {
-                // When user focuses on branch dropdown, refresh options excluding current branch
-                // This shows all branches for the selected course, allowing direct selection
                 const filtersForFetch = { ...filters };
                 if (filtersForFetch.branch) {
                   delete filtersForFetch.branch;
                 }
                 loadFilterOptions(filtersForFetch, 'branch');
               }}
-              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px] disabled:opacity-50 col-span-2 sm:col-span-1"
+              className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px] disabled:opacity-50"
               disabled={filters.course && availableBranches.length === 0}
             >
               <option value="">All Branches</option>
@@ -2637,7 +2633,7 @@ const Attendance = () => {
             <select
               value={filters.currentYear}
               onChange={(event) => handleFilterChange('currentYear', event.target.value)}
-              className="w-full rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+              className="min-w-[100px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
             >
               <option value="">All Years</option>
               {filterOptions.years.map((yearOption) => (
@@ -2646,29 +2642,49 @@ const Attendance = () => {
                 </option>
               ))}
             </select>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <select
-                value={filters.currentSemester}
-                onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
-                className="w-full sm:w-auto flex-1 rounded-md border border-gray-300 px-2 sm:px-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
-              >
-                <option value="">All Semesters</option>
-                {filterOptions.semesters.map((semesterOption) => (
-                  <option key={semesterOption} value={semesterOption}>
-                    Sem {semesterOption}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={filters.currentSemester}
+              onChange={(event) => handleFilterChange('currentSemester', event.target.value)}
+              className="min-w-[110px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
+            >
+              <option value="">All Semesters</option>
+              {filterOptions.semesters.map((semesterOption) => (
+                <option key={semesterOption} value={semesterOption}>
+                  Sem {semesterOption}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="inline-flex items-center justify-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-600 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation min-h-[36px]"
+            >
+              <RefreshCw size={12} />
+              Clear
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDayEndReport}
+              disabled={dayEndReportLoading}
+              className="inline-flex items-center justify-center gap-1 px-3 py-1 rounded-md bg-indigo-600 text-white text-xs font-semibold shadow hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed min-h-[36px] whitespace-nowrap"
+            >
+              <Download size={14} />
+              {dayEndReportLoading ? 'Loading...' : 'Day End Report'}
+            </button>
+
+            {filters.currentYear && filters.currentSemester && (
               <button
                 type="button"
-                onClick={handleDayEndReport}
-                disabled={dayEndReportLoading}
-                className="inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-2 rounded-md bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px] sm:min-w-[132px] whitespace-nowrap"
+                onClick={handleMarkHolidayForFiltered}
+                disabled={markHolidayLoading}
+                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 text-[10px] sm:text-xs font-bold text-white bg-amber-600 rounded-md hover:bg-amber-700 active:bg-amber-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[36px] px-3"
               >
-                <Download size={14} />
-                {dayEndReportLoading ? 'Loading...' : 'Day End Report'}
+                {markHolidayLoading ? <Loader2 size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
+                Mark No Class
               </button>
-            </div>
+            )}
           </div>
 
           {/* Search Inputs - Full Width on Mobile */}
@@ -2680,7 +2696,7 @@ const Attendance = () => {
                 placeholder="Student name or PIN"
                 value={filters.studentName}
                 onChange={(event) => handleFilterChange('studentName', event.target.value)}
-                className="w-full rounded-md border border-gray-300 pl-8 sm:pl-10 pr-2 sm:pr-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+                className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
               />
             </div>
             <div className="relative">
@@ -2690,47 +2706,12 @@ const Attendance = () => {
                 placeholder="Parent mobile"
                 value={filters.parentMobile}
                 onChange={(event) => handleFilterChange('parentMobile', event.target.value)}
-                className="w-full rounded-md border border-gray-300 pl-8 sm:pl-10 pr-2 sm:pr-3 py-2.5 sm:py-1.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[44px]"
+                className="w-full rounded-md border border-gray-300 pl-8 pr-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
               />
             </div>
           </div>
 
-          {/* Action Buttons and Results Count */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation min-h-[44px]"
-            >
-              <RefreshCw size={14} />
-              Clear Filters
-            </button>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 justify-end">
-              {filters.currentYear && filters.currentSemester && (
-                <button
-                  type="button"
-                  onClick={handleMarkHolidayForFiltered}
-                  disabled={markHolidayLoading}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-sm font-semibold text-white bg-amber-600 rounded-md hover:bg-amber-700 active:bg-amber-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
-                >
-                  {markHolidayLoading ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
-                  Mark No Class Work (Year {filters.currentYear}, Sem {filters.currentSemester})
-                </button>
-              )}
-              <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
-                {loading && totalStudents === 0 ? (
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="animate-pulse bg-gray-200 rounded h-4 w-12" />
-                    <span>students found</span>
-                  </div>
-                ) : (
-                  <>
-                    <span className="font-semibold">{totalStudents.toLocaleString()}</span> students found
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+
         </div>
       </section>
 
@@ -3039,7 +3020,7 @@ const Attendance = () => {
                       {sendingReports ? (
                         <>
                           <Loader2 size={14} className="animate-spin" />
-                          Sending...
+                          Sending
                         </>
                       ) : (
                         <>
@@ -3190,41 +3171,76 @@ const Attendance = () => {
       )}
 
       {/* Attendance Statistics */}
-      <section className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-green-100 p-2">
-              <Check size={20} className="text-green-600" />
+      <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+        {/* Total Students Card */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 sm:p-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-slate-100 p-1">
+              <Users size={14} className="text-slate-600" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-600">Total Present</p>
-              {loading && attendanceStatistics.total === 0 ? (
-                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+              <p className="text-[10px] text-gray-600 leading-tight">Total Students</p>
+              {loading && totalStudents === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-12 mt-0.5" />
               ) : (
-                <p className="text-2xl font-bold text-green-700">{presentCount}</p>
+                <p className="text-sm font-bold text-slate-700 leading-tight">{totalStudents.toLocaleString()}</p>
               )}
             </div>
           </div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-blue-100 p-2">
-              <CalendarCheck size={20} className="text-blue-600" />
+
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 sm:p-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-green-100 p-1">
+              <Check size={14} className="text-green-600" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-600">Total Marked</p>
+              <p className="text-[10px] text-gray-600 leading-tight">Total Present</p>
               {loading && attendanceStatistics.total === 0 ? (
-                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-12 mt-0.5" />
               ) : (
-                <p className="text-2xl font-bold text-blue-700">{markedCount}</p>
+                <p className="text-sm font-bold text-green-700 leading-tight">{presentCount}</p>
               )}
             </div>
           </div>
         </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 sm:p-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-red-100 p-1">
+              <X size={14} className="text-red-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] text-gray-600 leading-tight">Total Absent</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-12 mt-0.5" />
+              ) : (
+                <p className="text-sm font-bold text-red-700 leading-tight">{absentCount}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 sm:p-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-blue-100 p-1">
+              <CalendarCheck size={14} className="text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] text-gray-600 leading-tight">Completed Marking</p>
+              {loading && attendanceStatistics.total === 0 ? (
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-12 mt-0.5" />
+              ) : (
+                <p className="text-sm font-bold text-blue-700 leading-tight">{markedCount}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div
-          className={`bg-white border rounded-xl shadow-sm p-4 transition-all duration-200 
+          className={`bg-white border rounded-lg shadow-sm p-1.5 sm:p-2 transition-all duration-200 
             ${pendingFilter === 'pending'
-              ? 'border-amber-500 ring-2 ring-amber-200 bg-amber-50'
+              ? 'border-amber-500 ring-1 ring-amber-200 bg-amber-50'
               : pendingCount > 0 && !loading
                 ? 'border-amber-300 hover:border-amber-400 hover:bg-gray-50 cursor-pointer'
                 : 'border-gray-200'
@@ -3232,47 +3248,30 @@ const Attendance = () => {
           onClick={() => {
             if (pendingCount > 0 && !loading) {
               setPendingFilter(pendingFilter === 'pending' ? 'all' : 'pending');
-              // Don't need to set showPendingStudents since filteredStudents logic handles it
-              // setShowPendingStudents(true); 
             }
           }}
           title={pendingCount > 0 && !loading ? "Click to view pending students" : ""}
         >
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-amber-100 p-2">
-              <AlertTriangle size={20} className="text-amber-600" />
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-amber-100 p-1">
+              <AlertTriangle size={14} className="text-amber-600" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-gray-600">Pending Marked</p>
+              <p className="text-[10px] text-gray-600 leading-tight">Pending Marking</p>
               {loading && attendanceStatistics.total === 0 ? (
-                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
+                <div className="animate-pulse bg-gray-200 rounded h-4 w-12 mt-0.5" />
               ) : (
-                <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-red-100 p-2">
-              <X size={20} className="text-red-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-gray-600">Total Absent</p>
-              {loading && attendanceStatistics.total === 0 ? (
-                <div className="animate-pulse bg-gray-200 rounded h-8 w-16 mt-1" />
-              ) : (
-                <p className="text-2xl font-bold text-red-700">{absentCount}</p>
+                <p className="text-sm font-bold text-amber-700 leading-tight">{pendingCount}</p>
               )}
             </div>
           </div>
         </div>
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-4 py-3 border-b border-gray-200">
-          <div className="flex items-center gap-2 text-gray-700 font-semibold">
-            <CalendarCheck size={18} />
+      <section className="flex-1 min-h-0 bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-2.5 py-2 border-b border-gray-200">
+          <div className="flex items-center gap-2 text-gray-700 font-semibold text-xs">
+            <CalendarCheck size={16} />
             <span>Daily Attendance</span>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -3281,17 +3280,17 @@ const Attendance = () => {
                 type="button"
                 onClick={handleGetDeleteCount}
                 disabled={gettingDeleteCount || deleteLoading}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center gap-1 px-3 py-1 rounded-md text-xs font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors touch-manipulation min-h-[32px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {gettingDeleteCount || deleteLoading ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={12} className="animate-spin" />
                     {gettingDeleteCount ? 'Counting...' : 'Deleting...'}
                   </>
                 ) : (
                   <>
-                    <X size={16} />
-                    Clear Today's Data
+                    <X size={12} />
+                    Clear
                   </>
                 )}
               </button>
@@ -3300,20 +3299,20 @@ const Attendance = () => {
               type="button"
               onClick={handleSave}
               disabled={!hasChanges || saving || editingLocked}
-              className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-md text-sm font-semibold transition-colors touch-manipulation min-h-[44px] ${hasChanges && !saving && !editingLocked
+              className={`inline-flex items-center justify-center gap-1 px-3 py-1 rounded-md text-xs font-semibold transition-colors touch-manipulation min-h-[32px] ${hasChanges && !saving && !editingLocked
                 ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
             >
               {saving ? (
                 <>
-                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <Check size={16} />
-                  Save Attendance
+                  <Check size={12} />
+                  Save
                 </>
               )}
             </button>
@@ -3349,166 +3348,167 @@ const Attendance = () => {
             )}
           </div>
         ) : (
-          <>
-            {/* Desktop Table View */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    {columnOrder.map((columnKey) => {
-                      const columnConfig = {
-                        student: { label: 'Student', sortable: true },
-                        pin: { label: 'PIN', sortable: true },
-                        registrationStatus: { label: 'Registration Status', sortable: true },
-                        batch: { label: 'Batch', sortable: true },
-                        course: { label: 'Course', sortable: true },
-                        branch: { label: 'Branch', sortable: true },
-                        year: { label: 'Year', sortable: true },
-                        semester: { label: 'Semester', sortable: true },
-                        parentContact: { label: 'Parent Contact', sortable: true },
-                        attendance: { label: 'Attendance', sortable: true },
-                        smsStatus: { label: 'SMS Status', sortable: false }
-                      };
-                      const config = columnConfig[columnKey];
-                      if (!config) return null;
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-auto no-scrollbar">
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      {columnOrder.map((columnKey) => {
+                        const columnConfig = {
+                          student: { label: 'Student', sortable: true },
+                          pin: { label: 'PIN', sortable: true },
+                          registrationStatus: { label: 'Registration Status', sortable: true },
+                          batch: { label: 'Batch', sortable: true },
+                          course: { label: 'Course', sortable: true },
+                          branch: { label: 'Branch', sortable: true },
+                          year: { label: 'Year', sortable: true },
+                          semester: { label: 'Semester', sortable: true },
+                          parentContact: { label: 'Parent Contact', sortable: true },
+                          attendance: { label: 'Attendance', sortable: true },
+                          smsStatus: { label: 'SMS Status', sortable: false }
+                        };
+                        const config = columnConfig[columnKey];
+                        if (!config) return null;
 
-                      return (
-                        <th key={columnKey} className={`px-4 py-3 ${config.align === 'right' ? 'text-right' : ''}`}>
-                          <div className={`flex items-center gap-2 ${config.align === 'right' ? 'justify-end' : ''}`}>
-                            <div className={`flex items-center gap-1 ${config.align === 'right' ? '' : 'flex-1'}`}>
-                              {config.sortable ? (
-                                <button
-                                  onClick={() => handleSort(columnKey)}
-                                  className="flex items-center gap-1 hover:text-gray-900 transition-colors"
-                                >
+                        return (
+                          <th key={columnKey} className={`px-1 py-1 text-[10px] ${config.align === 'right' ? 'text-right' : ''}`}>
+                            <div className={`flex items-center gap-2 ${config.align === 'right' ? 'justify-end' : ''}`}>
+                              <div className={`flex items-center gap-1 ${config.align === 'right' ? '' : 'flex-1'}`}>
+                                {config.sortable ? (
+                                  <button
+                                    onClick={() => handleSort(columnKey)}
+                                    className="flex items-center gap-1 hover:text-gray-900 transition-colors"
+                                  >
+                                    <span>{config.label}</span>
+                                    {sortConfig.field === columnKey && (
+                                      <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
+                                    )}
+                                  </button>
+                                ) : (
                                   <span>{config.label}</span>
-                                  {sortConfig.field === columnKey && (
-                                    <ArrowUpDown size={14} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
-                                  )}
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  onClick={() => moveColumn(columnKey, 'left')}
+                                  disabled={columnOrder.indexOf(columnKey) === 0}
+                                  className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title="Move left"
+                                >
+                                  <ChevronLeft size={12} />
                                 </button>
-                              ) : (
-                                <span>{config.label}</span>
-                              )}
+                                <button
+                                  onClick={() => moveColumn(columnKey, 'right')}
+                                  disabled={columnOrder.indexOf(columnKey) === columnOrder.length - 1}
+                                  className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title="Move right"
+                                >
+                                  <ChevronRight size={12} />
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex flex-col gap-0.5">
-                              <button
-                                onClick={() => moveColumn(columnKey, 'left')}
-                                disabled={columnOrder.indexOf(columnKey) === 0}
-                                className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="Move left"
-                              >
-                                <ChevronLeft size={12} />
-                              </button>
-                              <button
-                                onClick={() => moveColumn(columnKey, 'right')}
-                                disabled={columnOrder.indexOf(columnKey) === columnOrder.length - 1}
-                                className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="Move right"
-                              >
-                                <ChevronRight size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {sortedStudents.map((student) => {
-                    const status = effectiveStatus(student.id);
-                    const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
-                    return (
-                      <tr
-                        key={student.id}
-                        className="hover:bg-gray-50"
-                      >
-                        {columnOrder.map((columnKey) => {
-                          if (columnKey === 'student') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center gap-3">
-                                  {renderPhoto(student)}
-                                  <div className="font-semibold text-gray-900">
-                                    {student.studentName || 'Unknown Student'}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {sortedStudents.map((student) => {
+                      const status = effectiveStatus(student.id);
+                      const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
+                      return (
+                        <tr
+                          key={student.id}
+                          className="hover:bg-gray-50"
+                        >
+                          {columnOrder.map((columnKey) => {
+                            if (columnKey === 'student') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-1.5">
+                                    {renderPhoto(student)}
+                                    <div className="font-semibold text-gray-900 text-[10px] leading-tight max-w-[90px] truncate" title={student.studentName}>
+                                      {student.studentName || 'Unknown Student'}
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'pin') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.pinNumber || 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'registrationStatus') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {(() => {
-                                  const raw = (student.registration_status || '').toLowerCase();
-                                  const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
-                                  const label = isCompleted ? 'Completed' : 'Pending';
-                                  const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800';
-                                  return (
-                                    <span
-                                      title="Registration status is updated when student completes registration on student portal"
-                                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls}`}
-                                    >
-                                      {label}
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'batch') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.batch || 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'course') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.course || 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'branch') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.branch || 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'year') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'semester') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'parentContact') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3 text-sm text-gray-700" onClick={(e) => e.stopPropagation()}>
-                                <div>{parentContact}</div>
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'attendance') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                {/* Attendance status logic:
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'pin') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.pinNumber || 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'registrationStatus') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {(() => {
+                                    const raw = (student.registration_status || '').toLowerCase();
+                                    const isCompleted = raw === 'completed' || raw === 'registered' || raw === 'done';
+                                    const label = isCompleted ? 'Completed' : 'Pending';
+                                    const cls = isCompleted ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800';
+                                    return (
+                                      <span
+                                        title="Registration status is updated when student completes registration on student portal"
+                                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${cls}`}
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'batch') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.batch || 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'course') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.course || 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'branch') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.branch || 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'year') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.currentYear ? `Year ${student.currentYear}` : 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'semester') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  {student.currentSemester ? `Semester ${student.currentSemester}` : 'N/A'}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'parentContact') {
+                              return (
+                                <td key={columnKey} className="px-1 py-1.5 text-[10px] text-gray-700" onClick={(e) => e.stopPropagation()}>
+                                  <div>{parentContact}</div>
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'attendance') {
+                              return (
+                                <td key={columnKey} className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                                  {/* Attendance status logic:
                             - hasDbRecord: student.attendanceStatus is not null (record exists in DB for this date)
                             - statusChanged: current status differs from initial loaded status
                             - justSaved: attendance was saved in this session
@@ -3517,35 +3517,90 @@ const Attendance = () => {
                             1. There's a DB record AND status hasn't been changed locally
                             2. OR attendance was just saved in this session
                         */}
-                                {(() => {
-                                  const hasDbRecord = student.attendanceStatus !== null;
-                                  const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
-                                  const justSaved = lastUpdatedAt !== null;
+                                  {(() => {
+                                    const hasDbRecord = student.attendanceStatus !== null;
+                                    const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+                                    const justSaved = lastUpdatedAt !== null;
 
-                                  // Show marked state if saved or has existing record that wasn't changed
-                                  const isHoliday = status === 'holiday';
-                                  const showMarked = justSaved || (hasDbRecord && !statusChanged);
+                                    // Show marked state if saved or has existing record that wasn't changed
+                                    const isHoliday = status === 'holiday';
+                                    const showMarked = justSaved || (hasDbRecord && !statusChanged);
 
-                                  if (showMarked && !statusChanged) {
-                                    return (
-                                      <div className="flex items-center gap-3">
-                                        <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${isHoliday
-                                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                          : status === 'present'
-                                            ? 'bg-green-100 text-green-700 border border-green-200'
-                                            : 'bg-red-100 text-red-700 border border-red-200'
-                                          }`}>
-                                          {isHoliday ? <AlertTriangle size={16} /> : <Check size={16} />}
-                                          <div className="flex flex-col items-start text-left leading-tight">
-                                            <span>{isHoliday ? 'No Class Work (Marked)' : status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}</span>
-                                            {isHoliday && student.holidayReason && (
-                                              <span className="text-[10px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
-                                            )}
+                                    if (showMarked && !statusChanged) {
+                                      return (
+                                        <div className="flex items-center gap-1.5">
+                                          <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${isHoliday
+                                            ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                            : status === 'present'
+                                              ? 'bg-green-100 text-green-700 border border-green-200'
+                                              : 'bg-red-100 text-red-700 border border-red-200'
+                                            }`}>
+                                            {isHoliday ? <AlertTriangle size={12} /> : <Check size={12} />}
+                                            <div className="flex flex-col items-start text-left leading-tight">
+                                              <span>{isHoliday ? 'No Class' : status === 'present' ? 'Present' : 'Absent'}</span>
+                                              {isHoliday && student.holidayReason && (
+                                                <span className="text-[8px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
+                                              )}
+                                            </div>
                                           </div>
+                                          {/* Still allow changing even if marked */}
+                                          {!isHoliday && (
+                                            <label className="flex items-center gap-1 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={status === 'absent'}
+                                                onChange={(e) => {
+                                                  if (editingLocked) {
+                                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                                    return;
+                                                  }
+                                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                                }}
+                                                disabled={editingLocked}
+                                                className="w-3.5 h-3.5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                              />
+                                              <span className={`text-[10px] font-bold ${editingLocked ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                Change
+                                              </span>
+                                            </label>
+                                          )}
                                         </div>
-                                        {/* Still allow changing even if marked */}
-                                        {!isHoliday && (
-                                          <label className="flex items-center gap-2 cursor-pointer">
+                                      );
+                                    }
+
+                                    // Not marked yet - show toggle controls
+                                    return (
+                                      <div className="flex items-center gap-1.5">
+                                        <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${status === 'holiday'
+                                          ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                          : status === 'present'
+                                            ? 'bg-green-50 text-green-600 border border-green-100'
+                                            : 'bg-red-50 text-red-600 border border-red-100'
+                                          }`}>
+                                          {status === 'holiday' ? (
+                                            <>
+                                              <AlertTriangle size={12} />
+                                              <div className="flex flex-col items-start text-left leading-tight">
+                                                <span>No Class</span>
+                                                {student.holidayReason && (
+                                                  <span className="text-[8px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
+                                                )}
+                                              </div>
+                                            </>
+                                          ) : status === 'present' ? (
+                                            <>
+                                              <Check size={12} />
+                                              Present
+                                            </>
+                                          ) : (
+                                            <>
+                                              <X size={12} />
+                                              Absent
+                                            </>
+                                          )}
+                                        </div>
+                                        {status !== 'holiday' && (
+                                          <label className="flex items-center gap-1 cursor-pointer">
                                             <input
                                               type="checkbox"
                                               checked={status === 'absent'}
@@ -3557,328 +3612,273 @@ const Attendance = () => {
                                                 handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
                                               }}
                                               disabled={editingLocked}
-                                              className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                              className="w-3.5 h-3.5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
-                                            <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                              Change
+                                            <span className={`text-[10px] font-bold ${editingLocked ? 'text-gray-400' : 'text-gray-600'}`}>
+                                              Absent
                                             </span>
                                           </label>
                                         )}
                                       </div>
                                     );
-                                  }
+                                  })()}
+                                </td>
+                              );
+                            }
+                            if (columnKey === 'smsStatus') {
+                              return (
+                                <td key={columnKey} className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+                                  {(() => {
+                                    const smsStatus = smsStatusMap[student.id];
+                                    if (!smsStatus) {
+                                      if (status === 'absent') {
+                                        return (
+                                          <button
+                                            onClick={() => handleRetrySms(student)}
+                                            disabled={retryingSmsFor === student.id}
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
+                                            title="Click to send SMS notification"
+                                          >
+                                            {retryingSmsFor === student.id ? (
+                                              <>
+                                                <RefreshCw size={10} className="animate-spin" />
+                                                Sending
+                                              </>
+                                            ) : (
+                                              <>
+                                                <AlertTriangle size={10} />
+                                                Pending
+                                              </>
+                                            )}
+                                          </button>
+                                        );
+                                      }
+                                      return <span className="text-xs text-gray-400">-</span>;
+                                    }
 
-                                  // Not marked yet - show toggle controls
-                                  return (
-                                    <div className="flex items-center gap-3">
-                                      <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'holiday'
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                        : status === 'present'
-                                          ? 'bg-green-50 text-green-600 border border-green-100'
-                                          : 'bg-red-50 text-red-600 border border-red-100'
-                                        }`}>
-                                        {status === 'holiday' ? (
-                                          <>
-                                            <AlertTriangle size={16} />
-                                            <div className="flex flex-col items-start text-left leading-tight">
-                                              <span>No Class Work</span>
-                                              {student.holidayReason && (
-                                                <span className="text-[10px] font-normal italic opacity-80 mt-0.5 block">{student.holidayReason}</span>
-                                              )}
-                                            </div>
-                                          </>
-                                        ) : status === 'present' ? (
-                                          <>
-                                            <Check size={16} />
-                                            Present
-                                          </>
-                                        ) : (
-                                          <>
-                                            <X size={16} />
-                                            Absent
-                                          </>
-                                        )}
-                                      </div>
-                                      {status !== 'holiday' && (
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            checked={status === 'absent'}
-                                            onChange={(e) => {
-                                              if (editingLocked) {
-                                                toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                                return;
-                                              }
-                                              handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                            }}
-                                            disabled={editingLocked}
-                                            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                          />
-                                          <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                            Mark as Absent
-                                          </span>
-                                        </label>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                              </td>
-                            );
-                          }
-                          if (columnKey === 'smsStatus') {
-                            return (
-                              <td key={columnKey} className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                {(() => {
-                                  const smsStatus = smsStatusMap[student.id];
-                                  if (!smsStatus) {
-                                    if (status === 'absent') {
-                                      return (
+                                    if (smsStatus.success) {
+                                      return smsStatus.mocked ? (
                                         <button
                                           onClick={() => handleRetrySms(student)}
                                           disabled={retryingSmsFor === student.id}
-                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
-                                          title="Click to send SMS notification"
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
+                                          title="Test mode - Click to send again"
                                         >
                                           {retryingSmsFor === student.id ? (
                                             <>
-                                              <RefreshCw size={12} className="animate-spin" />
-                                              Sending...
+                                              <RefreshCw size={10} className="animate-spin" />
+                                              Sending
                                             </>
                                           ) : (
                                             <>
-                                              <AlertTriangle size={12} />
-                                              Pending - Send
+                                              <RefreshCw size={10} />
+                                              Test/Retry
+                                            </>
+                                          )}
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleRetrySms(student)}
+                                          disabled={retryingSmsFor === student.id}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
+                                          title="SMS sent - Click to send again"
+                                        >
+                                          {retryingSmsFor === student.id ? (
+                                            <>
+                                              <RefreshCw size={10} className="animate-spin" />
+                                              Sending
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Check size={10} />
+                                              Sent/Retry
                                             </>
                                           )}
                                         </button>
                                       );
                                     }
-                                    return <span className="text-xs text-gray-400">-</span>;
-                                  }
 
-                                  if (smsStatus.success) {
-                                    return smsStatus.mocked ? (
-                                      <button
-                                        onClick={() => handleRetrySms(student)}
-                                        disabled={retryingSmsFor === student.id}
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors cursor-pointer disabled:opacity-50"
-                                        title="Test mode - Click to send again"
-                                      >
-                                        {retryingSmsFor === student.id ? (
-                                          <>
-                                            <RefreshCw size={12} className="animate-spin" />
-                                            Sending...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <RefreshCw size={12} />
-                                            Test - Send Again
-                                          </>
-                                        )}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleRetrySms(student)}
-                                        disabled={retryingSmsFor === student.id}
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition-colors cursor-pointer disabled:opacity-50"
-                                        title="SMS sent - Click to send again"
-                                      >
-                                        {retryingSmsFor === student.id ? (
-                                          <>
-                                            <RefreshCw size={12} className="animate-spin" />
-                                            Sending...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Check size={12} />
-                                            Sent - Send Again
-                                          </>
-                                        )}
-                                      </button>
-                                    );
-                                  }
+                                    if (smsStatus.skipped) {
+                                      return (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700" title={smsStatus.reason}>
+                                          <AlertTriangle size={10} />
+                                          {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
+                                        </span>
+                                      );
+                                    }
 
-                                  if (smsStatus.skipped) {
                                     return (
-                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700" title={smsStatus.reason}>
-                                        <AlertTriangle size={12} />
-                                        {smsStatus.reason === 'missing_parent_mobile' ? 'No Mobile' : 'Skipped'}
-                                      </span>
+                                      <button
+                                        onClick={() => handleRetrySms(student)}
+                                        disabled={retryingSmsFor === student.id}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
+                                        title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
+                                      >
+                                        {retryingSmsFor === student.id ? (
+                                          <>
+                                            <RefreshCw size={10} className="animate-spin" />
+                                            Retrying
+                                          </>
+                                        ) : (
+                                          <>
+                                            <X size={10} />
+                                            Retry
+                                          </>
+                                        )}
+                                      </button>
                                     );
-                                  }
+                                  })()}
+                                </td>
+                              );
+                            }
 
-                                  return (
-                                    <button
-                                      onClick={() => handleRetrySms(student)}
-                                      disabled={retryingSmsFor === student.id}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors cursor-pointer disabled:opacity-50"
-                                      title={`Failed: ${smsStatus.reason || 'Unknown error'}. Click to retry.`}
-                                    >
-                                      {retryingSmsFor === student.id ? (
-                                        <>
-                                          <RefreshCw size={12} className="animate-spin" />
-                                          Retrying...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <X size={12} />
-                                          Failed - Retry
-                                        </>
-                                      )}
-                                    </button>
-                                  );
-                                })()}
-                              </td>
-                            );
-                          }
+                            return null;
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-                          return null;
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-3 p-3 sm:p-4">
+                {sortedStudents.map((student) => {
+                  const status = effectiveStatus(student.id);
+                  const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
+                  const hasDbRecord = student.attendanceStatus !== null;
+                  const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
+                  const justSaved = lastUpdatedAt !== null;
+                  const showMarked = justSaved || (hasDbRecord && !statusChanged);
 
-            {/* Mobile Card View */}
-            <div className="lg:hidden space-y-3 p-3 sm:p-4">
-              {sortedStudents.map((student) => {
-                const status = effectiveStatus(student.id);
-                const parentContact = student.parentMobile1 || student.parentMobile2 || 'Not available';
-                const hasDbRecord = student.attendanceStatus !== null;
-                const statusChanged = statusMap[student.id] !== initialStatusMap[student.id];
-                const justSaved = lastUpdatedAt !== null;
-                const showMarked = justSaved || (hasDbRecord && !statusChanged);
-
-                return (
-                  <div
-                    key={student.id}
-                    className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="p-4 space-y-3">
-                      {/* Header with Photo and Name */}
-                      <div className="flex items-start gap-3">
-                        {renderPhoto(student)}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
-                          <p className="text-sm text-gray-600 mt-1">{student.pinNumber || 'N/A'}</p>
-                        </div>
-                      </div>
-
-                      {/* Key Information */}
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                        <div>
-                          <p className="text-xs text-gray-500">Batch</p>
-                          <p className="text-sm font-medium text-gray-900">{student.batch || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Course</p>
-                          <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Branch</p>
-                          <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Year/Sem</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {student.currentYear ? `Y${student.currentYear}` : 'N/A'}/{student.currentSemester ? `S${student.currentSemester}` : 'N/A'}
-                          </p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-xs text-gray-500">Parent Contact</p>
-                          <p className="text-sm font-medium text-gray-900">{parentContact}</p>
-                        </div>
-                      </div>
-
-                      {/* Attendance Status */}
-                      <div className="pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                        {showMarked && !statusChanged ? (
-                          <div className="flex flex-col gap-2">
-                            <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
-                              ? 'bg-green-100 text-green-700 border border-green-200'
-                              : 'bg-red-100 text-red-700 border border-red-200'
-                              }`}>
-                              {status === 'present' ? <Check size={16} /> : <X size={16} />}
-                              {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
-                            </div>
-                            <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
-                              <input
-                                type="checkbox"
-                                checked={status === 'absent'}
-                                onChange={(e) => {
-                                  if (editingLocked) {
-                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                    return;
-                                  }
-                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                }}
-                                disabled={editingLocked}
-                                className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
-                              />
-                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                Change Status
-                              </span>
-                            </label>
+                  return (
+                    <div
+                      key={student.id}
+                      className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      <div className="p-4 space-y-3">
+                        {/* Header with Photo and Name */}
+                        <div className="flex items-start gap-3">
+                          {renderPhoto(student)}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 text-base truncate">{student.studentName || 'Unknown Student'}</h3>
+                            <p className="text-sm text-gray-600 mt-1">{student.pinNumber || 'N/A'}</p>
                           </div>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
-                              ? 'bg-green-50 text-green-600 border border-green-100'
-                              : 'bg-red-50 text-red-600 border border-red-100'
-                              }`}>
-                              {status === 'present' ? <Check size={16} /> : <X size={16} />}
-                              {status === 'present' ? 'Present' : 'Absent'}
-                            </div>
-                            <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
-                              <input
-                                type="checkbox"
-                                checked={status === 'absent'}
-                                onChange={(e) => {
-                                  if (editingLocked) {
-                                    toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
-                                    return;
-                                  }
-                                  handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
-                                }}
-                                disabled={editingLocked}
-                                className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
-                              />
-                              <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
-                                Mark as Absent
-                              </span>
-                            </label>
-                          </div>
-                        )}
-                      </div>
+                        </div>
 
+                        {/* Key Information */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                          <div>
+                            <p className="text-xs text-gray-500">Batch</p>
+                            <p className="text-sm font-medium text-gray-900">{student.batch || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Course</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Branch</p>
+                            <p className="text-sm font-medium text-gray-900 truncate" title={student.branch || ''}>{student.branch || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Year/Sem</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {student.currentYear ? `Y${student.currentYear}` : 'N/A'}/{student.currentSemester ? `S${student.currentSemester}` : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-gray-500">Parent Contact</p>
+                            <p className="text-sm font-medium text-gray-900">{parentContact}</p>
+                          </div>
+                        </div>
+
+                        {/* Attendance Status */}
+                        <div className="pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                          {showMarked && !statusChanged ? (
+                            <div className="flex flex-col gap-2">
+                              <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
+                                ? 'bg-green-100 text-green-700 border border-green-200'
+                                : 'bg-red-100 text-red-700 border border-red-200'
+                                }`}>
+                                {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                                {status === 'present' ? 'Present (Marked)' : 'Absent (Marked)'}
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                                <input
+                                  type="checkbox"
+                                  checked={status === 'absent'}
+                                  onChange={(e) => {
+                                    if (editingLocked) {
+                                      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                      return;
+                                    }
+                                    handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                  }}
+                                  disabled={editingLocked}
+                                  className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                                />
+                                <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                  Change Status
+                                </span>
+                              </label>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium ${status === 'present'
+                                ? 'bg-green-50 text-green-600 border border-green-100'
+                                : 'bg-red-50 text-red-600 border border-red-100'
+                                }`}>
+                                {status === 'present' ? <Check size={16} /> : <X size={16} />}
+                                {status === 'present' ? 'Present' : 'Absent'}
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer touch-manipulation min-h-[44px]">
+                                <input
+                                  type="checkbox"
+                                  checked={status === 'absent'}
+                                  onChange={(e) => {
+                                    if (editingLocked) {
+                                      toast.error(editingLockReason || 'Attendance editing is disabled for this date.');
+                                      return;
+                                    }
+                                    handleStatusChange(student.id, e.target.checked ? 'absent' : 'present');
+                                  }}
+                                  disabled={editingLocked}
+                                  className="w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 disabled:opacity-50"
+                                />
+                                <span className={`text-sm ${editingLocked ? 'text-gray-400' : 'text-gray-700'}`}>
+                                  Mark as Absent
+                                </span>
+                              </label>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* Infinite scroll observer and loading indicator */}
+              {(() => {
+                const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
+                if (hasFilters && hasMore) {
+                  return (
+                    <div ref={scrollObserverRef} className="py-4 flex justify-center">
+                      {loadingMore && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Loader2 size={20} className="animate-spin" />
+                          <span className="text-sm">Loading more students...</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
-
-            {/* Infinite scroll observer and loading indicator */}
-            {(() => {
-              const hasFilters = !!(filters.batch || filters.course || filters.branch || filters.currentYear || filters.currentSemester);
-              if (hasFilters && hasMore) {
-                return (
-                  <div ref={scrollObserverRef} className="py-4 flex justify-center">
-                    {loadingMore && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Loader2 size={20} className="animate-spin" />
-                        <span className="text-sm">Loading more students...</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              return null;
-            })()}
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 border-t border-gray-100">
-              <div className="text-sm text-gray-600">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 border-t border-gray-100">
+              <div className="text-[11px] text-gray-600">
                 {totalStudents === 0
                   ? 'No students to display'
                   : (() => {
@@ -3900,14 +3900,14 @@ const Attendance = () => {
                   return null; // Don't show pagination controls when filters are applied
                 }
                 return (
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-                    <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    <label className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-gray-600">
                       <span className="hidden sm:inline">Rows per page</span>
                       <span className="sm:hidden">Per page</span>
                       <select
                         value={pageSize}
                         onChange={handlePageSizeChange}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm touch-manipulation min-h-[44px]"
+                        className="px-1.5 py-0.5 border border-gray-300 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-[11px] touch-manipulation min-h-[28px] sm:min-h-[32px]"
                         disabled={loading}
                       >
                         {pageSizeOptions.map(option => (
@@ -3920,18 +3920,18 @@ const Attendance = () => {
                         type="button"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={isFirstPage || loading || totalStudents === 0}
-                        className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                        className="flex-1 sm:flex-none px-2 py-1 border border-gray-300 rounded-md text-[11px] text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[32px] font-semibold"
                       >
                         Previous
                       </button>
-                      <span className="text-xs sm:text-sm text-gray-600 px-2 text-center whitespace-nowrap">
+                      <span className="text-[10px] sm:text-[11px] text-gray-600 px-1 text-center whitespace-nowrap">
                         Page {Math.min(currentPage, totalPages).toLocaleString()} of {totalPages.toLocaleString()}
                       </span>
                       <button
                         type="button"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={isLastPage || loading || totalStudents === 0}
-                        className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[44px] font-medium"
+                        className="flex-1 sm:flex-none px-2 py-1 border border-gray-300 rounded-md text-[11px] text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation min-h-[32px] font-semibold"
                       >
                         Next
                       </button>
@@ -3940,7 +3940,7 @@ const Attendance = () => {
                 );
               })()}
             </div>
-          </>
+          </div>
         )}
       </section>
 
@@ -4123,25 +4123,25 @@ const Attendance = () => {
 
               {/* Pagination Footer */}
               {smsResults.length > smsPageSize && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-                  <div className="text-sm text-gray-600">
+                <div className="flex items-center justify-between px-4 py-1.5 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+                  <div className="text-[11px] text-gray-600">
                     Showing {((smsCurrentPage - 1) * smsPageSize) + 1} to {Math.min(smsCurrentPage * smsPageSize, smsResults.length)} of {smsResults.length} students
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSmsCurrentPage(p => Math.max(1, p - 1))}
                       disabled={smsCurrentPage === 1}
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[28px]"
                     >
                       Previous
                     </button>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-[11px] text-gray-600">
                       Page {smsCurrentPage} of {Math.ceil(smsResults.length / smsPageSize)}
                     </span>
                     <button
                       onClick={() => setSmsCurrentPage(p => Math.min(Math.ceil(smsResults.length / smsPageSize), p + 1))}
                       disabled={smsCurrentPage >= Math.ceil(smsResults.length / smsPageSize)}
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[28px]"
                     >
                       Next
                     </button>
@@ -4372,7 +4372,7 @@ const Attendance = () => {
         calendarError={calendarError}
         onRetryCalendarFetch={handleRetryCalendarFetch}
       />
-    </div >
+    </div>
   );
 };
 
