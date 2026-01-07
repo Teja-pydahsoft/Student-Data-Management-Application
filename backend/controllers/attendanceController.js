@@ -341,10 +341,6 @@ exports.getAttendance = async (req, res) => {
         s.student_name,
         s.parent_mobile1,
         s.parent_mobile2,
-        s.student_photo,
-        s.batch,
-        s.course,
-        s.branch,
         s.current_year,
         s.current_semester,
         CASE
@@ -427,18 +423,13 @@ exports.getAttendance = async (req, res) => {
       // JSON extraction is expensive, so we prioritize fixed columns
       query += `
         AND (
-          s.student_name LIKE ?
-          OR s.pin_no LIKE ?
-          OR (s.student_data IS NOT NULL AND (
-            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Student Name"')) LIKE ?
-            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."student_name"')) LIKE ?
-            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."PIN Number"')) LIKE ?
-            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Pin Number"')) LIKE ?
-            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."pin_number"')) LIKE ?
-          ))
+          s.admission_number LIKE ? 
+          OR s.admission_no LIKE ? 
+          OR s.pin_no LIKE ? 
+          OR s.student_name LIKE ?
         )
       `;
-      params.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword);
+      params.push(keyword, keyword, keyword, keyword);
     }
 
     if (parentMobile) {
@@ -448,13 +439,9 @@ exports.getAttendance = async (req, res) => {
         AND (
           s.parent_mobile1 LIKE ?
           OR s.parent_mobile2 LIKE ?
-          OR (s.student_data IS NOT NULL AND (
-            JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 1"')) LIKE ?
-            OR JSON_UNQUOTE(JSON_EXTRACT(s.student_data, '$."Parent Mobile Number 2"')) LIKE ?
-          ))
         )
       `;
-      params.push(mobileLike, mobileLike, mobileLike, mobileLike);
+      params.push(mobileLike, mobileLike);
     }
 
     const { attendanceStatus } = req.query;

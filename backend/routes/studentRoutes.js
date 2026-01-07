@@ -153,6 +153,14 @@ router.get(
   attachUserScope,
   studentController.getStudentByAdmission
 );
+
+router.get(
+  '/:admissionNumber/photo',
+  authMiddleware,
+  allowStudentOwnProfileOrPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.getStudentPhoto
+);
 router.put(
   '/:admissionNumber',
   authMiddleware,

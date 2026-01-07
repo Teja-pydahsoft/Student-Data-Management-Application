@@ -2265,7 +2265,13 @@ exports.getAllStudents = async (req, res) => {
     }
 
     let query = `
-      SELECT *,
+      SELECT 
+        id, admission_number, admission_no, pin_no, student_name, student_data, 
+        fee_status, student_mobile, parent_mobile1, parent_mobile2, created_at, 
+        student_status, course, branch, current_year, current_semester, batch, 
+        certificates_status, student_address, city_village, mandal_name, district, 
+        stud_type, scholar_status, gender, dob, father_name, adhar_no, admission_date, 
+        previous_college, remarks, college, caste,
         CASE
           WHEN
             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
@@ -2387,7 +2393,7 @@ exports.getAllStudents = async (req, res) => {
       }
     });
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY id DESC';
     if (!fetchAll) {
       query += ' LIMIT ? OFFSET ?';
       params.push(pageSize, pageOffset);
@@ -6360,6 +6366,38 @@ exports.adminVerifyMobile = async (req, res) => {
       success: false,
       message: 'Server error while verifying mobile'
     });
+  }
+};
+
+// Get single student photo (Lazy Load)
+exports.getStudentPhoto = async (req, res) => {
+  try {
+    const { admissionNumber } = req.params;
+
+    if (!admissionNumber) {
+      return res.status(400).json({ success: false, message: 'Admission number required' });
+    }
+
+    const [students] = await masterPool.query(
+      'SELECT student_photo FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    const photo = students[0].student_photo;
+
+    // Return the photo data directly (it's likely a base64 string or blob)
+    return res.json({
+      success: true,
+      data: photo
+    });
+
+  } catch (error) {
+    console.error('Get student photo error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch photo' });
   }
 };
 

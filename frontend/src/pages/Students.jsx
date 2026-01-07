@@ -25,6 +25,7 @@ import {
   History,
   MessageSquare
 } from 'lucide-react';
+import StudentAvatar from '../components/StudentAvatar';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import StudentHistoryTab from '../components/Students/StudentHistoryTab';
@@ -409,9 +410,40 @@ const Students = () => {
     searchTermRef.current = searchTerm;
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm);
-    }, 100); // 100ms debounce delay for immediate fetch
+    }, 500); // 500ms debounce delay for immediate fetch
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Fetch full student details (including photo) when opening modal
+  useEffect(() => {
+    const fetchFullDetails = async () => {
+      if (showModal && selectedStudent?.admission_number) {
+        // If photo is missing, we likely need to fetch full details
+        // We always fetch to ensure we have the latest data including the photo blob if it exists
+        try {
+          const response = await api.get(`/students/${selectedStudent.admission_number}`);
+          if (response.data.success) {
+            setSelectedStudent(prev => ({
+              ...prev, // Keep existing fields (like computed ones)
+              ...response.data.data, // Overwrite with fresh DB data (including photo)
+              // Ensure we don't lose the ID or crucial keys if the API returns slightly different structure
+              id: prev.id
+            }));
+
+            // Also update editData if we are in edit mode or just to have it ready
+            setEditData(prev => ({
+              ...prev,
+              ...response.data.data
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to fetch full student details:", error);
+        }
+      }
+    };
+
+    fetchFullDetails();
+  }, [showModal, selectedStudent?.admission_number]);
 
   useEffect(() => {
     pageSizeRef.current = pageSize;
@@ -2617,27 +2649,12 @@ const Students = () => {
                         </td>
                         {canViewField('student_photo') && (
                           <td className="py-1 px-1.5 sticky left-10 bg-white z-10 border-r border-gray-200">
-                            <div className="flex items-center justify-center w-7 h-7 mx-auto">
-                              {student.student_photo &&
-                                student.student_photo !== '{}' &&
-                                student.student_photo !== null &&
-                                student.student_photo !== '' &&
-                                student.student_photo !== '{}' ? (
-                                <img
-                                  src={getStaticFileUrlDirect(student.student_photo)}
-                                  alt="Student Photo"
-                                  className="w-7 h-7 rounded-full object-cover border border-gray-200 shadow-sm"
-                                  onError={(e) => {
-                                    if (e.target && e.target.style) {
-                                      e.target.style.display = 'none';
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center">
-                                  <span className="text-gray-400 text-[8px]">No</span>
-                                </div>
-                              )}
+                            <div className="flex items-center justify-center mx-auto">
+                              <StudentAvatar
+                                admissionNumber={student.admission_number}
+                                studentName={student.student_name}
+                                className="w-7 h-7"
+                              />
                             </div>
                           </td>
                         )}
@@ -2766,26 +2783,12 @@ const Students = () => {
                         </div>
                         {canViewField('student_photo') && (
                           <div className="flex-shrink-0">
-                            {student.student_photo &&
-                              student.student_photo !== '{}' &&
-                              student.student_photo !== null &&
-                              student.student_photo !== '' &&
-                              student.student_photo !== '{}' ? (
-                              <img
-                                src={getStaticFileUrlDirect(student.student_photo)}
-                                alt="Student Photo"
-                                className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-sm"
-                                onError={(e) => {
-                                  if (e.target && e.target.style) {
-                                    e.target.style.display = 'none';
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center shadow-sm">
-                                <span className="text-gray-400 text-xs">No Photo</span>
-                              </div>
-                            )}
+                            <StudentAvatar
+                              admissionNumber={student.admission_number}
+                              studentName={student.student_name}
+                              className="w-16 h-16"
+                              iconSize={32}
+                            />
                           </div>
                         )}
                         <div className="flex-1 min-w-0" onClick={() => !isCashier && handleViewDetails(student)}>

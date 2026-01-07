@@ -20,6 +20,7 @@ import {
   Mail,
   Users
 } from 'lucide-react';
+import StudentAvatar from '../components/StudentAvatar';
 import toast from 'react-hot-toast';
 import {
   ResponsiveContainer,
@@ -3428,7 +3429,11 @@ const Attendance = () => {
                               return (
                                 <td key={columnKey} className="px-1 py-1" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center gap-1.5">
-                                    {renderPhoto(student)}
+                                    <StudentAvatar
+                                      admissionNumber={student.admissionNumber}
+                                      studentName={student.studentName}
+                                      className="w-7 h-7"
+                                    />
                                     <div className="font-semibold text-gray-900 text-[10px] leading-tight max-w-[90px] truncate" title={student.studentName}>
                                       {student.studentName || 'Unknown Student'}
                                     </div>
