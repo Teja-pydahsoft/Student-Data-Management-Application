@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate, Outlet } from 'react-router-dom';
+import { NavLink, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import {
     Home,
     CalendarCheck,
@@ -18,18 +18,91 @@ import {
     BellOff
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import api from '../../config/api';
 import toast from 'react-hot-toast';
 import NotificationPermissionModal from '../NotificationPermissionModal';
 import NotificationIcon from '../Notifications/NotificationIcon';
 import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../../services/pushService';
+import RegistrationPendingModal from '../RegistrationPendingModal';
 
 const StudentLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
     const [notificationModalOpen, setNotificationModalOpen] = useState(false);
     const [isSubscribed, setIsSubscribed] = useState(false);
+    const [showRestrictionModal, setShowRestrictionModal] = useState(false);
+    const [fetchedStatus, setFetchedStatus] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, logout } = useAuthStore();
+
+    useEffect(() => {
+        const fetchStudentStatus = async () => {
+            if (user?.admission_number) {
+                try {
+                    const res = await api.get(`/students/${user.admission_number}`);
+                    if (res.data.success && res.data.data) {
+                        setFetchedStatus(res.data.data);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch student status in layout', error);
+                }
+            }
+        };
+        fetchStudentStatus();
+    }, [user?.admission_number]);
+
+    // Registration Status Check
+    const isRegistrationPending = () => {
+        // Use fetched data if available, otherwise fall back to user store
+        const data = fetchedStatus || user;
+
+        const rawSource = data?.registration_status
+            || (data?.student_data ? (data.student_data['Registration Status'] || data.student_data.registration_status) : '')
+            || '';
+        const raw = String(rawSource).trim().toLowerCase();
+
+        // If we have no data yet (and no user data), assume pending to be safe, 
+        // OR allow if we want to be lenient during loading. 
+        // Given the requirement is strict ("complete the registration to get the access"), 
+        // we should probably default to pending if we are unsure, BUT we don't want to block 
+        // valid users during a slow network request.
+        // Compromise: if raw is empty string (data missing), assume pending ONLY if we have finished loading?
+        // For now: if raw is empty, it returns 'pending'.
+
+        return raw !== 'completed';
+    };
+
+    const isPending = isRegistrationPending();
+    const allowedPaths = ['/student/dashboard', '/student/semester-registration'];
+
+    useEffect(() => {
+        // Check if current path is restricted
+        if (isPending && !allowedPaths.includes(location.pathname)) {
+            setShowRestrictionModal(true);
+        } else if (!isPending) {
+            // Auto close if status is confirmed as not pending (e.g. after fetch)
+            setShowRestrictionModal(false);
+        }
+    }, [location.pathname, isPending]);
+
+    const handleNavigation = (e, path) => {
+        if (isPending && !allowedPaths.includes(path)) {
+            e.preventDefault();
+            setShowRestrictionModal(true);
+            setSidebarOpen(false); // Close mobile sidebar if open
+        } else {
+            setSidebarOpen(false);
+        }
+    };
+
+    const handleModalClose = () => {
+        setShowRestrictionModal(false);
+        // If currently on a restricted page, redirect to dashboard
+        if (isPending && !allowedPaths.includes(location.pathname)) {
+            navigate('/student/dashboard');
+        }
+    };
 
     useEffect(() => {
         checkPushStatus();
@@ -98,6 +171,11 @@ const StudentLayout = ({ children }) => {
                 onAllow={handleAllowNotifications}
             />
 
+            <RegistrationPendingModal
+                isOpen={showRestrictionModal}
+                onClose={handleModalClose}
+            />
+
             {/* Mobile Menu Button */}
             <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2 items-center">
                 <button
@@ -151,7 +229,7 @@ const StudentLayout = ({ children }) => {
                             <NavLink
                                 key={item.path}
                                 to={item.path}
-                                onClick={() => setSidebarOpen(false)}
+                                onClick={(e) => handleNavigation(e, item.path)}
                                 className={({ isActive }) => `
                                   relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group
                                   ${isActive
