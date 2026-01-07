@@ -142,42 +142,86 @@ const Reports = () => {
     },
     [filters]
   );
-  const fetchFilterOptions = async (currentFilters = {}, excludeField = null) => {
-    try {
-      const params = new URLSearchParams();
-      // Exclude the field being changed to show all available options
-      if (currentFilters.college && excludeField !== 'college') params.append('college', currentFilters.college);
-      if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
-      // Include course only if course is not being changed and branch is not being changed
-      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
-      if (currentFilters.branch && excludeField !== 'branch') params.append('branch', currentFilters.branch);
-
-      const queryString = params.toString();
-      const response = await api.get(`/students/quick-filters${queryString ? `?${queryString}` : ''}`);
-      if (response.data?.success) {
-        const data = response.data.data || {};
-        setFilterOptions({
-          colleges: data.colleges || [],
-          batches: data.batches || [],
-          courses: data.courses || [],
-          branches: data.branches || [],
-          years: data.years || [],
-          semesters: data.semesters || []
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to fetch filter options:', error);
-    }
-  };
-
+  // Fetch initial options only once on mount
   useEffect(() => {
-    fetchFilterOptions();
+    const fetchInitialOptions = async () => {
+      try {
+        const response = await api.get('/students/quick-filters');
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            colleges: data.colleges || [],
+            batches: data.batches || [],
+            courses: data.courses || [],
+            branches: data.branches || [],
+            years: data.years || [],
+            semesters: data.semesters || []
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to fetch initial filter options:', error);
+      }
+    };
+    fetchInitialOptions();
   }, []);
 
-  // Refresh filter options when parent filters change (for cascading)
+  // Update Courses when College or Batch changes
   useEffect(() => {
-    fetchFilterOptions(filters);
-  }, [filters.college, filters.batch, filters.course, filters.branch]);
+    const updateCourseOptions = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.college) params.append('college', filters.college);
+        if (filters.batch) params.append('batch', filters.batch);
+
+        // Fetch options filtered by college/batch to update Courses and Branches
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            courses: data.courses || [],
+            // If course is not selected, show all branches for this college
+            // If course IS selected, the course-specific effect will handle branches
+            branches: !filters.course ? (data.branches || []) : prev.branches
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to update course options:', error);
+      }
+    };
+
+    updateCourseOptions();
+  }, [filters.college, filters.batch, filters.course]);
+  // Added filters.course dependency so if it's cleared, we reset branches if needed, 
+  // though handleFilterChange clears it, so it triggers this.
+
+  // Update Branches when Course changes
+  useEffect(() => {
+    if (!filters.course) return; // Handled by the college/batch effect
+
+    const updateBranchOptions = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.college) params.append('college', filters.college);
+        if (filters.batch) params.append('batch', filters.batch);
+        params.append('course', filters.course);
+
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            branches: data.branches || []
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to update branch options:', error);
+      }
+    };
+
+    updateBranchOptions();
+  }, [filters.course]);
 
   useEffect(() => {
     loadReport({ ...filters, page: 1 });
@@ -506,11 +550,6 @@ const Reports = () => {
             <select
               value={filters.course || ''}
               onChange={(e) => handleFilterChange('course', e.target.value)}
-              onFocus={() => {
-                const filtersForFetch = { ...filters };
-                if (filtersForFetch.course) delete filtersForFetch.course;
-                fetchFilterOptions(filtersForFetch, 'course');
-              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Courses</option>
@@ -527,11 +566,6 @@ const Reports = () => {
             <select
               value={filters.branch || ''}
               onChange={(e) => handleFilterChange('branch', e.target.value)}
-              onFocus={() => {
-                const filtersForFetch = { ...filters };
-                if (filtersForFetch.branch) delete filtersForFetch.branch;
-                fetchFilterOptions(filtersForFetch, 'branch');
-              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Branches</option>
