@@ -302,7 +302,7 @@ const Reports = () => {
       <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
         {/* Filters and Actions Row */}
         <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 w-full">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 w-full">
             {/* Search */}
             <div className="md:col-span-2 lg:col-span-2 xl:col-span-2 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
