@@ -14,6 +14,11 @@ import {
   Search,
   XCircle
 } from 'lucide-react';
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  LineChart, Line
+} from 'recharts';
 import toast from 'react-hot-toast';
 import RegistrationDownloadModal from '../components/Reports/RegistrationDownloadModal';
 import api from '../config/api';
@@ -30,9 +35,6 @@ const StatusBadge = ({ status, type = 'icon' }) => {
     if (status === 'No Due' || status === 'Verified' || status === 'completed') colorClass = 'bg-green-100 text-green-700';
     else if (status === 'Permitted') colorClass = 'bg-orange-100 text-orange-700';
     else if (status === 'Unverified' || status === 'Pending' || status === 'pending') colorClass = 'bg-red-50 text-red-600';
-
-    // Capitalize logical statuses for display if needed, but we expect backend to send nice text now for fee/certs
-    // For icon types derived from 'completed'/'pending', we might get raw strings here to display.
 
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${colorClass}`}>
@@ -62,6 +64,7 @@ const Reports = () => {
     totalRecords: 0
   });
   const [stats, setStats] = useState(null);
+  const [activeTab, setActiveTab] = useState('sheet');
 
   const [filters, setFilters] = useState({
     college: '',
@@ -146,7 +149,7 @@ const Reports = () => {
       if (currentFilters.college && excludeField !== 'college') params.append('college', currentFilters.college);
       if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
       // Include course only if course is not being changed and branch is not being changed
-      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
+      if (currentFilters.course && excludeField !== 'course' && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
       if (currentFilters.branch && excludeField !== 'branch') params.append('branch', currentFilters.branch);
 
       const queryString = params.toString();
@@ -266,9 +269,137 @@ const Reports = () => {
 
   const hasActiveFilters = activeFilterEntries.length > 0;
 
+  // Transform stats for charts
+  const overviewChartData = useMemo(() => {
+    if (!stats) return [];
+    return [
+      {
+        name: 'Verification',
+        completed: stats.verification?.completed || 0,
+        pending: stats.verification?.pending || 0
+      },
+      {
+        name: 'Certificates',
+        completed: stats.certificates?.verified || 0,
+        pending: stats.certificates?.pending || 0
+      },
+      {
+        name: 'Fees',
+        completed: stats.fees?.cleared || 0,
+        pending: stats.fees?.pending || 0
+      },
+      {
+        name: 'Promotion',
+        completed: stats.promotion?.completed || 0,
+        pending: stats.promotion?.pending || 0
+      },
+      {
+        name: 'Scholarship',
+        completed: stats.scholarship?.assigned || 0,
+        pending: stats.scholarship?.pending || 0
+      }
+    ];
+  }, [stats]);
+
+
+  // Chart Data Helpers
+  const renderSingleStageChart = (stageName, completed, pending, colors = ['#10B981', '#EF4444']) => {
+    const data = [
+      { name: 'Completed', value: completed },
+      { name: 'Pending', value: pending }
+    ];
+    // Don't render if no data
+    if (completed === 0 && pending === 0) return null;
+
+    return (
+      <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center h-full">
+        <h3 className="text-xs font-semibold text-gray-700 mb-1">{stageName}</h3>
+        <div className="flex-1 w-full min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius="45%"
+                outerRadius="70%"
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={colors[index]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex gap-2 text-[10px] mt-1">
+          <div className="flex items-center gap-1">
+            <div className={`w-1.5 h-1.5 rounded-full`} style={{ backgroundColor: colors[0] }}></div>
+            <span className="text-gray-600">{completed}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className={`w-1.5 h-1.5 rounded-full`} style={{ backgroundColor: colors[1] }}></div>
+            <span className="text-gray-600">{pending}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const StatsGrid = () => (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 flex-shrink-0">
+      <div className="bg-blue-50 p-2 md:p-3 rounded-lg border border-blue-100">
+        <div className="text-[10px] md:text-xs text-blue-600 uppercase font-semibold">Total</div>
+        <div className="text-lg md:text-xl font-bold text-blue-900">{stats?.total || 0}</div>
+      </div>
+      <div className="bg-yellow-50 p-2 md:p-3 rounded-lg border border-yellow-100">
+        <div className="text-[10px] md:text-xs text-yellow-600 uppercase font-semibold">Verification</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.verification?.completed || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.verification?.pending || 0}</span>
+        </div>
+      </div>
+      <div className="bg-purple-50 p-2 md:p-3 rounded-lg border border-purple-100">
+        <div className="text-[10px] md:text-xs text-purple-600 uppercase font-semibold">Certificates</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.certificates?.verified || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.certificates?.pending || 0}</span>
+        </div>
+      </div>
+      <div className="bg-green-50 p-2 md:p-3 rounded-lg border border-green-100">
+        <div className="text-[10px] md:text-xs text-green-600 uppercase font-semibold">Fees</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.fees?.cleared || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.fees?.pending || 0}</span>
+        </div>
+      </div>
+      <div className="bg-indigo-50 p-2 md:p-3 rounded-lg border border-indigo-100">
+        <div className="text-[10px] md:text-xs text-indigo-600 uppercase font-semibold">Promotion</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.promotion?.completed || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.promotion?.pending || 0}</span>
+        </div>
+      </div>
+      <div className="bg-pink-50 p-2 md:p-3 rounded-lg border border-pink-100">
+        <div className="text-[10px] md:text-xs text-pink-600 uppercase font-semibold">Scholarship</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.scholarship?.assigned || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.scholarship?.pending || 0}</span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className={`flex flex-col gap-4 sm:gap-6 w-full ${activeTab === 'analytics' ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="rounded-full bg-blue-100 p-3 text-blue-600">
             <FileText size={32} />
@@ -281,6 +412,26 @@ const Reports = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className='flex bg-gray-100 p-1 rounded-lg mr-2'>
+            <button
+              onClick={() => setActiveTab('sheet')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'sheet'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Sheets
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'analytics'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Graphs
+            </button>
+          </div>
           <button
             onClick={() => loadReport(filters)}
             disabled={loading}
@@ -299,7 +450,7 @@ const Reports = () => {
         </div>
       </header>
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-3 flex-shrink-0">
         {/* Filters and Actions Row */}
         <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 w-full">
@@ -422,165 +573,179 @@ const Reports = () => {
             </button>
           )}
         </div>
+      </section>
 
-        {/* Stats Grid */}
-        {
-          stats && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2 border-t border-gray-100">
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                <div className="text-xs text-blue-600 uppercase font-semibold">Total Students</div>
-                <div className="text-xl font-bold text-blue-900">{stats.total || 0}</div>
-              </div>
-              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                <div className="text-xs text-yellow-600 uppercase font-semibold">Verification</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-bold text-green-600">{stats.verification?.completed || 0}</span>
-                  <span className="text-xs text-gray-400">/</span>
-                  <span className="text-sm font-bold text-red-500">{stats.verification?.pending || 0}</span>
+      {/* Analytics View */}
+      {activeTab === 'analytics' && (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden gap-4 animate-in fade-in duration-300">
+          {stats && <StatsGrid />}
+
+          {stats && (
+            <div className="flex-1 min-h-0 flex flex-col gap-4">
+              {/* Overview Charts (Bar + Line) */}
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Bar Chart */}
+                <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+                  <h3 className="text-sm font-bold text-gray-800 mb-2 flex-shrink-0">Stage-wise Overview</h3>
+                  <div className="flex-1 min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={overviewChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: '12px' }} />
+                        <Bar dataKey="completed" fill="#10B981" name="Completed" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="pending" fill="#EF4444" name="Pending" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Line Chart */}
+                <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+                  <h3 className="text-sm font-bold text-gray-800 mb-2 flex-shrink-0">Stage-wise Trends</h3>
+                  <div className="flex-1 min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={overviewChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Legend wrapperStyle={{ fontSize: '12px' }} />
+                        <Line type="monotone" dataKey="completed" stroke="#10B981" strokeWidth={2} name="Completed" dot={{ r: 4 }} />
+                        <Line type="monotone" dataKey="pending" stroke="#EF4444" strokeWidth={2} name="Pending" dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
-              <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
-                <div className="text-xs text-purple-600 uppercase font-semibold">Certificates</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-bold text-green-600">{stats.certificates?.verified || 0}</span>
-                  <span className="text-xs text-gray-400">/</span>
-                  <span className="text-sm font-bold text-red-500">{stats.certificates?.pending || 0}</span>
-                </div>
-              </div>
-              <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-                <div className="text-xs text-green-600 uppercase font-semibold">Fees</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-bold text-green-600">{stats.fees?.cleared || 0}</span>
-                  <span className="text-xs text-gray-400">/</span>
-                  <span className="text-sm font-bold text-red-500">{stats.fees?.pending || 0}</span>
-                </div>
-              </div>
-              <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                <div className="text-xs text-indigo-600 uppercase font-semibold">Promotion</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-bold text-green-600">{stats.promotion?.completed || 0}</span>
-                  <span className="text-xs text-gray-400">/</span>
-                  <span className="text-sm font-bold text-red-500">{stats.promotion?.pending || 0}</span>
-                </div>
-              </div>
-              <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
-                <div className="text-xs text-pink-600 uppercase font-semibold">Scholarship</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-sm font-bold text-green-600">{stats.scholarship?.assigned || 0}</span>
-                  <span className="text-xs text-gray-400">/</span>
-                  <span className="text-sm font-bold text-red-500">{stats.scholarship?.pending || 0}</span>
-                </div>
+
+              {/* Detailed Pie Charts Grid - Strip at bottom */}
+              <div className="h-40 shrink-0 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {renderSingleStageChart('Verification', stats.verification?.completed || 0, stats.verification?.pending || 0, ['#EAB308', '#FCA5A5'])}
+                {renderSingleStageChart('Certificates', stats.certificates?.verified || 0, stats.certificates?.pending || 0, ['#A855F7', '#FCA5A5'])}
+                {renderSingleStageChart('Fees', stats.fees?.cleared || 0, stats.fees?.pending || 0, ['#22C55E', '#FCA5A5'])}
+                {renderSingleStageChart('Promotion', stats.promotion?.completed || 0, stats.promotion?.pending || 0, ['#6366F1', '#FCA5A5'])}
+                {renderSingleStageChart('Scholarship', stats.scholarship?.assigned || 0, stats.scholarship?.pending || 0, ['#EC4899', '#FCA5A5'])}
               </div>
             </div>
-          )
-        }
-      </section >
+          )}
+        </div>
+      )}
 
+      {/* Sheets View */}
+      {activeTab === 'sheet' && (
+        <div className="animate-in fade-in duration-300">
+          <div className="space-y-4">
+            {stats && <StatsGrid />}
 
-      {
-        loading ? (
-          <div className="py-24 flex flex-col items-center gap-3 text-gray-500" >
-            <RefreshCw className="animate-spin" size={24} />
-            Loading report data...
-          </div>
-        ) : reportData.length === 0 ? (
-          <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
-            <AlertCircle size={32} />
-            <p>No students found matching current filters.</p>
-          </div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 whitespace-nowrap">Pin No</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Student Name</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Course</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Branch</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>
-                    <th className="px-4 py-3 whitespace-nowrap">Registration Status</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Information Verification</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Certificates</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Fees</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Promotion</th>
-                    <th className="px-4 py-3 whitespace-nowrap text-center">Scholarship</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {reportData.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <div>
-                          <div className="font-medium">{student.student_name}</div>
-                          <div className="text-xs text-gray-500">{student.admission_number}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{student.course}</td>
-                      <td className="px-4 py-3 text-gray-600">{student.branch}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={student.overall_status} />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex justify-center">
-                          <StatusBadge status={student.stages.verification} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex justify-center">
-                          <StatusBadge status={student.stages.certificates} type="text" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex justify-center">
-                          <StatusBadge status={student.stages.fee} type="text" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex justify-center">
-                          <StatusBadge status={student.stages.promotion} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex justify-center">
-                          <StatusBadge status={student.stages.scholarship} type="text" />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div className="text-xs text-gray-500">
-                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalRecords)} of {pagination.totalRecords} records
+            {loading ? (
+              <div className="py-24 flex flex-col items-center gap-3 text-gray-500" >
+                <RefreshCw className="animate-spin" size={24} />
+                Loading report data...
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1 || loading}
-                  className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-gray-600">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <button
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === pagination.totalPages || loading}
-                  className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
+            ) : reportData.length === 0 ? (
+              <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
+                <AlertCircle size={32} />
+                <p>No students found matching current filters.</p>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 whitespace-nowrap">Pin No</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Student Name</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Course</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Branch</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>
+                        <th className="px-4 py-3 whitespace-nowrap">Registration Status</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Information Verification</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Certificates</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Fees</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Promotion</th>
+                        <th className="px-4 py-3 whitespace-nowrap text-center">Scholarship</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {reportData.map((student) => (
+                        <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no}</td>
+                          <td className="px-4 py-3 text-gray-700">
+                            <div>
+                              <div className="font-medium">{student.student_name}</div>
+                              <div className="text-xs text-gray-500">{student.admission_number}</div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{student.course}</td>
+                          <td className="px-4 py-3 text-gray-600">{student.branch}</td>
+                          <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
+                          <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={student.overall_status} />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex justify-center">
+                              <StatusBadge status={student.stages.verification} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex justify-center">
+                              <StatusBadge status={student.stages.certificates} type="text" />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex justify-center">
+                              <StatusBadge status={student.stages.fee} type="text" />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex justify-center">
+                              <StatusBadge status={student.stages.promotion} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex justify-center">
+                              <StatusBadge status={student.stages.scholarship} type="text" />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+                  <div className="text-xs text-gray-500">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalRecords)} of {pagination.totalRecords} records
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePageChange(pagination.page - 1)}
+                      disabled={pagination.page === 1 || loading}
+                      className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </span>
+                    <button
+                      onClick={() => handlePageChange(pagination.page + 1)}
+                      disabled={pagination.page === pagination.totalPages || loading}
+                      className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
       <RegistrationDownloadModal
         isOpen={downloadModalOpen}
@@ -593,5 +758,3 @@ const Reports = () => {
 };
 
 export default Reports;
-
-
