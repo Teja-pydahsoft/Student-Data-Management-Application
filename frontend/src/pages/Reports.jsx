@@ -166,41 +166,38 @@ const Reports = () => {
     fetchInitialOptions();
   }, []);
 
-  // Update Courses when College or Batch changes
+  // Update Dependents when College or Batch changes
   useEffect(() => {
-    const updateCourseOptions = async () => {
+    const updateCollegeBatchDependents = async () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
         if (filters.batch) params.append('batch', filters.batch);
 
-        // Fetch options filtered by college/batch to update Courses and Branches
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
         if (response.data?.success) {
           const data = response.data.data || {};
           setFilterOptions(prev => ({
             ...prev,
             courses: data.courses || [],
-            // If course is not selected, show all branches for this college
-            // If course IS selected, the course-specific effect will handle branches
-            branches: !filters.course ? (data.branches || []) : prev.branches
+            // Reset downstream options if their parents aren't selected
+            branches: !filters.course ? (data.branches || []) : prev.branches,
+            years: (!filters.course && !filters.branch) ? (data.years || []) : prev.years,
+            semesters: (!filters.course && !filters.branch && !filters.year) ? (data.semesters || []) : prev.semesters
           }));
         }
       } catch (error) {
-        console.warn('Failed to update course options:', error);
+        console.warn('Failed to update college/batch dependents:', error);
       }
     };
+    updateCollegeBatchDependents();
+  }, [filters.college, filters.batch, filters.course, filters.branch, filters.year]);
 
-    updateCourseOptions();
-  }, [filters.college, filters.batch, filters.course]);
-  // Added filters.course dependency so if it's cleared, we reset branches if needed, 
-  // though handleFilterChange clears it, so it triggers this.
-
-  // Update Branches when Course changes
+  // Update Dependents when Course changes
   useEffect(() => {
-    if (!filters.course) return; // Handled by the college/batch effect
+    if (!filters.course) return;
 
-    const updateBranchOptions = async () => {
+    const updateCourseDependents = async () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
@@ -212,16 +209,73 @@ const Reports = () => {
           const data = response.data.data || {};
           setFilterOptions(prev => ({
             ...prev,
-            branches: data.branches || []
+            branches: data.branches || [],
+            years: !filters.branch ? (data.years || []) : prev.years,
+            semesters: (!filters.branch && !filters.year) ? (data.semesters || []) : prev.semesters
           }));
         }
       } catch (error) {
-        console.warn('Failed to update branch options:', error);
+        console.warn('Failed to update course dependents:', error);
       }
     };
+    updateCourseDependents();
+  }, [filters.course, filters.branch, filters.year]);
 
-    updateBranchOptions();
-  }, [filters.course]);
+  // Update Dependents when Branch changes
+  useEffect(() => {
+    if (!filters.branch) return;
+
+    const updateBranchDependents = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.college) params.append('college', filters.college);
+        if (filters.batch) params.append('batch', filters.batch);
+        if (filters.course) params.append('course', filters.course);
+        params.append('branch', filters.branch);
+
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            years: data.years || [],
+            semesters: !filters.year ? (data.semesters || []) : prev.semesters
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to update branch dependents:', error);
+      }
+    };
+    updateBranchDependents();
+  }, [filters.branch, filters.year]);
+
+  // Update Dependents when Year changes
+  useEffect(() => {
+    if (!filters.year) return;
+
+    const updateYearDependents = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.college) params.append('college', filters.college);
+        if (filters.batch) params.append('batch', filters.batch);
+        if (filters.course) params.append('course', filters.course);
+        if (filters.branch) params.append('branch', filters.branch);
+        params.append('year', filters.year);
+
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            semesters: data.semesters || []
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to update year dependents:', error);
+      }
+    };
+    updateYearDependents();
+  }, [filters.year]);
 
   useEffect(() => {
     loadReport({ ...filters, page: 1 });
@@ -365,8 +419,8 @@ const Reports = () => {
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius="45%"
-                outerRadius="70%"
+                innerRadius="60%"
+                outerRadius="80%"
                 paddingAngle={5}
                 dataKey="value"
               >
@@ -625,7 +679,7 @@ const Reports = () => {
           {stats && (
             <div className="flex-1 min-h-0 flex flex-col gap-4">
               {/* Overview Charts (Bar + Line) */}
-              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="h-80 shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Bar Chart */}
                 <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col">
                   <h3 className="text-sm font-bold text-gray-800 mb-2 flex-shrink-0">Stage-wise Overview</h3>
@@ -664,7 +718,7 @@ const Reports = () => {
               </div>
 
               {/* Detailed Pie Charts Grid - Strip at bottom */}
-              <div className="h-40 shrink-0 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="h-48 shrink-0 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 {renderSingleStageChart('Verification', stats.verification?.completed || 0, stats.verification?.pending || 0, ['#EAB308', '#FCA5A5'])}
                 {renderSingleStageChart('Certificates', stats.certificates?.verified || 0, stats.certificates?.pending || 0, ['#A855F7', '#FCA5A5'])}
                 {renderSingleStageChart('Fees', stats.fees?.cleared || 0, stats.fees?.pending || 0, ['#22C55E', '#FCA5A5'])}
