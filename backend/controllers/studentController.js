@@ -2264,7 +2264,17 @@ exports.getAllStudents = async (req, res) => {
       }
     }
 
-    let query = 'SELECT * FROM students WHERE 1=1';
+    let query = `
+      SELECT *,
+        CASE
+          WHEN
+            (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
+            (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+          THEN 'Completed'
+          ELSE registration_status
+        END AS registration_status_computed
+      FROM students WHERE 1=1`;
     const params = [];
 
     // Apply user scope filtering (college/course/branch restrictions)
@@ -2506,9 +2516,10 @@ exports.getAllStudents = async (req, res) => {
         ? student.fee_status
         : (parsedData?.fee_status || parsedData?.['Fee Status'] || null);
 
-      const resolvedRegistrationStatus = (student.registration_status && String(student.registration_status).trim().length > 0)
-        ? student.registration_status
-        : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
+      const resolvedRegistrationStatus = student.registration_status_computed ||
+        ((student.registration_status && String(student.registration_status).trim().length > 0)
+          ? student.registration_status
+          : (parsedData?.registration_status || parsedData?.['Registration Status'] || null));
 
       return {
         ...student,
@@ -2558,7 +2569,16 @@ exports.getStudentByAdmission = async (req, res) => {
     const { admissionNumber } = req.params;
 
     const [students] = await masterPool.query(
-      'SELECT * FROM students WHERE admission_number = ? OR admission_no = ?',
+      `SELECT *,
+        CASE
+          WHEN
+            (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
+            (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+          THEN 'Completed'
+          ELSE registration_status
+        END AS registration_status_computed
+      FROM students WHERE admission_number = ? OR admission_no = ?`,
       [admissionNumber, admissionNumber]
     );
 
@@ -2588,9 +2608,10 @@ exports.getStudentByAdmission = async (req, res) => {
       fee_status: (students[0].fee_status && String(students[0].fee_status).trim().length > 0)
         ? students[0].fee_status
         : (parsedData?.fee_status || parsedData?.['Fee Status'] || null),
-      registration_status: (students[0].registration_status && String(students[0].registration_status).trim().length > 0)
-        ? students[0].registration_status
-        : (parsedData?.registration_status || parsedData?.['Registration Status'] || null)
+      registration_status: students[0].registration_status_computed ||
+        ((students[0].registration_status && String(students[0].registration_status).trim().length > 0)
+          ? students[0].registration_status
+          : (parsedData?.registration_status || parsedData?.['Registration Status'] || null))
     };
 
     // Derive fee status from student_fees for the student's current year and semester
@@ -2937,6 +2958,9 @@ exports.updateStudent = async (req, res) => {
     }
 
     await updateStagingStudentStage(admissionNumber, resolvedStage, serializedStudentData);
+
+    // Auto-complete check
+    await checkAndAutoCompleteRegistration(admissionNumber);
 
     clearStudentsCache();
 
@@ -5241,6 +5265,8 @@ exports.updateFeeStatus = async (req, res) => {
       }
     }
 
+    await checkAndAutoCompleteRegistration(admissionNumber);
+
     clearStudentsCache();
 
     res.json({
@@ -5253,6 +5279,57 @@ exports.updateFeeStatus = async (req, res) => {
       success: false,
       message: 'Server error while updating fee status'
     });
+  }
+};
+
+// Helper: Check for registration auto-completion
+const checkAndAutoCompleteRegistration = async (admissionNumber) => {
+  try {
+    const [rows] = await masterPool.query(
+      'SELECT student_data, certificates_status, fee_status FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    if (rows.length === 0) return;
+
+    const student = rows[0];
+    const studentData = parseJSON(student.student_data) || {};
+
+    // 1. Verification Check
+    const isMobileVerified = studentData.is_student_mobile_verified === true;
+    const isParentVerified = studentData.is_parent_mobile_verified === true;
+    const verificationCompleted = isMobileVerified && isParentVerified;
+
+    // 2. Certificates Check
+    let certStatus = student.certificates_status || '';
+    const certificatesCompleted = (certStatus && (certStatus.includes('Verified') || certStatus.toLowerCase() === 'completed'));
+
+    // 3. Fee Check
+    const feeStatus = student.fee_status || '';
+    const feeCompleted = ['no_due', 'no due', 'permitted', 'completed', 'nodue'].includes(feeStatus.toLowerCase());
+
+    // If ALL conditions are met, update registration_status to 'Completed'
+    if (verificationCompleted && certificatesCompleted && feeCompleted) {
+      console.log(`Auto-completing registration for ${admissionNumber}`);
+
+      const hasRegColumn = await columnExists('registration_status');
+      if (hasRegColumn) {
+        await masterPool.query(
+          'UPDATE students SET registration_status = ? WHERE admission_number = ?',
+          ['Completed', admissionNumber]
+        );
+      }
+
+      studentData.registration_status = 'Completed';
+      studentData['Registration Status'] = 'Completed';
+
+      await masterPool.query(
+        'UPDATE students SET student_data = ? WHERE admission_number = ?',
+        [JSON.stringify(studentData), admissionNumber]
+      );
+    }
+  } catch (err) {
+    console.error(`Check auto-complete error for ${admissionNumber}:`, err);
   }
 };
 
@@ -6222,4 +6299,68 @@ exports.exportRegistrationReport = async (req, res) => {
     res.status(500).json({ success: false, message: 'Export failed' });
   }
 };
+
+// Admin manually verify mobile (Student/Parent)
+exports.adminVerifyMobile = async (req, res) => {
+  try {
+    const { admissionNumber, type } = req.body; // type: 'student' or 'parent'
+
+    if (!admissionNumber || !type) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admission number and verification type are required'
+      });
+    }
+
+    // 1. Fetch student
+    const [students] = await masterPool.query(
+      'SELECT id, student_data, pin_no FROM students WHERE admission_number = ?',
+      [admissionNumber]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    const student = students[0];
+    let studentData = typeof student.student_data === 'string'
+      ? JSON.parse(student.student_data || '{}')
+      : (student.student_data || {});
+
+    // 2. Update status based on type
+    if (type === 'student') {
+      studentData.is_student_mobile_verified = true;
+    } else if (type === 'parent') {
+      studentData.is_parent_mobile_verified = true;
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid verification type' });
+    }
+
+    // 3. Save back to DB
+    await masterPool.query(
+      'UPDATE students SET student_data = ? WHERE id = ?',
+      [JSON.stringify(studentData), student.id]
+    );
+
+    // 4. Clear cache
+    clearStudentsCache();
+
+    res.json({
+      success: true,
+      message: `${type === 'student' ? 'Student' : 'Parent'} mobile marked as verified`,
+      data: {
+        is_student_mobile_verified: studentData.is_student_mobile_verified,
+        is_parent_mobile_verified: studentData.is_parent_mobile_verified
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin verify mobile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while verifying mobile'
+    });
+  }
+};
+
 

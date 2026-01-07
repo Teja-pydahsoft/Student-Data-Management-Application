@@ -149,7 +149,16 @@ exports.unifiedLogin = async (req, res) => {
       if (studentCred.password_hash && await bcrypt.compare(password, studentCred.password_hash)) {
         // Validation Passed! NOW fetch the heavy student profile details.
         const [studentDetails] = await masterPool.query(
-          `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+          `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+            CASE
+              WHEN
+                (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
+                (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
+                (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+              THEN 'Completed'
+              ELSE s.registration_status
+            END AS registration_status_computed,
+            s.registration_status, s.student_data
            FROM students s
            WHERE s.id = ? LIMIT 1`,
           [studentCred.student_id]
@@ -161,6 +170,19 @@ exports.unifiedLogin = async (req, res) => {
             id: studentCred.student_id, admissionNumber: studentCred.admission_number, role: 'student'
           }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
+          // Helper to resolve status
+          let parsedData = {};
+          try {
+            parsedData = (s.student_data && typeof s.student_data === 'string')
+              ? JSON.parse(s.student_data)
+              : (s.student_data || {});
+          } catch (e) { }
+
+          const resolvedStatus = s.registration_status_computed ||
+            ((s.registration_status && String(s.registration_status).trim().length > 0)
+              ? s.registration_status
+              : (parsedData?.registration_status || parsedData?.['Registration Status'] || 'Pending'));
+
           const user = {
             admission_number: studentCred.admission_number,
             username: studentCred.username,
@@ -171,6 +193,7 @@ exports.unifiedLogin = async (req, res) => {
             branch: s.branch,
             college: s.college,
             student_photo: s.student_photo,
+            registration_status: resolvedStatus,
             role: 'student'
           };
 
@@ -282,7 +305,16 @@ exports.verifyToken = async (req, res) => {
 
     if (authUser.role === 'student') {
       const [students] = await masterPool.query(
-        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college
+        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+          CASE
+            WHEN
+              (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
+              (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
+              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+            THEN 'Completed'
+            ELSE s.registration_status
+          END AS registration_status_computed,
+          s.registration_status, s.student_data
          FROM students s
          LEFT JOIN student_credentials sc ON sc.student_id = s.id
          WHERE s.id = ?`,
@@ -297,6 +329,20 @@ exports.verifyToken = async (req, res) => {
       }
 
       const studentValid = students[0];
+
+      // Helper to resolve status
+      let parsedData = {};
+      try {
+        parsedData = (studentValid.student_data && typeof studentValid.student_data === 'string')
+          ? JSON.parse(studentValid.student_data)
+          : (studentValid.student_data || {});
+      } catch (e) { }
+
+      const resolvedStatus = studentValid.registration_status_computed ||
+        ((studentValid.registration_status && String(studentValid.registration_status).trim().length > 0)
+          ? studentValid.registration_status
+          : (parsedData?.registration_status || parsedData?.['Registration Status'] || 'Pending'));
+
       const user = {
         admission_number: studentValid.admission_number,
         username: studentValid.username,
@@ -307,6 +353,7 @@ exports.verifyToken = async (req, res) => {
         branch: studentValid.branch,
         college: studentValid.college,
         student_photo: studentValid.student_photo,
+        registration_status: resolvedStatus,
         role: 'student'
       };
 

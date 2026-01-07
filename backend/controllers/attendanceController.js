@@ -347,7 +347,14 @@ exports.getAttendance = async (req, res) => {
         s.branch,
         s.current_year,
         s.current_semester,
-        s.registration_status,
+        CASE
+          WHEN
+            (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
+            (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
+            (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+          THEN 'Completed'
+          ELSE s.registration_status
+        END AS registration_status,
         s.fee_status,
         s.student_data,
         ar.id AS attendance_record_id,

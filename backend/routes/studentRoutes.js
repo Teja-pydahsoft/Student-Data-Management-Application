@@ -211,6 +211,15 @@ router.get(
   studentController.exportRegistrationReport
 );
 
+// Verify Mobile (Admin Override)
+router.post(
+  '/verify-mobile',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
+  attachUserScope,
+  studentController.adminVerifyMobile
+);
+
 router.post('/otp/send', authMiddleware, studentController.sendOtp);
 router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.get(
@@ -244,6 +253,9 @@ router.post(
   attachUserScope,
   studentController.rejoinStudent
 );
+
+
+
 
 
 module.exports = router;

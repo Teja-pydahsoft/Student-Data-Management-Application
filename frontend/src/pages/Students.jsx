@@ -31,6 +31,7 @@ import StudentHistoryTab from '../components/Students/StudentHistoryTab';
 import StudentAttendanceTab from '../components/Students/StudentAttendanceTab';
 import StudentSmsTab from '../components/Students/StudentSmsTab';
 import toast from 'react-hot-toast';
+import MobileVerificationModal from '../components/Students/MobileVerificationModal';
 import BulkRollNumberModal from '../components/BulkRollNumberModal';
 import BulkUploadModal from '../components/BulkUploadModal';
 import ManualRollNumberModal from '../components/ManualRollNumberModal';
@@ -204,6 +205,23 @@ const Students = () => {
   const pageSizeOptions = [10, 25, 50, 100];
 
   // React Query hooks
+  // --- Action Handlers ---
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+
+  const handleVerificationComplete = (updatedStatus) => {
+    setSelectedStudent(prev => ({
+      ...prev,
+      student_data: {
+        ...(prev.student_data || {}),
+        ...updatedStatus
+      }
+    }));
+    setEditData(prev => ({
+      ...prev,
+      ...updatedStatus
+    }));
+  };
+
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
   const bulkDeleteMutation = useBulkDeleteStudents();
@@ -3440,6 +3458,14 @@ const Students = () => {
                   >
                     <Book size={16} /> Details
                   </button>
+                  {canViewField('registration_status') && (
+                    <button
+                      onClick={() => setActiveStudentTab('registration')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-all ${activeStudentTab === 'registration' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      <CheckCircle size={16} /> Registration
+                    </button>
+                  )}
                   {canViewAttendance && (
                     <button
                       onClick={() => setActiveStudentTab('attendance')}
@@ -3463,6 +3489,163 @@ const Students = () => {
                     </button>
                   )}
                 </div>
+
+                {activeStudentTab === 'registration' && canViewField('registration_status') && (() => {
+                  const studentData = selectedStudent.student_data || {};
+
+                  const isStudentVerified = studentData.is_student_mobile_verified === true;
+                  const isParentVerified = studentData.is_parent_mobile_verified === true;
+                  const isVerificationComplete = isStudentVerified && isParentVerified;
+
+                  const certStatus = (selectedStudent.certificates_status || studentData.certificates_status || '').toLowerCase();
+                  const isCertComplete = certStatus.includes('verified') || certStatus === 'completed';
+
+                  const feeStatus = (selectedStudent.fee_status || studentData.fee_status || '').toLowerCase();
+                  const isFeeComplete = ['no due', 'no_due', 'permitted', 'completed', 'nodue'].some(s => feeStatus.includes(s));
+
+                  const currentYear = selectedStudent.current_year || studentData.current_year;
+                  const currentSem = selectedStudent.current_semester || studentData.current_semester;
+                  const isPromotionActive = !!currentYear;
+
+                  const scholarStatus = selectedStudent.scholar_status || studentData.scholar_status || 'Pending';
+
+                  const isRegistrationComplete = isVerificationComplete && isCertComplete && isFeeComplete;
+
+                  const StatusBadge = ({ completed, text }) => (
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${completed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                      {completed ? 'Completed' : text || 'Pending'}
+                    </span>
+                  );
+
+                  return (
+                    <div className="space-y-6">
+                      <div className={`rounded-xl p-6 border ${isRegistrationComplete ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 shadow-sm'}`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">Registration Status</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                              Overall registration completion based on all stages
+                            </p>
+                          </div>
+                          <div className={`px-4 py-2 rounded-lg font-bold text-lg flex items-center gap-2 ${isRegistrationComplete ? 'bg-green-200 text-green-800' : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                            {isRegistrationComplete ? (
+                              <><CheckCircle size={24} /> Completed</>
+                            ) : (
+                              <><LoadingAnimation width={20} height={20} showMessage={false} variant="inline" /> Pending</>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide px-1">
+                        Registration Stages
+                      </h4>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        <div
+                          className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                          onDoubleClick={() => canViewField('registration_status') && setShowVerificationModal(true)}
+                          title="Double-click to manually verify"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-1 p-2 rounded-full ${isVerificationComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              <MessageSquare size={20} />
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-gray-900">1. Mobile Verification</h5>
+                              <div className="flex flex-col gap-1 mt-1">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <span className={isStudentVerified ? 'text-green-600' : 'text-red-500'}>
+                                    {isStudentVerified ? <CheckCircle size={14} className="inline mr-1" /> : <X size={14} className="inline mr-1" />}
+                                    Student Mobile
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <span className={isParentVerified ? 'text-green-600' : 'text-red-500'}>
+                                    {isParentVerified ? <CheckCircle size={14} className="inline mr-1" /> : <X size={14} className="inline mr-1" />}
+                                    Parent Mobile
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <StatusBadge completed={isVerificationComplete} />
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-1 p-2 rounded-full ${isCertComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              <FileText size={20} />
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-gray-900">2. Certificate Status</h5>
+                              <p className="text-sm text-gray-500 mt-1">
+                                Current Status: <span className="font-medium text-gray-900 capitalize">{certStatus || 'Pending'}</span>
+                              </p>
+                            </div>
+                          </div>
+                          <StatusBadge completed={isCertComplete} text={certStatus} />
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-1 p-2 rounded-full ${isFeeComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              <span className="font-bold text-lg px-1">₹</span>
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-gray-900">3. Fee Payment</h5>
+                              <p className="text-sm text-gray-500 mt-1">
+                                Current Status: <span className="font-medium text-gray-900 capitalize">{feeStatus || 'Pending'}</span>
+                              </p>
+                            </div>
+                          </div>
+                          <StatusBadge completed={isFeeComplete} text={feeStatus} />
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-1 p-2 rounded-full ${isPromotionActive ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
+                              <TrendingUp size={20} />
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-gray-900">4. Promotion Status</h5>
+                              <p className="text-sm text-gray-500 mt-1">
+                                Current Academic Stage
+                              </p>
+                            </div>
+                          </div>
+                          <div className="ml-auto flex items-center">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                              Year {currentYear || '-'} • Sem {currentSem || '-'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-1 p-2 rounded-full bg-purple-100 text-purple-600">
+                              <Book size={20} />
+                            </div>
+                            <div>
+                              <h5 className="font-semibold text-gray-900">5. Scholarship Status</h5>
+                              <p className="text-sm text-gray-500 mt-1">
+                                Applicability
+                              </p>
+                            </div>
+                          </div>
+                          <div className="ml-auto flex items-center">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-50 text-purple-700 border border-purple-100 capitalize">
+                              {scholarStatus}
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {activeStudentTab === 'attendance' && (
                   <StudentAttendanceTab student={selectedStudent} />
@@ -4417,6 +4600,13 @@ const Students = () => {
           </div>
         </div>
       )}
+
+      <MobileVerificationModal
+        isOpen={showVerificationModal}
+        onClose={() => setShowVerificationModal(false)}
+        student={selectedStudent}
+        onVerificationComplete={handleVerificationComplete}
+      />
     </div>
   );
 };
