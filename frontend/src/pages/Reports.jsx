@@ -349,10 +349,18 @@ const Reports = () => {
   };
 
   const StatsGrid = () => (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 flex-shrink-0">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 flex-shrink-0">
       <div className="bg-blue-50 p-2 md:p-3 rounded-lg border border-blue-100">
         <div className="text-[10px] md:text-xs text-blue-600 uppercase font-semibold">Total</div>
         <div className="text-lg md:text-xl font-bold text-blue-900">{stats?.total || 0}</div>
+      </div>
+      <div className="bg-gray-50 p-2 md:p-3 rounded-lg border border-gray-100">
+        <div className="text-[10px] md:text-xs text-gray-600 uppercase font-semibold">Registration</div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-bold text-green-600">{stats?.registration?.completed || 0}</span>
+          <span className="text-xs text-gray-400">/</span>
+          <span className="text-sm font-bold text-red-500">{stats?.registration?.pending || 0}</span>
+        </div>
       </div>
       <div className="bg-yellow-50 p-2 md:p-3 rounded-lg border border-yellow-100">
         <div className="text-[10px] md:text-xs text-yellow-600 uppercase font-semibold">Verification</div>
@@ -398,7 +406,7 @@ const Reports = () => {
   );
 
   return (
-    <div className={`flex flex-col gap-4 sm:gap-6 w-full ${activeTab === 'analytics' ? 'h-[calc(100vh-6rem)] overflow-hidden' : ''}`}>
+    <div className="flex flex-col gap-4 sm:gap-6 w-full h-full overflow-hidden">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="rounded-full bg-blue-100 p-3 text-blue-600">
@@ -636,114 +644,120 @@ const Reports = () => {
 
       {/* Sheets View */}
       {activeTab === 'sheet' && (
-        <div className="animate-in fade-in duration-300">
-          <div className="space-y-4">
-            {stats && <StatsGrid />}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden animate-in fade-in duration-300 gap-4">
 
-            {loading ? (
-              <div className="py-24 flex flex-col items-center gap-3 text-gray-500" >
-                <RefreshCw className="animate-spin" size={24} />
-                Loading report data...
-              </div>
-            ) : reportData.length === 0 ? (
-              <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
-                <AlertCircle size={32} />
-                <p>No students found matching current filters.</p>
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
-                      <tr>
-                        <th className="px-4 py-3 whitespace-nowrap">Pin No</th>
-                        <th className="px-4 py-3 whitespace-nowrap">Student Name</th>
-                        <th className="px-4 py-3 whitespace-nowrap">Course</th>
-                        <th className="px-4 py-3 whitespace-nowrap">Branch</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>
-                        <th className="px-4 py-3 whitespace-nowrap">Registration Status</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Information Verification</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Certificates</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Fees</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Promotion</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-center">Scholarship</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {reportData.map((student) => (
-                        <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no}</td>
-                          <td className="px-4 py-3 text-gray-700">
-                            <div>
-                              <div className="font-medium">{student.student_name}</div>
-                              <div className="text-xs text-gray-500">{student.admission_number}</div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">{student.course}</td>
-                          <td className="px-4 py-3 text-gray-600">{student.branch}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
-                          <td className="px-4 py-3">
-                            <StatusBadge status={student.overall_status} />
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center">
-                              <StatusBadge status={student.stages.verification} />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center">
-                              <StatusBadge status={student.stages.certificates} type="text" />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center">
-                              <StatusBadge status={student.stages.fee} type="text" />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center">
-                              <StatusBadge status={student.stages.promotion} />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center">
-                              <StatusBadge status={student.stages.scholarship} type="text" />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-                  <div className="text-xs text-gray-500">
-                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalRecords)} of {pagination.totalRecords} records
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePageChange(pagination.page - 1)}
-                      disabled={pagination.page === 1 || loading}
-                      className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-gray-600">
-                      Page {pagination.page} of {pagination.totalPages}
-                    </span>
-                    <button
-                      onClick={() => handlePageChange(pagination.page + 1)}
-                      disabled={pagination.page === pagination.totalPages || loading}
-                      className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* Stats Grid - Fixed at top of Sheets view */}
+          <div className="flex-shrink-0">
+            {stats && <StatsGrid />}
           </div>
+
+          {/* Table Area - Grows to fill remaining space */}
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500" >
+              <RefreshCw className="animate-spin" size={24} />
+              Loading report data...
+            </div>
+          ) : reportData.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500">
+              <AlertCircle size={32} />
+              <p>No students found matching current filters.</p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              {/* Scrollable Table Body */}
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-sm text-left relative">
+                  <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Pin No</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Student Name</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Course</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Branch</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Year</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Sem</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Registration Status</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Information Verification</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Certificates</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Fees</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Promotion</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Scholarship</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {reportData.map((student) => (
+                      <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no}</td>
+                        <td className="px-4 py-3 text-gray-700">
+                          <div>
+                            <div className="font-medium">{student.student_name}</div>
+                            <div className="text-xs text-gray-500">{student.admission_number}</div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{student.course}</td>
+                        <td className="px-4 py-3 text-gray-600">{student.branch}</td>
+                        <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
+                        <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={student.overall_status} />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StatusBadge status={student.stages.verification} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StatusBadge status={student.stages.certificates} type="text" />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StatusBadge status={student.stages.fee} type="text" />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StatusBadge status={student.stages.promotion} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex justify-center">
+                            <StatusBadge status={student.stages.scholarship} type="text" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Fixed Footer: Pagination */}
+              <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between shadow-[0_-2px_4px_rgba(0,0,0,0.02)] z-20">
+                <div className="text-xs text-gray-500">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalRecords)} of {pagination.totalRecords} records
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1 || loading}
+                    className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === pagination.totalPages || loading}
+                    className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

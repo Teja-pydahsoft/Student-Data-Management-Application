@@ -5878,6 +5878,10 @@ exports.getRegistrationReport = async (req, res) => {
 
     const statistics = {
       total: totalCount,
+      registration: {
+        completed: parseInt(statsRow.overall_completed || 0),
+        pending: totalCount - parseInt(statsRow.overall_completed || 0)
+      },
       verification: {
         completed: parseInt(statsRow.verification_completed || 0),
         pending: totalCount - parseInt(statsRow.verification_completed || 0)
