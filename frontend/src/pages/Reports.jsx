@@ -1,49 +1,79 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BarChart3,
-  CalendarDays,
-  Clock,
   RefreshCw,
   Users as UsersIcon,
-  TrendingUp,
-  Download
+  Download,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  ShieldCheck,
+  FileText,
+  BookOpen,
+  Zap,
+  Award,
+  Search,
+  XCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import DownloadReportsModal from '../components/Reports/DownloadReportsModal';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts';
+import RegistrationDownloadModal from '../components/Reports/RegistrationDownloadModal';
 import api from '../config/api';
 
 const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
 
-const formatPercentage = (value) => {
-  if (Number.isNaN(value) || value === null || value === undefined) {
-    return '0%';
+const StatusBadge = ({ status, type = 'icon' }) => {
+  const isCompleted = status === 'completed' || status === 'Verified' || status === 'No Due';
+  const isPermitted = status === 'Permitted';
+  const isPending = status === 'pending' || status === 'Unverified' || status === 'Pending';
+
+  if (type === 'text') {
+    let colorClass = 'bg-gray-100 text-gray-700'; // Default
+    if (status === 'No Due' || status === 'Verified' || status === 'completed') colorClass = 'bg-green-100 text-green-700';
+    else if (status === 'Permitted') colorClass = 'bg-orange-100 text-orange-700';
+    else if (status === 'Unverified' || status === 'Pending' || status === 'pending') colorClass = 'bg-red-50 text-red-600';
+
+    // Capitalize logical statuses for display if needed, but we expect backend to send nice text now for fee/certs
+    // For icon types derived from 'completed'/'pending', we might get raw strings here to display.
+
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${colorClass}`}>
+        {status === 'completed' ? 'Completed' : status === 'pending' ? 'Pending' : status}
+      </span>
+    );
   }
-  return `${value}%`;
+
+  // Icon checks (strictly for 'completed' vs others logic usually)
+  const isIconCompleted = status === 'completed';
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${isIconCompleted ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+      }`}>
+      {isIconCompleted ? <CheckCircle size={12} /> : <Clock size={12} />}
+      {isIconCompleted ? 'Completed' : 'Pending'}
+    </span>
+  );
 };
 
 const Reports = () => {
-  const [summary, setSummary] = useState(null);
+  const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    totalPages: 0,
+    totalRecords: 0
+  });
+  const [stats, setStats] = useState(null);
+
   const [filters, setFilters] = useState({
+    college: '',
     batch: '',
     course: '',
     branch: '',
     year: '',
-    semester: ''
+    semester: '',
+    search: ''
   });
   const [filterOptions, setFilterOptions] = useState({
+    colleges: [],
     batches: [],
     courses: [],
     branches: [],
@@ -52,28 +82,56 @@ const Reports = () => {
   });
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
-  const loadSummary = useCallback(
+  // Debounced search
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: searchTerm }));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const loadReport = useCallback(
     async (overrideFilters) => {
       const activeFilters = overrideFilters ?? filters;
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (activeFilters.batch) params.append('batch', activeFilters.batch);
-        if (activeFilters.course) params.append('course', activeFilters.course);
-        if (activeFilters.branch) params.append('branch', activeFilters.branch);
-        if (activeFilters.year) params.append('year', activeFilters.year);
-        if (activeFilters.semester) params.append('semester', activeFilters.semester);
+        if (activeFilters.college) params.append('filter_college', activeFilters.college);
+        if (activeFilters.batch) params.append('filter_batch', activeFilters.batch);
+        if (activeFilters.course) params.append('filter_course', activeFilters.course);
+        if (activeFilters.branch) params.append('filter_branch', activeFilters.branch);
+        if (activeFilters.year) params.append('filter_year', activeFilters.year);
+        if (activeFilters.semester) params.append('filter_semester', activeFilters.semester);
+        if (activeFilters.search) params.append('search', activeFilters.search);
+        if (activeFilters.page) params.append('page', activeFilters.page);
+        if (activeFilters.limit) params.append('limit', activeFilters.limit);
 
         const query = params.toString();
-        const response = await api.get(`/attendance/summary${query ? `?${query}` : ''}`);
-        if (!response.data?.success) {
+        const response = await api.get(`/students/reports/registration${query ? `?${query}` : ''}`);
+
+        if (response.data?.success) {
+          setReportData(response.data.data || []);
+          if (response.data.pagination) {
+            setPagination(prev => ({
+              ...prev,
+              page: parseInt(response.data.pagination.page),
+              totalPages: parseInt(response.data.pagination.totalPages),
+              totalRecords: parseInt(response.data.pagination.total),
+              limit: parseInt(response.data.pagination.limit)
+            }));
+          }
+          if (response.data.statistics) {
+            setStats(response.data.statistics);
+          }
+        } else {
           throw new Error(response.data?.message || 'Unable to load reports');
         }
-        setSummary(response.data.data);
       } catch (error) {
-        console.error('Failed to load attendance summary:', error);
+        console.error('Failed to load registration report:', error);
         toast.error(
-          error.response?.data?.message || error.message || 'Unable to load attendance summary'
+          error.response?.data?.message || error.message || 'Unable to load registration report'
         );
       } finally {
         setLoading(false);
@@ -81,11 +139,11 @@ const Reports = () => {
     },
     [filters]
   );
-
   const fetchFilterOptions = async (currentFilters = {}, excludeField = null) => {
     try {
       const params = new URLSearchParams();
       // Exclude the field being changed to show all available options
+      if (currentFilters.college && excludeField !== 'college') params.append('college', currentFilters.college);
       if (currentFilters.batch && excludeField !== 'batch') params.append('batch', currentFilters.batch);
       // Include course only if course is not being changed and branch is not being changed
       if (currentFilters.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', currentFilters.course);
@@ -96,6 +154,7 @@ const Reports = () => {
       if (response.data?.success) {
         const data = response.data.data || {};
         setFilterOptions({
+          colleges: data.colleges || [],
           batches: data.batches || [],
           courses: data.courses || [],
           branches: data.branches || [],
@@ -115,11 +174,17 @@ const Reports = () => {
   // Refresh filter options when parent filters change (for cascading)
   useEffect(() => {
     fetchFilterOptions(filters);
-  }, [filters.batch, filters.course, filters.branch]);
+  }, [filters.college, filters.batch, filters.course, filters.branch]);
 
   useEffect(() => {
-    loadSummary(filters);
-  }, [filters, loadSummary]);
+    loadReport({ ...filters, page: 1 });
+  }, [filters, loadReport]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      loadReport({ ...filters, page: newPage });
+    }
+  };
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => {
@@ -134,23 +199,24 @@ const Reports = () => {
       }
 
       // Clear dependent filters when parent filter changes
-      if (field === 'batch') {
-        // When batch changes, clear course, branch, year, and semester
+      if (field === 'college') {
+        delete newFilters.course;
+        delete newFilters.branch;
+        delete newFilters.year;
+        delete newFilters.semester;
+      } else if (field === 'batch') {
         delete newFilters.course;
         delete newFilters.branch;
         delete newFilters.year;
         delete newFilters.semester;
       } else if (field === 'course') {
-        // When course changes, clear branch, year, and semester
         delete newFilters.branch;
         delete newFilters.year;
         delete newFilters.semester;
       } else if (field === 'branch') {
-        // When branch changes, clear year and semester
         delete newFilters.year;
         delete newFilters.semester;
       } else if (field === 'year') {
-        // When year changes, clear semester
         delete newFilters.semester;
       }
 
@@ -160,16 +226,20 @@ const Reports = () => {
 
   const clearFilters = () => {
     setFilters({
+      college: '',
       batch: '',
       course: '',
       branch: '',
       year: '',
-      semester: ''
+      semester: '',
+      search: ''
     });
+    setSearchTerm('');
   };
 
   const activeFilterEntries = useMemo(() => {
     const entries = [];
+    if (filters.college) entries.push({ key: 'college', label: `College: ${filters.college}` });
     if (filters.batch) entries.push({ key: 'batch', label: `Batch: ${filters.batch}` });
     if (filters.course) entries.push({ key: 'course', label: `Course: ${filters.course}` });
     if (filters.branch) entries.push({ key: 'branch', label: `Branch: ${filters.branch}` });
@@ -196,88 +266,74 @@ const Reports = () => {
 
   const hasActiveFilters = activeFilterEntries.length > 0;
 
-  const dailyStats = useMemo(() => {
-    const base = {
-      present: 0,
-      absent: 0,
-      pending: 0,
-      percentage: 0,
-      isHoliday: false,
-      holiday: null
-    };
-    return summary?.daily ? { ...base, ...summary.daily } : base;
-  }, [summary]);
-
-  const dailyPercentageLabel = dailyStats.isHoliday
-    ? 'Holiday'
-    : formatPercentage(dailyStats.percentage);
-
-  const weeklySeries = useMemo(
-    () =>
-      (summary?.weekly?.series || []).map((entry) => ({
-        ...entry,
-        holiday: entry.isHoliday ? 1 : 0
-      })),
-    [summary]
-  );
-  const monthlySeries = useMemo(
-    () =>
-      (summary?.monthly?.series || []).map((entry) => ({
-        ...entry,
-        holiday: entry.isHoliday ? 1 : 0
-      })),
-    [summary]
-  );
-
-  const weeklyTotals = useMemo(() => {
-    const base = { present: 0, absent: 0, total: 0, holidays: 0, workingDays: 0 };
-    return summary?.weekly?.totals ? { ...base, ...summary.weekly.totals } : base;
-  }, [summary]);
-  const monthlyTotals = useMemo(() => {
-    const base = { present: 0, absent: 0, total: 0, holidays: 0, workingDays: 0 };
-    return summary?.monthly?.totals ? { ...base, ...summary.monthly.totals } : base;
-  }, [summary]);
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="rounded-full bg-blue-100 p-3 text-blue-600">
-            <BarChart3 size={32} />
+            <FileText size={32} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 heading-font">Attendance Reports</h1>
+            <h1 className="text-2xl font-bold text-gray-900 heading-font">Registration Reports</h1>
             <p className="text-sm text-gray-600">
-              Review attendance analytics across daily, weekly, and monthly intervals with visual insights.
+              Track student registration status across the 5 stages.
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => loadSummary(filters)}
-          disabled={loading}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-md border transition-colors ${loading
-            ? 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-            : 'border-gray-300 text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-          {loading ? (
-            <span className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <RefreshCw size={16} />
-          )}
-          Refresh Data
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => loadReport(filters)}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+          >
+            {loading ? <span className="h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" /> : <RefreshCw size={16} />}
+            Refresh
+          </button>
+          <button
+            onClick={() => setDownloadModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-green-500 text-green-600 hover:bg-green-50 text-sm font-medium transition-colors"
+          >
+            <Download size={16} />
+            Download
+          </button>
+        </div>
       </header>
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Batch</label>
+      <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+        {/* Filters and Actions Row */}
+        <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 w-full">
+            {/* Search */}
+            <div className="md:col-span-2 lg:col-span-2 xl:col-span-2 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* College */}
+            <select
+              value={filters.college || ''}
+              onChange={(e) => handleFilterChange('college', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Colleges</option>
+              {filterOptions.colleges.map((college) => (
+                <option key={college} value={college}>
+                  {college}
+                </option>
+              ))}
+            </select>
+
+            {/* Batch */}
             <select
               value={filters.batch}
-              onChange={(event) => handleFilterChange('batch', event.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => handleFilterChange('batch', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Batches</option>
               {(filterOptions.batches || []).map((batch) => (
@@ -286,23 +342,17 @@ const Reports = () => {
                 </option>
               ))}
             </select>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Course</label>
+            {/* Course */}
             <select
               value={filters.course || ''}
-              onChange={(event) => handleFilterChange('course', event.target.value)}
+              onChange={(e) => handleFilterChange('course', e.target.value)}
               onFocus={() => {
-                // When user focuses on course dropdown, refresh options excluding current course
-                // This shows all courses for the selected batch, allowing direct selection
                 const filtersForFetch = { ...filters };
-                if (filtersForFetch.course) {
-                  delete filtersForFetch.course;
-                }
+                if (filtersForFetch.course) delete filtersForFetch.course;
                 fetchFilterOptions(filtersForFetch, 'course');
               }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Courses</option>
               {(filterOptions.courses || [])
@@ -313,23 +363,17 @@ const Reports = () => {
                   </option>
                 ))}
             </select>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Branch</label>
+            {/* Branch */}
             <select
               value={filters.branch || ''}
-              onChange={(event) => handleFilterChange('branch', event.target.value)}
+              onChange={(e) => handleFilterChange('branch', e.target.value)}
               onFocus={() => {
-                // When user focuses on branch dropdown, refresh options excluding current branch
-                // This shows all branches for the selected course, allowing direct selection
                 const filtersForFetch = { ...filters };
-                if (filtersForFetch.branch) {
-                  delete filtersForFetch.branch;
-                }
+                if (filtersForFetch.branch) delete filtersForFetch.branch;
                 fetchFilterOptions(filtersForFetch, 'branch');
               }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Branches</option>
               {(filterOptions.branches || []).map((branch) => (
@@ -338,14 +382,12 @@ const Reports = () => {
                 </option>
               ))}
             </select>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Year</label>
+            {/* Year */}
             <select
               value={filters.year}
-              onChange={(event) => handleFilterChange('year', event.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => handleFilterChange('year', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Years</option>
               {availableYears.map((year) => (
@@ -354,277 +396,199 @@ const Reports = () => {
                 </option>
               ))}
             </select>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Semester</label>
+            {/* Semester */}
             <select
               value={filters.semester}
-              onChange={(event) => handleFilterChange('semester', event.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => handleFilterChange('semester', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Semesters</option>
+              <option value="">All Sems</option>
               {availableSemesters.map((semester) => (
                 <option key={semester} value={String(semester)}>
-                  Semester {semester}
+                  Sem {semester}
                 </option>
               ))}
             </select>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-gray-600">
-            {hasActiveFilters
-              ? `${activeFilterEntries.length} filter${activeFilterEntries.length > 1 ? 's' : ''} applied`
-              : 'Showing metrics for all students'}
-          </div>
-          <div className="flex items-center gap-2">
+          {hasActiveFilters && (
             <button
-              type="button"
-              onClick={() => setDownloadModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-green-500 text-green-600 hover:bg-green-50 text-sm transition-colors font-medium"
-            >
-              <Download size={16} />
-              Download Reports
-            </button>
-            <button
-              type="button"
               onClick={clearFilters}
-              disabled={!hasActiveFilters}
-              className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${hasActiveFilters
-                ? 'border-blue-200 text-blue-600 hover:bg-blue-50'
-                : 'border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed'
-                }`}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm font-medium transition-colors"
             >
-              Clear Filters
+              <XCircle size={16} />
+              Clear
             </button>
-          </div>
+          )}
         </div>
 
-        {hasActiveFilters && (
-          <div className="flex flex-wrap gap-2">
-            {activeFilterEntries.map((entry) => (
-              <span
-                key={entry.key}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-medium text-blue-700"
-              >
-                {entry.label}
+        {/* Stats Grid */}
+        {
+          stats && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2 border-t border-gray-100">
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <div className="text-xs text-blue-600 uppercase font-semibold">Total Students</div>
+                <div className="text-xl font-bold text-blue-900">{stats.total || 0}</div>
+              </div>
+              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                <div className="text-xs text-yellow-600 uppercase font-semibold">Verification</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-green-600">{stats.verification?.completed || 0}</span>
+                  <span className="text-xs text-gray-400">/</span>
+                  <span className="text-sm font-bold text-red-500">{stats.verification?.pending || 0}</span>
+                </div>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                <div className="text-xs text-purple-600 uppercase font-semibold">Certificates</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-green-600">{stats.certificates?.verified || 0}</span>
+                  <span className="text-xs text-gray-400">/</span>
+                  <span className="text-sm font-bold text-red-500">{stats.certificates?.pending || 0}</span>
+                </div>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                <div className="text-xs text-green-600 uppercase font-semibold">Fees</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-green-600">{stats.fees?.cleared || 0}</span>
+                  <span className="text-xs text-gray-400">/</span>
+                  <span className="text-sm font-bold text-red-500">{stats.fees?.pending || 0}</span>
+                </div>
+              </div>
+              <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <div className="text-xs text-indigo-600 uppercase font-semibold">Promotion</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-green-600">{stats.promotion?.completed || 0}</span>
+                  <span className="text-xs text-gray-400">/</span>
+                  <span className="text-sm font-bold text-red-500">{stats.promotion?.pending || 0}</span>
+                </div>
+              </div>
+              <div className="bg-pink-50 p-3 rounded-lg border border-pink-100">
+                <div className="text-xs text-pink-600 uppercase font-semibold">Scholarship</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm font-bold text-green-600">{stats.scholarship?.assigned || 0}</span>
+                  <span className="text-xs text-gray-400">/</span>
+                  <span className="text-sm font-bold text-red-500">{stats.scholarship?.pending || 0}</span>
+                </div>
+              </div>
+            </div>
+          )
+        }
+      </section >
+
+
+      {
+        loading ? (
+          <div className="py-24 flex flex-col items-center gap-3 text-gray-500" >
+            <RefreshCw className="animate-spin" size={24} />
+            Loading report data...
+          </div>
+        ) : reportData.length === 0 ? (
+          <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
+            <AlertCircle size={32} />
+            <p>No students found matching current filters.</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 whitespace-nowrap">Pin No</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Student Name</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Course</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Branch</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Registration Status</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Information Verification</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Certificates</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Fees</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Promotion</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Scholarship</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {reportData.map((student) => (
+                    <tr key={student.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        <div>
+                          <div className="font-medium">{student.student_name}</div>
+                          <div className="text-xs text-gray-500">{student.admission_number}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{student.course}</td>
+                      <td className="px-4 py-3 text-gray-600">{student.branch}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={student.overall_status} />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center">
+                          <StatusBadge status={student.stages.verification} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center">
+                          <StatusBadge status={student.stages.certificates} type="text" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center">
+                          <StatusBadge status={student.stages.fee} type="text" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center">
+                          <StatusBadge status={student.stages.promotion} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center">
+                          <StatusBadge status={student.stages.scholarship} type="text" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.totalRecords)} of {pagination.totalRecords} records
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  type="button"
-                  onClick={() => handleFilterChange(entry.key, '')}
-                  className="text-blue-500 hover:text-blue-700"
-                  aria-label={`Remove ${entry.label}`}
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1 || loading}
+                  className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  ×
+                  Previous
                 </button>
-              </span>
-            ))}
+                <span className="text-sm text-gray-600">
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.totalPages || loading}
+                  className="px-3 py-1 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </section>
 
-      {loading ? (
-        <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
-          <RefreshCw className="animate-spin" size={24} />
-          Loading attendance analytics...
-        </div>
-      ) : !summary ? (
-        <div className="py-24 flex flex-col items-center gap-3 text-gray-500">
-          <BarChart3 size={32} />
-          <p>No attendance data available yet.</p>
-        </div>
-      ) : (
-        <>
-          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Total Students</p>
-                  <p className="text-2xl font-semibold text-gray-900">{summary.totalStudents}</p>
-                </div>
-                <div className="rounded-full bg-blue-100 text-blue-600 p-3">
-                  <UsersIcon size={22} />
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-gray-500">
-                Overall student strength considered for attendance metrics.
-              </p>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Daily Attendance</p>
-                  <p className="text-2xl font-semibold text-gray-900">{dailyPercentageLabel}</p>
-                </div>
-                <div className="rounded-full bg-green-100 text-green-600 p-3">
-                  <CalendarDays size={22} />
-                </div>
-              </div>
-              <div className="mt-3 text-sm text-gray-600 space-y-1">
-                <p>
-                  Present: <span className="font-semibold text-green-600">{dailyStats.present}</span>
-                </p>
-                <p>
-                  Absent: <span className="font-semibold text-red-500">{dailyStats.absent}</span>
-                </p>
-                <p>
-                  Pending: <span className="font-semibold text-gray-600">{dailyStats.pending}</span>
-                </p>
-                {dailyStats.isHoliday && (
-                  <p className="text-xs text-amber-600">
-                    Holiday: {dailyStats.holiday?.reasons?.join(', ') || 'Institute break'}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Weekly Overview</p>
-                  <p className="text-2xl font-semibold text-gray-900">{weeklyTotals.total}</p>
-                </div>
-                <div className="rounded-full bg-purple-100 text-purple-600 p-3">
-                  <Clock size={22} />
-                </div>
-              </div>
-              <div className="mt-3 text-sm text-gray-600 space-y-1">
-                <p>
-                  Present:{' '}
-                  <span className="font-semibold text-green-600">{weeklyTotals.present || 0}</span>
-                </p>
-                <p>
-                  Absent: <span className="font-semibold text-red-500">{weeklyTotals.absent || 0}</span>
-                </p>
-                <p>
-                  Holidays:{' '}
-                  <span className="font-semibold text-amber-600">{weeklyTotals.holidays || 0}</span>
-                </p>
-                <p>
-                  Working days:{' '}
-                  <span className="font-semibold text-gray-700">{weeklyTotals.workingDays || 0}</span>
-                </p>
-                <p className="text-xs text-gray-500">
-                  Range: {summary.weekly.startDate} → {summary.weekly.endDate}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Monthly Overview</p>
-                  <p className="text-2xl font-semibold text-gray-900">{monthlyTotals.total}</p>
-                </div>
-                <div className="rounded-full bg-orange-100 text-orange-600 p-3">
-                  <TrendingUp size={22} />
-                </div>
-              </div>
-              <div className="mt-3 text-sm text-gray-600 space-y-1">
-                <p>
-                  Present:{' '}
-                  <span className="font-semibold text-green-600">{monthlyTotals.present || 0}</span>
-                </p>
-                <p>
-                  Absent: <span className="font-semibold text-red-500">{monthlyTotals.absent || 0}</span>
-                </p>
-                <p>
-                  Holidays:{' '}
-                  <span className="font-semibold text-amber-600">{monthlyTotals.holidays || 0}</span>
-                </p>
-                <p>
-                  Working days:{' '}
-                  <span className="font-semibold text-gray-700">{monthlyTotals.workingDays || 0}</span>
-                </p>
-                <p className="text-xs text-gray-500">
-                  Range: {summary.monthly.startDate} → {summary.monthly.endDate}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <h2 className="text-lg font-semibold text-gray-900">Weekly Attendance Trend</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Track present vs absent counts for each day in the last week.
-              </p>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={weeklySeries}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="present" stroke="#16a34a" strokeWidth={2} name="Present" />
-                    <Line type="monotone" dataKey="absent" stroke="#ef4444" strokeWidth={2} name="Absent" />
-                    <Line
-                      type="monotone"
-                      dataKey="holiday"
-                      stroke="#f59e0b"
-                      strokeWidth={2}
-                      strokeDasharray="6 3"
-                      name="Holiday"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-              <h2 className="text-lg font-semibold text-gray-900">Monthly Attendance Coverage</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                A detailed snapshot of attendance distribution across the current month.
-              </p>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={monthlySeries}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="present"
-                      stackId="1"
-                      stroke="#16a34a"
-                      fill="#86efac"
-                      name="Present"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="absent"
-                      stackId="1"
-                      stroke="#ef4444"
-                      fill="#fca5a5"
-                      name="Absent"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="holiday"
-                      stackId="1"
-                      stroke="#f59e0b"
-                      fill="#fcd34d"
-                      name="Holiday"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </section>
-        </>
-      )}
-
-      <DownloadReportsModal
+      <RegistrationDownloadModal
         isOpen={downloadModalOpen}
         onClose={() => setDownloadModalOpen(false)}
-        filters={filters}
+        initialFilters={filters}
+        filterOptions={filterOptions}
       />
-    </div>
+    </div >
   );
 };
 

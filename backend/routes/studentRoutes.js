@@ -74,6 +74,13 @@ router.get(
   studentController.getDashboardStats
 );
 router.get(
+  '/reports/registration',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.getRegistrationReport
+);
+router.get(
   '/dashboard-stats',
   authMiddleware,
   verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
@@ -195,6 +202,15 @@ router.post(
   attachUserScope,
   studentController.checkExpiredPermits
 );
+
+router.get(
+  '/reports/registration/export',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.exportRegistrationReport
+);
+
 router.post('/otp/send', authMiddleware, studentController.sendOtp);
 router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.get(

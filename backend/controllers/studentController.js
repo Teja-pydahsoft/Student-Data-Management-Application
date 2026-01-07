@@ -4373,6 +4373,11 @@ exports.getQuickFilterOptions = async (req, res) => {
     }
 
     // Fetch distinct values for each filter, applying cascading filters
+    const [collegeRows] = await masterPool.query(
+      `SELECT DISTINCT college FROM students ${whereClause} AND college IS NOT NULL AND college <> '' ORDER BY college ASC`,
+      params
+    );
+
     const [batchRows] = await masterPool.query(
       `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
       params
@@ -4561,6 +4566,7 @@ exports.getQuickFilterOptions = async (req, res) => {
     res.json({
       success: true,
       data: {
+        colleges: collegeRows.map((row) => row.college),
         batches: batchRows.map((row) => row.batch),
         years: yearRows.map((row) => row.currentYear),
         semesters: semesterRows.map((row) => row.currentSemester),
@@ -5765,3 +5771,392 @@ exports.rejoinStudent = async (req, res) => {
     });
   }
 };
+// Get Registration Report
+exports.getRegistrationReport = async (req, res) => {
+  try {
+    const {
+      filter_batch,
+      filter_course,
+      filter_branch,
+      filter_year,
+      filter_semester,
+      filter_college,
+      search,
+      page = 1,
+      limit = 50
+    } = req.query;
+
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 50;
+    const offset = (pageNum - 1) * limitNum;
+
+    const normalizedFilterBatch = filter_batch && filter_batch.trim().length > 0 ? filter_batch.trim() : null;
+    const normalizedFilterCollege = filter_college && filter_college.trim().length > 0 ? filter_college.trim() : null;
+    const normalizedFilterCourse = filter_course && filter_course.trim().length > 0 ? filter_course.trim() : null;
+    const normalizedFilterBranch = filter_branch && filter_branch.trim().length > 0 ? filter_branch.trim() : null;
+    const parsedFilterYear = filter_year ? parseInt(filter_year, 10) : null;
+    const parsedFilterSemester = filter_semester ? parseInt(filter_semester, 10) : null;
+
+    let baseQuery = 'FROM students WHERE 1=1';
+    const params = [];
+
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        baseQuery += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
+
+    // Filter for REGULAR students only (Matches Attendance Page Logic)
+    baseQuery += " AND student_status = 'Regular'";
+
+    // Apply Filters
+    if (normalizedFilterBatch) {
+      baseQuery += ' AND batch = ?';
+      params.push(normalizedFilterBatch);
+    }
+    if (normalizedFilterCollege) {
+      baseQuery += ' AND college = ?';
+      params.push(normalizedFilterCollege);
+    }
+    if (normalizedFilterCourse) {
+      baseQuery += ' AND course = ?';
+      params.push(normalizedFilterCourse);
+    }
+    if (normalizedFilterBranch) {
+      baseQuery += ' AND branch = ?';
+      params.push(normalizedFilterBranch);
+    }
+    if (parsedFilterYear) {
+      baseQuery += ' AND current_year = ?';
+      params.push(parsedFilterYear);
+    }
+    if (parsedFilterSemester) {
+      baseQuery += ' AND current_semester = ?';
+      params.push(parsedFilterSemester);
+    }
+
+    if (search) {
+      const searchPattern = `%${search.trim()}%`;
+      baseQuery += ` AND (
+        admission_number LIKE ? 
+        OR admission_no LIKE ? 
+        OR pin_no LIKE ? 
+        OR student_name LIKE ?
+      )`;
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+
+    // Get Total Count
+    const countQuery = `SELECT COUNT(id) as total ${baseQuery}`;
+    const [countResult] = await masterPool.query(countQuery, params);
+    const totalRecords = countResult[0].total;
+    const totalPages = Math.ceil(totalRecords / limitNum);
+
+    // Statistics Query - Efficient single-pass aggregation
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%' THEN 1 ELSE 0 END) as verification_completed,
+        SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
+        SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
+        SUM(CASE WHEN current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '' THEN 1 ELSE 0 END) as promotion_completed,
+        SUM(CASE WHEN scholar_status IS NOT NULL AND scholar_status != '' AND scholar_status NOT LIKE '%Pending%' AND scholar_status NOT LIKE '%Not%' THEN 1 ELSE 0 END) as scholarship_assigned,
+        SUM(CASE WHEN 
+             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
+             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+             THEN 1 ELSE 0 END) as overall_completed
+      ${baseQuery}
+    `;
+
+    const [statsResult] = await masterPool.query(statsQuery, params);
+    const statsRow = statsResult[0] || {};
+    const totalCount = parseInt(statsRow.total || 0);
+
+    const statistics = {
+      total: totalCount,
+      verification: {
+        completed: parseInt(statsRow.verification_completed || 0),
+        pending: totalCount - parseInt(statsRow.verification_completed || 0)
+      },
+      certificates: {
+        verified: parseInt(statsRow.certificates_verified || 0),
+        pending: totalCount - parseInt(statsRow.certificates_verified || 0)
+      },
+      fees: {
+        cleared: parseInt(statsRow.fee_cleared || 0),
+        pending: totalCount - parseInt(statsRow.fee_cleared || 0)
+      },
+      promotion: {
+        completed: parseInt(statsRow.promotion_completed || 0),
+        pending: totalCount - parseInt(statsRow.promotion_completed || 0)
+      },
+      scholarship: {
+        assigned: parseInt(statsRow.scholarship_assigned || 0),
+        pending: totalCount - parseInt(statsRow.scholarship_assigned || 0)
+      },
+      overall: {
+        completed: parseInt(statsRow.overall_completed || 0),
+        pending: totalCount - parseInt(statsRow.overall_completed || 0)
+      }
+    };
+
+    // Get Data - specific columns only for performance
+    const dataQuery = `
+      SELECT 
+        id, pin_no, student_name, admission_number, course, branch, 
+        current_year, current_semester, student_data, 
+        certificates_status, fee_status, scholar_status
+      ${baseQuery} 
+      ORDER BY pin_no ASC, id ASC 
+      LIMIT ? OFFSET ?
+    `;
+    const dataParams = [...params, limitNum, offset];
+
+    const [students] = await masterPool.query(dataQuery, dataParams);
+
+    // Process students to calculate 5 stages status
+    const reportData = students.map(student => {
+      const studentData = typeof student.student_data === 'string'
+        ? JSON.parse(student.student_data || '{}')
+        : (student.student_data || {});
+
+      // Stage 1: Verification
+      const isStudentVerified = !!studentData.is_student_mobile_verified;
+      const isParentVerified = !!studentData.is_parent_mobile_verified;
+      const verificationStatus = (isStudentVerified && isParentVerified) ? 'completed' : 'pending';
+
+      // Stage 2: Certificates
+      const certStatusRaw = (student.certificates_status || '').toLowerCase();
+      const isCertVerified = certStatusRaw.includes('verified');
+      const certificatesStatusDisplay = isCertVerified ? 'Verified' : 'Unverified';
+      const certificatesStatus = isCertVerified ? 'completed' : 'pending';
+
+      // Stage 3: Fee Status
+      const feeRaw = (student.fee_status || '').toLowerCase();
+      let feeStatusDisplay = student.fee_status || 'Pending';
+      if (feeRaw.includes('no_due') || feeRaw.includes('nodue') || feeRaw.includes('no due')) feeStatusDisplay = 'No Due';
+      else if (feeRaw.includes('permitted')) feeStatusDisplay = 'Permitted';
+      else if (feeRaw.includes('completed')) feeStatusDisplay = 'No Due';
+
+      const isFeeCleared = ['completed', 'no_due', 'nodue', 'no due', 'partially_completed', 'partial', 'permitted'].some(s => feeRaw.includes(s));
+      const feeStatus = isFeeCleared ? 'completed' : 'pending';
+
+      // Stage 4: Promotion
+      const promotionStatus = (student.current_year && student.current_semester) ? 'completed' : 'pending';
+
+      // Stage 5: Scholarship
+      const scholarRaw = (student.scholar_status || '').toLowerCase();
+      let scholarshipStatusDisplay = student.scholar_status || 'Pending';
+
+      if (scholarRaw.includes('jvd') || scholarRaw.includes('yes') || scholarRaw.includes('eligible')) {
+        // Keep valid status as is
+      } else if (!student.scholar_status || scholarRaw === '') {
+        scholarshipStatusDisplay = 'Pending';
+      }
+
+      // Logic for overall status - existing logic was just checking truthiness
+      const scholarshipStatus = (student.scholar_status) ? 'completed' : 'pending';
+
+      // Overall Registration Status
+      const overallStatus = (
+        verificationStatus === 'completed' &&
+        certificatesStatus === 'completed' &&
+        feeStatus === 'completed'
+      ) ? 'completed' : 'pending';
+
+      return {
+        id: student.id,
+        pin_no: student.pin_no || student.admission_number || 'N/A',
+        student_name: student.student_name,
+        admission_number: student.admission_number,
+        course: student.course,
+        branch: student.branch,
+        current_year: student.current_year,
+        current_semester: student.current_semester,
+        stages: {
+          verification: verificationStatus,
+          certificates: certificatesStatusDisplay,
+          fee: feeStatusDisplay,
+          promotion: promotionStatus,
+          scholarship: scholarshipStatusDisplay
+        },
+        overall_status: overallStatus
+      };
+    });
+
+    res.json({
+      success: true,
+      data: reportData,
+      statistics,
+      pagination: {
+        total: totalRecords,
+        page: pageNum,
+        totalPages: totalPages,
+        limit: limitNum
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching registration report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch registration report'
+    });
+  }
+};
+
+// Export Registration Report (Excel/PDF)
+exports.exportRegistrationReport = async (req, res) => {
+  try {
+    const {
+      filter_batch,
+      filter_course,
+      filter_branch,
+      filter_year,
+      filter_semester,
+      filter_college,
+      search,
+      format = 'excel'
+    } = req.query;
+
+    let baseQuery = 'FROM students WHERE 1=1';
+    const params = [];
+
+    // Apply user scope filtering
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        baseQuery += ` AND ${scopeCondition}`;
+        params.push(...scopeParams);
+      }
+    }
+
+    baseQuery += " AND student_status = 'Regular'";
+
+    const normalizedFilterBatch = filter_batch && filter_batch.trim().length > 0 ? filter_batch.trim() : null;
+    const normalizedFilterCollege = filter_college && filter_college.trim().length > 0 ? filter_college.trim() : null;
+    const normalizedFilterCourse = filter_course && filter_course.trim().length > 0 ? filter_course.trim() : null;
+    const normalizedFilterBranch = filter_branch && filter_branch.trim().length > 0 ? filter_branch.trim() : null;
+    const parsedFilterYear = filter_year ? parseInt(filter_year, 10) : null;
+    const parsedFilterSemester = filter_semester ? parseInt(filter_semester, 10) : null;
+
+    if (normalizedFilterBatch) { baseQuery += ' AND batch = ?'; params.push(normalizedFilterBatch); }
+    if (normalizedFilterCollege) { baseQuery += ' AND college = ?'; params.push(normalizedFilterCollege); }
+    if (normalizedFilterCourse) { baseQuery += ' AND course = ?'; params.push(normalizedFilterCourse); }
+    if (normalizedFilterBranch) { baseQuery += ' AND branch = ?'; params.push(normalizedFilterBranch); }
+    if (parsedFilterYear) { baseQuery += ' AND current_year = ?'; params.push(parsedFilterYear); }
+    if (parsedFilterSemester) { baseQuery += ' AND current_semester = ?'; params.push(parsedFilterSemester); }
+
+    if (search) {
+      const searchPattern = `%${search.trim()}%`;
+      baseQuery += ` AND (admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ? OR student_name LIKE ?)`;
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+
+    const dataQuery = `
+      SELECT 
+        pin_no, student_name, admission_number, course, branch, college, batch,
+        current_year, current_semester, student_data, 
+        certificates_status, fee_status, scholar_status
+      ${baseQuery} 
+      ORDER BY pin_no ASC
+    `;
+
+    const [students] = await masterPool.query(dataQuery, params);
+
+    // Process Data
+    const processedData = students.map(student => {
+      const studentData = typeof student.student_data === 'string' ? JSON.parse(student.student_data || '{}') : (student.student_data || {});
+
+      const isStudentVerified = !!studentData.is_student_mobile_verified;
+      const isParentVerified = !!studentData.is_parent_mobile_verified;
+      const verificationStatus = (isStudentVerified && isParentVerified) ? 'Completed' : 'Pending';
+
+      const certStatusRaw = (student.certificates_status || '').toLowerCase();
+      const certificatesStatus = certStatusRaw.includes('verified') ? 'Verified' : 'Unverified';
+
+      const feeRaw = (student.fee_status || '').toLowerCase();
+      let feeStatus = student.fee_status || 'Pending';
+      if (feeRaw.includes('no_due') || feeRaw.includes('nodue') || feeRaw.includes('completed')) feeStatus = 'No Due';
+      else if (feeRaw.includes('permitted')) feeStatus = 'Permitted';
+
+      let scholarshipStatus = student.scholar_status || 'Pending';
+      const scholarRaw = (student.scholar_status || '').toLowerCase();
+      if (!student.scholar_status || scholarRaw === '') scholarshipStatus = 'Pending';
+
+
+      const promotionStatus = (student.current_year && student.current_semester) ? 'Completed' : 'Pending';
+
+      return {
+        'Pin No': student.pin_no,
+        'Student Name': student.student_name,
+        'Admission No': student.admission_number,
+        'College': student.college,
+        'Course': student.course,
+        'Branch': student.branch,
+        'Year': student.current_year,
+        'Semester': student.current_semester,
+        'Verification': verificationStatus,
+        'Certificates': certificatesStatus,
+        'Fees': feeStatus,
+        'Promotion': promotionStatus,
+        'Scholarship': scholarshipStatus
+      };
+    });
+
+    if (format === 'excel') {
+      const XLSX = require('xlsx');
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(processedData);
+
+      // Auto-width columns
+      const wscols = Object.keys(processedData[0] || {}).map(() => ({ wch: 20 }));
+      ws['!cols'] = wscols;
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Registration Report');
+
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Disposition', 'attachment; filename="Registration_Report.xlsx"');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      return res.send(buffer);
+    }
+    else if (format === 'pdf') {
+      const PDFDocument = require('pdfkit');
+      const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+
+      res.setHeader('Content-Disposition', 'attachment; filename="Registration_Report.pdf"');
+      res.setHeader('Content-Type', 'application/pdf');
+
+      doc.pipe(res);
+
+      doc.fontSize(16).text('Registration Report', { align: 'center' });
+      doc.moveDown();
+
+      // Simple table output for PDF (keeping it very basic to avoid complex layout logic bugs)
+      // For a proper table in PDFKit, external libraries like pdfkit-table are better, 
+      // but sticking to core pdfkit: just listing data or simple columns.
+      // Given constraints, I'll print a simple list or CSV-like text.
+      // Or better, just rows of text.
+
+      processedData.forEach((row, i) => {
+        if (doc.y > 500) doc.addPage();
+        const line = `${row['Pin No']} | ${row['Student Name']} | ${row['Course']}-${row['Branch']} | Fees: ${row['Fees']} | Certs: ${row['Certificates']}`;
+        doc.fontSize(10).text(line);
+      });
+
+      doc.end();
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid format' });
+    }
+
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ success: false, message: 'Export failed' });
+  }
+};
+
