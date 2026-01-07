@@ -6137,16 +6137,75 @@ exports.exportRegistrationReport = async (req, res) => {
       doc.fontSize(16).text('Registration Report', { align: 'center' });
       doc.moveDown();
 
-      // Simple table output for PDF (keeping it very basic to avoid complex layout logic bugs)
-      // For a proper table in PDFKit, external libraries like pdfkit-table are better, 
-      // but sticking to core pdfkit: just listing data or simple columns.
-      // Given constraints, I'll print a simple list or CSV-like text.
-      // Or better, just rows of text.
+      // -- Table Configuration --
+      const tableTop = 100;
+      const rowHeight = 25;
+      const fontSize = 9;
+      const pageWidth = doc.page.width - 60; // 30 margin each side
 
-      processedData.forEach((row, i) => {
-        if (doc.y > 500) doc.addPage();
-        const line = `${row['Pin No']} | ${row['Student Name']} | ${row['Course']}-${row['Branch']} | Fees: ${row['Fees']} | Certs: ${row['Certificates']}`;
-        doc.fontSize(10).text(line);
+      // Column widths (Total must be approximately pageWidth, here ~780 for A4 Landscape)
+      const columns = [
+        { header: 'Pin No', key: 'Pin No', width: 80 },
+        { header: 'Student Name', key: 'Student Name', width: 140 }, // Expanded name
+        { header: 'Course', key: 'Course', width: 60 },
+        { header: 'Branch', key: 'Branch', width: 60 },
+        { header: 'Year', key: 'Year', width: 40 },
+        { header: 'Sem', key: 'Semester', width: 40 },
+        { header: 'Fees', key: 'Fees', width: 70 },
+        { header: 'Certs', key: 'Certificates', width: 70 },
+        { header: 'Promo', key: 'Promotion', width: 70 },
+        { header: 'Scholar', key: 'Scholarship', width: 70 },
+        { header: 'Verify', key: 'Verification', width: 70 }
+      ];
+
+      let y = tableTop;
+
+      // Helper to draw a row
+      const drawRow = (yPos, rowData, isHeader = false) => {
+        let x = 30; // Left margin
+        doc.fontSize(isHeader ? 10 : fontSize).font(isHeader ? 'Helvetica-Bold' : 'Helvetica');
+
+        // Background for header
+        if (isHeader) {
+          doc.rect(x, yPos, pageWidth, rowHeight).fill('#f0f0f0').stroke();
+          doc.fillColor('black'); // Reset fill
+        }
+
+        columns.forEach(col => {
+          // Draw cell text
+          const text = isHeader ? col.header : (rowData[col.key] || '-').toString();
+
+          // Truncate text to fit width
+          let displayText = text;
+          if (!isHeader && text.length > (col.width / 5)) {
+            displayText = text.substring(0, Math.floor(col.width / 5)) + '..';
+          }
+
+          doc.text(displayText, x + 5, yPos + 8, { width: col.width - 10, align: 'left', lineBreak: false });
+
+          x += col.width;
+        });
+
+        // Bottom border
+        doc.moveTo(30, yPos + rowHeight).lineTo(30 + pageWidth, yPos + rowHeight).strokeColor('#aaaaaa').stroke();
+      };
+
+      // Draw Header
+      drawRow(y, {}, true);
+      y += rowHeight;
+
+      // Draw Rows
+      processedData.forEach((row) => {
+        // New Page Check
+        if (y + rowHeight > doc.page.height - 30) {
+          doc.addPage();
+          y = 50; // Reset Y
+          drawRow(y, {}, true); // Draw Header on new page
+          y += rowHeight;
+        }
+
+        drawRow(y, row);
+        y += rowHeight;
       });
 
       doc.end();
