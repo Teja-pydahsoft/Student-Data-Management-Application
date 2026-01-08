@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X, Users } from 'lucide-react';
+import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X, Users, AlertCircle } from 'lucide-react';
 import { SkeletonBox, SkeletonCard } from '../../components/SkeletonLoader';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -636,91 +636,100 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Club Payment Pending Alert */}
-            {clubs.some(c => c.payment_status === 'payment_due') && (
-                <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg shadow-orange-200 overflow-hidden relative mb-6 animate-pulse-slow">
-                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
-                                <Smartphone size={24} />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold">Club Memberships Approved!</h2>
-                                <p className="text-orange-100">
-                                    You have pending payments for joined clubs. Complete payment to access club activities.
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => navigate('/student/clubs')}
-                            className="bg-white text-orange-600 px-6 py-2.5 rounded-xl font-bold hover:bg-orange-50 transition-colors shadow-sm cursor-pointer whitespace-nowrap flex items-center gap-2"
-                        >
-                            View & Pay <ArrowRight size={16} />
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* REMOVED STANDALONE CLUB PAYMENT ALERT */}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Student Clubs Section */}
                 <div className="lg:col-span-8 flex flex-col gap-6">
                     {/* Club Section */}
+                    {/* Club Section */}
                     {(() => {
-                        const joinedClub = clubs.find(c => c.userStatus === 'approved');
+                        const myClubs = clubs.filter(c => c.userStatus === 'approved' || c.userStatus === 'pending');
 
-                        if (joinedClub) {
-                            // SHOW JOINED CLUB FEED
+                        if (myClubs.length > 0) {
                             return (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative z-10">
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-14 w-14 rounded-xl bg-gray-100 overflow-hidden border border-gray-200">
-                                                {joinedClub.image_url ? (
-                                                    <img src={joinedClub.image_url} alt={joinedClub.name} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-50"><Users size={24} /></div>
-                                                )}
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative z-10 transition-all">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                                <Users size={18} />
                                             </div>
-                                            <div>
-                                                <h3 className="text-xl font-bold text-gray-900">{joinedClub.name}</h3>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle size={10} /> Member</span>
-                                                    <span className="text-xs text-gray-500">View your club dashboard</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <Link
-                                            to="/student/clubs"
-                                            className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-semibold hover:bg-indigo-100 transition-colors"
-                                        >
-                                            Visit Club Page
+                                            Your Clubs
+                                        </h3>
+                                        <Link to="/student/clubs" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                                            View All
                                         </Link>
                                     </div>
 
-                                    {/* Mini Activity Feed */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Latest Activity</h4>
-                                        {joinedClub.activities && joinedClub.activities.length > 0 ? (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {joinedClub.activities.slice(0, 2).map((activity, idx) => (
-                                                    <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-indigo-100 transition-all group cursor-pointer" onClick={() => navigate('/student/clubs')}>
-                                                        {activity.image_url && (
-                                                            <div className="h-32 mb-3 rounded-lg overflow-hidden relative">
-                                                                <img src={activity.image_url} alt="" className="w-full h-full object-cover" />
-                                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {myClubs.map((club) => {
+                                            const isPaymentDue = club.payment_status === 'payment_due';
+                                            return (
+                                                <div key={club.id} className={`rounded-xl p-4 border transition-all h-full flex flex-col ${isPaymentDue ? 'bg-orange-50/50 border-orange-200' : 'bg-gray-50 border-gray-100'}`}>
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-10 w-10 rounded-lg bg-gray-200 overflow-hidden border border-gray-200 flex-shrink-0">
+                                                                {club.image_url ? (
+                                                                    <img src={club.image_url} alt={club.name} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center text-gray-400"><Users size={16} /></div>
+                                                                )}
                                                             </div>
-                                                        )}
-                                                        <h5 className="font-bold text-gray-900 line-clamp-1 mb-1">{activity.title}</h5>
-                                                        <p className="text-xs text-gray-500 mb-2">{new Date(activity.posted_at).toLocaleDateString()}</p>
-                                                        <p className="text-sm text-gray-600 line-clamp-2">{activity.description}</p>
+                                                            <div>
+                                                                <h4 className="text-base font-bold text-gray-900 line-clamp-1">{club.name}</h4>
+                                                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                                                    {club.userStatus === 'approved' && (
+                                                                        <span className="bg-green-100 text-green-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><CheckCircle size={8} /> Member</span>
+                                                                    )}
+                                                                    {club.userStatus === 'pending' && (
+                                                                        <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5"><Clock size={8} /> Pending</span>
+                                                                    )}
+
+                                                                    {isPaymentDue && (
+                                                                        <span className="text-[10px] text-orange-600 font-bold flex items-center gap-0.5 animate-pulse"><AlertCircle size={10} /> Payment Pending</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                                <p className="text-gray-500 text-sm">No recent activities posted.</p>
-                                            </div>
-                                        )}
+
+                                                    {/* Activity Feed for this club - abbreviated for grid */}
+                                                    <div className="flex-1 mb-3">
+                                                        {club.userStatus === 'approved' && club.activities && club.activities.length > 0 ? (
+                                                            <div className="bg-white rounded-lg p-2 border border-gray-100 hover:border-indigo-100 transition-all cursor-pointer flex gap-2" onClick={() => navigate('/student/clubs')}>
+                                                                {club.activities[0].image_url && (
+                                                                    <div className="h-8 w-8 rounded-md overflow-hidden relative flex-shrink-0">
+                                                                        <img src={club.activities[0].image_url} alt="" className="w-full h-full object-cover" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <h5 className="font-bold text-gray-900 line-clamp-1 text-[10px]">{club.activities[0].title}</h5>
+                                                                    <p className="text-[9px] text-gray-500 line-clamp-1">{club.activities[0].description}</p>
+                                                                </div>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+
+                                                    <div className="mt-auto">
+                                                        {isPaymentDue ? (
+                                                            <button
+                                                                onClick={() => navigate('/student/clubs')}
+                                                                className="w-full py-1.5 bg-orange-500 text-white rounded-lg text-xs font-bold hover:bg-orange-600 transition-colors shadow-sm animate-pulse-slow whitespace-nowrap"
+                                                            >
+                                                                Pay Fee
+                                                            </button>
+                                                        ) : (
+                                                            <Link
+                                                                to="/student/clubs"
+                                                                className="w-full block text-center py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-50 transition-colors"
+                                                            >
+                                                                View Dashboard
+                                                            </Link>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             );
@@ -784,80 +793,81 @@ const Dashboard = () => {
                         }
                     })()}
 
-                    {/* Feed Section */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col flex-1 relative z-10">
-                        <div className="flex items-center justify-between mb-6">
+                    {/* Feed Section - COMPACTED */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col flex-1 relative z-10">
+                        <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <span role="img" aria-label="feed">📰</span>
+                                <div className="p-1.5 bg-blue-100 rounded-lg">
+                                    <span role="img" aria-label="feed" className="text-lg">📰</span>
                                 </div>
                                 Recent Updates & Polls
                             </h3>
                         </div>
 
-                        <div className="space-y-4 flex-1">
+                        <div className="space-y-3 flex-1">
                             {loading ? (
                                 <div className="text-center py-8 text-gray-500">Loading updates...</div>
                             ) : feedItems.length > 0 ? (
-                                feedItems.slice(0, 5).map((item, index) => {
+                                feedItems.slice(0, 4).map((item, index) => { // Limited to 4 items
                                     if (item.type === 'poll') {
                                         const poll = item.data;
                                         return (
-                                            <div key={`poll-${poll.id}`} className="p-5 rounded-xl bg-purple-50 border border-purple-100 hover:border-purple-200 transition-colors relative">
-                                                <div className="absolute top-4 right-4 text-purple-200">
-                                                    <Vote size={48} className="opacity-20" />
+                                            <div key={`poll-${poll.id}`} className="p-4 rounded-lg bg-purple-50 border border-purple-100 hover:border-purple-200 transition-colors relative">
+                                                <div className="absolute top-3 right-3 text-purple-200">
+                                                    <Vote size={32} className="opacity-20" />
                                                 </div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wide">Active Poll</span>
-                                                    <span className="text-xs text-gray-500">{new Date(poll.created_at).toLocaleDateString()}</span>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wide">Active Poll</span>
+                                                    <span className="text-[10px] text-gray-500">{new Date(poll.created_at).toLocaleDateString()}</span>
                                                 </div>
-                                                <h4 className="font-bold text-gray-900 mb-2">{poll.question}</h4>
-                                                <p className="text-sm text-gray-600 mb-4">{poll.total_votes} students have voted</p>
+                                                <h4 className="font-bold text-gray-900 text-sm mb-1">{poll.question}</h4>
+                                                <p className="text-xs text-gray-600 mb-2">{poll.total_votes} students have voted</p>
 
                                                 {/* Show Vote Status or Action */}
                                                 {poll.has_voted ? (
-                                                    <div className="flex items-center gap-2 text-sm text-purple-700 font-medium bg-purple-100 px-3 py-2 rounded-lg inline-flex">
-                                                        <CheckCircle size={16} /> Voted
+                                                    <div className="flex items-center gap-1 text-xs text-purple-700 font-medium bg-purple-100 px-2 py-1 rounded inline-flex">
+                                                        <CheckCircle size={12} /> Voted
                                                     </div>
                                                 ) : (
                                                     <Link
                                                         to="/student/announcements"
-                                                        className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 inline-block"
+                                                        className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-purple-700 inline-block"
                                                     >
-                                                        Participate Now
+                                                        Vote Now
                                                     </Link>
                                                 )}
                                             </div>
                                         );
                                     } else {
+                                        // Announcement
                                         const ann = item.data;
                                         return (
-                                            <div key={`ann-${ann.id}`} className="p-5 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 transition-colors group">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-base">{ann.title}</h4>
-                                                    <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-100 whitespace-nowrap">
-                                                        {new Date(ann.created_at).toLocaleDateString()}
-                                                    </span>
+                                            <div
+                                                key={`ann-${ann.id}`}
+                                                className="p-4 rounded-lg bg-gray-50 border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all cursor-pointer group"
+                                                onClick={() => {
+                                                    setCurrentAnnouncement(ann);
+                                                    setShowAnnouncement(true);
+                                                }}
+                                            >
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-700 transition-colors line-clamp-1">{ann.title}</h4>
+                                                    <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">{new Date(ann.created_at).toLocaleDateString()}</span>
                                                 </div>
-                                                <p className="text-sm text-gray-600 line-clamp-2 mb-3 leading-relaxed">
-                                                    {ann.content}
-                                                </p>
-                                                <button
-                                                    onClick={() => {
-                                                        setCurrentAnnouncement(ann);
-                                                        setShowAnnouncement(true);
-                                                    }}
-                                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                                                >
-                                                    Read More &rarr;
-                                                </button>
+                                                <p className="text-xs text-gray-600 line-clamp-2 mb-2">{ann.content}</p>
+                                                <span className="text-[10px] text-blue-600 font-medium flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                                    Read More <ArrowRight size={10} />
+                                                </span>
                                             </div>
                                         );
                                     }
                                 })
                             ) : (
                                 <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                    <p className="text-gray-500 text-sm">No new updates</p>
+                                    <div className="inline-flex p-3 bg-gray-100 rounded-full text-gray-400 mb-2">
+                                        <FileText size={20} />
+                                    </div>
+                                    <p className="text-gray-500 text-xs">No recent updates.</p>
                                 </div>
                             )}
 
