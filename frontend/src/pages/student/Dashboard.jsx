@@ -615,7 +615,7 @@ const Dashboard = () => {
 
             {/* Registration Pending Banner (Only if NOT Completed) */}
             {!isRegistrationCompleted && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg shadow-blue-200 overflow-hidden relative">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white shadow-lg shadow-blue-200 overflow-hidden relative mb-6">
                     <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div>
                             <h2 className="text-2xl font-bold mb-2">Semester Registration Open</h2>
@@ -633,6 +633,31 @@ const Dashboard = () => {
                         </div>
                     </div>
                     <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                </div>
+            )}
+
+            {/* Club Payment Pending Alert */}
+            {clubs.some(c => c.payment_status === 'payment_due') && (
+                <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg shadow-orange-200 overflow-hidden relative mb-6 animate-pulse-slow">
+                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+                                <Smartphone size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold">Club Memberships Approved!</h2>
+                                <p className="text-orange-100">
+                                    You have pending payments for joined clubs. Complete payment to access club activities.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate('/student/clubs')}
+                            className="bg-white text-orange-600 px-6 py-2.5 rounded-xl font-bold hover:bg-orange-50 transition-colors shadow-sm cursor-pointer whitespace-nowrap flex items-center gap-2"
+                        >
+                            View & Pay <ArrowRight size={16} />
+                        </button>
+                    </div>
                 </div>
             )}
 

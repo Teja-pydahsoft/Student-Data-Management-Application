@@ -7,64 +7,53 @@ const getClubs = async (req, res) => {
     try {
         const { role, id } = req.user;
 
-        // Optimize: Fetch IDs sorted first to avoid "Out of sort memory" with large JSON columns
-        const [clubIds] = await masterPool.query('SELECT id FROM clubs WHERE is_active = TRUE ORDER BY created_at DESC');
+        // Fetch clubs
+        const [clubs] = await masterPool.query('SELECT * FROM clubs WHERE is_active = TRUE ORDER BY created_at DESC');
 
-        let clubs = [];
-        if (clubIds.length > 0) {
-            const ids = clubIds.map(c => c.id);
-            // Use parameter expansion for IN clause
-            const placeholders = ids.map(() => '?').join(',');
-            const [rows] = await masterPool.query(
-                `SELECT * FROM clubs WHERE id IN (${placeholders})`,
-                ids
-            );
-            // Re-sort results in memory to match the ID order (which is already sorted by created_at)
-            clubs = ids.map(id => rows.find(r => r.id === id)).filter(Boolean);
-        }
-
-        // Helper to safe parse
+        // Parse JSON fields (activities, form_fields) - members is no longer JSON here
         const safeParse = (val) => {
-            if (!val) return [];
-            try {
-                return typeof val === 'string' ? JSON.parse(val) : val;
-            } catch (e) {
-                return [];
-            }
+            try { return typeof val === 'string' ? JSON.parse(val) : (val || []); } catch (e) { return []; }
         };
 
-        const parsedClubs = clubs.map(club => ({
-            ...club,
-            form_fields: safeParse(club.form_fields),
-            members: safeParse(club.members),
-            activities: safeParse(club.activities)
-        }));
+        let enrichedClubs = [];
 
-        // If student, check membership status for each club
-        if (role === 'student') {
-            const clubsWithStatus = parsedClubs.map(club => {
-                const members = club.members || [];
-                const membership = members.find(m => m.student_id === id);
+        // Fetch members count and check status
+        for (const club of clubs) {
+            const [memberCount] = await masterPool.query('SELECT COUNT(*) as count FROM club_members WHERE club_id = ? AND status = "approved"', [club.id]);
+            const count = memberCount[0].count;
 
-                let userStatus = null;
-                if (membership) {
-                    userStatus = membership.status;
+            let userStatus = null;
+            let paymentStatus = null;
+            if (role === 'student') {
+                const [membership] = await masterPool.query('SELECT status, payment_status FROM club_members WHERE club_id = ? AND student_id = ?', [club.id, id]);
+                if (membership.length > 0) {
+                    userStatus = membership[0].status;
+                    paymentStatus = membership[0].payment_status;
                 }
+            }
 
-                // Hide members and activities if not approved
-                const { members: _, activities, ...clubData } = club;
-                return {
-                    ...clubData,
-                    userStatus,
-                    // Only show activities if approved
-                    activities: userStatus === 'approved' ? (club.activities || []) : []
-                };
+            // Only show activities if approved (student) or admin
+            const activities = (role === 'admin' || userStatus === 'approved') ? safeParse(club.activities) : [];
+
+            enrichedClubs.push({
+                ...club,
+                form_fields: safeParse(club.form_fields),
+                members: [], // List view doesn't need full member list, just count
+                memberCount: count, // Using a new field or overriding members.length concept
+                // For compatibility with frontend that checks members.length, let's mock it or just use memberCount
+                // Frontend check: (club.members || []).length
+                // So we can attach a dummy array of length 'count' or update frontend. 
+                // Let's perform a lightweight fetch of just IDs if we want to preserve exact structure, 
+                // or better: let's populate 'members' with a dummy array of partial objects to satisfy .length logic without fetching full objects.
+                // Actually, let's just fetch IDs.
+                members: new Array(count).fill({}),
+                activities,
+                userStatus,
+                payment_status: paymentStatus // Exposed for frontend checks
             });
-            return res.json({ success: true, data: clubsWithStatus });
         }
 
-        // Admin sees everything
-        res.json({ success: true, data: parsedClubs });
+        res.json({ success: true, data: enrichedClubs });
     } catch (error) {
         console.error('Error fetching clubs:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch clubs' });
@@ -73,7 +62,10 @@ const getClubs = async (req, res) => {
 
 const createClub = async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, membership_fee, fee_type } = req.body;
+
+        // target_audience removed
+
         let image_url = '';
 
         if (req.file) {
@@ -101,8 +93,8 @@ const createClub = async (req, res) => {
         const form_fields = JSON.stringify([]);
 
         await masterPool.query(
-            'INSERT INTO clubs (name, description, image_url, form_fields, members, activities, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [name, description, image_url, form_fields, members, activities, req.user.id]
+            'INSERT INTO clubs (name, description, image_url, form_fields, members, activities, created_by, membership_fee, fee_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, description, image_url, form_fields, members, activities, req.user?.id || null, membership_fee || 0, fee_type || 'Yearly']
         );
 
         res.json({ success: true, message: 'Club created successfully', data: { image_url } });
@@ -120,51 +112,41 @@ const joinClub = async (req, res) => {
         const { clubId } = req.params;
         const studentId = req.user.id;
 
-        // Get student details for denormalization
-        const [students] = await masterPool.query(
-            'SELECT student_name, admission_number, batch, course, branch, current_year, current_semester, student_mobile, student_photo FROM students WHERE id = ?',
-            [studentId]
+        // Check if already a member
+        const [existing] = await masterPool.query(
+            'SELECT id FROM club_members WHERE club_id = ? AND student_id = ?',
+            [clubId, studentId]
         );
 
-        if (students.length === 0) return res.status(404).json({ success: false, message: 'Student not found' });
-
-        const student = students[0];
-
-        // Check if already a member
-        const [clubs] = await masterPool.query('SELECT members FROM clubs WHERE id = ?', [clubId]);
-        if (clubs.length === 0) return res.status(404).json({ success: false, message: 'Club not found' });
-
-        let membersData = clubs[0].members;
-        let currentMembers = [];
-        try {
-            currentMembers = typeof membersData === 'string' ? JSON.parse(membersData) : (membersData || []);
-        } catch (e) {
-            currentMembers = [];
-        }
-
-        if (currentMembers.find(m => m.student_id === studentId)) {
+        if (existing.length > 0) {
             return res.status(400).json({ success: false, message: 'Already requested or joined' });
         }
 
-        const newMember = {
-            student_id: studentId,
-            student_name: student.student_name,
-            admission_number: student.admission_number,
-            batch: student.batch,
-            course: student.course,
-            branch: student.branch,
-            year: student.current_year,
-            semester: student.current_semester,
-            photo: student.student_photo,
-            status: 'pending',
-            joined_at: new Date().toISOString()
-        };
+        const [clubs] = await masterPool.query('SELECT name, created_by, membership_fee, fee_type FROM clubs WHERE id = ?', [clubId]);
+        if (clubs.length === 0) return res.status(404).json({ success: false, message: 'Club not found' });
 
-        // Atomic update using JSON_ARRAY_APPEND
+        const club = clubs[0];
+        const membershipFee = parseFloat(club.membership_fee) || 0;
+        const feeType = club.fee_type || 'Yearly';
+        // Initially set to 'not_required' - payment only happens after admin approval
+        const paymentStatus = 'not_required';
+
         await masterPool.query(
-            "UPDATE clubs SET members = JSON_ARRAY_APPEND(COALESCE(members, JSON_ARRAY()), '$', CAST(? AS JSON)) WHERE id = ?",
-            [JSON.stringify(newMember), clubId]
+            'INSERT INTO club_members (club_id, student_id, status, payment_status, fee_type) VALUES (?, ?, ?, ?, ?)',
+            [clubId, studentId, 'pending', paymentStatus, feeType]
         );
+
+        // Notify Club Creator (Admin/Faculty)
+        // In this simplified version, we assume created_by is the user ID of the admin.
+        // We need to fetch the admin ID who created the club.
+        if (club.created_by) {
+            sendNotificationToUser(club.created_by, {
+                title: `New Join Request: ${req.user.name}`,
+                body: `${req.user.name} wants to join ${club.name}. Review request.`,
+                icon: '/icon-192x192.png',
+                data: { url: '/admin/clubs' } // Adjust URL as needed
+            }).catch(console.error);
+        }
 
         res.json({ success: true, message: 'Join request sent successfully' });
     } catch (error) {
@@ -178,34 +160,59 @@ const updateMembershipStatus = async (req, res) => {
         const { clubId } = req.params;
         const { studentId, status } = req.body; // status: 'approved' | 'rejected'
 
-        // We need to find the index of the member to update. 
-        // MySQL JSON modification is tricky for array elements by property value.
-        // Read-modify-write is safest for this complexity without complex JSON_SEARCH + path logic.
-        // But since "single table" was requested, let's try to be efficient.
+        // If approving, check club fee and set payment_status accordingly
+        if (status === 'approved') {
+            const [club] = await masterPool.query('SELECT name, membership_fee FROM clubs WHERE id = ?', [clubId]);
+            if (club.length === 0) {
+                return res.status(404).json({ success: false, message: 'Club not found' });
+            }
 
-        // Fetch current members
-        const [rows] = await masterPool.query('SELECT members FROM clubs WHERE id = ?', [clubId]);
-        if (rows.length === 0) return res.status(404).json({ success: false, message: 'Club not found' });
+            const fee = parseFloat(club[0].membership_fee) || 0;
+            const newPaymentStatus = fee > 0 ? 'payment_due' : 'NA';
 
-        let membersData = rows[0].members;
-        let members = [];
-        try {
-            members = typeof membersData === 'string' ? JSON.parse(membersData) : (membersData || []);
-        } catch (e) {
-            members = [];
+            const [result] = await masterPool.query(
+                'UPDATE club_members SET status = ?, payment_status = ? WHERE club_id = ? AND student_id = ?',
+                [status, newPaymentStatus, clubId, studentId]
+            );
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ success: false, message: 'Member not found' });
+            }
+
+            // Notify Student
+            const title = fee > 0 ? `Club Membership Approved - Payment Due` : `Club Membership Approved!`;
+            const body = fee > 0 ? `You have been approved for ${club[0].name}. Please pay ₹${fee} to complete joining.` : `Welcome to ${club[0].name}! You can now access club activities.`;
+
+            sendNotificationToUser(studentId, {
+                title,
+                body,
+                icon: '/icon-192x192.png',
+                data: { url: '/student/clubs' }
+            }).catch(console.error);
+
+        } else {
+            // Rejection
+            const [club] = await masterPool.query('SELECT name FROM clubs WHERE id = ?', [clubId]);
+
+            // For rejection, just update status
+            const [result] = await masterPool.query(
+                'UPDATE club_members SET status = ?, payment_status = ? WHERE club_id = ? AND student_id = ?',
+                [status, 'NA', clubId, studentId]
+            );
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ success: false, message: 'Member not found' });
+            }
+
+            if (club.length > 0) {
+                sendNotificationToUser(studentId, {
+                    title: `Club Request Rejected`,
+                    body: `Your request to join ${club[0].name} was not approved.`,
+                    icon: '/icon-192x192.png',
+                    data: { url: '/student/clubs' }
+                }).catch(console.error);
+            }
         }
-        const memberIndex = members.findIndex(m => m.student_id === parseInt(studentId));
-
-        if (memberIndex === -1) {
-            return res.status(404).json({ success: false, message: 'Member not found' });
-        }
-
-        // Update status
-        members[memberIndex].status = status;
-        members[memberIndex].updated_at = new Date().toISOString();
-
-        // Write back
-        await masterPool.query('UPDATE clubs SET members = ? WHERE id = ?', [JSON.stringify(members), clubId]);
 
         res.json({ success: true, message: `Member ${status}` });
     } catch (error) {
@@ -332,18 +339,12 @@ const deleteActivity = async (req, res) => {
 // Helper: Notify club members
 const notifyClubMembers = async (clubId, title, description) => {
     try {
-        const [rows] = await masterPool.query('SELECT members FROM clubs WHERE id = ?', [clubId]);
-        if (rows.length === 0) return;
+        // Fetch approved members from club_members table
+        const [approvedMembers] = await masterPool.query(
+            'SELECT student_id FROM club_members WHERE club_id = ? AND status = "approved"',
+            [clubId]
+        );
 
-        let members = [];
-        try {
-            members = typeof rows[0].members === 'string' ? JSON.parse(rows[0].members) : (rows[0].members || []);
-        } catch (e) {
-            return;
-        }
-
-        // Filter approved members
-        const approvedMembers = members.filter(m => m.status === 'approved');
 
         if (approvedMembers.length === 0) return;
 
@@ -381,15 +382,25 @@ const getClubDetails = async (req, res) => {
             if (!val) return [];
             try {
                 return typeof val === 'string' ? JSON.parse(val) : val;
-            } catch (e) {
-                return [];
-            }
+            } catch (e) { return []; }
         };
+
+        // Fetch members from relation table
+        const [members] = await masterPool.query(
+            `SELECT cm.id, cm.club_id, cm.student_id, cm.status, cm.payment_status, 
+                    cm.fee_type, cm.joined_at, cm.updated_at,
+                    s.student_name, s.admission_number, s.student_photo 
+             FROM club_members cm 
+             JOIN students s ON cm.student_id = s.id 
+             WHERE cm.club_id = ?
+             ORDER BY cm.joined_at DESC`,
+            [clubId]
+        );
 
         const parsedClub = {
             ...club,
             form_fields: safeParse(club.form_fields),
-            members: safeParse(club.members),
+            members: members, // Now array of objects from DB
             activities: safeParse(club.activities)
         };
 
@@ -404,11 +415,13 @@ const getClubDetails = async (req, res) => {
 const updateClub = async (req, res) => {
     try {
         const { clubId } = req.params;
-        const { name, description } = req.body;
+        const { name, description, membership_fee, fee_type } = req.body;
 
         // Build update query dynamically
-        let query = 'UPDATE clubs SET name = ?, description = ?';
-        let params = [name, description];
+        let query = 'UPDATE clubs SET name = ?, description = ?, membership_fee = ?, fee_type = ?';
+        let params = [name, description, membership_fee || 0, fee_type || 'Yearly'];
+
+
 
         if (req.file) {
             try {

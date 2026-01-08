@@ -1315,6 +1315,57 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     ]
   );
 
+  // -- CLUB FEE UPDATE LOGIC --
+  try {
+    const [allClubs] = await connection.query('SELECT id, members, fee_type, membership_fee FROM clubs');
+
+    for (const club of allClubs) {
+      let members = [];
+      try {
+        members = typeof club.members === 'string' ? JSON.parse(club.members) : (club.members || []);
+      } catch (e) { continue; }
+
+      const memberIndex = members.findIndex(m => m.student_id === student.id);
+      if (memberIndex !== -1) {
+        const member = members[memberIndex];
+        const feeType = club.fee_type || 'Yearly';
+        const fee = parseFloat(club.membership_fee) || 0;
+
+        if (fee > 0) {
+          let shouldUpdate = false;
+
+          // Semesterly: Update if semester changed (or year changed implying semester reset)
+          if (feeType === 'Semesterly') {
+            // If semester changes, fee is due
+            if (nextStage.semester !== currentStage.semester || nextStage.year !== currentStage.year) {
+              shouldUpdate = true;
+            }
+          }
+          // Yearly: Update if year changed
+          else if (feeType === 'Yearly') {
+            if (nextStage.year !== currentStage.year) {
+              shouldUpdate = true;
+            }
+          }
+
+          if (shouldUpdate) {
+            // Update status to indicate payment is required
+            // We keep them as 'member' (or whatever status) but mark payment_status
+            member.payment_status = 'payment_due';
+            member.updated_at = new Date().toISOString();
+
+            // Update DB
+            await connection.query('UPDATE clubs SET members = ? WHERE id = ?', [JSON.stringify(members), club.id]);
+          }
+        }
+      }
+    }
+  } catch (clubError) {
+    console.warn('Failed to update club fees on promotion:', clubError);
+    // Non-fatal, proceed
+  }
+  // -- END CLUB FEE UPDATE LOGIC --
+
   return {
     status: 'SUCCESS',
     student,
