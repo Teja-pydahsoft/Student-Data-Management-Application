@@ -245,7 +245,7 @@ exports.saveCustomHoliday = async (req, res) => {
     });
 
     // Send Notification
-    notifyAllStudents({ title, description }).catch(err => console.error(err));
+    // notifyAllStudents({ title, description }).catch(err => console.error(err));
 
   } catch (error) {
     console.error('Failed to save custom holiday:', error);
