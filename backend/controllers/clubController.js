@@ -2,6 +2,11 @@ const { masterPool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { sendNotificationToUser } = require('./pushController');
 const fs = require('fs');
+const Transaction = require('../MongoDb-Models/Transaction');
+
+const StudentFee = require('../MongoDb-Models/StudentFee');
+const FeeHead = require('../MongoDb-Models/FeeHead');
+
 
 const getClubs = async (req, res) => {
     try {
@@ -29,6 +34,41 @@ const getClubs = async (req, res) => {
                 if (membership.length > 0) {
                     userStatus = membership[0].status;
                     paymentStatus = membership[0].payment_status;
+
+                    // --- SYNC CHECK: Check total paid in MongoDB ---
+                    // Even if approved/paid, let's calculate exact paid amount for UI
+                    if (userStatus === 'approved') {
+                         try {
+                            const [sRow] = await masterPool.query('SELECT admission_number FROM students WHERE id = ?', [id]);
+                            if (sRow.length > 0) {
+                                const admNum = sRow[0].admission_number;
+                                
+                                // Fetch ALL matching transactions (Partial Payments Support)
+                                const txs = await Transaction.find({
+                                    studentId: admNum,
+                                    transactionType: 'DEBIT',
+                                    remarks: { $regex: new RegExp(club.name, 'i') }
+                                });
+
+                                const totalPaid = txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                const requiredFee = Number(club.membership_fee) || 0;
+
+                                // Expose for Frontend
+                                club.paid_amount = totalPaid;
+                                club.balance_due = Math.max(0, requiredFee - totalPaid);
+
+                                // Auto-Update Status to PAID if fully paid
+                                if (paymentStatus === 'payment_due' && totalPaid >= requiredFee && requiredFee > 0) {
+                                    console.log(`[SYNC] Fully paid club fee for ${admNum}, Club: ${club.name}. Updating SQL.`);
+                                    await masterPool.query('UPDATE club_members SET payment_status = ? WHERE club_id = ? AND student_id = ?', ['paid', club.id, id]);
+                                    paymentStatus = 'paid';
+                                }
+                            }
+                         } catch (syncErr) {
+                             console.error('Error syncing club payment status:', syncErr);
+                         }
+                    }
+                    // -------------------------------------------------------------
                 }
             }
 
@@ -49,7 +89,9 @@ const getClubs = async (req, res) => {
                 members: new Array(count).fill({}),
                 activities,
                 userStatus,
-                payment_status: paymentStatus // Exposed for frontend checks
+                payment_status: paymentStatus, // Exposed for frontend checks
+                paid_amount: club.paid_amount || 0,
+                balance_due: club.balance_due !== undefined ? club.balance_due : (Number(club.membership_fee) || 0)
             });
         }
 

@@ -251,6 +251,79 @@ exports.getStudentFeeDetails = async (req, res) => {
     // "Fetch the fees correctly" -> implies current total liability.
     
     // Let's fetch ALL applicable fee structures for this batch, course, branch up to the current year.
+    // --- JIT CLUB FEE SYNC ---
+    try {
+        // A. Get approved memberships for this student
+        // We know admission_number (studentId), but club_members uses internal ID.
+        // We actually fetched 'student' record from SQL above, which has 'id'? No, we selected specific columns.
+        // Let's fetch internal ID if we didn't get it.
+        // The previous query was: SELECT s.student_name ... FROM students ...
+        // Let's rely on a separate query to be safe or modify the top one. 
+        // For minimal impact, separate lightweight query:
+        const [sRow] = await masterPool.query('SELECT id FROM students WHERE admission_number = ?', [studentId]);
+        
+        if (sRow.length > 0) {
+            const internalStudentId = sRow[0].id;
+            
+            // B. Fetch Approved Clubs with Fee > 0
+            const [approvedClubs] = await masterPool.query(`
+                SELECT c.name, c.membership_fee 
+                FROM club_members cm
+                JOIN clubs c ON cm.club_id = c.id
+                WHERE cm.student_id = ? AND cm.status = 'approved' AND c.membership_fee > 0
+            `, [internalStudentId]);
+
+            if (approvedClubs.length > 0) {
+                 // C. Find "Club Fee" Head
+                 let feeHead = await FeeHead.findOne({ name: 'Club Fee' });
+                 if (!feeHead) {
+                     // Auto-create if missing (Self-healing)
+                     feeHead = await FeeHead.create({
+                         name: 'Club Fee',
+                         code: 'CF',
+                         description: 'Fee for club memberships',
+                         type: 'Individual',
+                         frequency: 'One-time',
+                         isActive: true
+                     });
+                 }
+
+                 // D. Sync Check
+                 for (const club of approvedClubs) {
+                     const expectedRemarks = `Club Fee: ${club.name}`;
+                     
+                     // Check if fee exists
+                     const exists = await StudentFee.exists({
+                         studentId: studentId, // Admission Number
+                         feeHead: feeHead._id,
+                         remarks: expectedRemarks
+                     });
+
+                     if (!exists) {
+                         await StudentFee.create({
+                             studentId: studentId,
+                             studentName: student.student_name || 'Student',
+                             feeHead: feeHead._id,
+                             college: collegeName || 'NA',
+                             course: student.course || 'NA',
+                             branch: student.branch || 'NA',
+                             academicYear: '2024-2025', // Should ideally come from somewhere constant
+                             studentYear: student.current_year || 1,
+                             semester: student.current_semester || 1,
+                             amount: Number(club.membership_fee),
+                             remarks: expectedRemarks
+                         });
+                         console.log(`[JIT SYNC] Created Club Fee for ${studentId}: ${club.name}`);
+                     }
+                 }
+            }
+        }
+    } catch (jitError) {
+        console.error('[JIT Error] Failed to sync club fees:', jitError);
+        // Continue execution - do not fail the whole request
+    }
+    // -------------------------
+
     const query = {
       course: student.course,
       branch: student.branch,

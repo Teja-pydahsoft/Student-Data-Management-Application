@@ -167,10 +167,10 @@ const StudentClubs = () => {
                                             // Check payment status for approved members
                                             club.payment_status === 'payment_due' ? (
                                                 <button
-                                                    onClick={() => toast.info('Payment integration coming soon!')}
+                                                    onClick={() => toast.info(`Please go to Fee Management to pay the remaining ₹${club.balance_due || club.membership_fee}`)}
                                                     className="w-full py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium flex items-center justify-center gap-2"
                                                 >
-                                                    💳 Pay ₹{club.membership_fee} to Join
+                                                    💳 {club.paid_amount > 0 ? `Pay Remaining ₹${club.balance_due}` : `Pay ₹${club.membership_fee} to Join`}
                                                 </button>
                                             ) : (
                                                 <button

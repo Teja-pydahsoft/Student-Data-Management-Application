@@ -51,7 +51,7 @@ const studentFeeSchema = mongoose.Schema({
   timestamps: true,
 });
 
-// Compound index to prevent duplicate fee of same head for same student/year/semester
-studentFeeSchema.index({ studentId: 1, feeHead: 1, academicYear: 1, studentYear: 1, semester: 1 }, { unique: true });
+// Compound index to prevent duplicate fee of same head for same student/year/semester (Including remarks to allow different clubs)
+studentFeeSchema.index({ studentId: 1, feeHead: 1, academicYear: 1, studentYear: 1, semester: 1, remarks: 1 }, { unique: true });
 
 module.exports = mongoose.model('StudentFee', studentFeeSchema);

@@ -133,7 +133,7 @@ exports.verifyPayment = async (req, res) => {
 
         // 2. Fetch Student/Config to get secret for verification
         const [students] = await masterPool.query(
-            'SELECT s.student_name, s.course, s.current_year, s.current_semester, s.student_data FROM students s WHERE s.admission_number = ?',
+            'SELECT s.id, s.student_name, s.course, s.current_year, s.current_semester, s.student_data FROM students s WHERE s.admission_number = ?',
             [studentId]
         );
 
@@ -240,6 +240,49 @@ exports.verifyPayment = async (req, res) => {
 
         await newTransaction.save();
         console.log(`[PAYMENT] Transaction successfully recorded: ${newTransaction._id} for student ${studentId}`);
+
+        // --- CLUB FEE UPDATE LOGIC ---
+        // Check if this payment is for a Club Fee and update SQL club_members
+        if (remarks && remarks.toLowerCase().includes('club fee')) {
+            try {
+                // Extract Club Name from remarks "Club Fee: <Name>"
+                const match = remarks.match(/Club Fee:\s*(.+)/i);
+                if (match && match[1]) {
+                    const clubName = match[1].trim();
+                    
+                    // Find Club ID and Fee
+                    const [clubs] = await masterPool.query('SELECT id, membership_fee FROM clubs WHERE name = ?', [clubName]);
+                    
+                    if (clubs.length > 0) {
+                        const clubId = clubs[0].id;
+                        const requiredFee = Number(clubs[0].membership_fee) || 0;
+
+                        // Calculate Total Paid including this new transaction
+                        const txs = await Transaction.find({
+                            studentId: studentId,
+                            transactionType: 'DEBIT',
+                            remarks: { $regex: new RegExp(clubName, 'i') }
+                        });
+                        const totalPaid = txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+                        // Only mark as PAID if fully paid
+                        if (totalPaid >= requiredFee) {
+                            await masterPool.query(
+                                'UPDATE club_members SET payment_status = ? WHERE club_id = ? AND student_id = ?',
+                                ['paid', clubId, student.id]
+                            );
+                            console.log(`[PAYMENT] Fully Paid Club Fee for ${studentId}, Club: ${clubName}. Status Updated.`);
+                        } else {
+                            console.log(`[PAYMENT] Partial Club Payment recorded for ${studentId}, Club: ${clubName}. Total: ${totalPaid}/${requiredFee}`);
+                        }
+                    }
+                }
+            } catch (clubUpdateError) {
+                console.error('[PAYMENT] Error updating club member status:', clubUpdateError);
+                // Non-blocking
+            }
+        }
+        // -----------------------------
 
         res.json({
             success: true,

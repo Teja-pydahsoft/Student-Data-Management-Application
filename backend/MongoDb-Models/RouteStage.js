@@ -6,6 +6,10 @@ const routeStageSchema = new mongoose.Schema({
         ref: 'TransportRoute',
         required: true
     },
+    stageCode: {
+        type: String,
+        trim: true
+    },
     stageName: {
         type: String,
         required: true,

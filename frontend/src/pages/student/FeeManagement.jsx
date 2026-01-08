@@ -83,8 +83,9 @@ const FeeManagement = () => {
                 amount: amountToPay,
                 feeHeadId: feeItem?.feeHead?._id,
                 studentYear: feeItem?.studentYear || feeData?.studentDetails?.currentYear,
+                studentYear: feeItem?.studentYear || feeData?.studentDetails?.currentYear,
                 semester: feeItem?.semester || feeData?.studentDetails?.currentSemester,
-                remarks: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'General Fee Payment'
+                remarks: feeItem ? (feeItem.remarks || `Payment for ${feeItem.feeHead?.name}`) : 'General Fee Payment'
             });
 
             if (!orderResponse.data.success) {
@@ -100,7 +101,7 @@ const FeeManagement = () => {
                 amount: order.amount,
                 currency: order.currency,
                 name: 'Pydah Group',
-                description: feeItem ? `Payment for ${feeItem.feeHead?.name}` : 'Fee Payment',
+                description: feeItem ? (feeItem.remarks || `Payment for ${feeItem.feeHead?.name}`) : 'Fee Payment',
                 order_id: order.id,
                 handler: async (response) => {
                     try {
@@ -113,7 +114,7 @@ const FeeManagement = () => {
                             feeHeadId: feeItem?.feeHead?._id,
                             studentYear: feeItem?.studentYear || feeData?.studentDetails?.currentYear,
                             semester: feeItem?.semester || feeData?.studentDetails?.currentSemester,
-                            remarks: feeItem ? `Online Payment: ${feeItem.feeHead?.name}` : 'Online Lumpsum Payment'
+                            remarks: feeItem ? (feeItem.remarks || `Online Payment: ${feeItem.feeHead?.name}`) : 'Online Lumpsum Payment'
                         });
 
                         if (verifyRes.data.success) {
@@ -420,6 +421,20 @@ const FeeManagement = () => {
                                                     tx.studentYear?.toString() === inv.studentYear?.toString() &&
                                                     (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
                                                 ) {
+                                                    // Strict check for Club Fees to avoid cross-paying
+                                                    const isClubFee = inv.feeHead?.name?.toLowerCase().includes('club');
+                                                    if (isClubFee && inv.remarks) {
+                                                        // Extract just the club name from "Club Fee: Coding Club" -> "Coding Club"
+                                                        // Or match if tx.remarks contains the specific unique part of inv.remarks
+                                                        const clubNameMatch = inv.remarks.match(/Club Fee:\s*(.+)/i);
+                                                        const clubName = clubNameMatch ? clubNameMatch[1] : inv.remarks;
+
+                                                        // If transaction remarks don't contain the club name, skip it
+                                                        if (!tx.remarks || !tx.remarks.toLowerCase().includes(clubName.toLowerCase())) {
+                                                            return;
+                                                        }
+                                                    }
+
                                                     if (tx.transactionType === 'DEBIT') {
                                                         itemPaid += Number(tx.amount) || 0;
                                                     } else {
@@ -523,6 +538,17 @@ const FeeManagement = () => {
                                                 tx.studentYear?.toString() === inv.studentYear?.toString() &&
                                                 (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
                                             ) {
+                                                // Strict check for Club Fees to avoid cross-paying
+                                                const isClubFee = inv.feeHead?.name?.toLowerCase().includes('club');
+                                                if (isClubFee && inv.remarks) {
+                                                    const clubNameMatch = inv.remarks.match(/Club Fee:\s*(.+)/i);
+                                                    const clubName = clubNameMatch ? clubNameMatch[1] : inv.remarks;
+
+                                                    if (!tx.remarks || !tx.remarks.toLowerCase().includes(clubName.toLowerCase())) {
+                                                        return;
+                                                    }
+                                                }
+
                                                 itemPaid += Number(tx.amount) || 0;
                                             }
                                         });
