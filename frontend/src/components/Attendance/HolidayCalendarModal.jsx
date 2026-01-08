@@ -37,9 +37,30 @@ const STATUS_META = {
   }
 };
 
+const normalizeDateToIST = (dateStr) => {
+  if (!dateStr) return '';
+  // If it's already YYYY-MM-DD, return it
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+  // If it's an ISO string, convert to IST date (YYYY-MM-DD)
+  try {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const formatIsoDate = (isoDate, formatOptions = {}) => {
   if (!isoDate) return '';
-  const date = new Date(`${isoDate}T00:00:00`);
+
+  // First normalize to YYYY-MM-DD in IST to ensure we mean the correct day
+  const normalizedDate = normalizeDateToIST(isoDate);
+
+  // Then create a local date at midnight for formatting
+  const date = new Date(`${normalizedDate}T00:00:00`);
+
   if (Number.isNaN(date.getTime())) return isoDate;
   return date.toLocaleDateString(undefined, formatOptions);
 };
@@ -138,7 +159,7 @@ const HolidayCalendarModal = ({
     const map = new Map();
     (data.publicHolidays || []).forEach((holiday) => {
       // Normalize date to YYYY-MM-DD format for consistent matching
-      const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
+      const normalizedDate = normalizeDateToIST(holiday.date);
       if (normalizedDate) {
         map.set(normalizedDate, holiday);
       }
@@ -150,7 +171,7 @@ const HolidayCalendarModal = ({
     const map = new Map();
     (data.customHolidays || []).forEach((holiday) => {
       // Normalize date to YYYY-MM-DD format for consistent matching
-      const normalizedDate = holiday.date ? holiday.date.split('T')[0] : holiday.date;
+      const normalizedDate = normalizeDateToIST(holiday.date);
       if (normalizedDate) {
         map.set(normalizedDate, holiday);
       }
@@ -344,8 +365,8 @@ const HolidayCalendarModal = ({
                   ? publicHoliday
                     ? 'bg-orange-100 text-orange-700 border border-orange-300' // Changed from red to orange
                     : customHoliday
-                    ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                    : 'bg-amber-100 text-amber-700 border border-amber-300'
+                      ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                      : 'bg-amber-100 text-amber-700 border border-amber-300'
                   : 'bg-blue-100 text-blue-700 border border-blue-300';
 
                 const baseClasses = cell.isCurrentMonth
@@ -358,11 +379,10 @@ const HolidayCalendarModal = ({
                     type="button"
                     onClick={() => handleDayClick(cell)}
                     disabled={!cell.isCurrentMonth}
-                    className={`flex h-20 flex-col justify-between rounded-lg border py-2 text-sm transition-colors ${
-                      isSelected
+                    className={`flex h-20 flex-col justify-between rounded-lg border py-2 text-sm transition-colors ${isSelected
                         ? 'border-blue-500 bg-blue-100 text-blue-800 shadow-md ring-2 ring-blue-300'
                         : `${cellBgColor} text-gray-700 ${baseClasses}`
-                    }`}
+                      }`}
                   >
                     <span className="font-semibold">{cell.day}</span>
                     {isHoliday && (
@@ -370,8 +390,8 @@ const HolidayCalendarModal = ({
                         {publicHoliday
                           ? 'Public Holiday'
                           : customHoliday
-                          ? 'Institute Holiday'
-                          : 'Sunday'}
+                            ? 'Institute Holiday'
+                            : 'Sunday'}
                       </span>
                     )}
                     {!isHoliday && <span className="h-2" />}
@@ -473,11 +493,10 @@ const HolidayCalendarModal = ({
                         <span className="flex items-center gap-2">
                           <span className="text-xs">{holiday.label}</span>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                              holiday.type === 'public'
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${holiday.type === 'public'
                                 ? 'bg-red-100 text-red-700'
                                 : 'bg-purple-100 text-purple-700'
-                            }`}
+                              }`}
                           >
                             {holiday.type === 'public' ? 'Public' : 'Institute'}
                           </span>
@@ -500,9 +519,8 @@ const HolidayCalendarModal = ({
                 selectedDateStatus !== 'holiday' &&
                 statusSummaryMeta[selectedDateStatus] && (
                   <div
-                    className={`rounded-md border px-3 py-2 text-xs font-semibold ${
-                      statusSummaryMeta[selectedDateStatus].className || 'bg-gray-100 text-gray-600 border-gray-200'
-                    }`}
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusSummaryMeta[selectedDateStatus].className || 'bg-gray-100 text-gray-600 border-gray-200'
+                      }`}
                   >
                     {statusSummaryMeta[selectedDateStatus].message || selectedDateStatus}
                   </div>
@@ -547,39 +565,38 @@ const HolidayCalendarModal = ({
                   <div className="font-semibold text-blue-900">
                     {selectedHolidayDetails?.publicHoliday
                       ? selectedHolidayDetails.publicHoliday.localName ||
-                        selectedHolidayDetails.publicHoliday.name
+                      selectedHolidayDetails.publicHoliday.name
                       : selectedHolidayDetails?.customHoliday
-                      ? selectedHolidayDetails.customHoliday.title || 'Institute Holiday'
-                      : selectedHolidayDetails?.isSunday
-                      ? 'Sunday'
-                      : 'Instructional Day'}
+                        ? selectedHolidayDetails.customHoliday.title || 'Institute Holiday'
+                        : selectedHolidayDetails?.isSunday
+                          ? 'Sunday'
+                          : 'Instructional Day'}
                   </div>
                   <div className="mt-1 text-xs text-blue-600">
                     {selectedHolidayDetails?.publicHoliday
                       ? selectedHolidayDetails.publicHoliday.name
                       : selectedHolidayDetails?.customHoliday?.description
-                      ? selectedHolidayDetails.customHoliday.description
-                      : selectedHolidayDetails?.isSunday
-                      ? 'Weekly holiday'
-                      : 'Classes are expected to be held on this date.'}
+                        ? selectedHolidayDetails.customHoliday.description
+                        : selectedHolidayDetails?.isSunday
+                          ? 'Weekly holiday'
+                          : 'Classes are expected to be held on this date.'}
                   </div>
                 </div>
                 {/* Only show attendance status if it's not a holiday */}
-                {selectedHolidayDetails?.status && 
-                 selectedHolidayDetails.status !== 'holiday' && 
-                 !selectedHolidayDetails?.customHoliday && 
-                 !selectedHolidayDetails?.publicHoliday && 
-                 !selectedHolidayDetails?.isSunday && (
-                  <div
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
-                      STATUS_META[selectedHolidayDetails.status]?.badgeClass ||
-                      'bg-gray-100 text-gray-600 border-gray-200'
-                    }`}
-                  >
-                    {STATUS_META[selectedHolidayDetails.status]?.label ||
-                      selectedHolidayDetails.status}
-                  </div>
-                )}
+                {selectedHolidayDetails?.status &&
+                  selectedHolidayDetails.status !== 'holiday' &&
+                  !selectedHolidayDetails?.customHoliday &&
+                  !selectedHolidayDetails?.publicHoliday &&
+                  !selectedHolidayDetails?.isSunday && (
+                    <div
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${STATUS_META[selectedHolidayDetails.status]?.badgeClass ||
+                        'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}
+                    >
+                      {STATUS_META[selectedHolidayDetails.status]?.label ||
+                        selectedHolidayDetails.status}
+                    </div>
+                  )}
 
                 {isAdmin && (
                   <div className="space-y-3">
@@ -702,8 +719,8 @@ const HolidayCalendarModal = ({
                 </div>
                 <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-2 text-sm text-gray-600">
                   {data.publicHolidays?.length === 0 &&
-                  data.customHolidays?.length === 0 &&
-                  data.sundays?.length === 0 ? (
+                    data.customHolidays?.length === 0 &&
+                    data.sundays?.length === 0 ? (
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
                       No holidays recorded for this month yet.
                     </div>

@@ -42,6 +42,21 @@ import { useInvalidateStudents } from '../hooks/useStudents';
 
 const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
 
+const normalizeDateToIST = (dateStr) => {
+  if (!dateStr) return '';
+  // If it's already YYYY-MM-DD, return it
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+
+  // If it's an ISO string, convert to IST date (YYYY-MM-DD)
+  try {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const formatDateInput = (date) => {
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) {
@@ -447,8 +462,12 @@ const Attendance = () => {
           Array.isArray(payload.sundays) && payload.sundays.length > 0
             ? payload.sundays
             : computeSundaysForMonthKey(monthKey),
-        publicHolidays: Array.isArray(payload.publicHolidays) ? payload.publicHolidays : [],
-        customHolidays: Array.isArray(payload.customHolidays) ? payload.customHolidays : [],
+        publicHolidays: Array.isArray(payload.publicHolidays)
+          ? payload.publicHolidays.map(h => ({ ...h, date: normalizeDateToIST(h.date) }))
+          : [],
+        customHolidays: Array.isArray(payload.customHolidays)
+          ? payload.customHolidays.map(h => ({ ...h, date: normalizeDateToIST(h.date) }))
+          : [],
         attendanceStatus:
           payload.attendanceStatus && typeof payload.attendanceStatus === 'object'
             ? payload.attendanceStatus
