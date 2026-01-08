@@ -51,7 +51,7 @@ const resolveParentEmail = (student) => {
 };
 
 const VALID_STATUSES = new Set(['present', 'absent', 'holiday']);
-const EXCLUDED_COURSES = ['M.Tech', 'MBA', 'MCS', 'M Sc Aqua', 'MCA', 'M.Pharma', 'M Pharma'];
+
 
 const parseStudentData = (data) => {
   if (!data) return {};
@@ -91,14 +91,39 @@ exports.getFilterOptions = async (req, res) => {
     // Get filter parameters from query string
     const { course, branch, batch, year, semester, college } = req.query;
 
-    // Helper to build WHERE clause parts (User Scope + Excluded Courses)
+    // Fetch attendance configuration from DB
+    let excludedCourses = [];
+    let excludedStudents = [];
+
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+        if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch attendance config, using defaults:', err);
+      // Fallback - empty arrays
+    }
+
+    // Helper to build WHERE clause parts (User Scope + Excluded Courses/Students)
     const buildBaseWhere = () => {
       let clause = `WHERE 1=1 AND student_status = 'Regular'`;
       const params = [];
 
-      if (EXCLUDED_COURSES.length > 0) {
-        clause += ` AND course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-        params.push(...EXCLUDED_COURSES);
+      if (excludedCourses.length > 0) {
+        clause += ` AND course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+        params.push(...excludedCourses);
+      }
+
+      if (excludedStudents.length > 0) {
+        // Exclude by admission number
+        clause += ` AND admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+        params.push(...excludedStudents);
       }
 
       // Apply user scope filtering
@@ -405,11 +430,37 @@ exports.getAttendance = async (req, res) => {
       params.push(branch);
     }
 
-    // Exclude certain courses (after course filter to use index)
-    if (EXCLUDED_COURSES.length > 0) {
-      query += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      params.push(...EXCLUDED_COURSES);
+    // Fetched dynamic exclusion config
+    {
+      let excludedCourses = [];
+      let excludedStudents = [];
+      try {
+        const [settings] = await masterPool.query(
+          'SELECT value FROM settings WHERE `key` = ?',
+          ['attendance_config']
+        );
+        if (settings && settings.length > 0) {
+          const config = JSON.parse(settings[0].value);
+          if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+          if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch attendance config in getAttendance, using defaults', err);
+      }
+
+      if (excludedCourses.length > 0) {
+        query += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+        params.push(...excludedCourses);
+      }
+
+      if (excludedStudents.length > 0) {
+        const placeholders = excludedStudents.map(() => '?').join(',');
+        query += ` AND s.admission_number NOT IN (${placeholders})`;
+        params.push(...excludedStudents);
+      }
     }
+
+
 
     // Apply user scope filtering (after indexed filters)
     if (req.userScope) {
@@ -513,9 +564,34 @@ exports.getAttendance = async (req, res) => {
     }
 
     // Exclude certain courses (after course filter to use index)
-    if (EXCLUDED_COURSES.length > 0) {
-      countQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      countParams.push(...EXCLUDED_COURSES);
+    // Exclude certain courses (after course filter to use index)
+    {
+      let excludedCourses = [];
+      let excludedStudents = [];
+      try {
+        const [settings] = await masterPool.query(
+          'SELECT value FROM settings WHERE `key` = ?',
+          ['attendance_config']
+        );
+        if (settings && settings.length > 0) {
+          const config = JSON.parse(settings[0].value);
+          if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+          if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch attendance config in getAttendance count query', err);
+      }
+
+      if (excludedCourses.length > 0) {
+        countQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+        countParams.push(...excludedCourses);
+      }
+
+      if (excludedStudents.length > 0) {
+        const placeholders = excludedStudents.map(() => '?').join(',');
+        countQuery += ` AND s.admission_number NOT IN (${placeholders})`;
+        countParams.push(...excludedStudents);
+      }
     }
 
     // Apply user scope filtering (after indexed filters)
@@ -632,9 +708,34 @@ exports.getAttendance = async (req, res) => {
     }
 
     // Exclude certain courses (after course filter to use index)
-    if (EXCLUDED_COURSES.length > 0) {
-      statsQuery += ` AND s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`;
-      statsParams.push(...EXCLUDED_COURSES);
+    // Exclude certain courses (after course filter to use index)
+    {
+      let excludedCourses = [];
+      let excludedStudents = [];
+      try {
+        const [settings] = await masterPool.query(
+          'SELECT value FROM settings WHERE `key` = ?',
+          ['attendance_config']
+        );
+        if (settings && settings.length > 0) {
+          const config = JSON.parse(settings[0].value);
+          if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+          if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch attendance config in getAttendance stats query', err);
+      }
+
+      if (excludedCourses.length > 0) {
+        statsQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+        statsParams.push(...excludedCourses);
+      }
+
+      if (excludedStudents.length > 0) {
+        const placeholders = excludedStudents.map(() => '?').join(',');
+        statsQuery += ` AND s.admission_number NOT IN (${placeholders})`;
+        statsParams.push(...excludedStudents);
+      }
     }
 
     // Apply user scope filtering (after indexed filters)
@@ -2669,11 +2770,7 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
     params.push(filters.course);
   }
 
-  // Exclude certain courses globally (e.g., M.Tech, MBA, MCS)
-  if (EXCLUDED_COURSES.length > 0) {
-    conditions.push(`${prefix}course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`);
-    params.push(...EXCLUDED_COURSES);
-  }
+
 
   if (filters.branch) {
     conditions.push(`${prefix}branch = ?`);
@@ -2701,6 +2798,16 @@ const buildWhereClause = (filters, alias) => {
 
 exports.getAttendanceSummary = async (req, res) => {
   try {
+    const [settings] = await masterPool.query(
+      'SELECT value FROM settings WHERE `key` = ?',
+      ['attendance_config']
+    );
+    let excludedCourses = [];
+    if (settings && settings.length > 0) {
+      const config = JSON.parse(settings[0].value);
+      if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+    }
+
     const referenceDate = safeDate(req.query.date) || new Date();
     const todayKey = formatDateKey(referenceDate);
 
@@ -2720,8 +2827,14 @@ exports.getAttendanceSummary = async (req, res) => {
       studentStatus: 'Regular' // Day-end summary should only consider regular students
     };
 
-    // Build filter conditions
-    const countFilter = buildWhereClause(filters, 's');
+    const { conditions, params } = buildStudentFilterConditions(filters, 's');
+
+    if (excludedCourses.length > 0) {
+      conditions.push(`s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`);
+      params.push(...excludedCourses);
+    }
+
+    const whereClause = conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
 
     // Apply user scope filtering
     let scopeCondition = '';

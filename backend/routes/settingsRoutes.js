@@ -11,6 +11,10 @@ router.use(authMiddleware);
 router.get('/notifications', settingsController.getNotificationSettings);
 router.put('/notifications', settingsController.updateNotificationSettings);
 
+// Attendance settings routes
+router.get('/attendance', settingsController.getAttendanceSettings);
+router.put('/attendance', settingsController.updateAttendanceSettings);
+
 // Document requirements settings routes (new CRUD API)
 router.get('/documents', documentSettingsController.getAllDocumentRequirements);
 router.get('/documents/:courseType/:academicStage', documentSettingsController.getDocumentRequirements);

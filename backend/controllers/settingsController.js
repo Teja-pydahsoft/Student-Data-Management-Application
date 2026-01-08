@@ -54,7 +54,7 @@ exports.getNotificationSettings = async (req, res) => {
 
     // Build settings object from database or use defaults
     const settingsObj = {};
-    
+
     if (settings && settings.length > 0) {
       settings.forEach(item => {
         const key = item.key.replace('notification_', '');
@@ -121,7 +121,7 @@ exports.updateNotificationSettings = async (req, res) => {
 
     // Validate and prepare settings for storage
     const settingsToSave = [];
-    
+
     for (const [key, value] of Object.entries(settings)) {
       // Validate key is a known notification type
       if (!NOTIFICATION_TYPES[key]) {
@@ -236,5 +236,99 @@ exports.getNotificationSetting = async (typeKey) => {
       };
     }
     return null;
+  }
+};
+
+/**
+ * GET /api/settings/attendance
+ * Get attendance configuration settings
+ */
+exports.getAttendanceSettings = async (req, res) => {
+  try {
+    const [settings] = await masterPool.query(
+      'SELECT value FROM settings WHERE `key` = ?',
+      ['attendance_config']
+    );
+
+    let config = {
+      excludedCourses: [],
+      excludedStudents: [] // Array of admission numbers
+    };
+
+    if (settings && settings.length > 0) {
+      try {
+        const storedConfig = JSON.parse(settings[0].value);
+        config = { ...config, ...storedConfig };
+
+        // Ensure arrays
+        if (!Array.isArray(config.excludedCourses)) config.excludedCourses = [];
+        if (!Array.isArray(config.excludedStudents)) config.excludedStudents = [];
+
+      } catch (e) {
+        console.error('Error parsing attendance settings:', e);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error) {
+    console.error('Get attendance settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching attendance settings'
+    });
+  }
+};
+
+/**
+ * PUT /api/settings/attendance
+ * Update attendance configuration settings
+ */
+exports.updateAttendanceSettings = async (req, res) => {
+  try {
+    const { excludedCourses, excludedStudents } = req.body;
+
+    // Validate inputs
+    if (excludedCourses && !Array.isArray(excludedCourses)) {
+      return res.status(400).json({
+        success: false,
+        message: 'excludedCourses must be an array'
+      });
+    }
+
+    if (excludedStudents && !Array.isArray(excludedStudents)) {
+      return res.status(400).json({
+        success: false,
+        message: 'excludedStudents must be an array'
+      });
+    }
+
+    const config = {
+      excludedCourses: excludedCourses || [],
+      excludedStudents: excludedStudents || []
+    };
+
+    const value = JSON.stringify(config);
+
+    await masterPool.query(
+      `INSERT INTO settings (\`key\`, value, updated_at) 
+       VALUES (?, ?, ?) 
+       ON DUPLICATE KEY UPDATE value = ?, updated_at = ?`,
+      ['attendance_config', value, new Date(), value, new Date()]
+    );
+
+    res.json({
+      success: true,
+      message: 'Attendance settings saved successfully',
+      data: config
+    });
+  } catch (error) {
+    console.error('Update attendance settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating attendance settings'
+    });
   }
 };

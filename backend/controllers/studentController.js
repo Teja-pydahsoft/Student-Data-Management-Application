@@ -5242,10 +5242,15 @@ exports.updateFeeStatus = async (req, res) => {
       }
     }
 
+    // Determine if the new fee status counts as "completed/no due"
+    // Using the same list as checkAndAutoCompleteRegistration
+    const isFeeCleared = ['no_due', 'no due', 'permitted', 'completed', 'nodue'].includes(fee_status.toLowerCase());
+
     // If column exists, update column; otherwise, update JSON field only
     const hasFeeStatusColumn = await columnExists('fee_status');
     const hasPermitEndingDateColumn = await columnExists('permit_ending_date');
     const hasPermitRemarksColumn = await columnExists('permit_remarks');
+    const hasRegStatusColumn = await columnExists('registration_status');
 
     if (hasFeeStatusColumn) {
       let updateQuery = 'UPDATE students SET fee_status = ?';
@@ -5261,6 +5266,12 @@ exports.updateFeeStatus = async (req, res) => {
         updateParams.push(permit_remarks || null);
       }
 
+      // If fee is NOT cleared, force registration_status to pending
+      if (!isFeeCleared && hasRegStatusColumn) {
+        updateQuery += ', registration_status = ?';
+        updateParams.push('pending');
+      }
+
       updateQuery += ' WHERE admission_number = ?';
       updateParams.push(admissionNumber);
 
@@ -5274,20 +5285,18 @@ exports.updateFeeStatus = async (req, res) => {
       }
 
       // If permit ending date has passed, automatically set registration_status to 'pending'
-      if (fee_status === 'permitted' && permit_ending_date) {
+      // Only needed if we haven't already set it to pending above
+      if (isFeeCleared && fee_status === 'permitted' && permit_ending_date && hasRegStatusColumn) {
         const permitDate = new Date(permit_ending_date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         permitDate.setHours(0, 0, 0, 0);
 
         if (permitDate < today) {
-          const hasRegStatusColumn = await columnExists('registration_status');
-          if (hasRegStatusColumn) {
-            await masterPool.query(
-              'UPDATE students SET registration_status = ? WHERE admission_number = ?',
-              ['pending', admissionNumber]
-            );
-          }
+          await masterPool.query(
+            'UPDATE students SET registration_status = ? WHERE admission_number = ?',
+            ['pending', admissionNumber]
+          );
         }
       }
     } else {
@@ -5302,8 +5311,10 @@ exports.updateFeeStatus = async (req, res) => {
       const current = rows[0]?.student_data || '{}';
       let parsed;
       try { parsed = JSON.parse(current || '{}'); } catch (_e) { parsed = {}; }
+
       parsed.fee_status = fee_status;
       parsed['Fee Status'] = fee_status;
+
       if (permit_ending_date) {
         parsed.permit_ending_date = permit_ending_date;
         parsed['Permit Ending Date'] = permit_ending_date;
@@ -5312,6 +5323,13 @@ exports.updateFeeStatus = async (req, res) => {
         parsed.permit_remarks = permit_remarks;
         parsed['Permit Remarks'] = permit_remarks;
       }
+
+      // If fee is NOT cleared, update registration status in JSON as well
+      if (!isFeeCleared) {
+        parsed.registration_status = 'pending';
+        parsed['Registration Status'] = 'pending';
+      }
+
       const serialized = JSON.stringify(parsed);
       const [upd] = await masterPool.query(
         'UPDATE students SET student_data = ? WHERE admission_number = ?',
@@ -5322,6 +5340,9 @@ exports.updateFeeStatus = async (req, res) => {
       }
     }
 
+    // Even if we set it to pending, checkAndAutoCompleteRegistration might set it back to completed
+    // if the conditions are actually met (e.g. if the user mistakenly deemed it "not cleared" but the system logic says it is).
+    // However, if !isFeeCleared, checkAndAutoCompleteRegistration's "Fee Check" will also fail, so it won't autoComplete.
     await checkAndAutoCompleteRegistration(admissionNumber);
 
     clearStudentsCache();
