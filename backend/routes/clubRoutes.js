@@ -28,6 +28,7 @@ router.patch('/:clubId/members', verifyToken, isAdmin, clubController.updateMemb
 router.post('/:clubId/activities', verifyToken, isAdmin, upload.single('image'), clubController.createActivity);
 router.put('/:clubId', verifyToken, isAdmin, upload.single('image'), clubController.updateClub);
 router.delete('/:clubId', verifyToken, isAdmin, clubController.deleteClub);
+router.patch('/:clubId/status', verifyToken, isAdmin, clubController.toggleClubStatus);
 router.put('/:clubId/activities/:activityId', verifyToken, isAdmin, upload.single('image'), clubController.updateActivity);
 router.delete('/:clubId/activities/:activityId', verifyToken, isAdmin, clubController.deleteActivity);
 

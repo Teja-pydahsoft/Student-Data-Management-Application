@@ -65,17 +65,21 @@ const deleteActivity = async (clubId, activityId) => {
     return response.data;
 };
 
+const toggleClubStatus = async (clubId, isActive) => {
+    const response = await api.patch(`/clubs/${clubId}/status`, { isActive });
+    return response.data;
+};
+
 export default {
     getClubs,
     getClubDetails,
     createClub,
     joinClub,
     updateMembershipStatus,
-    joinClub,
-    updateMembershipStatus,
     createActivity,
     updateClub,
     deleteClub,
     updateActivity,
-    deleteActivity
+    deleteActivity,
+    toggleClubStatus
 };

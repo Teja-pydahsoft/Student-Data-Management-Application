@@ -11,9 +11,16 @@ const FeeHead = require('../MongoDb-Models/FeeHead');
 const getClubs = async (req, res) => {
     try {
         const { role, id } = req.user;
+        const isAdmin = ['admin', 'super_admin'].includes(role);
 
         // Fetch clubs
-        const [clubs] = await masterPool.query('SELECT * FROM clubs WHERE is_active = TRUE ORDER BY created_at DESC');
+        let query = 'SELECT * FROM clubs';
+        if (!isAdmin) {
+            query += ' WHERE is_active = TRUE';
+        }
+        query += ' ORDER BY created_at DESC';
+
+        const [clubs] = await masterPool.query(query);
 
         // Parse JSON fields (activities, form_fields) - members is no longer JSON here
         const safeParse = (val) => {
@@ -38,11 +45,11 @@ const getClubs = async (req, res) => {
                     // --- SYNC CHECK: Check total paid in MongoDB ---
                     // Even if approved/paid, let's calculate exact paid amount for UI
                     if (userStatus === 'approved') {
-                         try {
+                        try {
                             const [sRow] = await masterPool.query('SELECT admission_number FROM students WHERE id = ?', [id]);
                             if (sRow.length > 0) {
                                 const admNum = sRow[0].admission_number;
-                                
+
                                 // Fetch ALL matching transactions (Partial Payments Support)
                                 const txs = await Transaction.find({
                                     studentId: admNum,
@@ -64,9 +71,9 @@ const getClubs = async (req, res) => {
                                     paymentStatus = 'paid';
                                 }
                             }
-                         } catch (syncErr) {
-                             console.error('Error syncing club payment status:', syncErr);
-                         }
+                        } catch (syncErr) {
+                            console.error('Error syncing club payment status:', syncErr);
+                        }
                     }
                     // -------------------------------------------------------------
                 }
@@ -204,17 +211,18 @@ const updateMembershipStatus = async (req, res) => {
 
         // If approving, check club fee and set payment_status accordingly
         if (status === 'approved') {
-            const [club] = await masterPool.query('SELECT name, membership_fee FROM clubs WHERE id = ?', [clubId]);
+            const [club] = await masterPool.query('SELECT name, membership_fee, fee_type FROM clubs WHERE id = ?', [clubId]);
             if (club.length === 0) {
                 return res.status(404).json({ success: false, message: 'Club not found' });
             }
 
             const fee = parseFloat(club[0].membership_fee) || 0;
+            const feeType = club[0].fee_type || 'Yearly';
             const newPaymentStatus = fee > 0 ? 'payment_due' : 'NA';
 
             const [result] = await masterPool.query(
-                'UPDATE club_members SET status = ?, payment_status = ? WHERE club_id = ? AND student_id = ?',
-                [status, newPaymentStatus, clubId, studentId]
+                'UPDATE club_members SET status = ?, payment_status = ?, fee_type = ? WHERE club_id = ? AND student_id = ?',
+                [status, newPaymentStatus, feeType, clubId, studentId]
             );
 
             if (result.affectedRows === 0) {
@@ -431,7 +439,8 @@ const getClubDetails = async (req, res) => {
         const [members] = await masterPool.query(
             `SELECT cm.id, cm.club_id, cm.student_id, cm.status, cm.payment_status, 
                     cm.fee_type, cm.joined_at, cm.updated_at,
-                    s.student_name, s.admission_number, s.student_photo 
+                    s.student_name, s.admission_number, s.student_photo,
+                    s.college, s.course, s.branch, s.current_year, s.current_semester
              FROM club_members cm 
              JOIN students s ON cm.student_id = s.id 
              WHERE cm.club_id = ?
@@ -508,12 +517,23 @@ const deleteClub = async (req, res) => {
     }
 };
 
+const toggleClubStatus = async (req, res) => {
+    try {
+        const { clubId } = req.params;
+        const { isActive } = req.body;
+
+        await masterPool.query('UPDATE clubs SET is_active = ? WHERE id = ?', [isActive, clubId]);
+
+        res.json({ success: true, message: `Club ${isActive ? 'activated' : 'deactivated'} successfully` });
+    } catch (error) {
+        console.error('Error toggling club status:', error);
+        res.status(500).json({ success: false, message: 'Failed to update club status' });
+    }
+};
+
 module.exports = {
     createClub,
     getClubs,
-    joinClub,
-    updateMembershipStatus,
-    createActivity,
     joinClub,
     updateMembershipStatus,
     createActivity,
@@ -521,5 +541,6 @@ module.exports = {
     updateClub,
     deleteClub,
     updateActivity,
-    deleteActivity
+    deleteActivity,
+    toggleClubStatus
 };

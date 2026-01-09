@@ -3,32 +3,49 @@ import {
     Plus, Users, Calendar, X, Trash2, Check, XCircle,
     Edit2, Layout, UserPlus, FileText, ArrowRight,
     TrendingUp, Award, Zap, Heart, Camera, Search, Filter,
-    MoreHorizontal, Shield, Wallet
+    MoreHorizontal, Shield, Wallet, Send, Image
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import clubService from '../services/clubService';
 import toast from 'react-hot-toast';
 
-const ClubCard = ({ club, onSelect }) => (
+const ClubCard = ({ club, onSelect, isAdmin, onToggleStatus }) => (
     <div
         onClick={() => onSelect(club)}
-        className="group bg-white rounded-xl border border-gray-200 hover:border-blue-400 p-5 transition-all cursor-pointer hover:shadow-lg relative overflow-hidden"
+        className={`group bg-white rounded-xl border ${club.is_active ? 'border-gray-200 hover:border-blue-400' : 'border-red-200 hover:border-red-300 opacity-75 hover:opacity-100'} p-5 transition-all cursor-pointer hover:shadow-lg relative overflow-hidden`}
     >
-        <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-            <ArrowRight className="text-blue-500" size={20} />
+        <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-2">
+            {isAdmin && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggleStatus(club.id, club.is_active); }}
+                    className={`p-1.5 rounded-md ${club.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                    title={club.is_active ? "Deactivate Club" : "Activate Club"}
+                >
+                    <Zap size={16} className={club.is_active ? "fill-red-600" : "fill-green-600"} />
+                </button>
+            )}
+            <div className="bg-blue-50 text-blue-600 p-1.5 rounded-md">
+                <ArrowRight size={16} />
+            </div>
         </div>
 
+        {!club.is_active && (
+            <div className="absolute top-0 left-0 bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-br-lg z-10 uppercase tracking-wide">
+                Inactive
+            </div>
+        )}
+
         <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden">
+            <div className={`w-16 h-16 rounded-xl ${club.is_active ? 'bg-gray-100' : 'bg-gray-50 grayscale'} flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden text-gray-400`}>
                 {club.image_url ? (
                     <img src={club.image_url} alt="" className="w-full h-full object-cover" />
                 ) : (
-                    <Users className="text-gray-400" size={28} />
+                    <Users size={28} />
                 )}
             </div>
-            <div>
-                <h3 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">{club.name}</h3>
+            <div className="flex-1 min-w-0">
+                <h3 className={`font-bold text-lg leading-tight group-hover:text-blue-600 transition-colors truncate ${!club.is_active && 'text-gray-500'}`}>{club.name}</h3>
                 <div className="flex items-center gap-3 mt-2 text-sm text-gray-500">
                     <span className="flex items-center gap-1"><Users size={14} /> {(club.members || []).length} Members</span>
                     {club.membership_fee > 0 && (
@@ -87,8 +104,22 @@ const Clubs = () => {
         image: null,
         membership_fee: '',
         fee_type: 'Yearly',
-
     });
+
+    // Activity State
+    const [showActivityModal, setShowActivityModal] = useState(false);
+    const [editingActivity, setEditingActivity] = useState(null);
+    const [activityForm, setActivityForm] = useState({
+        title: '',
+        description: '',
+        image: null
+    });
+
+    // Filtering State
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterCourse, setFilterCourse] = useState('');
+    const [filterBranch, setFilterBranch] = useState('');
+    const [filterYear, setFilterYear] = useState('');
 
     useEffect(() => {
         const type = localStorage.getItem('userType');
@@ -192,6 +223,79 @@ const Clubs = () => {
         }
     };
 
+    const handleToggleStatus = async (clubId, currentStatus) => {
+        try {
+            const newStatus = !currentStatus;
+            await clubService.toggleClubStatus(clubId, newStatus);
+            toast.success(`Club ${newStatus ? 'activated' : 'deactivated'}`);
+
+            if (selectedClub && selectedClub.id === clubId) {
+                setSelectedClub(prev => ({ ...prev, is_active: newStatus }));
+            }
+
+            setClubs(prev => prev.map(c => c.id === clubId ? { ...c, is_active: newStatus } : c));
+        } catch (error) {
+            toast.error('Failed to change status');
+        }
+    };
+
+    const handleActivitySubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const data = new FormData();
+            data.append('title', activityForm.title);
+            data.append('description', activityForm.description);
+            if (activityForm.image) {
+                data.append('image', activityForm.image);
+            }
+
+            if (editingActivity) {
+                await clubService.updateActivity(selectedClub.id, editingActivity.id, data);
+                toast.success('Activity updated');
+            } else {
+                await clubService.createActivity(selectedClub.id, data);
+                toast.success('Activity posted');
+            }
+
+            // Refresh details
+            const response = await clubService.getClubDetails(selectedClub.id);
+            if (response.success) setSelectedClub(response.data);
+
+            setShowActivityModal(false);
+            resetActivityForm();
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to save activity');
+        }
+    };
+
+    const handleDeleteActivity = async (activityId) => {
+        if (!window.confirm('Delete this activity?')) return;
+        try {
+            await clubService.deleteActivity(selectedClub.id, activityId);
+            toast.success('Activity deleted');
+            const response = await clubService.getClubDetails(selectedClub.id);
+            if (response.success) setSelectedClub(response.data);
+        } catch (error) {
+            toast.error('Failed to delete activity');
+        }
+    };
+
+    const prepareActivityEdit = (activity) => {
+        setEditingActivity(activity);
+        setActivityForm({
+            title: activity.title,
+            description: activity.description,
+            image: null // New image logic handled separately or UI indicator needed if keeping old
+        });
+        setShowActivityModal(true);
+    };
+
+    const resetActivityForm = () => {
+        setEditingActivity(null);
+        setActivityForm({ title: '', description: '', image: null });
+    };
+
     const handleMemberAction = async (studentId, action) => {
         try {
             await clubService.updateMembershipStatus(selectedClub.id, studentId, action);
@@ -234,7 +338,7 @@ const Clubs = () => {
         // Set basic info immediately
         setSelectedClub(club);
         setViewMode('details');
-        setActiveTab('overview');
+        setActiveTab('members');
 
         // Fetch full details
         try {
@@ -255,23 +359,23 @@ const Clubs = () => {
     return (
         <div className="p-6 w-full mx-auto space-y-6">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Clubs & Communities</h1>
-                    <p className="text-gray-500">Manage student organizations, memberships, and activities.</p>
-                </div>
-                <div className="flex gap-3">
-                    {/* Add Filter/Search here if needed in future */}
-                    {viewMode === 'list' && (
+            {viewMode === 'list' && (
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Clubs & Communities</h1>
+                        <p className="text-gray-500">Manage student organizations, memberships, and activities.</p>
+                    </div>
+                    <div className="flex gap-3">
+                        {/* Add Filter/Search here if needed in future */}
                         <button
                             onClick={() => { resetForm(); setShowCreateModal(true); }}
                             className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all active:scale-95"
                         >
                             <Plus size={18} strokeWidth={2.5} /> Create New Club
                         </button>
-                    )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {viewMode === 'list' ? (
                 <div className="space-y-6">
@@ -313,7 +417,13 @@ const Clubs = () => {
                     {/* Clubs Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {clubs.map(club => (
-                            <ClubCard key={club.id} club={club} onSelect={handleViewDetails} />
+                            <ClubCard
+                                key={club.id}
+                                club={club}
+                                onSelect={handleViewDetails}
+                                isAdmin={isAdmin}
+                                onToggleStatus={handleToggleStatus}
+                            />
                         ))}
                         {clubs.length === 0 && !loading && (
                             <div className="col-span-full py-20 text-center text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
@@ -346,6 +456,18 @@ const Clubs = () => {
                             </div>
                         </div>
                         <div className="flex gap-2">
+                            {isAdmin && (
+                                <button
+                                    onClick={() => handleToggleStatus(selectedClub.id, selectedClub.is_active)}
+                                    className={`px-4 py-2 border rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${selectedClub.is_active
+                                        ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                                        : 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'
+                                        }`}
+                                >
+                                    <Zap size={16} className={selectedClub.is_active ? "fill-red-600" : "fill-green-600"} />
+                                    {selectedClub.is_active ? 'Deactivate' : 'Activate'}
+                                </button>
+                            )}
                             <button
                                 onClick={() => prepareEdit(selectedClub)}
                                 className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-bold flex items-center gap-2"
@@ -384,190 +506,350 @@ const Clubs = () => {
 
                     <div className="p-6 flex-1 bg-gray-50/30">
                         {activeTab === 'overview' && (
-                            <div className="max-w-4xl space-y-6 animate-in fade-in duration-300">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {/* Membership & Fees Card */}
-                                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Membership & Fees</h3>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                                                <span className="text-gray-600">Fee Amount</span>
-                                                <span className="font-bold text-gray-900">
-                                                    {selectedClub.membership_fee > 0 ? `₹${selectedClub.membership_fee}` : 'Free'}
-                                                </span>
+                            <div className="max-w-7xl space-y-6 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    {/* Left Column: Fees & Stats */}
+                                    <div className="lg:col-span-1 space-y-6">
+                                        {/* Membership & Fees Card */}
+                                        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Membership & Fees</h3>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                                                    <span className="text-gray-600">Fee Amount</span>
+                                                    <span className="font-bold text-gray-900">
+                                                        {selectedClub.membership_fee > 0 ? `₹${selectedClub.membership_fee}` : 'Free'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                                                    <span className="text-gray-600">Frequency</span>
+                                                    <span className="font-medium text-gray-900">{selectedClub.fee_type || 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2">
+                                                    <span className="text-gray-600">Total Revenue (Est.)</span>
+                                                    <span className="font-bold text-green-600">
+                                                        ₹{(selectedClub.membership_fee || 0) * (selectedClub.members?.length || 0)}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                                                <span className="text-gray-600">Frequency</span>
-                                                <span className="font-medium text-gray-900">{selectedClub.fee_type || 'N/A'}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center py-2">
-                                                <span className="text-gray-600">Total Revenue (Est.)</span>
-                                                <span className="font-bold text-green-600">
-                                                    ₹{(selectedClub.membership_fee || 0) * (selectedClub.members?.length || 0)}
-                                                </span>
+                                        </div>
+
+                                        {/* Club Statistics Card */}
+                                        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Club Statistics</h3>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                                                    <span className="text-gray-600">Total Members</span>
+                                                    <span className="font-bold text-gray-900">{selectedClub.members?.length || 0}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                                                    <span className="text-gray-600">Total Activities</span>
+                                                    <span className="font-medium text-gray-900">{selectedClub.activities?.length || 0}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2">
+                                                    <span className="text-gray-600">Status</span>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${selectedClub.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {selectedClub.is_active ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Club Statistics Card */}
-                                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Club Statistics</h3>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                                                <span className="text-gray-600">Total Members</span>
-                                                <span className="font-bold text-gray-900">{selectedClub.members?.length || 0}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                                                <span className="text-gray-600">Total Activities</span>
-                                                <span className="font-medium text-gray-900">{selectedClub.activities?.length || 0}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center py-2">
-                                                <span className="text-gray-600">Status</span>
-                                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
-                                                    Active
-                                                </span>
-                                            </div>
-                                        </div>
+                                    {/* Right Column: Description */}
+                                    <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Description</h3>
+                                        <p className="text-gray-700 leading-relaxed whitespace-pre-wrap flex-1">{selectedClub.description}</p>
                                     </div>
-                                </div>
-
-                                {/* Description Card */}
-                                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Description</h3>
-                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedClub.description}</p>
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'members' && (
-                            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-in fade-in duration-300">
-                                {!selectedClub.members || selectedClub.members.length === 0 ? (
-                                    <div className="p-12 text-center text-gray-400">No members yet.</div>
-                                ) : (
-                                    <table className="w-full text-left">
-                                        <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold">
-                                            <tr>
-                                                <th className="px-6 py-4">Student Name</th>
-                                                <th className="px-6 py-4">Status</th>
-                                                <th className="px-6 py-4">Payment</th>
-                                                <th className="px-6 py-4">Joined Date</th>
-                                                <th className="px-6 py-4">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {selectedClub.members.map((member, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 font-medium text-gray-900">{member.student_name}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${member.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                                            member.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                                'bg-red-100 text-red-700'
-                                                            }`}>
-                                                            {member.status.toUpperCase()}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`text-sm font-medium ${member.payment_status === 'paid' ? 'text-green-600' :
-                                                            member.payment_status === 'payment_due' ? 'text-orange-600' :
-                                                                'text-gray-600'
-                                                            }`}>
-                                                            {member.payment_status === 'payment_due' ? 'Payment Due' :
-                                                                member.payment_status === 'paid' ? 'Paid' :
-                                                                    member.payment_status === 'not_required' ? 'Pending Approval' : 'N/A'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-sm text-gray-500">
-                                                        {new Date(member.joined_at).toLocaleDateString()}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        {member.status === 'pending' ? (
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => handleMemberAction(member.student_id, 'approved')}
-                                                                    className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-bold flex items-center gap-1"
-                                                                >
-                                                                    <Check size={14} /> Approve
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleMemberAction(member.student_id, 'rejected')}
-                                                                    className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-1"
-                                                                >
-                                                                    <XCircle size={14} /> Reject
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">-</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                            <div className="space-y-4 animate-in fade-in duration-300">
+                                {/* Search & Filter Bar */}
+                                <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name or admission no..."
+                                            value={searchTerm}
+                                            onChange={e => setSearchTerm(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <select
+                                        value={filterCourse} onChange={e => setFilterCourse(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white min-w-[150px]"
+                                    >
+                                        <option value="">All Courses</option>
+                                        {[...new Set(selectedClub.members?.map(m => m.course).filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                    <select
+                                        value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white min-w-[150px]"
+                                    >
+                                        <option value="">All Branches</option>
+                                        {[...new Set(selectedClub.members?.map(m => m.branch).filter(Boolean))].map(b => <option key={b} value={b}>{b}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                                    {!selectedClub.members || selectedClub.members.length === 0 ? (
+                                        <div className="p-12 text-center text-gray-400">No members yet.</div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                                                    <tr>
+                                                        <th className="px-6 py-4">Student Details</th>
+                                                        <th className="px-6 py-4">Academic Info</th>
+                                                        <th className="px-6 py-4">Status</th>
+                                                        <th className="px-6 py-4">Payment</th>
+                                                        <th className="px-6 py-4">Joined Date</th>
+                                                        <th className="px-6 py-4">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {selectedClub.members
+                                                        .filter(m => m.status && m.status !== 'pending')
+                                                        .filter(member => {
+                                                            const matchesSearch = (member.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                                                                (member.admission_number?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+                                                            const matchesCourse = !filterCourse || member.course === filterCourse;
+                                                            const matchesBranch = !filterBranch || member.branch === filterBranch;
+                                                            return matchesSearch && matchesCourse && matchesBranch;
+                                                        })
+                                                        .map((member, idx) => (
+                                                            <tr key={idx} className="hover:bg-gray-50">
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0">
+                                                                            {member.student_photo ? <img src={member.student_photo} className="w-full h-full object-cover" alt="" /> : <Users size={18} className="m-auto mt-2.5 text-gray-400" />}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-bold text-gray-900">{member.student_name}</div>
+                                                                            <div className="text-xs text-gray-500">{member.admission_number}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="text-sm text-gray-900 font-medium">{member.course} - {member.branch}</div>
+                                                                    <div className="text-xs text-gray-500">{member.college}</div>
+                                                                    <div className="text-xs text-gray-500">Year: {member.current_year} | Sem: {member.current_semester}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${member.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                                        }`}>
+                                                                        {(member.status || 'N/A').toUpperCase()}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className={`text-sm font-medium ${member.payment_status === 'paid' ? 'text-green-600' :
+                                                                        member.payment_status === 'payment_due' ? 'text-orange-600' : 'text-gray-600'
+                                                                        }`}>
+                                                                        {member.payment_status === 'payment_due' ? 'Payment Due' :
+                                                                            member.payment_status === 'paid' ? 'Paid' : 'N/A'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                                    {new Date(member.joined_at).toLocaleDateString()}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    {member.status === 'approved' && (
+                                                                        <button
+                                                                            onClick={() => handleMemberAction(member.student_id, 'rejected')}
+                                                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                            title="Remove Member"
+                                                                        >
+                                                                            <XCircle size={18} />
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
                         {activeTab === 'requests' && (
-                            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-in fade-in duration-300">
-                                {(() => {
-                                    const pendingMembers = selectedClub.members?.filter(m => m.status === 'pending') || [];
-                                    if (pendingMembers.length === 0) {
-                                        return <div className="p-12 text-center text-gray-400">No pending requests.</div>;
-                                    }
-                                    return (
-                                        <table className="w-full text-left">
-                                            <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold">
-                                                <tr>
-                                                    <th className="px-6 py-4">Student Name</th>
-                                                    <th className="px-6 py-4">Status</th>
-                                                    <th className="px-6 py-4">Requested Date</th>
-                                                    <th className="px-6 py-4">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {pendingMembers.map((member, idx) => (
-                                                    <tr key={idx} className="hover:bg-gray-50">
-                                                        <td className="px-6 py-4 font-medium text-gray-900">{member.student_name}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
-                                                                PENDING
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm text-gray-500">
-                                                            {new Date(member.joined_at).toLocaleDateString()}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => handleMemberAction(member.student_id, 'approved')}
-                                                                    className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-bold flex items-center gap-1"
-                                                                >
-                                                                    <Check size={14} /> Approve
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleMemberAction(member.student_id, 'rejected')}
-                                                                    className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-1"
-                                                                >
-                                                                    <XCircle size={14} /> Reject
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    );
-                                })()}
+                            <div className="space-y-4 animate-in fade-in duration-300">
+                                {/* Search & Filter Bar */}
+                                <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name or admission no..."
+                                            value={searchTerm}
+                                            onChange={e => setSearchTerm(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <select
+                                        value={filterCourse} onChange={e => setFilterCourse(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white min-w-[150px]"
+                                    >
+                                        <option value="">All Courses</option>
+                                        {[...new Set(selectedClub.members?.map(m => m.course).filter(Boolean))].map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                    <select
+                                        value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white min-w-[150px]"
+                                    >
+                                        <option value="">All Branches</option>
+                                        {[...new Set(selectedClub.members?.map(m => m.branch).filter(Boolean))].map(b => <option key={b} value={b}>{b}</option>)}
+                                    </select>
+                                </div>
+
+                                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                                    {(() => {
+                                        const pendingMembers = selectedClub.members
+                                            ?.filter(m => m.status === 'pending')
+                                            .filter(member => {
+                                                const matchesSearch = (member.student_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                                                    (member.admission_number?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+                                                const matchesCourse = !filterCourse || member.course === filterCourse;
+                                                const matchesBranch = !filterBranch || member.branch === filterBranch;
+                                                return matchesSearch && matchesCourse && matchesBranch;
+                                            }) || [];
+
+                                        if (pendingMembers.length === 0) {
+                                            return <div className="p-12 text-center text-gray-400">No pending requests found.</div>;
+                                        }
+                                        return (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left">
+                                                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                                                        <tr>
+                                                            <th className="px-6 py-4">Student Details</th>
+                                                            <th className="px-6 py-4">Academic Info</th>
+                                                            <th className="px-6 py-4">Status</th>
+                                                            <th className="px-6 py-4">Requested Date</th>
+                                                            <th className="px-6 py-4">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {pendingMembers.map((member, idx) => (
+                                                            <tr key={idx} className="hover:bg-gray-50">
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex-shrink-0">
+                                                                            {member.student_photo ? <img src={member.student_photo} className="w-full h-full object-cover" alt="" /> : <Users size={18} className="m-auto mt-2.5 text-gray-400" />}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-bold text-gray-900">{member.student_name}</div>
+                                                                            <div className="text-xs text-gray-500">{member.admission_number}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="text-sm text-gray-900 font-medium">{member.course} - {member.branch}</div>
+                                                                    <div className="text-xs text-gray-500">{member.college}</div>
+                                                                    <div className="text-xs text-gray-500">Year: {member.current_year} | Sem: {member.current_semester}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className="px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
+                                                                        PENDING
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                                    {new Date(member.joined_at).toLocaleDateString()}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => handleMemberAction(member.student_id, 'approved')}
+                                                                            className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-bold flex items-center gap-1"
+                                                                        >
+                                                                            <Check size={14} /> Approve
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleMemberAction(member.student_id, 'rejected')}
+                                                                            className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-1"
+                                                                        >
+                                                                            <XCircle size={14} /> Reject
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
                             </div>
                         )}
 
                         {activeTab === 'activities' && (
-                            <div className="space-y-6 max-w-3xl animate-in fade-in duration-300">
-                                {/* Example Placeholder for Activities */}
-                                <div className="bg-white p-6 rounded-xl border border-gray-200 text-center py-12">
-                                    <Zap size={32} className="mx-auto text-gray-300 mb-2" />
-                                    <p className="text-gray-500">Activity management coming soon to this view.</p>
-                                </div>
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                {isAdmin && (
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => { resetActivityForm(); setShowActivityModal(true); }}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex items-center gap-2 shadow-sm"
+                                        >
+                                            <Plus size={16} /> Add Activity
+                                        </button>
+                                    </div>
+                                )}
+
+                                {(!selectedClub.activities || selectedClub.activities.length === 0) ? (
+                                    <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+                                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <Calendar className="text-gray-400" size={32} />
+                                        </div>
+                                        <h3 className="text-lg font-medium text-gray-900">No activities yet</h3>
+                                        <p className="text-gray-500 max-w-sm mx-auto mt-1">
+                                            {isAdmin ? 'Get started by posting an update or event for this club.' : 'This club hasn\'t posted any activities yet.'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {selectedClub.activities.map((activity) => (
+                                            <div key={activity.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                                {activity.image_url && (
+                                                    <div className="h-48 overflow-hidden bg-gray-100">
+                                                        <img src={activity.image_url} alt={activity.title} className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                                <div className="p-5">
+                                                    <div className="flex justify-between items-start gap-4 mb-2">
+                                                        <div>
+                                                            <div className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">
+                                                                {new Date(activity.posted_at).toLocaleDateString()}
+                                                            </div>
+                                                            <h3 className="font-bold text-gray-900 text-lg leading-tight">{activity.title}</h3>
+                                                        </div>
+                                                        {isAdmin && (
+                                                            <div className="flex bg-gray-50 rounded-lg border border-gray-100 p-1 shrink-0">
+                                                                <button
+                                                                    onClick={() => prepareActivityEdit(activity)}
+                                                                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-white rounded-md transition-all"
+                                                                >
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteActivity(activity.id)}
+                                                                    className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-white rounded-md transition-all"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-gray-600 text-sm line-clamp-3">{activity.description}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -671,6 +953,78 @@ const Clubs = () => {
                             className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all"
                         >
                             {showEditModal ? 'Save Changes' : 'Create Club'} <ArrowRight size={16} />
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Activity Modal */}
+            <Modal
+                show={showActivityModal}
+                onClose={() => setShowActivityModal(false)}
+                title={editingActivity ? 'Edit Activity' : 'Post New Activity'}
+            >
+                <form onSubmit={handleActivitySubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
+                        <input
+                            type="text"
+                            value={activityForm.title}
+                            onChange={e => setActivityForm({ ...activityForm, title: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium"
+                            placeholder="e.g. Weekly Workshop"
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Description <span className="text-red-500">*</span></label>
+                        <textarea
+                            value={activityForm.description}
+                            onChange={e => setActivityForm({ ...activityForm, description: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none h-32"
+                            placeholder="Details about the activity..."
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Image (Optional)</label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
+                            <input
+                                type="file"
+                                onChange={e => setActivityForm({ ...activityForm, image: e.target.files[0] })}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                accept="image/*"
+                            />
+                            {activityForm.image ? (
+                                <div className="text-sm text-green-600 font-medium flex flex-col items-center gap-2">
+                                    <Check size={24} />
+                                    {activityForm.image.name}
+                                </div>
+                            ) : (
+                                <div className="text-gray-400 flex flex-col items-center gap-2">
+                                    <Image size={24} />
+                                    <span className="text-sm font-medium">Click to upload image</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowActivityModal(false)}
+                            className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
+                        >
+                            {editingActivity ? <Edit2 size={16} /> : <Send size={16} />}
+                            {editingActivity ? 'Update Activity' : 'Post Activity'}
                         </button>
                     </div>
                 </form>

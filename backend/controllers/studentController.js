@@ -1317,46 +1317,44 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
 
   // -- CLUB FEE UPDATE LOGIC --
   try {
-    const [allClubs] = await connection.query('SELECT id, members, fee_type, membership_fee FROM clubs');
+    // Fetch all active club memberships for this student
+    const [memberships] = await connection.query(
+      `SELECT cm.club_id, c.fee_type, c.membership_fee 
+       FROM club_members cm
+       JOIN clubs c ON cm.club_id = c.id
+       WHERE cm.student_id = ? AND cm.status = 'approved'`,
+      [student.id]
+    );
 
-    for (const club of allClubs) {
-      let members = [];
-      try {
-        members = typeof club.members === 'string' ? JSON.parse(club.members) : (club.members || []);
-      } catch (e) { continue; }
+    for (const membership of memberships) {
+      const feeTypeRaw = membership.fee_type || 'Yearly';
+      const feeType = feeTypeRaw.trim().toLowerCase();
+      const fee = parseFloat(membership.membership_fee) || 0;
 
-      const memberIndex = members.findIndex(m => m.student_id === student.id);
-      if (memberIndex !== -1) {
-        const member = members[memberIndex];
-        const feeType = club.fee_type || 'Yearly';
-        const fee = parseFloat(club.membership_fee) || 0;
+      if (fee > 0) {
+        let shouldUpdate = false;
 
-        if (fee > 0) {
-          let shouldUpdate = false;
-
-          // Semesterly: Update if semester changed (or year changed implying semester reset)
-          if (feeType === 'Semesterly') {
-            // If semester changes, fee is due
-            if (nextStage.semester !== currentStage.semester || nextStage.year !== currentStage.year) {
-              shouldUpdate = true;
-            }
+        // Semesterly: Update if semester changed (or year changed implying semester reset)
+        // Check for 'semesterly' and potential user typo 'semisterly'
+        if (feeType === 'semesterly' || feeType === 'semisterly') {
+          if (nextStage.semester !== currentStage.semester || nextStage.year !== currentStage.year) {
+            shouldUpdate = true;
           }
-          // Yearly: Update if year changed
-          else if (feeType === 'Yearly') {
-            if (nextStage.year !== currentStage.year) {
-              shouldUpdate = true;
-            }
+        }
+        // Yearly: Update if year changed
+        else if (feeType === 'yearly') {
+          if (nextStage.year !== currentStage.year) {
+            shouldUpdate = true;
           }
+        }
 
-          if (shouldUpdate) {
-            // Update status to indicate payment is required
-            // We keep them as 'member' (or whatever status) but mark payment_status
-            member.payment_status = 'payment_due';
-            member.updated_at = new Date().toISOString();
-
-            // Update DB
-            await connection.query('UPDATE clubs SET members = ? WHERE id = ?', [JSON.stringify(members), club.id]);
-          }
+        if (shouldUpdate) {
+          await connection.query(
+            `UPDATE club_members 
+             SET payment_status = 'payment_due', updated_at = CURRENT_TIMESTAMP 
+             WHERE club_id = ? AND student_id = ?`,
+            [membership.club_id, student.id]
+          );
         }
       }
     }
