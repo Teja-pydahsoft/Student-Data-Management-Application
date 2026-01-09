@@ -2848,8 +2848,8 @@ exports.getAttendanceSummary = async (req, res) => {
     }
 
     const [studentCountRows] = await masterPool.query(
-      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${scopeCondition}`,
-      [...countFilter.params, ...scopeParams]
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${whereClause}${scopeCondition}`,
+      [...params, ...scopeParams]
     );
     const totalStudents = studentCountRows[0]?.totalStudents || 0;
 
@@ -2910,11 +2910,11 @@ exports.getAttendanceSummary = async (req, res) => {
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
           AND ar.attendance_date = ?
-        WHERE 1=1${countFilter.clause}${scopeCondition}
+        WHERE 1=1${whereClause}${scopeCondition}
         GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
         ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
       `,
-      [todayKey, ...countFilter.params, ...scopeParams]
+      [todayKey, ...params, ...scopeParams]
     );
 
 
