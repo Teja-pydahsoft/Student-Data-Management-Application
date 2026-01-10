@@ -229,25 +229,25 @@ const StudentCalendar = () => {
                                 {calendarDays.map((item, idx) => (
                                     <div
                                         key={idx}
-                                        className={`min-h-[100px] p-2 border-b border-r relative transition-colors ${!item.day ? 'bg-gray-50/50' : 'hover:bg-blue-50/10'} ${item.date === new Date().toISOString().split('T')[0] ? 'bg-blue-50/20' : ''}`}
+                                        className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border-b ${(idx + 1) % 7 === 0 ? '' : 'border-r'} relative transition-colors ${!item.day ? 'bg-gray-50/50' : 'hover:bg-blue-50/10'} ${item.date === new Date().toISOString().split('T')[0] ? 'bg-blue-50/20' : ''}`}
                                     >
                                         {item.day && (
                                             <>
-                                                <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${item.date === new Date().toISOString().split('T')[0] ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700'}`}>
+                                                <span className={`text-xs md:text-sm font-medium w-6 h-6 md:w-7 md:h-7 flex items-center justify-center rounded-full ${item.date === new Date().toISOString().split('T')[0] ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700'}`}>
                                                     {item.day}
                                                 </span>
-                                                <div className="mt-2 space-y-1">
+                                                <div className="mt-1 md:mt-2 space-y-1">
                                                     {item.events.map(ev => (
                                                         <div
                                                             key={ev.id}
                                                             title={ev.description || ev.title}
-                                                            className={`text-[10px] px-1.5 py-1 rounded border truncate cursor-pointer hover:shadow-sm transition-shadow ${getEventTypeColor(ev.event_type)}`}
+                                                            className={`text-[10px] px-1 py-0.5 md:px-1.5 md:py-1 rounded border truncate cursor-pointer hover:shadow-sm transition-shadow ${getEventTypeColor(ev.event_type)}`}
                                                             onClick={() => {
                                                                 setSelectedEvent(ev);
                                                                 setShowEventModal(true);
                                                             }}
                                                         >
-                                                            <span className="truncate font-medium">{ev.title}</span>
+                                                            <span className="truncate font-medium block">{ev.title}</span>
                                                         </div>
                                                     ))}
                                                 </div>
