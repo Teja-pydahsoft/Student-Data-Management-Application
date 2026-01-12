@@ -15,7 +15,8 @@ import {
     Briefcase,
     CheckCircle,
     Bell,
-    BellOff
+    BellOff,
+    MoreHorizontal
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -26,12 +27,15 @@ import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../
 import RegistrationPendingModal from '../RegistrationPendingModal';
 
 const StudentLayout = ({ children }) => {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    // State
+    const [sidebarOpen, setSidebarOpen] = useState(false); // Kept for logic compatibility or specialized tablet views
     const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
     const [notificationModalOpen, setNotificationModalOpen] = useState(false);
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [showRestrictionModal, setShowRestrictionModal] = useState(false);
     const [fetchedStatus, setFetchedStatus] = useState(null);
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false); // New: For mobile "More" menu
+
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout } = useAuthStore();
@@ -54,22 +58,11 @@ const StudentLayout = ({ children }) => {
 
     // Registration Status Check
     const isRegistrationPending = () => {
-        // Use fetched data if available, otherwise fall back to user store
         const data = fetchedStatus || user;
-
         const rawSource = data?.registration_status
             || (data?.student_data ? (data.student_data['Registration Status'] || data.student_data.registration_status) : '')
             || '';
         const raw = String(rawSource).trim().toLowerCase();
-
-        // If we have no data yet (and no user data), assume pending to be safe, 
-        // OR allow if we want to be lenient during loading. 
-        // Given the requirement is strict ("complete the registration to get the access"), 
-        // we should probably default to pending if we are unsure, BUT we don't want to block 
-        // valid users during a slow network request.
-        // Compromise: if raw is empty string (data missing), assume pending ONLY if we have finished loading?
-        // For now: if raw is empty, it returns 'pending'.
-
         return raw !== 'completed';
     };
 
@@ -77,11 +70,9 @@ const StudentLayout = ({ children }) => {
     const allowedPaths = ['/student/dashboard', '/student/semester-registration'];
 
     useEffect(() => {
-        // Check if current path is restricted
         if (isPending && !allowedPaths.includes(location.pathname)) {
             setShowRestrictionModal(true);
         } else if (!isPending) {
-            // Auto close if status is confirmed as not pending (e.g. after fetch)
             setShowRestrictionModal(false);
         }
     }, [location.pathname, isPending]);
@@ -90,15 +81,13 @@ const StudentLayout = ({ children }) => {
         if (isPending && !allowedPaths.includes(path)) {
             e.preventDefault();
             setShowRestrictionModal(true);
-            setSidebarOpen(false); // Close mobile sidebar if open
-        } else {
-            setSidebarOpen(false);
+            setMostRecentNavClick(null); // specific logic cleaner
         }
+        setMoreMenuOpen(false); // Close mobile drawer on nav
     };
 
     const handleModalClose = () => {
         setShowRestrictionModal(false);
-        // If currently on a restricted page, redirect to dashboard
         if (isPending && !allowedPaths.includes(location.pathname)) {
             navigate('/student/dashboard');
         }
@@ -114,8 +103,6 @@ const StudentLayout = ({ children }) => {
             setIsSubscribed(true);
         } else if (status === 'default') {
             setIsSubscribed(false);
-            // Show modal automatically if permission is default (not yet asked)
-            // Delay slightly for better UX
             setTimeout(() => setNotificationModalOpen(true), 1500);
         } else {
             setIsSubscribed(false);
@@ -155,6 +142,19 @@ const StudentLayout = ({ children }) => {
         { icon: CreditCard, label: 'Fee Management', path: '/student/fees' },
     ];
 
+    // Split items for Mobile Navigation
+    // Primary: Dashboard, Attendance, Fees, Services (or Registration if pending)
+    const mobilePrimaryPaths = isPending
+        ? ['/student/dashboard', '/student/attendance', '/student/fees', '/student/semester-registration']
+        : ['/student/dashboard', '/student/attendance', '/student/fees', '/student/services'];
+
+    // Helper to find item by path
+    const findItem = (path) => navItems.find(item => item.path === path);
+
+    const mobilePrimaryItems = mobilePrimaryPaths.map(path => findItem(path)).filter(Boolean);
+    const mobileSecondaryItems = navItems.filter(item => !mobilePrimaryPaths.includes(item.path));
+
+
     return (
         <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
             {/* Background Pattern */}
@@ -176,16 +176,6 @@ const StudentLayout = ({ children }) => {
                 onClose={handleModalClose}
             />
 
-            {/* Mobile Menu Button */}
-            <div className="lg:hidden fixed top-4 right-4 z-50 flex gap-2 items-center">
-                <button
-                    className="p-2.5 bg-white/80 backdrop-blur-md rounded-xl shadow-sm border border-gray-200 text-gray-700 active:scale-95 transition-all"
-                    onClick={() => setSidebarOpen(!sidebarOpen)}
-                >
-                    {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-                </button>
-            </div>
-
             {/* Desktop Sidebar Toggle Button */}
             {!desktopSidebarOpen && (
                 <button
@@ -197,11 +187,11 @@ const StudentLayout = ({ children }) => {
                 </button>
             )}
 
-            {/* Sidebar */}
+            {/* Sidebar (HIDDEN on Mobile) */}
             <aside className={`
+                hidden lg:flex
                 fixed inset-y-0 left-0 z-40 w-72 bg-white/90 backdrop-blur-xl border-r border-gray-200/60 shadow-[4px_0_24px_-2px_rgba(0,0,0,0.02)] transform transition-transform duration-300 cubic-bezier(0.4, 0, 0.2, 1)
-                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-                ${desktopSidebarOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full'}
+                ${desktopSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
                 <div className="h-full flex flex-col">
                     {/* Logo Area */}
@@ -216,7 +206,7 @@ const StudentLayout = ({ children }) => {
                         </div>
                         <button
                             onClick={() => setDesktopSidebarOpen(false)}
-                            className="hidden lg:flex p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                         >
                             <Menu size={20} />
                         </button>
@@ -224,7 +214,6 @@ const StudentLayout = ({ children }) => {
 
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
-
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.path}
@@ -249,7 +238,7 @@ const StudentLayout = ({ children }) => {
                         ))}
                     </nav>
 
-                    {/* User Info Card (Moved to Bottom) */}
+                    {/* User Info Card */}
                     <div
                         onClick={() => navigate('/student/profile')}
                         className="mx-4 mb-2 p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md transition-all"
@@ -287,19 +276,14 @@ const StudentLayout = ({ children }) => {
                 </div>
             </aside>
 
-            {/* Overlay for mobile */}
-            {sidebarOpen && (
-                <div
-                    className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
-                    onClick={() => setSidebarOpen(false)}
-                />
-            )}
-
             {/* Main Content */}
-            <main className={`flex-1 h-screen overflow-y-auto p-4 lg:p-8 relative z-10 transition-all duration-300 ${desktopSidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}`}>
-
-                {/* Notification Icon - Bottom Right for ALL devices */}
-                <div className="fixed bottom-8 right-8 z-50">
+            <main className={`
+                flex-1 h-screen overflow-y-auto p-4 lg:p-8 relative z-10 transition-all duration-300 
+                ${desktopSidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}
+                pb-24 lg:pb-8
+            `}>
+                {/* Notification Icon */}
+                <div className="fixed bottom-20 lg:bottom-8 right-4 lg:right-8 z-50">
                     <NotificationIcon />
                 </div>
 
@@ -307,6 +291,119 @@ const StudentLayout = ({ children }) => {
                     <Outlet />
                 </div>
             </main>
+
+            {/* Mobile Bottom Navigation */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200/80 backdrop-blur-lg z-50 pb-safe">
+                <div className="flex items-center justify-between px-2 pt-2 pb-3">
+                    {mobilePrimaryItems.map((item) => (
+                        <NavLink
+                            key={item.path}
+                            to={item.path}
+                            onClick={(e) => handleNavigation(e, item.path)}
+                            className={({ isActive }) => `
+                                flex-1 flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg transition-colors
+                                ${isActive ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}
+                            `}
+                        >
+                            {({ isActive }) => (
+                                <>
+                                    <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'animate-pulse-subtle' : ''} />
+                                    <span className="text-[10px] font-medium truncate w-full text-center leading-tight">
+                                        {/* Shorten labels for mobile if needed */}
+                                        {item.label === 'Fee Management' ? 'Fees' :
+                                            item.label === 'Attendance' ? 'Attend' : item.label}
+                                    </span>
+                                </>
+                            )}
+                        </NavLink>
+                    ))}
+
+                    {/* More Button */}
+                    <button
+                        onClick={() => setMoreMenuOpen(true)}
+                        className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg transition-colors ${moreMenuOpen ? 'text-blue-600' : 'text-gray-500'}`}
+                    >
+                        <Menu size={22} />
+                        <span className="text-[10px] font-medium leading-tight">Menu</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Mobile More Menu Drawer */}
+            {moreMenuOpen && (
+                <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+                        onClick={() => setMoreMenuOpen(false)}
+                    />
+
+                    {/* Drawer Content - with margin for bottom bar */}
+                    <div className="relative bg-[#F8FAFC] rounded-t-3xl p-6 shadow-2xl animate-fade-in-up pb-28">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-gray-900">Ofther Menu</h3>
+                            <button onClick={() => setMoreMenuOpen(false)} className="p-2 bg-white rounded-full text-gray-600 shadow-sm border border-gray-100">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-4 mb-6">
+                            {mobileSecondaryItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    onClick={(e) => handleNavigation(e, item.path)}
+                                    className={({ isActive }) => `
+                                        flex flex-col items-center gap-2 p-3 rounded-2xl transition-all border
+                                        ${isActive
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200'
+                                            : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
+                                    `}
+                                >
+                                    <item.icon size={24} />
+                                    <span className="text-[10px] font-bold text-center line-clamp-2 leading-tight">
+                                        {item.label === 'Sem Registration' ? 'Reg.' : item.label}
+                                    </span>
+                                </NavLink>
+                            ))}
+                        </div>
+
+                        {/* Profile & Logout in Drawer */}
+                        <div className="space-y-3">
+                            <div
+                                onClick={() => {
+                                    navigate('/student/profile');
+                                    setMoreMenuOpen(false);
+                                }}
+                                className="flex items-center gap-3 p-4 rounded-2xl bg-white border border-gray-100 shadow-sm active:bg-gray-50 transition-colors cursor-pointer"
+                            >
+                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 overflow-hidden">
+                                    {user?.student_photo ? (
+                                        <img src={user.student_photo} alt="Profile" className="h-full w-full object-cover" />
+                                    ) : (
+                                        <User size={20} />
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-gray-900 truncate">{user?.name || 'Student'}</p>
+                                    <p className="text-xs text-gray-500">View Profile</p>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded-lg">
+                                    <MoreHorizontal size={18} className="text-gray-400" />
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleLogout}
+                                className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 text-red-600 font-bold border border-red-100 active:bg-red-100 transition-colors"
+                            >
+                                <LogOut size={20} />
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
