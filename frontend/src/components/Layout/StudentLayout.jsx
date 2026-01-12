@@ -1,23 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import {
-    Home,
-    CalendarCheck,
-    User,
-    Users,
-    LogOut,
-    Menu,
-    X,
-    FileText,
-    CreditCard,
-    Ticket,
-    Megaphone,
-    Briefcase,
-    CheckCircle,
-    Bell,
-    BellOff,
-    MoreHorizontal
-} from 'lucide-react';
+    RiHome4Line,
+    RiHome4Fill,
+    RiMegaphoneLine,
+    RiMegaphoneFill,
+    RiGroupLine,
+    RiGroupFill,
+    RiCalendarEventLine,
+    RiCalendarEventFill,
+    RiCheckboxCircleLine,
+    RiCheckboxCircleFill,
+    RiFileList3Line,
+    RiFileList3Fill,
+    RiServiceLine,
+    RiServiceFill,
+    RiWallet3Line,
+    RiWallet3Fill,
+    RiMenuLine,
+    RiCloseLine,
+    RiLogoutBoxRLine,
+    RiUser3Line,
+    RiUser3Fill,
+    RiMore2Fill,
+    RiNotification3Line
+} from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
@@ -132,14 +139,14 @@ const StudentLayout = ({ children }) => {
     };
 
     const navItems = [
-        { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
-        { icon: Megaphone, label: 'Announcements', path: '/student/announcements' },
-        { icon: Users, label: 'Clubs', path: '/student/clubs' },
-        { icon: CalendarCheck, label: 'Event Calendar', path: '/student/events' },
-        { icon: CheckCircle, label: 'Attendance', path: '/student/attendance' },
-        { icon: FileText, label: 'Sem Registration', path: '/student/semester-registration' },
-        { icon: Briefcase, label: 'Services', path: '/student/services' },
-        { icon: CreditCard, label: 'Fee Management', path: '/student/fees' },
+        { icon: RiHome4Line, activeIcon: RiHome4Fill, label: 'Dashboard', path: '/student/dashboard' },
+        { icon: RiMegaphoneLine, activeIcon: RiMegaphoneFill, label: 'Announcements', path: '/student/announcements' },
+        { icon: RiGroupLine, activeIcon: RiGroupFill, label: 'Clubs', path: '/student/clubs' },
+        { icon: RiCalendarEventLine, activeIcon: RiCalendarEventFill, label: 'Event Calendar', path: '/student/events' },
+        { icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Attendance', path: '/student/attendance' },
+        { icon: RiFileList3Line, activeIcon: RiFileList3Fill, label: 'Sem Registration', path: '/student/semester-registration' },
+        { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
+        { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
     ];
 
     // Split items for Mobile Navigation
@@ -183,7 +190,7 @@ const StudentLayout = ({ children }) => {
                     onClick={() => setDesktopSidebarOpen(true)}
                     title="Expand Sidebar"
                 >
-                    <Menu size={20} />
+                    <RiMenuLine size={20} />
                 </button>
             )}
 
@@ -208,7 +215,7 @@ const StudentLayout = ({ children }) => {
                             onClick={() => setDesktopSidebarOpen(false)}
                             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                         >
-                            <Menu size={20} />
+                            <RiMenuLine size={20} />
                         </button>
                     </div>
 
@@ -226,14 +233,17 @@ const StudentLayout = ({ children }) => {
                                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
                                 `}
                             >
-                                {({ isActive }) => (
-                                    <>
-                                        <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-blue-600 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0 scale-y-0'}`}></span>
-                                        <item.icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} strokeWidth={isActive ? 2.5 : 2} />
-                                        <span className="tracking-wide">{item.label}</span>
-                                        {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-lg shadow-blue-400"></div>}
-                                    </>
-                                )}
+                                {({ isActive }) => {
+                                    const Icon = isActive ? item.activeIcon : item.icon;
+                                    return (
+                                        <>
+                                            <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-blue-600 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0 scale-y-0'}`}></span>
+                                            <Icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
+                                            <span className="tracking-wide">{item.label}</span>
+                                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-lg shadow-blue-400"></div>}
+                                        </>
+                                    );
+                                }}
                             </NavLink>
                         ))}
                     </nav>
@@ -250,7 +260,7 @@ const StudentLayout = ({ children }) => {
                                     <img src={user.student_photo} alt="Profile" className="h-full w-full object-cover" />
                                 ) : (
                                     <div className="h-full w-full bg-blue-100 flex items-center justify-center text-blue-600">
-                                        <User size={18} />
+                                        <RiUser3Fill size={18} />
                                     </div>
                                 )}
                             </div>
@@ -269,7 +279,7 @@ const StudentLayout = ({ children }) => {
                             onClick={handleLogout}
                             className="flex items-center justify-center gap-2.5 px-4 py-3.5 w-full rounded-xl text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 group"
                         >
-                            <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
+                            <RiLogoutBoxRLine size={18} className="group-hover:-translate-x-1 transition-transform" />
                             Sign Out
                         </button>
                     </div>
@@ -292,46 +302,62 @@ const StudentLayout = ({ children }) => {
                 </div>
             </main>
 
-            {/* Mobile Bottom Navigation - Enhanced Styling */}
-            <div className="lg:hidden fixed bottom-5 left-4 right-4 bg-white/90 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-2xl z-50 pb-safe animate-slide-up">
-                <div className="flex items-center justify-around px-2 py-3">
+            {/* Mobile Bottom Navigation - Docked & Premium */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-gray-200/50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-3xl z-50 pb-safe">
+                <div className="flex items-center justify-around px-2 pt-3 pb-2">
                     {mobilePrimaryItems.map((item) => (
                         <NavLink
                             key={item.path}
                             to={item.path}
                             onClick={(e) => handleNavigation(e, item.path)}
                             className={({ isActive }) => `
-                                flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300
-                                ${isActive ? 'text-blue-600 scale-105' : 'text-gray-400 hover:text-gray-600'}
+                                flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 group
+                                ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}
                             `}
                         >
-                            {({ isActive }) => (
-                                <>
-                                    <div className={`relative p-1 rounded-xl transition-all ${isActive ? 'bg-blue-50' : ''}`}>
-                                        <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'animate-pulse-subtle' : ''} />
-                                        {isActive && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full"></div>}
-                                    </div>
-                                    <span className={`text-[10px] font-semibold tracking-wide truncate w-full text-center leading-none ${isActive ? 'text-blue-700' : 'text-gray-500'}`}>
-                                        {/* Shorten labels for mobile */}
-                                        {item.label === 'Fee Management' ? 'Fees' :
-                                            item.label === 'Attendance' ? 'Attend' :
-                                                item.label === 'Sem Registration' ? 'Register' :
-                                                    item.label}
-                                    </span>
-                                </>
-                            )}
+                            {({ isActive }) => {
+                                const Icon = isActive ? item.activeIcon : item.icon;
+                                return (
+                                    <>
+                                        <div className="relative p-1 transition-all">
+                                            <Icon
+                                                size={26}
+                                                className={`transition-all duration-300 ${isActive ? 'scale-110 drop-shadow-sm' : 'group-active:scale-90'}`}
+                                            />
+                                            {isActive && (
+                                                <span className="absolute -top-1 right-0 flex h-2 w-2">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className={`text-[10px] font-bold tracking-wide truncate w-full text-center leading-none transition-colors duration-300 ${isActive ? 'text-blue-600' : 'text-gray-500 font-medium'}`}>
+                                            {/* Shorten labels for mobile */}
+                                            {item.label === 'Fee Management' ? 'Fees' :
+                                                item.label === 'Attendance' ? 'Attend' :
+                                                    item.label === 'Sem Registration' ? 'Register' :
+                                                        item.label}
+                                        </span>
+                                    </>
+                                );
+                            }}
                         </NavLink>
                     ))}
 
                     {/* More Button */}
                     <button
                         onClick={() => setMoreMenuOpen(true)}
-                        className={`flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 ${moreMenuOpen ? 'text-blue-600 scale-105' : 'text-gray-400'}`}
+                        className={`flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 group ${moreMenuOpen ? 'text-blue-600' : 'text-gray-400'}`}
                     >
-                        <div className={`relative p-1 rounded-xl ${moreMenuOpen ? 'bg-blue-50' : ''}`}>
-                            <Menu size={24} />
+                        <div className="relative p-1">
+                            <RiMenuLine
+                                size={26}
+                                className={`transition-all duration-300 ${moreMenuOpen ? 'scale-110 drop-shadow-sm' : 'group-active:scale-90'}`}
+                            />
                         </div>
-                        <span className="text-[10px] font-semibold tracking-wide leading-none text-gray-500">Menu</span>
+                        <span className={`text-[10px] font-bold tracking-wide leading-none transition-colors duration-300 ${moreMenuOpen ? 'text-blue-600' : 'text-gray-500 font-medium'}`}>
+                            Menu
+                        </span>
                     </button>
                 </div>
             </div>
@@ -346,11 +372,11 @@ const StudentLayout = ({ children }) => {
                     />
 
                     {/* Drawer Content - with margin for bottom bar */}
-                    <div className="relative bg-[#F8FAFC] rounded-t-3xl p-6 shadow-2xl animate-fade-in-up pb-28">
+                    <div className="relative bg-[#F8FAFC] rounded-t-3xl p-6 shadow-2xl animate-fade-in-up pb-32">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold text-gray-900">Ofther Menu</h3>
                             <button onClick={() => setMoreMenuOpen(false)} className="p-2 bg-white rounded-full text-gray-600 shadow-sm border border-gray-100">
-                                <X size={20} />
+                                <RiCloseLine size={20} />
                             </button>
                         </div>
 
@@ -367,10 +393,17 @@ const StudentLayout = ({ children }) => {
                                             : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
                                     `}
                                 >
-                                    <item.icon size={24} />
-                                    <span className="text-[10px] font-bold text-center line-clamp-2 leading-tight">
-                                        {item.label === 'Sem Registration' ? 'Reg.' : item.label}
-                                    </span>
+                                    {({ isActive }) => {
+                                        const Icon = isActive ? item.activeIcon : item.icon;
+                                        return (
+                                            <>
+                                                <Icon size={24} />
+                                                <span className="text-[10px] font-bold text-center line-clamp-2 leading-tight">
+                                                    {item.label === 'Sem Registration' ? 'Reg.' : item.label}
+                                                </span>
+                                            </>
+                                        );
+                                    }}
                                 </NavLink>
                             ))}
                         </div>
@@ -388,7 +421,7 @@ const StudentLayout = ({ children }) => {
                                     {user?.student_photo ? (
                                         <img src={user.student_photo} alt="Profile" className="h-full w-full object-cover" />
                                     ) : (
-                                        <User size={20} />
+                                        <RiUser3Fill size={20} />
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -396,7 +429,7 @@ const StudentLayout = ({ children }) => {
                                     <p className="text-xs text-gray-500">View Profile</p>
                                 </div>
                                 <div className="p-2 bg-gray-50 rounded-lg">
-                                    <MoreHorizontal size={18} className="text-gray-400" />
+                                    <RiMore2Fill size={18} className="text-gray-400" />
                                 </div>
                             </div>
 
@@ -404,7 +437,7 @@ const StudentLayout = ({ children }) => {
                                 onClick={handleLogout}
                                 className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 text-red-600 font-bold border border-red-100 active:bg-red-100 transition-colors"
                             >
-                                <LogOut size={20} />
+                                <RiLogoutBoxRLine size={20} />
                                 Sign Out
                             </button>
                         </div>
