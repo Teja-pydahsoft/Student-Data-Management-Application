@@ -292,26 +292,31 @@ const StudentLayout = ({ children }) => {
                 </div>
             </main>
 
-            {/* Mobile Bottom Navigation */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200/80 backdrop-blur-lg z-50 pb-safe">
-                <div className="flex items-center justify-between px-2 pt-2 pb-3">
+            {/* Mobile Bottom Navigation - Enhanced Styling */}
+            <div className="lg:hidden fixed bottom-5 left-4 right-4 bg-white/90 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-2xl z-50 pb-safe animate-slide-up">
+                <div className="flex items-center justify-around px-2 py-3">
                     {mobilePrimaryItems.map((item) => (
                         <NavLink
                             key={item.path}
                             to={item.path}
                             onClick={(e) => handleNavigation(e, item.path)}
                             className={({ isActive }) => `
-                                flex-1 flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg transition-colors
-                                ${isActive ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}
+                                flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300
+                                ${isActive ? 'text-blue-600 scale-105' : 'text-gray-400 hover:text-gray-600'}
                             `}
                         >
                             {({ isActive }) => (
                                 <>
-                                    <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'animate-pulse-subtle' : ''} />
-                                    <span className="text-[10px] font-medium truncate w-full text-center leading-tight">
-                                        {/* Shorten labels for mobile if needed */}
+                                    <div className={`relative p-1 rounded-xl transition-all ${isActive ? 'bg-blue-50' : ''}`}>
+                                        <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'animate-pulse-subtle' : ''} />
+                                        {isActive && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full"></div>}
+                                    </div>
+                                    <span className={`text-[10px] font-semibold tracking-wide truncate w-full text-center leading-none ${isActive ? 'text-blue-700' : 'text-gray-500'}`}>
+                                        {/* Shorten labels for mobile */}
                                         {item.label === 'Fee Management' ? 'Fees' :
-                                            item.label === 'Attendance' ? 'Attend' : item.label}
+                                            item.label === 'Attendance' ? 'Attend' :
+                                                item.label === 'Sem Registration' ? 'Register' :
+                                                    item.label}
                                     </span>
                                 </>
                             )}
@@ -321,10 +326,12 @@ const StudentLayout = ({ children }) => {
                     {/* More Button */}
                     <button
                         onClick={() => setMoreMenuOpen(true)}
-                        className={`flex-1 flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg transition-colors ${moreMenuOpen ? 'text-blue-600' : 'text-gray-500'}`}
+                        className={`flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 ${moreMenuOpen ? 'text-blue-600 scale-105' : 'text-gray-400'}`}
                     >
-                        <Menu size={22} />
-                        <span className="text-[10px] font-medium leading-tight">Menu</span>
+                        <div className={`relative p-1 rounded-xl ${moreMenuOpen ? 'bg-blue-50' : ''}`}>
+                            <Menu size={24} />
+                        </div>
+                        <span className="text-[10px] font-semibold tracking-wide leading-none text-gray-500">Menu</span>
                     </button>
                 </div>
             </div>
@@ -409,4 +416,3 @@ const StudentLayout = ({ children }) => {
 };
 
 export default StudentLayout;
-
