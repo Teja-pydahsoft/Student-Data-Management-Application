@@ -30,6 +30,7 @@ import api from '../../config/api';
 import toast from 'react-hot-toast';
 import NotificationPermissionModal from '../NotificationPermissionModal';
 import NotificationIcon from '../Notifications/NotificationIcon';
+import InstallPrompt from '../PWA/InstallPrompt';
 import { getSubscriptionStatus, registerServiceWorker, subscribeUser } from '../../services/pushService';
 import RegistrationPendingModal from '../RegistrationPendingModal';
 
@@ -171,6 +172,8 @@ const StudentLayout = ({ children }) => {
                     backgroundSize: '24px 24px'
                 }}
             />
+
+            <InstallPrompt />
 
             <NotificationPermissionModal
                 isOpen={notificationModalOpen}
@@ -374,20 +377,20 @@ const StudentLayout = ({ children }) => {
                     {/* Drawer Content - with margin for bottom bar */}
                     <div className="relative bg-[#F8FAFC] rounded-t-3xl p-6 shadow-2xl animate-fade-in-up pb-32">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-bold text-gray-900">Ofther Menu</h3>
+                            <h3 className="text-lg font-bold text-gray-900">More Menu</h3>
                             <button onClick={() => setMoreMenuOpen(false)} className="p-2 bg-white rounded-full text-gray-600 shadow-sm border border-gray-100">
                                 <RiCloseLine size={20} />
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-4 mb-6">
+                        <div className="grid grid-cols-4 gap-3 mb-6">
                             {mobileSecondaryItems.map((item) => (
                                 <NavLink
                                     key={item.path}
                                     to={item.path}
                                     onClick={(e) => handleNavigation(e, item.path)}
                                     className={({ isActive }) => `
-                                        flex flex-col items-center gap-2 p-3 rounded-2xl transition-all border
+                                        flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
                                         ${isActive
                                             ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200'
                                             : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
@@ -397,8 +400,10 @@ const StudentLayout = ({ children }) => {
                                         const Icon = isActive ? item.activeIcon : item.icon;
                                         return (
                                             <>
-                                                <Icon size={24} />
-                                                <span className="text-[10px] font-bold text-center line-clamp-2 leading-tight">
+                                                <div className={`p-2 rounded-xl ${isActive ? 'bg-white/20' : 'bg-gray-50'}`}>
+                                                    <Icon size={20} />
+                                                </div>
+                                                <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
                                                     {item.label === 'Sem Registration' ? 'Reg.' : item.label}
                                                 </span>
                                             </>
