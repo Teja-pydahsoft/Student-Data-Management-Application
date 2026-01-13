@@ -23,7 +23,11 @@ import {
     RiUser3Line,
     RiUser3Fill,
     RiMore2Fill,
-    RiNotification3Line
+    RiNotification3Line,
+    RiCustomerService2Line,
+    RiCustomerService2Fill,
+    RiTicketLine,
+    RiTicketFill
 } from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -139,6 +143,26 @@ const StudentLayout = ({ children }) => {
         navigate('/student/login');
     };
 
+    const getTicketAppUrl = (path) => {
+        const token = localStorage.getItem('token');
+        let userStr = localStorage.getItem('user');
+
+        // Remove large fields (like student_photo) to prevent HTTP 431 Header Too Large errors
+        try {
+            const userObj = JSON.parse(userStr);
+            if (userObj) {
+                const { student_photo, ...safeUser } = userObj;
+                userStr = JSON.stringify(safeUser);
+            }
+        } catch (e) {
+            console.error('Error parsing user object for SSO', e);
+        }
+
+        return `${TICKET_APP_URL}/auth-callback?token=${token}&user=${encodeURIComponent(userStr)}&redirect=${path}`;
+    };
+
+    const TICKET_APP_URL = import.meta.env.VITE_TICKET_APP_URL || 'http://localhost:5174';
+
     const navItems = [
         { icon: RiHome4Line, activeIcon: RiHome4Fill, label: 'Dashboard', path: '/student/dashboard' },
         { icon: RiMegaphoneLine, activeIcon: RiMegaphoneFill, label: 'Announcements', path: '/student/announcements' },
@@ -148,6 +172,14 @@ const StudentLayout = ({ children }) => {
         { icon: RiFileList3Line, activeIcon: RiFileList3Fill, label: 'Sem Registration', path: '/student/semester-registration' },
         { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
         { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
+        {
+            icon: RiTicketLine,
+            activeIcon: RiTicketFill,
+            label: 'Ticket Management',
+            path: '/student/dashboard',
+            isExternal: true,
+            isTicketApp: true
+        },
     ];
 
     // Split items for Mobile Navigation
@@ -225,29 +257,44 @@ const StudentLayout = ({ children }) => {
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
                         {navItems.map((item) => (
-                            <NavLink
-                                key={item.path}
-                                to={item.path}
-                                onClick={(e) => handleNavigation(e, item.path)}
-                                className={({ isActive }) => `
-                                  relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group
-                                  ${isActive
-                                        ? 'bg-blue-50/80 text-blue-700 shadow-sm'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-                                `}
-                            >
-                                {({ isActive }) => {
-                                    const Icon = isActive ? item.activeIcon : item.icon;
-                                    return (
-                                        <>
-                                            <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-blue-600 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0 scale-y-0'}`}></span>
-                                            <Icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
-                                            <span className="tracking-wide">{item.label}</span>
-                                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-lg shadow-blue-400"></div>}
-                                        </>
-                                    );
-                                }}
-                            </NavLink>
+                            item.isExternal ? (
+                                <a
+                                    key={item.path}
+                                    href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
+                                    className={`
+                                      relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group
+                                      text-gray-600 hover:bg-blue-50 hover:text-blue-700
+                                    `}
+                                >
+                                    <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-blue-600 transition-all duration-300 opacity-0 scale-y-0`}></span>
+                                    <item.icon size={20} className={`transition-transform duration-300 group-hover:scale-110`} />
+                                    <span className="tracking-wide">{item.label}</span>
+                                </a>
+                            ) : (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    onClick={(e) => handleNavigation(e, item.path)}
+                                    className={({ isActive }) => `
+                                      relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group
+                                      ${isActive
+                                            ? 'bg-blue-50/80 text-blue-700 shadow-sm'
+                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                                    `}
+                                >
+                                    {({ isActive }) => {
+                                        const Icon = isActive ? item.activeIcon : item.icon;
+                                        return (
+                                            <>
+                                                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-blue-600 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0 scale-y-0'}`}></span>
+                                                <Icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
+                                                <span className="tracking-wide">{item.label}</span>
+                                                {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 shadow-lg shadow-blue-400"></div>}
+                                            </>
+                                        );
+                                    }}
+                                </NavLink>
+                            )
                         ))}
                     </nav>
 
@@ -309,42 +356,63 @@ const StudentLayout = ({ children }) => {
             <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-gray-200/50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-3xl z-50 pb-safe">
                 <div className="flex items-center justify-around px-2 pt-3 pb-2">
                     {mobilePrimaryItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            onClick={(e) => handleNavigation(e, item.path)}
-                            className={({ isActive }) => `
-                                flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 group
-                                ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}
-                            `}
-                        >
-                            {({ isActive }) => {
-                                const Icon = isActive ? item.activeIcon : item.icon;
-                                return (
-                                    <>
-                                        <div className="relative p-1 transition-all">
-                                            <Icon
-                                                size={26}
-                                                className={`transition-all duration-300 ${isActive ? 'scale-110 drop-shadow-sm' : 'group-active:scale-90'}`}
-                                            />
-                                            {isActive && (
-                                                <span className="absolute -top-1 right-0 flex h-2 w-2">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                                                </span>
-                                            )}
-                                        </div>
-                                        <span className={`text-[10px] font-bold tracking-wide truncate w-full text-center leading-none transition-colors duration-300 ${isActive ? 'text-blue-600' : 'text-gray-500 font-medium'}`}>
-                                            {/* Shorten labels for mobile */}
-                                            {item.label === 'Fee Management' ? 'Fees' :
-                                                item.label === 'Attendance' ? 'Attend' :
-                                                    item.label === 'Sem Registration' ? 'Register' :
-                                                        item.label}
-                                        </span>
-                                    </>
-                                );
-                            }}
-                        </NavLink>
+                        item.isExternal ? (
+                            <a
+                                key={item.path}
+                                href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
+                                className={`
+                                    flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 group
+                                    text-gray-400 hover:text-gray-600
+                                `}
+                            >
+                                <div className="relative p-1 transition-all">
+                                    <item.icon
+                                        size={26}
+                                        className={`transition-all duration-300 group-active:scale-90`}
+                                    />
+                                </div>
+                                <span className={`text-[10px] font-bold tracking-wide leading-none transition-colors duration-300 text-gray-500 font-medium`}>
+                                    {item.label}
+                                </span>
+                            </a>
+                        ) : (
+                            <NavLink
+                                key={item.path}
+                                to={item.path}
+                                onClick={(e) => handleNavigation(e, item.path)}
+                                className={({ isActive }) => `
+                                    flex-1 flex flex-col items-center justify-center gap-1.5 p-1 transition-all duration-300 group
+                                    ${isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}
+                                `}
+                            >
+                                {({ isActive }) => {
+                                    const Icon = isActive ? item.activeIcon : item.icon;
+                                    return (
+                                        <>
+                                            <div className="relative p-1 transition-all">
+                                                <Icon
+                                                    size={26}
+                                                    className={`transition-all duration-300 ${isActive ? 'scale-110 drop-shadow-sm' : 'group-active:scale-90'}`}
+                                                />
+                                                {isActive && (
+                                                    <span className="absolute -top-1 right-0 flex h-2 w-2">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className={`text-[10px] font-bold tracking-wide truncate w-full text-center leading-none transition-colors duration-300 ${isActive ? 'text-blue-600' : 'text-gray-500 font-medium'}`}>
+                                                {/* Shorten labels for mobile */}
+                                                {item.label === 'Fee Management' ? 'Fees' :
+                                                    item.label === 'Attendance' ? 'Attend' :
+                                                        item.label === 'Sem Registration' ? 'Register' :
+                                                            item.label}
+                                            </span>
+                                        </>
+                                    );
+                                }}
+                            </NavLink>
+                        )
                     ))}
 
                     {/* More Button */}
@@ -385,31 +453,49 @@ const StudentLayout = ({ children }) => {
 
                         <div className="grid grid-cols-4 gap-3 mb-6">
                             {mobileSecondaryItems.map((item) => (
-                                <NavLink
-                                    key={item.path}
-                                    to={item.path}
-                                    onClick={(e) => handleNavigation(e, item.path)}
-                                    className={({ isActive }) => `
-                                        flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
-                                        ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200'
-                                            : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
-                                    `}
-                                >
-                                    {({ isActive }) => {
-                                        const Icon = isActive ? item.activeIcon : item.icon;
-                                        return (
-                                            <>
-                                                <div className={`p-2 rounded-xl ${isActive ? 'bg-white/20' : 'bg-gray-50'}`}>
-                                                    <Icon size={20} />
-                                                </div>
-                                                <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
-                                                    {item.label === 'Sem Registration' ? 'Reg.' : item.label}
-                                                </span>
-                                            </>
-                                        );
-                                    }}
-                                </NavLink>
+                                item.isExternal ? (
+                                    <a
+                                        key={item.path}
+                                        href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
+                                        className={`
+                                            flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
+                                            bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95
+                                        `}
+                                    >
+                                        <div className={`p-2 rounded-xl bg-gray-50`}>
+                                            <item.icon size={20} />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
+                                            {item.label}
+                                        </span>
+                                    </a>
+                                ) : (
+                                    <NavLink
+                                        key={item.path}
+                                        to={item.path}
+                                        onClick={(e) => handleNavigation(e, item.path)}
+                                        className={({ isActive }) => `
+                                            flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
+                                            ${isActive
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200'
+                                                : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
+                                        `}
+                                    >
+                                        {({ isActive }) => {
+                                            const Icon = isActive ? item.activeIcon : item.icon;
+                                            return (
+                                                <>
+                                                    <div className={`p-2 rounded-xl ${isActive ? 'bg-white/20' : 'bg-gray-50'}`}>
+                                                        <Icon size={20} />
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
+                                                        {item.label === 'Sem Registration' ? 'Reg.' : item.label}
+                                                    </span>
+                                                </>
+                                            );
+                                        }}
+                                    </NavLink>
+                                )
                             ))}
                         </div>
 

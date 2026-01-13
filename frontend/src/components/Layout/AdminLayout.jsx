@@ -38,7 +38,8 @@ import {
 } from "../../constants/rbac";
 import toast from "react-hot-toast";
 
-// Navigation items with frontend module keys as permissions
+const TICKET_APP_URL = import.meta.env.VITE_TICKET_APP_URL || 'http://localhost:5174';
+
 const NAV_ITEMS = [
   {
     path: "/",
@@ -113,16 +114,22 @@ const NAV_ITEMS = [
     icon: Ticket,
     label: "Ticket Management",
     permission: FRONTEND_MODULES.TICKETS,
+    isExternal: true,
+    isTicketApp: true,
     subItems: [
       {
         path: "/tickets",
         label: "Tickets",
         permission: FRONTEND_MODULES.TICKETS,
+        isExternal: true,
+        isTicketApp: true,
       },
       {
         path: "/task-management",
         label: "Task Management",
         permission: FRONTEND_MODULES.TASK_MANAGEMENT,
+        isExternal: true,
+        isTicketApp: true,
       },
     ],
   },
@@ -158,6 +165,25 @@ const AdminLayout = () => {
     logout();
     toast.success("Logged out successfully");
     navigate("/login");
+  };
+
+  const getTicketAppUrl = (path) => {
+    const token = localStorage.getItem('token');
+    let userStr = localStorage.getItem('user');
+
+    // Remove large fields (like student_photo) to prevent HTTP 431 Header Too Large errors
+    try {
+      const userObj = JSON.parse(userStr);
+      if (userObj) {
+        // Filter out photo or other large fields
+        const { student_photo, ...safeUser } = userObj;
+        userStr = JSON.stringify(safeUser);
+      }
+    } catch (e) {
+      console.error('Error parsing user object for SSO', e);
+    }
+
+    return `${TICKET_APP_URL}/auth-callback?token=${token}&user=${encodeURIComponent(userStr)}&redirect=${path}`;
   };
 
   // Get allowed modules based on user role and permissions
@@ -407,6 +433,26 @@ const AdminLayout = () => {
                         {item.subItems.map((subItem, index) => {
                           const isSubActive =
                             location.pathname === subItem.path;
+
+                          if (subItem.isExternal) {
+                            return (
+                              <a
+                                key={subItem.path}
+                                href={subItem.isTicketApp ? getTicketAppUrl(subItem.path) : subItem.path}
+                                className={`
+                                    flex items-center rounded-md transition-all duration-200 touch-manipulation
+                                    gap-2 px-2 py-1.5 text-[11px] font-medium relative min-h-[36px]
+                                    text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm
+                                  `}
+                              >
+                                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                                <span className="whitespace-nowrap">
+                                  {subItem.label}
+                                </span>
+                              </a>
+                            );
+                          }
+
                           return (
                             <Link
                               key={subItem.path}
@@ -455,6 +501,23 @@ const AdminLayout = () => {
                 );
                 const isActiveState = isActive || hasActiveSubItem;
 
+                if (item.isExternal) {
+                  return (
+                    <a
+                      key={item.path}
+                      href={item.isTicketApp ? getTicketAppUrl(item.subItems ? (item.subItems[0]?.path || item.path) : item.path) : (item.subItems ? (item.subItems[0]?.path || item.path) : item.path)}
+                      className={`
+                          flex items-center justify-center rounded-md transition-colors
+                          px-2 py-3
+                          text-gray-800 hover:bg-blue-100 hover:text-blue-700
+                        `}
+                      title={item.label}
+                    >
+                      <Icon size={20} className="flex-shrink-0" />
+                    </a>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.path}
@@ -472,6 +535,32 @@ const AdminLayout = () => {
                   >
                     <Icon size={20} className="flex-shrink-0" />
                   </Link>
+                );
+              }
+
+              if (item.isExternal) {
+                return (
+                  <a
+                    key={item.path}
+                    href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
+                    className={`
+                        flex items-center rounded-md transition-all duration-200 touch-manipulation
+                        ${sidebarCollapsed ? "justify-center px-1.5 py-2.5" : "gap-2 px-2.5 py-1.5"}
+                        min-h-[36px]
+                        text-gray-800 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700
+                      `}
+                    title={sidebarCollapsed ? item.label : ""}
+                  >
+                    <Icon size={18} className="flex-shrink-0" />
+                    <span
+                      className={`
+                          transition-opacity duration-300 ease-out whitespace-nowrap overflow-hidden text-xs
+                          ${sidebarCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto"}
+                        `}
+                    >
+                      {item.label}
+                    </span>
+                  </a>
                 );
               }
 
