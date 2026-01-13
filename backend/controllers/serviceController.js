@@ -4,6 +4,9 @@ const { sendNotificationToUser } = require("./pushController");
 const { createNotification } = require("../services/notificationService");
 const pdfService = require("../services/pdfService");
 const fs = require("fs");
+const FeeHead = require('../MongoDb-Models/FeeHead');
+const StudentFee = require('../MongoDb-Models/StudentFee');
+const Transaction = require('../MongoDb-Models/Transaction');
 
 // --- Services Configuration (Admin) ---
 
@@ -189,6 +192,61 @@ exports.requestService = async (req, res) => {
       [student_id, service_id, "pending", "pending", request_data],
     );
 
+    // --- ACTIVE SYNC: Create StudentFee Demand Immediately ---
+    try {
+        // 1. Fetch Student Details needed for Fee Record
+        const [stRows] = await masterPool.execute(
+            'SELECT admission_number, student_name, course, branch, current_year, current_semester, student_data FROM students WHERE id = ?',
+            [student_id]
+        );
+        
+        if (stRows.length > 0) {
+            const student = stRows[0];
+            let collegeName = 'Pydah Group';
+            // Try to extract college from student_data if available
+            if (student.student_data) {
+                try {
+                    const sd = typeof student.student_data === 'string' ? JSON.parse(student.student_data) : student.student_data;
+                    if (sd.college || sd.College) collegeName = sd.college || sd.College;
+                } catch(e) {}
+            }
+
+            // 2. Find/Create Fee Head
+            let ssFeeHead = await FeeHead.findOne({ code: 'SSF' });
+            if (!ssFeeHead) {
+                ssFeeHead = await FeeHead.create({
+                     name: 'Student Services FEE',
+                     code: 'SSF',
+                     description: 'Fees For the Student Services',
+                     type: 'Individual',
+                     frequency: 'Adhoc',
+                     isActive: true
+                });
+            }
+
+            // 3. Create Fee Demand
+            const expectedRemarks = `Service Request: ${service[0].name} (Ref: ${result.insertId})`;
+            await StudentFee.create({
+                 studentId: student.admission_number, // Use Admission Number for Mongo
+                 studentName: student.student_name,
+                 feeHead: ssFeeHead._id,
+                 college: collegeName,
+                 course: student.course || 'NA',
+                 branch: student.branch || 'NA',
+                 academicYear: '2024-2025', 
+                 studentYear: student.current_year || 1,
+                 semester: student.current_semester || 1,
+                 amount: Number(service[0].price),
+                 remarks: expectedRemarks
+            });
+            console.log(`[ACTIVE SYNC] Created Service Fee Demand for ${student.admission_number}: ${service[0].name}`);
+        }
+    } catch (syncError) {
+        console.error('[ACTIVE SYNC WARNING] Failed to create fee demand:', syncError);
+        // Don't fail the request, JIT sync will catch it later
+    }
+    // -------------------------------------------------------
+
     res.status(201).json({
       success: true,
       message: "Service requested successfully. Please complete payment.",
@@ -199,6 +257,77 @@ exports.requestService = async (req, res) => {
     console.error("Error requesting service:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
+};
+
+// DELETE Service Request (Student)
+exports.deleteServiceRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const student_id = req.user.id; // Internal ID from auth middleware
+
+        // 1. Fetch Request
+        const [requests] = await masterPool.execute(
+            'SELECT * FROM service_requests WHERE id = ?',
+            [id]
+        );
+
+        if (requests.length === 0) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        const request = requests[0];
+
+        // 2. Authorization Check (Must be own request)
+        if (request.student_id !== student_id) {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        // 3. Status Check (Must be pending/pending)
+        if (request.status !== 'pending' || request.payment_status === 'paid') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Cannot delete processed or paid requests.' 
+            });
+        }
+
+        // 4. Delete from MySQL
+        await masterPool.execute('DELETE FROM service_requests WHERE id = ?', [id]);
+
+        // --- ACTIVE SYNC: Remove StudentFee Demand ---
+        try {
+             // We need to find the fee with remarks containing "Ref: {id}"
+             // And ensuring it's for this student (though Ref ID is unique enough globally or contextually)
+             // Getting admission number from user object (assuming req.user populated with it or we need to fetch)
+             // But student_id is internal ID. We need admission number for mongo.
+             
+             // Fetch admission number first? Or we can search loosely if we are confident?
+             // Safest is to fetch student admission number using student_id
+             const [sRows] = await masterPool.execute('SELECT admission_number FROM students WHERE id = ?', [student_id]);
+             if (sRows.length > 0) {
+                 const admissionNumber = sRows[0].admission_number;
+                 
+                 // Find SSF Head
+                 const ssFeeHead = await FeeHead.findOne({ code: 'SSF' });
+                 if (ssFeeHead) {
+                     await StudentFee.findOneAndDelete({
+                         studentId: admissionNumber,
+                         feeHead: ssFeeHead._id,
+                         remarks: { $regex: `Ref: ${id}\\)` } // Matches "(Ref: 123)"
+                     });
+                     console.log(`[ACTIVE SYNC] Deleted Service Fee Demand for Ref: ${id}`);
+                 }
+             }
+        } catch (syncError) {
+             console.error('[ACTIVE SYNC WARNING] Failed to delete fee demand:', syncError);
+        }
+        // ---------------------------------------------
+
+        res.json({ success: true, message: 'Request deleted successfully' });
+
+    } catch (error) {
+        console.error('Error deleting service request:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
 };
 
 // Create Request (Admin on behalf of Student)
@@ -375,6 +504,73 @@ exports.getServiceRequests = async (req, res) => {
     query += " ORDER BY sr.request_date DESC";
 
     const [rows] = await masterPool.execute(query, params);
+
+    // --- SMART SYNC: Check Payment Status against Fee Ledger ---
+    // This allows external/manual payments to auto-update the request status
+    try {
+        const pendingRequests = rows.filter(r => r.payment_status === 'pending');
+        
+        if (pendingRequests.length > 0) {
+            const ssFeeHead = await FeeHead.findOne({ code: 'SSF' });
+            
+            if (ssFeeHead) {
+                // We'll check each pending request
+                const updates = pendingRequests.map(async (req) => {
+                    // Find the fee demand for this specific request
+                    // We need strict matching on Ref ID
+                    const feeRecord = await StudentFee.findOne({
+                        studentId: req.admission_number, // Ensure admission_number is fetched in the query
+                        feeHead: ssFeeHead._id,
+                        remarks: { $regex: `Ref: ${req.id}` } // Matches "...(Ref: 123)..."
+                    });
+
+                    if (feeRecord) {
+                        // Calculate total paid for this fee
+                        // We need transactions for this specific fee record
+                        // Or if we trust the feeRecord.paidAmount if you have an aggregated field (assuming NO aggregated field in schema based on previous files)
+                        // We must sum transactions.
+                        const transactions = await Transaction.find({
+                            studentId: req.admission_number,
+                            feeHead: ssFeeHead._id,
+                            studentYear: feeRecord.studentYear,
+                            // Strict match on remarks for this transaction to avoid club/other mixups? 
+                            // Actually, feeController usually links tx to fee details. 
+                            // But simplify: If existing logic worked, we just sum credits.
+                            // BUT wait, `StudentFee` doesn't track paid amount directly usually? 
+                            // Let's assume we need to sum transactions.
+                        });
+
+                        // Filter transactions that strictly match THIS service request Ref ID
+                        // This prevents cross-paying other service requests
+                        const relevantTxs = transactions.filter(tx => 
+                            tx.remarks && (tx.remarks.includes(`Ref: ${req.id}`) || tx.remarks.includes(`SR-${req.id}`))
+                        );
+                        
+                        const totalPaid = relevantTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                        const due = feeRecord.amount - totalPaid;
+
+                        if (due <= 0) {
+                           // It's PAID!
+                           // 1. Update MySQL
+                           await masterPool.execute(
+                               'UPDATE service_requests SET payment_status = ? WHERE id = ?',
+                               ['paid', req.id]
+                           );
+                           // 2. Update Local Object so Admin sees it immediately
+                           req.payment_status = 'paid';
+                           console.log(`[AUTO-SYNC] Marked Service Request #${req.id} as PAID based on Fee Ledger.`);
+                        }
+                    }
+                });
+
+                await Promise.all(updates);
+            }
+        }
+    } catch (syncError) {
+        console.error('[AUTO-SYNC WARNING] Failed to sync payments:', syncError);
+        // Fail gracefully, return rows as is
+    }
+    // -----------------------------------------------------------
 
     res.json({
       success: true,

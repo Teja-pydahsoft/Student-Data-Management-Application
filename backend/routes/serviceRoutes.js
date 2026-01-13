@@ -35,6 +35,9 @@ router.delete('/:id', verifyPermission(MODULES.SERVICES, 'manage_config'), servi
 // Student Request (Student Role Only)
 router.post('/requests', serviceController.requestService);
 
+// Delete Request (Student Role Only)
+router.delete('/requests/:id', serviceController.deleteServiceRequest);
+
 // Admin Create Request (Admin Only)
 router.post('/requests/admin', verifyPermission(MODULES.SERVICES, 'manage_requests'), serviceController.createRequestByAdmin);
 

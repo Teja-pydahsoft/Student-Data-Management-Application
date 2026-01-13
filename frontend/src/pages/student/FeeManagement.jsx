@@ -417,21 +417,46 @@ const FeeManagement = () => {
                                         if (transactions) {
                                             transactions.forEach(tx => {
                                                 // Link transaction to fee item by feeHead and year/sem
-                                                if (tx.feeHead?._id === inv.feeHead?._id &&
-                                                    tx.studentYear?.toString() === inv.studentYear?.toString() &&
-                                                    (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
+                                                // OR if it's a Service Fee, loosely match by Reference ID even if FeeHead is missing (Legacy/Error fallback)
+
+                                                const isServiceFee = inv.feeHead?.code === 'SSF' || inv.feeHead?.name === 'Student Services FEE';
+                                                let isServiceMatch = false;
+
+                                                if (isServiceFee && inv.remarks) {
+                                                    const refMatch = inv.remarks.match(/\(Ref: (\d+)\)/);
+                                                    if (refMatch) {
+                                                        const refId = refMatch[1];
+                                                        // Check if transaction has this Ref ID
+                                                        if (tx.remarks && (tx.remarks.includes(`Ref: ${refId}`) || tx.remarks.includes(`SR-${refId}`))) {
+                                                            isServiceMatch = true;
+                                                        }
+                                                    }
+                                                }
+
+                                                // Primary Match (Fee Head & Year) OR Service Match (Ref ID)
+                                                if (
+                                                    (tx.feeHead?._id === inv.feeHead?._id &&
+                                                        tx.studentYear?.toString() === inv.studentYear?.toString() &&
+                                                        (!inv.semester || tx.semester?.toString() === inv.semester?.toString()))
+                                                    || isServiceMatch
                                                 ) {
-                                                    // Strict check for Club Fees to avoid cross-paying
+                                                    // Strict check for Club Fees
                                                     const isClubFee = inv.feeHead?.name?.toLowerCase().includes('club');
                                                     if (isClubFee && inv.remarks) {
-                                                        // Extract just the club name from "Club Fee: Coding Club" -> "Coding Club"
-                                                        // Or match if tx.remarks contains the specific unique part of inv.remarks
                                                         const clubNameMatch = inv.remarks.match(/Club Fee:\s*(.+)/i);
                                                         const clubName = clubNameMatch ? clubNameMatch[1] : inv.remarks;
-
-                                                        // If transaction remarks don't contain the club name, skip it
                                                         if (!tx.remarks || !tx.remarks.toLowerCase().includes(clubName.toLowerCase())) {
                                                             return;
+                                                        }
+                                                    }
+
+                                                    // Service Fee Ref Check (Already done in isServiceMatch, but if we matched by Feehead, we MUST still verify Ref to prevent cross-pay)
+                                                    if (isServiceFee && !isServiceMatch && inv.remarks) {
+                                                        const refMatch = inv.remarks.match(/\(Ref: (\d+)\)/);
+                                                        if (refMatch) {
+                                                            const refId = refMatch[1];
+                                                            const hasRef = tx.remarks && (tx.remarks.includes(`Ref: ${refId}`) || tx.remarks.includes(`SR-${refId}`));
+                                                            if (!hasRef) return;
                                                         }
                                                     }
 
@@ -447,6 +472,22 @@ const FeeManagement = () => {
                                         const itemDue = Math.max(0, inv.amount - itemPaid);
                                         const isFullyPaid = itemDue <= 0;
 
+                                        // --- DISPLAY NAME LOGIC ---
+                                        // If Service Fee, extract real name from remarks
+                                        let displayName = inv.feeHead?.name || 'Tuition Fee';
+                                        let displaySubtext = inv.remarks || 'Standard Fee';
+
+                                        // Service Fee Display Override
+                                        if (inv.feeHead?.code === 'SSF' || inv.feeHead?.name === 'Student Services FEE') {
+                                            // Remarks format: "Service Request: Name (Ref: 123)"
+                                            const nameMatch = inv.remarks?.match(/Service Request: (.*?) \(Ref:/);
+                                            if (nameMatch && nameMatch[1]) {
+                                                displayName = nameMatch[1]; // "Bonafide Certificate"
+                                                displaySubtext = "Student Service Fee";
+                                            }
+                                        }
+                                        // --------------------------
+
                                         return (
                                             <tr key={index} className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="px-4 py-3">
@@ -455,8 +496,8 @@ const FeeManagement = () => {
                                                             <FileText size={16} />
                                                         </div>
                                                         <div>
-                                                            <p className="font-medium text-gray-900">{inv.feeHead?.name || 'Tuition Fee'}</p>
-                                                            <p className="text-xs text-gray-500 line-clamp-1">{inv.remarks || 'Standard Fee'}</p>
+                                                            <p className="font-medium text-gray-900">{displayName}</p>
+                                                            <p className="text-xs text-gray-500 line-clamp-1">{displaySubtext}</p>
                                                             <div className="flex flex-wrap gap-2 mt-1">
                                                                 {inv.isStructure ? (
                                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
@@ -534,9 +575,24 @@ const FeeManagement = () => {
                                     let itemPaid = 0;
                                     if (transactions) {
                                         transactions.forEach(tx => {
-                                            if (tx.feeHead?._id === inv.feeHead?._id &&
-                                                tx.studentYear?.toString() === inv.studentYear?.toString() &&
-                                                (!inv.semester || tx.semester?.toString() === inv.semester?.toString())
+                                            const isServiceFee = inv.feeHead?.code === 'SSF' || inv.feeHead?.name === 'Student Services FEE';
+                                            let isServiceMatch = false;
+
+                                            if (isServiceFee && inv.remarks) {
+                                                const refMatch = inv.remarks.match(/\(Ref: (\d+)\)/);
+                                                if (refMatch) {
+                                                    const refId = refMatch[1];
+                                                    if (tx.remarks && (tx.remarks.includes(`Ref: ${refId}`) || tx.remarks.includes(`SR-${refId}`))) {
+                                                        isServiceMatch = true;
+                                                    }
+                                                }
+                                            }
+
+                                            if (
+                                                (tx.feeHead?._id === inv.feeHead?._id &&
+                                                    tx.studentYear?.toString() === inv.studentYear?.toString() &&
+                                                    (!inv.semester || tx.semester?.toString() === inv.semester?.toString()))
+                                                || isServiceMatch
                                             ) {
                                                 // Strict check for Club Fees to avoid cross-paying
                                                 const isClubFee = inv.feeHead?.name?.toLowerCase().includes('club');
@@ -549,6 +605,16 @@ const FeeManagement = () => {
                                                     }
                                                 }
 
+                                                // Service Fee Ref Check (If matched by FeeHead, verify Ref)
+                                                if (isServiceFee && !isServiceMatch && inv.remarks) {
+                                                    const refMatch = inv.remarks.match(/\(Ref: (\d+)\)/);
+                                                    if (refMatch) {
+                                                        const refId = refMatch[1];
+                                                        const hasRef = tx.remarks && (tx.remarks.includes(`Ref: ${refId}`) || tx.remarks.includes(`SR-${refId}`));
+                                                        if (!hasRef) return;
+                                                    }
+                                                }
+
                                                 itemPaid += Number(tx.amount) || 0;
                                             }
                                         });
@@ -556,6 +622,19 @@ const FeeManagement = () => {
 
                                     const itemDue = Math.max(0, inv.amount - itemPaid);
                                     const isFullyPaid = itemDue <= 0;
+
+                                    // --- DISPLAY NAME LOGIC (Mobile) ---
+                                    let displayName = inv.feeHead?.name || 'Tuition Fee';
+                                    let displaySubtext = inv.remarks || 'Standard Fee';
+
+                                    if (inv.feeHead?.code === 'SSF' || inv.feeHead?.name === 'Student Services FEE') {
+                                        const nameMatch = inv.remarks?.match(/Service Request: (.*?) \(Ref:/);
+                                        if (nameMatch && nameMatch[1]) {
+                                            displayName = nameMatch[1];
+                                            displaySubtext = "Student Service Fee";
+                                        }
+                                    }
+                                    // -----------------------------------
 
                                     return (
                                         <div key={index} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
@@ -565,8 +644,8 @@ const FeeManagement = () => {
                                                         <FileText size={16} />
                                                     </div>
                                                     <div>
-                                                        <h4 className="font-bold text-gray-900 text-sm">{inv.feeHead?.name || 'Tuition Fee'}</h4>
-                                                        <span className="text-xs text-gray-500">Year {inv.studentYear} {inv.semester ? `- Sem ${inv.semester}` : ''}</span>
+                                                        <h4 className="font-bold text-gray-900 text-sm">{displayName}</h4>
+                                                        <span className="text-xs text-gray-500">{displaySubtext}</span>
                                                     </div>
                                                 </div>
                                                 {isFullyPaid ? (

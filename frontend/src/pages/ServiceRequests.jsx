@@ -433,6 +433,7 @@ const ServiceRequests = () => {
                                 <th className="px-6 py-4">Student</th>
                                 <th className="px-6 py-4">Mobile</th>
                                 <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4">Payment</th>
                                 <th className="px-6 py-4">Dates</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
@@ -462,6 +463,11 @@ const ServiceRequests = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             {getStatusBadge(req.status)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${req.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                                                {req.payment_status || 'pending'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500">
                                             <div>Req: {new Date(req.request_date).toLocaleDateString()}</div>

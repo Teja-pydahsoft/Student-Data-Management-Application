@@ -323,6 +323,150 @@ exports.getStudentFeeDetails = async (req, res) => {
         // Continue execution - do not fail the whole request
     }
     // -------------------------
+    // --- JIT SERVICE REQUEST SYNC (Refined) ---
+    // Rule: Request = Due (Demand). Payment = Transaction. Request Deleted = Due Deleted.
+    try {
+        // A. Fetch ALL Active Service Requests for this student
+        let internalStudentId = null;
+        if (typeof sRow !== 'undefined' && sRow.length > 0) {
+            internalStudentId = sRow[0].id;
+        } else {
+             const [sRowNow] = await masterPool.query('SELECT id FROM students WHERE admission_number = ?', [studentId]);
+             if (sRowNow.length > 0) internalStudentId = sRowNow[0].id;
+        }
+
+        if (internalStudentId) {
+             const [allRequests] = await masterPool.query(`
+                SELECT sr.id, sr.service_id, sr.payment_status, sr.status, s.name, s.price 
+                FROM service_requests sr
+                JOIN services s ON sr.service_id = s.id
+                WHERE sr.student_id = ? 
+            `, [internalStudentId]);
+
+             // B. Find "Student Services FEE" Head
+             let ssFeeHead = await FeeHead.findOne({ code: 'SSF' });
+             if (!ssFeeHead) {
+                 ssFeeHead = await FeeHead.create({
+                     name: 'Student Services FEE',
+                     code: 'SSF',
+                     description: 'Fees For the Student Services',
+                     type: 'Individual',
+                     frequency: 'Adhoc',
+                     isActive: true
+                 });
+             }
+
+             const activeRequestIds = new Set();
+
+             // C. Sync Each Request (Create Demand & Transaction if needed)
+             for (const req of allRequests) {
+                 activeRequestIds.add(req.id);
+                 const expectedRemarks = `Service Request: ${req.name} (Ref: ${req.id})`;
+                 
+                 // 1. Check/Create Demand (Due)
+                 // We simply check if it exists.
+                 const feeExists = await StudentFee.exists({
+                     studentId: studentId,
+                     feeHead: ssFeeHead._id,
+                     remarks: expectedRemarks
+                 });
+
+                 if (!feeExists) {
+                     await StudentFee.create({
+                         studentId: studentId,
+                         studentName: student.student_name || 'Student',
+                         feeHead: ssFeeHead._id,
+                         college: collegeName || 'NA',
+                         course: student.course || 'NA',
+                         branch: student.branch || 'NA',
+                         academicYear: '2024-2025', 
+                         studentYear: student.current_year || 1,
+                         semester: student.current_semester || 1,
+                         amount: Number(req.price),
+                         remarks: expectedRemarks
+                     });
+                     console.log(`[JIT SYNC] Created Service Fee Demand for ${studentId}: ${req.name}`);
+                 }
+
+                 // 2. Check/Create Transaction (Payment) ONLY if paid
+                 // 2. CHECK & SYNC TRANSACTIONS (Robust Deduplication)
+                 if (req.payment_status === 'paid') {
+                     // Robust Search: Find ANY transaction related to this Request ID
+                     // Matches: referenceNo "SR-123" OR remarks containing "Ref: 123"
+                     // We use a regex for the remarks to cover various formats
+                     const relatedTxs = await Transaction.find({
+                        studentId: studentId,
+                        feeHead: ssFeeHead._id,
+                        $or: [
+                            { referenceNo: `SR-${req.id}` },
+                            { remarks: { $regex: new RegExp(`Ref:\\s*${req.id}`, 'i') } }
+                        ]
+                     });
+
+                     let realPayment = null;
+                     let syncedPayment = null;
+
+                     relatedTxs.forEach(tx => {
+                         if (tx.collectedBy === 'system_sync' || (tx.remarks && tx.remarks.includes('- Synced'))) {
+                             syncedPayment = tx;
+                         } else {
+                             realPayment = tx;
+                         }
+                     });
+
+                     if (realPayment && syncedPayment) {
+                         // DUPLICATE DETECTED: We have a real payment (Razorpay/Cash) AND a Synced one.
+                         // Delete the Synced one to fix the "Double Count / Adjustment" issue.
+                         await Transaction.findByIdAndDelete(syncedPayment._id);
+                         console.log(`[JIT SYNC] Removed duplicate 'Synced' transaction for Ref: ${req.id} (Real payment exists)`);
+                     } else if (!realPayment && !syncedPayment) {
+                         // MISSING: Payment is marked 'paid' in SQL but no Transaction in Mongo.
+                         // Create 'Synced' transaction.
+                         // NOTE: Use 'Net Banking' to avoid Frontend treating it as 'Adjustment' (Credit/+).
+                         await Transaction.create({
+                             studentId: studentId,
+                             studentName: student.student_name,
+                             amount: Number(req.price),
+                             transactionType: 'DEBIT',
+                             paymentMode: 'Net Banking', // Avoid 'Adjustment'
+                             referenceNo: `SR-${req.id}`,
+                             remarks: `Service Request Payment: ${req.name} (Ref: ${req.id}) - Synced`,
+                             feeHead: ssFeeHead._id,
+                             studentYear: (student.current_year || 1).toString(),
+                             semester: (student.current_semester || 1).toString(),
+                             paymentDate: new Date(),
+                             collectedBy: 'system_sync',
+                             collectedByName: 'System JIT Sync'
+                         });
+                         console.log(`[JIT SYNC] Created Payment Transaction for ${studentId}: ${req.name}`);
+                     }
+                 }
+             }
+
+             // D. Cleanup Orphaned Fees (Request Deleted -> Due Deleted)
+             // Fetch all SSF fees for this student
+             const existingServiceFees = await StudentFee.find({
+                 studentId: studentId,
+                 feeHead: ssFeeHead._id
+             });
+
+             for (const fee of existingServiceFees) {
+                 // Extract Request ID from remarks "Service Request: ... (Ref: 123)"
+                 const match = fee.remarks.match(/\(Ref: (\d+)\)/);
+                 if (match && match[1]) {
+                     const refId = parseInt(match[1]);
+                     if (!activeRequestIds.has(refId)) {
+                         // This fee corresponds to a request that no longer exists in MySQL
+                         await StudentFee.findByIdAndDelete(fee._id);
+                         console.log(`[JIT SYNC] Deleted Orphaned Service Fee for ${studentId} (Ref: ${refId})`);
+                     }
+                 }
+             }
+        }
+    } catch (jitError) {
+        console.error('[JIT Error] Failed to sync service fees:', jitError);
+    }
+    // -------------------------
 
     const query = {
       course: student.course,

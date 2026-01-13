@@ -218,8 +218,33 @@ exports.verifyPayment = async (req, res) => {
             bankRRN = paymentDetails.acquirer_data.rrn || paymentDetails.acquirer_data.bank_transaction_id || paymentDetails.acquirer_data.upi_transaction_id || '';
         }
 
+        // --- SERVICE FEE LINKING (CRITICAL FOR SYNC) ---
+        // If this is a service request, we MUST link it to the 'SSF' Fee Head
+        // so the Fee Ledger can match it against the checking demand.
+        let finalFeeHeadId = feeHeadId || null;
+        let finalRemarks = remarks || `Online Payment via Razorpay (${razorpay_payment_id})`;
+
+        if (req.body.serviceRequestId || (remarks && remarks.toLowerCase().includes('service request'))) {
+            try {
+                const ssFeeHead = await FeeHead.findOne({ code: 'SSF' });
+                if (ssFeeHead) {
+                    finalFeeHeadId = ssFeeHead._id;
+                    console.log(`[PAYMENT] Linked Transaction to FeeHead: SSF (${ssFeeHead._id})`);
+                }
+                
+                // Ensure proper formatting for matching: "Service Request: <Name> (Ref: <ID>)"
+                // If we have the ID but remarks are generic, fix them.
+                if (req.body.serviceRequestId && !finalRemarks.includes('Ref:')) {
+                     finalRemarks += ` (Ref: ${req.body.serviceRequestId})`;
+                }
+            } catch (e) {
+                console.error('[PAYMENT] Failed to link FeeHead SSF:', e);
+            }
+        }
+        // -----------------------------------------------
+
         const newTransaction = new Transaction({
-            studentId,
+            studentId, // This is the Admission Number (from req.body)
             studentName: student.student_name,
             amount: Number(amount),
             transactionType: 'DEBIT', // Payment Received (System specific: DEBIT=Payment)
@@ -227,8 +252,8 @@ exports.verifyPayment = async (req, res) => {
             referenceNo: bankRRN || razorpay_payment_id, // Store Bank RRN as primary reference, fallback to pay_id if not found
             gatewayPaymentId: razorpay_payment_id, // Store Razorpay Payment ID specifically
             referenceOrderId: razorpay_order_id,
-            remarks: remarks || `Online Payment via Razorpay (${razorpay_payment_id})`,
-            feeHead: feeHeadId || null,
+            remarks: finalRemarks,
+            feeHead: finalFeeHeadId,
             studentYear: (studentYear || student.current_year)?.toString(),
             semester: (semester || student.current_semester)?.toString(),
             paymentConfigId: paymentConfig._id,
@@ -280,6 +305,41 @@ exports.verifyPayment = async (req, res) => {
             } catch (clubUpdateError) {
                 console.error('[PAYMENT] Error updating club member status:', clubUpdateError);
                 // Non-blocking
+            }
+        }
+        // -----------------------------
+
+        // --- SERVICE REQUEST UPDATE LOGIC ---
+        // Check if this payment is for a Service Request (we can pass serviceRequestId in body or check remarks)
+        const { serviceRequestId } = req.body; // Expecting this from frontend
+        if (serviceRequestId) {
+             try {
+                // Verify amount matches? 
+                // We assume amount was correct at order creation.
+                // Just update status
+                await masterPool.query(
+                    'UPDATE service_requests SET payment_status = ?, status = ? WHERE id = ?',
+                    ['paid', 'processing', serviceRequestId]
+                );
+                console.log(`[PAYMENT] Updated Service Request ${serviceRequestId} to "paid"`);
+
+             } catch (serviceUpdateError) {
+                 console.error('[PAYMENT] Error updating service request status:', serviceUpdateError);
+             }
+        } else if (remarks && remarks.toLowerCase().includes('service request payment')) {
+            // Fallback: If serviceRequestId wasn't passed but remarks has it "Service Request Payment: Name (Ref: ID)"
+            try {
+                const match = remarks.match(/Ref: (\d+)/i);
+                if (match && match[1]) {
+                    const extractedId = match[1];
+                     await masterPool.query(
+                        'UPDATE service_requests SET payment_status = ?, status = ? WHERE id = ?',
+                        ['paid', 'processing', extractedId]
+                    );
+                    console.log(`[PAYMENT] Updated Service Request ${extractedId} to "paid" (Extracted from remarks)`);
+                }
+            } catch (e) {
+                 console.error('[PAYMENT] Error parsing service request ID from remarks:', e);
             }
         }
         // -----------------------------

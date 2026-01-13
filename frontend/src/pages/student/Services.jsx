@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { serviceService } from '../../services/serviceService';
 import { toast } from 'react-hot-toast';
-import { FileText, Clock, CheckCircle, AlertCircle, Download, CreditCard, X, Plus } from 'lucide-react';
+import { FileText, Clock, CheckCircle, AlertCircle, Download, CreditCard, X, Plus, Trash2 } from 'lucide-react';
 import { SkeletonBox } from '../../components/SkeletonLoader';
 import api from '../../config/api';
+import useAuthStore from '../../store/authStore';
 
 const Services = () => {
     const [services, setServices] = useState([]);
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
+    const { user } = useAuthStore();
     const [activeTab, setActiveTab] = useState('available'); // 'available' or 'history'
 
     // Modal state
@@ -60,18 +62,113 @@ const Services = () => {
         }
     };
 
+    // Load Razorpay Script
+    const loadRazorpayScript = () => {
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
+
     const handlePayment = async (request) => {
         if (!window.confirm(`Proceed to pay ₹${request.service_price} for ${request.service_name}?`)) return;
 
         try {
-            const toastId = toast.loading('Processing payment...');
-            await serviceService.processPayment(request.id);
+            const toastId = toast.loading('Initializing payment...');
+
+            const resScript = await loadRazorpayScript();
+            if (!resScript) {
+                toast.dismiss(toastId);
+                toast.error('Razorpay SDK failed to load');
+                return;
+            }
+
+            // 1. Create Order
+            const orderResponse = await api.post('/payments/create-order', {
+                studentId: user?.admission_number,
+                amount: request.service_price,
+                remarks: `Service Request Payment: ${request.service_name} (Ref: ${request.id})`,
+                serviceRequestId: request.id,
+                serviceName: request.service_name,
+                studentYear: user?.current_year,
+                semester: user?.current_semester
+            });
+
+            if (!orderResponse.data.success) {
+                toast.dismiss(toastId);
+                toast.error(orderResponse.data.message || 'Order creation failed');
+                return;
+            }
+
+            const { order, key_id, studentDetails } = orderResponse.data;
+
+            // 2. Open Razorpay
+            const options = {
+                key: key_id,
+                amount: order.amount,
+                currency: order.currency,
+                name: 'Pydah Group',
+                description: `Payment for ${request.service_name}`,
+                order_id: order.id,
+                handler: async (response) => {
+                    try {
+                        toast.loading('Verifying payment...', { id: toastId });
+                        // 3. Verify Payment
+                        const verifyRes = await api.post('/payments/verify', {
+                            ...response,
+                            studentId: user?.admission_number,
+                            amount: request.service_price,
+                            remarks: `Service Request Payment: ${request.service_name} (Ref: ${request.id})`,
+                            serviceRequestId: request.id,
+                            studentYear: user?.current_year,
+                            semester: user?.current_semester
+                        });
+
+                        if (verifyRes.data.success) {
+                            toast.success('Payment successful!', { id: toastId });
+                            fetchData(); // Refresh to update status
+                        } else {
+                            toast.error(verifyRes.data.message || 'Verification failed', { id: toastId });
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        toast.error('Payment verification failed', { id: toastId });
+                    }
+                },
+                prefill: {
+                    name: studentDetails?.name || user?.name || '',
+                    email: studentDetails?.email || '',
+                    contact: studentDetails?.contact || ''
+                },
+                theme: {
+                    color: '#2563EB'
+                }
+            };
+
+            const paymentObject = new window.Razorpay(options);
+            paymentObject.open();
+
+        } catch (error) {
+            console.error(error);
+            toast.error('Payment initialization failed');
+        }
+    };
+
+    const handleDelete = async (request) => {
+        if (!window.confirm(`Are you sure you want to delete the request for ${request.service_name}?`)) return;
+
+        try {
+            const toastId = toast.loading('Deleting request...');
+            await serviceService.deleteRequest(request.id);
             toast.dismiss(toastId);
-            toast.success('Payment successful!');
+            toast.success('Request deleted successfully');
             fetchData();
         } catch (error) {
             console.error(error);
-            toast.error('Payment failed');
+            toast.error(error.response?.data?.message || 'Delete failed');
         }
     };
 
@@ -193,6 +290,7 @@ const Services = () => {
                                     <th className="px-6 py-4">Date</th>
                                     <th className="px-6 py-4">Purpose</th>
                                     <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Payment</th>
                                     <th className="px-6 py-4 text-right">Action</th>
                                 </tr>
                             </thead>
@@ -205,11 +303,12 @@ const Services = () => {
                                             <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-24" /></td>
                                             <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-40" /></td>
                                             <td className="px-6 py-4"><SkeletonBox height="h-6" width="w-24" className="rounded-full" /></td>
+                                            <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-24" className="rounded-full" /></td>
                                             <td className="px-6 py-4"><SkeletonBox height="h-4" width="w-20" /></td>
                                         </tr>
                                     ))
                                 ) : requests.length === 0 ? (
-                                    <tr><td colSpan="6" className="p-12 text-center text-gray-500">No requests found</td></tr>
+                                    <tr><td colSpan="7" className="p-12 text-center text-gray-500">No requests found</td></tr>
                                 ) : (
                                     requests.map(req => (
                                         <tr key={req.id} className="hover:bg-gray-50">
@@ -229,10 +328,35 @@ const Services = () => {
                                             <td className="px-6 py-4">
                                                 <StatusBadge status={req.status} paymentStatus={req.payment_status} />
                                             </td>
+                                            <td className="px-6 py-4">
+                                                {req.payment_status === 'paid' ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase">
+                                                        Paid
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-red-50 text-red-600 rounded-full text-xs font-bold uppercase">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4 text-right">
                                                 {/* Actions handled by Admin now. Student just views status */}
                                                 {req.payment_status === 'pending' ? (
-                                                    <span className="text-xs text-orange-600 font-medium">Pay at Office</span>
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleDelete(req)}
+                                                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition"
+                                                            title="Delete Request"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePayment(req)}
+                                                            className="inline-flex items-center gap-1 text-xs text-white font-medium bg-blue-600 px-3 py-1.5 rounded hover:bg-blue-700 transition shadow-sm"
+                                                        >
+                                                            <CreditCard size={12} /> Pay Now
+                                                        </button>
+                                                    </div>
                                                 ) : req.status === 'ready_to_collect' ? (
                                                     <span className="text-xs text-purple-600 font-medium">Ready for Collection</span>
                                                 ) : (
@@ -290,10 +414,34 @@ const Services = () => {
                                         </p>
 
                                         <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
-                                            <StatusBadge status={req.status} paymentStatus={req.payment_status} />
+                                            <div className="flex gap-2">
+                                                <StatusBadge status={req.status} paymentStatus={req.payment_status} />
+                                                {req.payment_status === 'paid' ? (
+                                                    <span className="inline-flex items-center px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase">
+                                                        Paid
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-[10px] font-bold uppercase">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </div>
 
                                             {req.payment_status === 'pending' ? (
-                                                <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded">Pay at Office</span>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleDelete(req)}
+                                                        className="text-xs text-red-600 font-medium bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 transition shadow-sm flex items-center gap-1"
+                                                    >
+                                                        <Trash2 size={12} /> Delete
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handlePayment(req)}
+                                                        className="text-xs text-white font-medium bg-blue-600 px-3 py-1.5 rounded hover:bg-blue-700 transition shadow-sm flex items-center gap-1"
+                                                    >
+                                                        <CreditCard size={12} /> Pay Now
+                                                    </button>
+                                                </div>
                                             ) : req.status === 'ready_to_collect' ? (
                                                 <span className="text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded">Ready</span>
                                             ) : (
