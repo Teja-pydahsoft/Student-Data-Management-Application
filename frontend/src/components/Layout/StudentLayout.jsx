@@ -258,10 +258,10 @@ const StudentLayout = ({ children }) => {
 
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-8 space-y-1.5 overflow-y-auto custom-scrollbar">
-                        {navItems.map((item) => (
+                        {navItems.map((item, index) => (
                             item.isExternal ? (
                                 <a
-                                    key={item.path}
+                                    key={`${item.path}-${index}`}
                                     href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
                                     className={`
                                       relative flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 group
@@ -274,7 +274,7 @@ const StudentLayout = ({ children }) => {
                                 </a>
                             ) : (
                                 <NavLink
-                                    key={item.path}
+                                    key={`${item.path}-${index}`}
                                     to={item.path}
                                     onClick={(e) => handleNavigation(e, item.path)}
                                     className={({ isActive }) => `

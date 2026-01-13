@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 
 import { motion } from 'framer-motion';
 import { SkeletonBox } from '../../components/SkeletonLoader';
+import '../../styles/student-pages.css';
 
 const RaiseTicket = () => {
     const navigate = useNavigate();
@@ -124,30 +125,25 @@ const RaiseTicket = () => {
 
     if (categoriesLoading) {
         return (
-            <div className="max-w-3xl mx-auto p-6 space-y-6 animate-pulse">
-                <div className="space-y-2">
+            <div className="student-page-container animate-pulse" style={{ maxWidth: '48rem', margin: '0 auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                     <SkeletonBox height="h-8" width="w-48" />
                     <SkeletonBox height="h-4" width="w-72" />
                 </div>
-                <div className="bg-white rounded-lg border p-6 space-y-6">
-                    <div className="space-y-2">
+                <div className="card-base" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         <SkeletonBox height="h-4" width="w-32" />
                         <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
                     </div>
-                    <div className="space-y-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         <SkeletonBox height="h-4" width="w-24" />
                         <SkeletonBox height="h-10" width="w-full" className="rounded-lg" />
                     </div>
-                    <div className="space-y-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         <SkeletonBox height="h-4" width="w-32" />
                         <SkeletonBox height="h-32" width="w-full" className="rounded-lg" />
-                        <SkeletonBox height="h-3" width="w-full" />
                     </div>
                     <SkeletonBox height="h-20" width="w-full" className="rounded-lg" />
-                    <div className="flex gap-4 pt-4 border-t">
-                        <SkeletonBox height="h-12" width="w-full" className="rounded-lg" />
-                        <SkeletonBox height="h-12" width="w-32" className="rounded-lg" />
-                    </div>
                 </div>
             </div>
         );
@@ -157,38 +153,37 @@ const RaiseTicket = () => {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8 pb-12"
+            className="student-page-container"
         >
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-gray-100">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-blue-600 mb-1">
+            <div className="flex-col md:flex-row flex-between pb-2 border-b border-gray-100" style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '0.5rem', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                <div className="page-header" style={{ marginBottom: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2563eb', marginBottom: '0.25rem' }}>
                         <Ticket size={16} />
-                        <span className="text-[10px] uppercase font-bold tracking-[0.2em]">Support Case</span>
+                        <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.2em' }}>Support Case</span>
                     </div>
-                    <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 heading-font tracking-tight">
+                    <h1 className="page-title">
                         Raise a Ticket
                     </h1>
-                    <p className="text-gray-500 text-sm lg:text-base body-font">
+                    <p className="page-subtitle">
                         Submit your details and our team will get back to you shortly
                     </p>
                 </div>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="bg-white rounded-[2rem] border border-gray-100 p-8 lg:p-10 space-y-8 shadow-2xl shadow-gray-100/50 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50/50 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-
+            <form onSubmit={handleSubmit} className="form-container">
                 {/* Category Selection */}
-                <div className="relative z-10">
-                    <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-                        Category <span className="text-red-500">*</span>
+                <div className="form-group">
+                    <label className="form-label">
+                        Category <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <select
                         value={formData.category_id}
                         onChange={(e) => handleCategoryChange(e.target.value)}
                         required
-                        className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-xl input-focus font-medium appearance-none"
+                        className="form-select"
+                        style={{ appearance: 'none' }}
                     >
                         <option value="">Select a category</option>
                         {categories.map((category) => (
@@ -198,7 +193,7 @@ const RaiseTicket = () => {
                         ))}
                     </select>
                     {selectedCategory?.description && (
-                        <p className="mt-2 text-xs text-blue-600 font-semibold px-1 italic">
+                        <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600, paddingLeft: '0.25rem', fontStyle: 'italic' }}>
                             Tip: {selectedCategory.description}
                         </p>
                     )}
@@ -209,15 +204,15 @@ const RaiseTicket = () => {
                     <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
-                        className="relative z-10"
+                        className="form-group"
                     >
-                        <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-                            Specific Issue <span className="text-gray-400 text-xs font-medium ml-1">(Optional)</span>
+                        <label className="form-label">
+                            Specific Issue <span style={{ color: '#9ca3af', fontSize: '0.75rem', fontWeight: 500, marginLeft: '0.25rem' }}>(Optional)</span>
                         </label>
                         <select
                             value={formData.sub_category_id}
                             onChange={(e) => setFormData({ ...formData, sub_category_id: e.target.value })}
-                            className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-xl input-focus font-medium appearance-none"
+                            className="form-select"
                         >
                             <option value="">Select a sub-category</option>
                             {selectedCategory.sub_categories.map((subCategory) => (
@@ -230,9 +225,9 @@ const RaiseTicket = () => {
                 )}
 
                 {/* Title */}
-                <div className="relative z-10">
-                    <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-                        Subject Line <span className="text-red-500">*</span>
+                <div className="form-group">
+                    <label className="form-label">
+                        Subject Line <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <input
                         type="text"
@@ -240,14 +235,14 @@ const RaiseTicket = () => {
                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                         required
                         placeholder="What's the issue?"
-                        className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-xl input-focus font-medium"
+                        className="form-input"
                     />
                 </div>
 
                 {/* Description */}
-                <div className="relative z-10">
-                    <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-                        Detailed Description <span className="text-red-500">*</span>
+                <div className="form-group">
+                    <label className="form-label">
+                        Detailed Description <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <textarea
                         value={formData.description}
@@ -255,44 +250,45 @@ const RaiseTicket = () => {
                         required
                         rows={5}
                         placeholder="Please provide as much detail as possible to help us resolve this quickly..."
-                        className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-xl input-focus font-medium resize-none shadow-inner"
+                        className="form-textarea"
+                        style={{ resize: 'none' }}
                     />
                 </div>
 
                 {/* Photo Upload */}
-                <div className="relative z-10">
-                    <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-                        Attachment <span className="text-gray-400 text-xs font-medium ml-1">(Optional)</span>
+                <div className="form-group">
+                    <label className="form-label">
+                        Attachment <span style={{ color: '#9ca3af', fontSize: '0.75rem', fontWeight: 500, marginLeft: '0.25rem' }}>(Optional)</span>
                     </label>
                     {!photoPreview ? (
-                        <div className="group border-2 border-dashed border-gray-200 rounded-3xl p-10 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer">
+                        <div className="photo-upload-box">
                             <input
                                 type="file"
                                 id="photo-upload"
                                 accept="image/*"
                                 onChange={handlePhotoChange}
-                                className="hidden"
+                                style={{ display: 'none' }}
                             />
-                            <label htmlFor="photo-upload" className="cursor-pointer block">
-                                <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:bg-blue-100 transition-all">
-                                    <Camera className="text-gray-400 group-hover:text-blue-600" size={32} />
+                            <label htmlFor="photo-upload" style={{ cursor: 'pointer', display: 'block' }}>
+                                <div style={{ width: '4rem', height: '4rem', backgroundColor: '#f9fafb', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                                    <Camera size={32} color="#9ca3af" />
                                 </div>
-                                <p className="text-base text-gray-900 font-bold mb-1">Click or drag photo</p>
-                                <p className="text-xs text-gray-500 font-medium tracking-wide">JPG, PNG up to 5MB</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.25rem' }}>Click or drag photo</p>
+                                <p style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500, letterSpacing: '0.025em' }}>JPG, PNG up to 5MB</p>
                             </label>
                         </div>
                     ) : (
-                        <div className="relative group overflow-hidden rounded-3xl border-2 border-blue-100 ring-8 ring-blue-50/50">
+                        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '1.5rem', border: '2px solid #dbeafe', padding: '0.5rem' }}>
                             <img
                                 src={photoPreview}
                                 alt="Preview"
-                                className="w-full max-h-72 object-cover transition-transform group-hover:scale-105 duration-500"
+                                style={{ width: '100%', maxHeight: '18rem', objectFit: 'cover', borderRadius: '1rem' }}
                             />
-                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', opacity: 0, transition: 'opacity 0.2s', ':hover': { opacity: 1 } }} className="group-hover:opacity-100">
                                 <button
                                     type="button"
                                     onClick={removePhoto}
-                                    className="p-3 bg-red-600 text-white rounded-2xl hover:bg-red-700 shadow-xl transform transition-all active:scale-90"
+                                    style={{ padding: '0.75rem', backgroundColor: '#dc2626', color: 'white', borderRadius: '1rem', border: 'none', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
                                 >
                                     <X size={24} />
                                 </button>
@@ -302,11 +298,12 @@ const RaiseTicket = () => {
                 </div>
 
                 {/* Submit Button */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 relative z-10">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingTop: '1rem', position: 'relative', zIndex: 10 }}>
                     <button
                         type="submit"
                         disabled={createMutation.isPending}
-                        className="w-full sm:flex-1 px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg btn-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg shadow-blue-200 transition-all group"
+                        className="btn-primary"
+                        style={{ width: '100%', padding: '1rem', fontSize: '1.125rem' }}
                     >
                         {createMutation.isPending ? (
                             <>
@@ -315,19 +312,25 @@ const RaiseTicket = () => {
                             </>
                         ) : (
                             <>
-                                <Sparkles size={22} className="group-hover:animate-pulse text-blue-200" />
+                                <Sparkles size={22} style={{ color: '#bfdbfe' }} />
                                 <span>Submit Ticket</span>
-                                <Plus size={22} className="transition-transform group-hover:rotate-90" />
+                                <Plus size={22} />
                             </>
                         )}
                     </button>
                     <button
                         type="button"
                         onClick={() => navigate('/student/my-tickets')}
-                        className="w-full sm:w-auto px-8 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all active:scale-95 shadow-sm"
+                        className="btn-secondary"
+                        style={{ width: '100%', backgroundColor: '#f3f4f6', color: '#374151' }}
                     >
                         Cancel
                     </button>
+                    <style>{`
+                        .btn-secondary:hover {
+                            background-color: #e5e7eb !important;
+                        }
+                    `}</style>
                 </div>
             </form>
 
@@ -336,26 +339,26 @@ const RaiseTicket = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-6 lg:p-8"
+                style={{ background: 'linear-gradient(to bottom right, #eff6ff, #e0e7ff)', border: '1px solid #dbeafe', borderRadius: '1.5rem', padding: '1.5rem 2rem' }}
             >
-                <div className="flex items-start gap-4">
-                    <div className="p-3 bg-white rounded-2xl text-blue-600 shadow-sm border border-blue-100">
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                    <div style={{ padding: '0.75rem', backgroundColor: 'white', borderRadius: '1rem', color: '#2563eb', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
                         <AlertCircle size={24} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-blue-900 mb-2 italic">What's next?</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-                            <div className="space-y-1">
-                                <p className="text-[10px] uppercase font-black text-blue-400 tracking-tighter">Phase 01</p>
-                                <p className="text-sm font-bold text-blue-800 leading-tight">Review by administration</p>
+                        <h3 className="heading-font" style={{ fontSize: '1.125rem', fontWeight: 900, color: '#1e3a8a', marginBottom: '0.5rem', fontStyle: 'italic' }}>What's next?</h3>
+                        <div className="stats-grid" style={{ marginTop: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <p style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#60a5fa', letterSpacing: '0.05em' }}>Phase 01</p>
+                                <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e40af', lineHeight: 1.25 }}>Review by administration</p>
                             </div>
-                            <div className="space-y-1">
-                                <p className="text-[10px] uppercase font-black text-blue-400 tracking-tighter">Phase 02</p>
-                                <p className="text-sm font-bold text-blue-800 leading-tight">Resource allocation</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <p style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#60a5fa', letterSpacing: '0.05em' }}>Phase 02</p>
+                                <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e40af', lineHeight: 1.25 }}>Resource allocation</p>
                             </div>
-                            <div className="space-y-1">
-                                <p className="text-[10px] uppercase font-black text-blue-400 tracking-tighter">Phase 03</p>
-                                <p className="text-sm font-bold text-blue-800 leading-tight">Solution & Feedback</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <p style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#60a5fa', letterSpacing: '0.05em' }}>Phase 03</p>
+                                <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e40af', lineHeight: 1.25 }}>Solution & Feedback</p>
                             </div>
                         </div>
                     </div>

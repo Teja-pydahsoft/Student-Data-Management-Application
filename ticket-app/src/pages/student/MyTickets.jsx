@@ -8,23 +8,22 @@ import {
     Eye,
     Clock,
     CheckCircle,
-    XCircle,
-    AlertCircle,
+    X,
     MessageSquare,
     Star,
     Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../config/api';
-
 import toast from 'react-hot-toast';
+import '../../styles/student-pages.css';
 
-const STATUS_COLORS = {
-    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    approaching: 'bg-blue-100 text-blue-800 border-blue-200',
-    resolving: 'bg-purple-100 text-purple-800 border-purple-200',
-    completed: 'bg-green-100 text-green-800 border-green-200',
-    closed: 'bg-gray-100 text-gray-800 border-gray-200'
+const STATUS_CLASSES = {
+    pending: 'status-pending',
+    approaching: 'status-active',
+    resolving: 'status-active',
+    completed: 'status-completed',
+    closed: 'status-pending'
 };
 
 const STATUS_LABELS = {
@@ -44,7 +43,7 @@ const MyTickets = () => {
     const { data: ticketsData, isLoading } = useQuery({
         queryKey: ['student-tickets'],
         queryFn: async () => {
-            const response = await api.get('/tickets/student/my-tickets');
+            const response = await api.get('/tickets/student');
             return response.data?.data || [];
         }
     });
@@ -92,34 +91,18 @@ const MyTickets = () => {
 
     if (isLoading) {
         return (
-            <div className="max-w-6xl mx-auto p-6 space-y-6 animate-pulse">
-                <div className="flex items-center justify-between">
-                    <div className="space-y-2">
+            <div className="student-page-container animate-pulse">
+                <div className="flex-between">
+                    <div className="page-header">
                         <SkeletonBox height="h-8" width="w-48" />
                         <SkeletonBox height="h-4" width="w-64" />
                     </div>
                     <SkeletonBox height="h-10" width="w-40" />
                 </div>
-                <div className="space-y-4">
+                <div className="flex-col" style={{ gap: '1rem' }}>
                     {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="bg-white rounded-lg border p-6">
-                            <div className="flex justify-between items-start">
-                                <div className="flex-1 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <SkeletonBox height="h-6" width="w-64" />
-                                        <SkeletonBox height="h-6" width="w-24" className="rounded-full" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <SkeletonBox height="h-4" width="w-48" />
-                                        <SkeletonBox height="h-4" width="w-56" />
-                                        <SkeletonBox height="h-4" width="w-40" />
-                                    </div>
-                                    <SkeletonBox height="h-16" width="w-full" className="rounded-lg" />
-                                </div>
-                                <div className="ml-4">
-                                    <SkeletonBox height="h-10" width="w-10" className="rounded-lg" />
-                                </div>
-                            </div>
+                        <div key={i} className="ticket-item">
+                            <SkeletonBox height="h-16" width="w-full" />
                         </div>
                     ))}
                 </div>
@@ -131,27 +114,27 @@ const MyTickets = () => {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8 pb-12"
+            className="student-page-container"
         >
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-gray-100">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-blue-600 mb-1">
+            <div className="flex-col md:flex-row flex-between pb-2 border-b border-gray-100" style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '1rem', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                <div className="page-header" style={{ marginBottom: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2563eb', marginBottom: '0.25rem' }}>
                         <Ticket size={16} />
-                        <span className="text-[10px] uppercase font-bold tracking-[0.2em]">Support Center</span>
+                        <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.2em' }}>Support Center</span>
                     </div>
-                    <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 heading-font tracking-tight">
+                    <h1 className="page-title">
                         My Tickets
                     </h1>
-                    <p className="text-gray-500 text-sm lg:text-base body-font">
+                    <p className="page-subtitle">
                         Track and manage your assistance requests
                     </p>
                 </div>
                 <Link
                     to="/student/raise-ticket"
-                    className="group inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold btn-hover shadow-lg shadow-blue-100 transition-all"
+                    className="btn-primary"
                 >
-                    <Plus size={20} className="transition-transform group-hover:rotate-90 duration-300" />
+                    <Plus size={20} />
                     <span>Raise New Ticket</span>
                 </Link>
             </div>
@@ -163,80 +146,76 @@ const MyTickets = () => {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="relative overflow-hidden bg-white rounded-[2rem] border border-gray-100 p-12 lg:p-20 text-center shadow-2xl shadow-gray-100/50"
+                        className="empty-state"
                     >
-                        {/* Background Decoration */}
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50/50 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-50/50 rounded-full -ml-32 -mb-32 blur-3xl"></div>
-
                         <div className="relative z-10 max-w-md mx-auto">
-                            <div className="w-24 h-24 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner rotate-3 group hover:rotate-6 transition-transform">
-                                <Ticket className="text-blue-600" size={48} />
+                            <div className="empty-state-icon">
+                                <Ticket className="text-blue-600" size={48} color="#2563eb" />
                             </div>
-                            <h3 className="text-2xl lg:text-3xl font-black text-gray-900 mb-4 heading-font">
+                            <h3 className="heading-font" style={{ fontSize: '1.875rem', fontWeight: 900, color: '#111827', marginBottom: '1rem' }}>
                                 No Active Tickets
                             </h3>
-                            <p className="text-gray-500 mb-10 leading-relaxed font-medium">
+                            <p className="body-font" style={{ color: '#6b7280', marginBottom: '2.5rem', fontWeight: 500, lineHeight: 1.6 }}>
                                 Everything looks good! You haven't raised any complaints or assistance requests yet.
                             </p>
                             <Link
                                 to="/student/raise-ticket"
-                                className="inline-flex items-center gap-3 px-8 py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black shadow-2xl shadow-gray-200 transition-all hover:-translate-y-1 active:scale-95 group"
+                                className="btn-secondary"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 2rem' }}
                             >
-                                <Sparkles size={20} className="text-blue-400 group-hover:animate-pulse" />
+                                <Sparkles size={20} color="#60a5fa" />
                                 <span>Create Your First Ticket</span>
                                 <Plus size={20} />
                             </Link>
                         </div>
                     </motion.div>
                 ) : (
-                    <div className="grid grid-cols-1 gap-5">
+                    <div className="flex-col" style={{ gap: '1.25rem' }}>
                         {tickets.map((ticket, index) => (
                             <motion.div
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: index * 0.05 }}
                                 key={ticket.id}
-                                className="bg-white rounded-xl border border-gray-100 p-6 relative overflow-hidden group card-hover"
+                                className="ticket-item"
+                                style={{ position: 'relative', overflow: 'hidden' }}
                             >
-                                <div className={`absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-full -mr-12 -mt-12 transition-transform group-hover:scale-110`}></div>
-                                {/* Card content same as before but with slightly cleaner layout */}
-                                <div className="flex items-start justify-between relative z-10">
-                                    <div className="flex-1">
-                                        <div className="flex flex-wrap items-center gap-3 mb-4">
-                                            <h3 className="text-xl font-bold text-gray-900 heading-font group-hover:text-blue-600 transition-colors">{ticket.title}</h3>
-                                            <span className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm ${STATUS_COLORS[ticket.status] || 'bg-gray-100'}`}>
+                                <div className="flex-start" style={{ width: '100%', gap: '1.5rem', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="flex-start" style={{ gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                            <h3 className="heading-font" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>{ticket.title}</h3>
+                                            <span className={`status-badge ${STATUS_CLASSES[ticket.status] || 'status-pending'}`}>
                                                 {STATUS_LABELS[ticket.status] || ticket.status}
                                             </span>
                                         </div>
 
-                                        <div className="flex flex-wrap gap-4 mb-4">
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">ID:</span>
-                                                <code className="text-xs font-mono font-bold text-blue-600">{ticket.ticket_number}</code>
+                                        <div className="flex-start" style={{ gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #f3f4f6' }}>
+                                                <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>ID:</span>
+                                                <code style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2563eb' }}>{ticket.ticket_number}</code>
                                             </div>
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Type:</span>
-                                                <span className="text-xs font-bold text-gray-700">{ticket.category_name}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #f3f4f6' }}>
+                                                <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Type:</span>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>{ticket.category_name}</span>
                                             </div>
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                                                <Clock size={12} className="text-gray-400" />
-                                                <span className="text-xs font-bold text-gray-600">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #f3f4f6' }}>
+                                                <Clock size={12} color="#9ca3af" />
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>{new Date(ticket.created_at).toLocaleDateString()}</span>
                                             </div>
                                         </div>
 
                                         {ticket.description && (
-                                            <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed max-w-3xl italic">"{ticket.description}"</p>
+                                            <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5, fontStyle: 'italic', maxWidth: '40rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>"{ticket.description}"</p>
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-3 ml-6 self-center relative z-10">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', alignSelf: 'center' }}>
                                         <button
                                             onClick={() => setSelectedTicket(ticket)}
-                                            className="p-3 text-blue-600 bg-blue-50 rounded-xl transition-all shadow-sm group/btn active:scale-90"
+                                            style={{ padding: '0.75rem', color: '#2563eb', backgroundColor: '#eff6ff', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}
                                             title="View Details"
                                         >
-                                            <Eye size={22} className="group-hover/btn:scale-110 transition-transform" />
+                                            <Eye size={22} />
                                         </button>
 
                                         {ticket.status === 'completed' && !ticket.feedback && (
@@ -245,7 +224,8 @@ const MyTickets = () => {
                                                     setSelectedTicket(ticket);
                                                     setShowFeedbackModal(true);
                                                 }}
-                                                className="px-5 py-2.5 bg-green-600 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-green-100 btn-hover"
+                                                className="btn-primary"
+                                                style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)' }}
                                             >
                                                 <MessageSquare size={18} />
                                                 Feedback
@@ -296,108 +276,107 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 lg:p-8"
+            className="modal-overlay"
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-white rounded-[2.5rem] max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20 relative"
+                className="modal-content"
             >
                 {/* Header Container */}
-                <div className="sticky top-0 bg-white/80 backdrop-blur-md z-20 px-8 py-6 border-b border-gray-100 flex items-center justify-between">
+                <div className="modal-header">
                     <div>
-                        <h2 className="text-2xl font-black text-gray-900 heading-font">Ticket Details</h2>
-                        <p className="text-xs text-blue-600 font-bold tracking-widest uppercase mt-0.5">Reference: {ticket.ticket_number}</p>
+                        <h2 className="heading-font" style={{ fontSize: '1.5rem', fontWeight: 900, color: '#111827' }}>Ticket Details</h2>
+                        <p style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: '0.125rem' }}>Reference: {ticket.ticket_number}</p>
                     </div>
-                    <button onClick={onClose} className="p-3 bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900 rounded-2xl transition-all active:scale-95 shadow-sm">
+                    <button onClick={onClose} style={{ padding: '0.75rem', backgroundColor: '#f3f4f6', color: '#6b7280', borderRadius: '1rem', border: 'none', cursor: 'pointer' }}>
                         <X size={24} />
                     </button>
                 </div>
 
-                <div className="p-8 lg:p-10 space-y-10">
+                <div style={{ padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
                     {/* Status Ribbon */}
-                    <div className="flex flex-wrap items-center gap-4">
-                        <div className={`px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest border shadow-sm ${STATUS_COLORS[ticket.status] || 'bg-gray-100'}`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div className={`status-badge ${STATUS_CLASSES[ticket.status] || 'status-pending'}`} style={{ fontSize: '0.75rem', padding: '0.5rem 1.5rem' }}>
                             {STATUS_LABELS[ticket.status] || ticket.status}
                         </div>
-                        <div className="flex items-center gap-2 text-gray-400 text-sm font-medium">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af', fontSize: '0.875rem', fontWeight: 500 }}>
                             <Clock size={16} />
                             <span>Created {new Date(ticket.created_at).toLocaleString()}</span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase font-black text-gray-400 tracking-tighter">Category & Type</label>
-                                <p className="text-lg font-bold text-gray-900">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Category & Type</label>
+                                <p style={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827' }}>
                                     {ticket.category_name}
-                                    {ticket.sub_category_name && <span className="text-blue-600 ml-2">› {ticket.sub_category_name}</span>}
+                                    {ticket.sub_category_name && <span style={{ color: '#2563eb', marginLeft: '0.5rem' }}>› {ticket.sub_category_name}</span>}
                                 </p>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase font-black text-gray-400 tracking-tighter">Subject</label>
-                                <p className="text-lg font-bold text-gray-900 leading-tight">{ticket.title}</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Subject</label>
+                                <p style={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>{ticket.title}</p>
                             </div>
                         </div>
 
                         {ticket.photo_url && (
-                            <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-black text-gray-400 tracking-tighter">Evidence / Attachment</label>
-                                <div className="rounded-3xl overflow-hidden border-4 border-gray-50 shadow-inner group">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Evidence / Attachment</label>
+                                <div style={{ borderRadius: '1.5rem', overflow: 'hidden', border: '4px solid #f9fafb', boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.06)' }}>
                                     <img
                                         src={ticket.photo_url}
                                         alt="Ticket attachment"
-                                        className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                                        style={{ width: '100%', height: '12rem', objectFit: 'cover' }}
                                     />
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-[10px] uppercase font-black text-gray-400 tracking-tighter">Detailed Description</label>
-                        <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100">
-                            <p className="text-gray-700 leading-relaxed font-medium whitespace-pre-wrap italic">"{ticket.description}"</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Detailed Description</label>
+                        <div style={{ padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '1.5rem', border: '1px solid #f3f4f6' }}>
+                            <p style={{ color: '#374151', lineHeight: 1.6, fontWeight: 500, whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>"{ticket.description}"</p>
                         </div>
                     </div>
 
                     {/* Feedback Display if exists */}
                     {ticket.feedback && (
-                        <div className="p-8 bg-green-50 rounded-[2rem] border border-green-200 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-10">
-                                <Star size={80} className="text-green-600" />
-                            </div>
-                            <h4 className="text-lg font-black text-green-900 mb-4 flex items-center gap-2">
+                        <div style={{ padding: '2rem', backgroundColor: '#f0fdf4', borderRadius: '2rem', border: '1px solid #bbf7d0', position: 'relative', overflow: 'hidden' }}>
+                            <h4 style={{ fontSize: '1.125rem', fontWeight: 900, color: '#14532d', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <MessageSquare size={20} />
                                 Your Feedback
                             </h4>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="flex gap-1">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                <div style={{ display: 'flex', gap: '0.25rem' }}>
                                     {[1, 2, 3, 4, 5].map((star) => (
                                         <Star
                                             key={star}
                                             size={20}
-                                            className={star <= ticket.feedback.rating ? "fill-green-600 text-green-600" : "text-green-200"}
+                                            className={star <= ticket.feedback.rating ? "text-green-600" : "text-green-200"}
+                                            fill={star <= ticket.feedback.rating ? "currentColor" : "none"}
                                         />
                                     ))}
                                 </div>
-                                <span className="font-black text-green-700 ml-2 text-xl">{ticket.feedback.rating}/5</span>
+                                <span style={{ fontWeight: 900, color: '#15803d', marginLeft: '0.5rem', fontSize: '1.25rem' }}>{ticket.feedback.rating}/5</span>
                             </div>
                             {ticket.feedback.feedback_text && (
-                                <p className="text-green-800 font-medium leading-relaxed italic">"{ticket.feedback.feedback_text}"</p>
+                                <p style={{ color: '#166534', fontWeight: 500, lineHeight: 1.6, fontStyle: 'italic' }}>"{ticket.feedback.feedback_text}"</p>
                             )}
                         </div>
                     )}
 
                     {/* Footer Actions */}
-                    <div className="pt-8 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
+                    <div style={{ paddingTop: '2rem', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             {ticket.status === 'completed' && !ticket.feedback && (
                                 <button
                                     onClick={onFeedback}
-                                    className="px-8 py-3 bg-green-600 text-white rounded-2xl font-black hover:bg-green-700 transition-all shadow-lg shadow-green-100 flex items-center gap-2 active:scale-95"
+                                    className="btn-primary"
+                                    style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', paddingLeft: '2rem', paddingRight: '2rem' }}
                                 >
                                     <Star size={18} />
                                     Rate Resolution
@@ -406,7 +385,7 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
                         </div>
                         <button
                             onClick={onClose}
-                            className="w-full sm:w-auto px-8 py-3 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black transition-all active:scale-95"
+                            className="btn-secondary"
                         >
                             Close Details
                         </button>
@@ -423,63 +402,67 @@ const FeedbackModal = ({ ticket, form, setForm, onClose, onSubmit, loading }) =>
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4"
+            className="modal-overlay"
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-white rounded-[2.5rem] max-w-md w-full shadow-2xl overflow-hidden"
+                className="modal-content"
+                style={{ maxWidth: '28rem', borderRadius: '2.5rem', overflow: 'hidden' }}
             >
-                <div className="p-8 border-b border-gray-50 text-center">
-                    <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle className="text-green-600" size={32} />
+                <div style={{ padding: '2rem', borderBottom: '1px solid #f9fafb', textAlign: 'center' }}>
+                    <div style={{ width: '4rem', height: '4rem', backgroundColor: '#f0fdf4', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                        <CheckCircle className="text-green-600" size={32} color="#16a34a" />
                     </div>
-                    <h2 className="text-2xl font-black text-gray-900 heading-font">Rate Resolution</h2>
-                    <p className="text-gray-500 font-medium mt-1">How was your experience with Ticket #{ticket.ticket_number}?</p>
+                    <h2 className="heading-font" style={{ fontSize: '1.5rem', fontWeight: 900, color: '#111827' }}>Rate Resolution</h2>
+                    <p style={{ color: '#6b7280', fontWeight: 500, marginTop: '0.25rem' }}>How was your experience with Ticket #{ticket.ticket_number}?</p>
                 </div>
 
-                <div className="p-8 space-y-8">
-                    <div className="text-center">
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Select Rating</label>
-                        <div className="flex items-center justify-center gap-3">
+                <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 900, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1rem' }}>Select Rating</label>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
                             {[1, 2, 3, 4, 5].map((rating) => (
                                 <button
                                     key={rating}
                                     type="button"
                                     onClick={() => setForm({ ...form, rating })}
-                                    className={`group relative p-2 transition-all duration-300 ${form.rating >= rating ? 'scale-125' : 'grayscale opacity-30 hover:grayscale-0 hover:opacity-100 hover:scale-110'}`}
+                                    style={{ background: 'none', border: 'none', padding: '0.5rem', cursor: 'pointer', transform: form.rating >= rating ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.2s' }}
                                 >
                                     <Star
                                         size={40}
-                                        className={form.rating >= rating ? 'fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'text-gray-300'}
+                                        color={form.rating >= rating ? '#facc15' : '#d1d5db'}
+                                        fill={form.rating >= rating ? '#facc15' : 'none'}
                                     />
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] uppercase font-black text-gray-400 tracking-tighter px-1">Detailed Feedback</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em', paddingLeft: '0.25rem' }}>Detailed Feedback</label>
                         <textarea
                             value={form.feedback_text}
                             onChange={(e) => setForm({ ...form, feedback_text: e.target.value })}
-                            className="w-full px-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all outline-none font-medium resize-none"
+                            className="form-textarea"
                             rows={4}
                             placeholder="Tell us what we did great or how we can improve..."
+                            style={{ resize: 'none' }}
                         />
                     </div>
 
-                    <div className="flex flex-col gap-3 pt-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '0.5rem' }}>
                         <button
                             onClick={onSubmit}
                             disabled={loading || !form.rating}
-                            className="w-full py-4 bg-green-600 text-white rounded-2xl font-black text-lg hover:bg-green-700 disabled:opacity-50 transition-all shadow-xl shadow-green-100 active:scale-95"
+                            className="btn-primary"
+                            style={{ width: '100%', padding: '1rem', fontSize: '1.125rem' }}
                         >
                             {loading ? 'Submitting...' : 'Submit Feedback'}
                         </button>
                         <button
                             onClick={onClose}
-                            className="w-full py-3 text-gray-500 font-bold hover:text-gray-900 transition-colors"
+                            style={{ width: '100%', padding: '0.75rem', color: '#6b7280', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}
                         >
                             Maybe Later
                         </button>

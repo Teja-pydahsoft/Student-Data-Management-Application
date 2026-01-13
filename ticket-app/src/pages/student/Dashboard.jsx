@@ -7,13 +7,13 @@ import {
     CheckCircle,
     Plus,
     ArrowRight,
-    AlertCircle,
     Activity,
     Shield
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../config/api';
 import { SkeletonBox } from '../../components/SkeletonLoader';
+import '../../styles/student-pages.css';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -22,17 +22,17 @@ const Dashboard = () => {
     const { data: tickets = [], isLoading } = useQuery({
         queryKey: ['tickets'],
         queryFn: async () => {
-            const response = await api.get('/tickets/student/my-tickets');
+            const response = await api.get('/tickets/student');
             return response.data?.data || [];
         }
     });
 
-    const stats = {
+    const stats = React.useMemo(() => ({
         total: tickets.length,
         pending: tickets.filter(t => t.status === 'pending').length,
-        resolved: tickets.filter(t => t.status === 'completed').length,
+        resolved: tickets.filter(t => ['completed', 'closed'].includes(t.status)).length,
         active: tickets.filter(t => ['approaching', 'resolving'].includes(t.status)).length
-    };
+    }), [tickets]);
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -51,14 +51,14 @@ const Dashboard = () => {
 
     if (isLoading) {
         return (
-            <div className="space-y-8 animate-pulse">
-                <div className="space-y-2">
+            <div className="student-page-container animate-pulse">
+                <div className="page-header">
                     <SkeletonBox height="h-10" width="w-64" />
                     <SkeletonBox height="h-4" width="w-48" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="stats-grid">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="bg-white rounded-[2rem] p-8 border border-gray-100 shadow-sm h-40">
+                        <div key={i} className="stat-card" style={{ height: '160px' }}>
                             <SkeletonBox height="h-4" width="w-24" className="mb-4" />
                             <SkeletonBox height="h-10" width="w-full" />
                         </div>
@@ -73,20 +73,20 @@ const Dashboard = () => {
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="space-y-8 pb-12"
+            className="student-page-container"
         >
             {/* Welcome Header */}
-            <motion.div variants={itemVariants} className="flex flex-col gap-1">
-                <h1 className="text-3xl font-black text-gray-900 heading-font tracking-tight">
-                    Support Dashboard
+            <motion.div variants={itemVariants} className="page-header">
+                <h1 className="page-title">
+                    Ticket Management
                 </h1>
-                <p className="text-gray-500 font-medium">
+                <p className="page-subtitle">
                     Manage and track your support requests and issues.
                 </p>
             </motion.div>
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="stats-grid">
                 {[
                     { label: 'Total Tickets', value: stats.total, icon: Ticket, color: 'blue' },
                     { label: 'Pending', value: stats.pending, icon: Clock, color: 'yellow' },
@@ -96,52 +96,54 @@ const Dashboard = () => {
                     <motion.div
                         key={idx}
                         variants={itemVariants}
-                        className="bg-white rounded-xl p-6 lg:p-8 border border-gray-100 shadow-sm relative overflow-hidden group card-hover"
+                        className="stat-card"
                     >
-                        <div className="relative z-10 flex flex-col gap-4">
-                            <div className={`p-3 rounded-xl w-fit bg-${stat.color}-50 text-${stat.color}-600`}>
+                        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="stat-icon-box" style={{
+                                backgroundColor: stat.color === 'blue' ? '#eff6ff' : stat.color === 'yellow' ? '#fefce8' : stat.color === 'purple' ? '#f3e8ff' : '#f0fdf4',
+                                color: stat.color === 'blue' ? '#2563eb' : stat.color === 'yellow' ? '#ca8a04' : stat.color === 'purple' ? '#9333ea' : '#16a34a'
+                            }}>
                                 <stat.icon size={24} />
                             </div>
                             <div>
-                                <h3 className="text-[10px] lg:text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{stat.label}</h3>
-                                <p className="text-2xl lg:text-3xl font-bold text-gray-900">{stat.value}</p>
+                                <h3 className="stat-label">{stat.label}</h3>
+                                <p className="stat-value">{stat.value}</p>
                             </div>
                         </div>
-                        <div className={`absolute -bottom-4 -right-4 w-20 h-20 bg-${stat.color}-50 rounded-full mix-blend-multiply filter blur-xl opacity-70`}></div>
                     </motion.div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="dashboard-main-grid">
                 {/* Recent Activity */}
-                <motion.div variants={itemVariants} className="lg:col-span-8 space-y-4">
-                    <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-xl font-black text-gray-900 heading-font">Recent Tickets</h2>
-                        <Link to="/student/my-tickets" className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group">
-                            View All <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                <motion.div variants={itemVariants} className="col-span-8 flex-col" style={{ gap: '1rem' }}>
+                    <div className="flex-between mb-4">
+                        <h2 className="heading-font" style={{ fontSize: '1.25rem', fontWeight: 900 }}>Recent Tickets</h2>
+                        <Link to="/student/my-tickets" style={{ fontSize: '0.875rem', fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.25rem', textDecoration: 'none' }}>
+                            View All <ArrowRight size={16} />
                         </Link>
                     </div>
 
                     {tickets.length > 0 ? (
-                        <div className="space-y-4">
+                        <div className="flex-col" style={{ gap: '1rem' }}>
                             {tickets.slice(0, 3).map((ticket) => (
                                 <div
                                     key={ticket.id}
-                                    className="bg-white rounded-[1.5rem] p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+                                    className="ticket-item"
                                     onClick={() => navigate('/student/my-tickets')}
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                    <div className="flex-start" style={{ gap: '1rem' }}>
+                                        <div className="ticket-icon-circle">
                                             <Ticket size={24} />
                                         </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 line-clamp-1">{ticket.title}</h4>
-                                            <p className="text-xs text-gray-500 font-medium tracking-tight">#{ticket.ticket_number} • {new Date(ticket.created_at).toLocaleDateString()}</p>
+                                        <div className="ticket-info">
+                                            <h4>{ticket.title}</h4>
+                                            <p>#{ticket.ticket_number} • {new Date(ticket.created_at).toLocaleDateString()}</p>
                                         </div>
                                     </div>
-                                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest text-center border shadow-sm ${ticket.status === 'completed' ? 'bg-green-50 text-green-700 border-green-100' :
-                                        ['approaching', 'resolving'].includes(ticket.status) ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                            'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                    <div className={`status-badge ${ticket.status === 'completed' ? 'status-completed' :
+                                        ['approaching', 'resolving'].includes(ticket.status) ? 'status-active' :
+                                            'status-pending'
                                         }`}>
                                         {ticket.status}
                                     </div>
@@ -149,15 +151,15 @@ const Dashboard = () => {
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-white rounded-[2rem] border border-dashed border-gray-200 p-12 text-center">
-                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <Shield className="text-blue-600" size={32} />
+                        <div className="card-base" style={{ textAlign: 'center', padding: '3rem', borderStyle: 'dashed' }}>
+                            <div style={{ width: '4rem', height: '4rem', backgroundColor: '#eff6ff', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                                <Shield className="text-blue-600" size={32} color="#2563eb" />
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900">No active tickets</h3>
-                            <p className="text-gray-500 mt-1 mb-6">Your support record is currently clean.</p>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827' }}>No active tickets</h3>
+                            <p style={{ color: '#6b7280', marginTop: '0.25rem', marginBottom: '1.5rem', fontSize: '0.875rem' }}>Your support record is currently clean.</p>
                             <Link
                                 to="/student/raise-ticket"
-                                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all hover:-translate-y-1 active:scale-95"
+                                className="btn-primary"
                             >
                                 <Plus size={20} />
                                 Raise First Ticket
@@ -167,35 +169,30 @@ const Dashboard = () => {
                 </motion.div>
 
                 {/* Quick Actions */}
-                <motion.div variants={itemVariants} className="lg:col-span-4 space-y-6">
-                    <h2 className="text-xl font-bold text-gray-900 heading-font">Quick Actions</h2>
-                    <div className="grid grid-cols-1 gap-4">
+                <motion.div variants={itemVariants} className="col-span-4 flex-col" style={{ gap: '1.5rem' }}>
+                    <h2 className="heading-font" style={{ fontSize: '1.25rem', fontWeight: 700 }}>Quick Actions</h2>
+                    <div className="flex-col" style={{ gap: '1rem' }}>
                         <Link
                             to="/student/raise-ticket"
-                            className="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl text-white shadow-lg shadow-blue-200 group relative overflow-hidden card-hover"
+                            className="action-card primary"
                         >
-                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-                                <Plus size={80} />
-                            </div>
-                            <div className="relative z-10 flex flex-col gap-2">
-                                <div className="p-3 bg-white/20 rounded-xl w-fit backdrop-blur-md mb-2">
+                            <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ padding: '0.75rem', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '0.75rem', width: 'fit-content', backdropFilter: 'blur(4px)' }}>
                                     <Plus size={24} />
                                 </div>
-                                <h3 className="text-xl font-bold uppercase tracking-tight heading-font">Raise Ticket</h3>
-                                <p className="text-blue-100 text-sm font-medium leading-relaxed opacity-90">Need help with something? Let us know immediately and we'll resolve it.</p>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '-0.025em', fontFamily: 'Poppins, sans-serif' }}>Raise Ticket</h3>
+                                <p style={{ fontSize: '0.875rem', fontWeight: 500, opacity: 0.9, lineHeight: 1.5 }}>Need help with something? Let us know immediately and we'll resolve it.</p>
                             </div>
                         </Link>
 
-                        <div className="p-8 bg-white rounded-2xl text-gray-900 relative overflow-hidden group shadow-sm border border-gray-100 card-hover">
-                            <div className="absolute -bottom-8 -right-8 p-4 opacity-5 group-hover:rotate-12 transition-transform">
-                                <Activity size={120} />
-                            </div>
-                            <div className="relative z-10">
-                                <h3 className="text-xl font-bold mb-2 uppercase tracking-tight heading-font">Support Desk</h3>
-                                <p className="text-gray-500 text-sm mb-6 leading-relaxed">Our support team is available 24/7 for urgent academic and facility issues.</p>
+                        <div className="action-card secondary">
+                            <div style={{ position: 'relative', zIndex: 10 }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '-0.025em', fontFamily: 'Poppins, sans-serif' }}>Support Desk</h3>
+                                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>Our support team is available 24/7 for urgent academic and facility issues.</p>
                                 <button
                                     onClick={() => navigate('/student/my-tickets')}
-                                    className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-sm btn-hover"
+                                    className="btn-secondary"
+                                    style={{ width: '100%', fontSize: '0.875rem' }}
                                 >
                                     View FAQ
                                 </button>
