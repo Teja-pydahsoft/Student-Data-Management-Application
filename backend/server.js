@@ -163,6 +163,7 @@ app.use("/api/push", require("./routes/pushRoutes")); // Renaming old /notificat
 // Let's use `/api/web-notifications` for the new internal notification center.
 app.use("/api/web-notifications", require("./routes/notificationRoutes"));
 app.use("/api/clubs", require("./routes/clubRoutes"));
+app.use("/api/transport", require("./routes/transportRoutes"));
 app.use("/api/payments", paymentRoutes);
 app.use("/api/previous-colleges", require("./routes/previousCollegeRoutes"));
 
