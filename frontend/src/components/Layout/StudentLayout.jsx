@@ -194,7 +194,7 @@ const StudentLayout = ({ children }) => {
     const findItem = (path) => navItems.find(item => item.path === path);
 
     const mobilePrimaryItems = mobilePrimaryPaths.map(path => findItem(path)).filter(Boolean);
-    const mobileSecondaryItems = navItems.filter(item => !mobilePrimaryPaths.includes(item.path));
+    const mobileSecondaryItems = navItems.filter(item => !mobilePrimaryPaths.includes(item.path) || item.label === 'Ticket Management');
 
 
     return (

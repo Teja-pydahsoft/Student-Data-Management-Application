@@ -7,7 +7,9 @@ import {
     X,
     AlertCircle,
     CheckCircle,
-    Camera
+    Camera,
+    Sparkles,
+    Plus
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
