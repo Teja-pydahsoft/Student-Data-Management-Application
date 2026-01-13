@@ -208,3 +208,19 @@ CREATE TABLE IF NOT EXISTS clubs (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL
 );
+
+-- Transport Requests Table
+-- Transport Requests Table
+CREATE TABLE IF NOT EXISTS transport_requests (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  admission_number VARCHAR(100),
+  student_name VARCHAR(255),
+  route_id VARCHAR(100) NOT NULL,
+  route_name VARCHAR(255),
+  stage_name VARCHAR(255),
+  bus_id VARCHAR(100),
+  fare DECIMAL(10, 2),
+  status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+  request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

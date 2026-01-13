@@ -21,9 +21,10 @@ import {
     RiCloseLine,
     RiLogoutBoxRLine,
     RiUser3Line,
-    RiUser3Fill,
     RiMore2Fill,
-    RiNotification3Line
+    RiNotification3Line,
+    RiBusLine,
+    RiBusFill
 } from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -147,6 +148,7 @@ const StudentLayout = ({ children }) => {
         { icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Attendance', path: '/student/attendance' },
         { icon: RiFileList3Line, activeIcon: RiFileList3Fill, label: 'Sem Registration', path: '/student/semester-registration' },
         { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
+        { icon: RiBusLine, activeIcon: RiBusFill, label: 'Transport', path: '/student/transport' },
         { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
     ];
 
