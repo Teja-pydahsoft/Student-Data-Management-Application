@@ -41,6 +41,15 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'ticket-backend' });
 });
 
+// Root API route
+app.get('/api', (req, res) => {
+    res.json({
+        message: 'Student Data Management - Ticket API',
+        version: '1.0.0',
+        status: 'running'
+    });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
