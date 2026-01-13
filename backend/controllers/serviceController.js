@@ -734,7 +734,7 @@ exports.downloadCertificate = async (req, res) => {
 
     // Fetch request with service and student details
     const query = `
-            SELECT sr.*, s.name as service_name, s.template_type, st.*,
+            SELECT sr.*, s.name as service_name, s.template_type, s.template_config, st.*,
             c.name as college_name, c.metadata as college_metadata
             FROM service_requests sr
             JOIN services s ON sr.service_id = s.id
