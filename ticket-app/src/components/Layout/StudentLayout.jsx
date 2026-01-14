@@ -189,7 +189,7 @@ const StudentLayout = ({ children }) => {
                 }
                 @media (min-width: 1025px) {
                     .desktop-sidebar { display: flex !important; }
-                    .menu-toggle { display: none !important; }
+                    /* Toggle button visibility is handled by React state */
                 }
                 
                 /* Mobile Bottom Bar */
