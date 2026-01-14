@@ -184,7 +184,7 @@ const StudentLayout = ({ children }) => {
                 /* Desktop Sidebar */
                 @media (max-width: 1024px) {
                     .desktop-sidebar { display: none !important; }
-                    .main-content { margin-left: 0 !important; }
+                    .main-content { margin-left: 0 !important; padding-top: 60px !important; }
                     .menu-toggle { display: block !important; }
                 }
                 @media (min-width: 1025px) {
@@ -203,7 +203,11 @@ const StudentLayout = ({ children }) => {
 
             {/* Background Pattern */}
             <div style={{
-                position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: 0.4,
+                position: 'fixed',
+                inset: 0,
+                zIndex: 0,
+                pointerEvents: 'none',
+                opacity: 0.4,
                 backgroundImage: `radial-gradient(#CBD5E1 1.5px, transparent 1.5px)`,
                 backgroundSize: '24px 24px'
             }} />
@@ -215,7 +219,8 @@ const StudentLayout = ({ children }) => {
                     style={{
                         position: 'fixed', top: '24px', left: '24px', zIndex: 50,
                         padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(255,255,255,0.8)',
-                        border: '1px solid #e5e7eb', cursor: 'pointer', backdropFilter: 'blur(4px)'
+                        border: '1px solid #e5e7eb', cursor: 'pointer', backdropFilter: 'blur(4px)',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                     }}
                     className="menu-toggle"
                 >

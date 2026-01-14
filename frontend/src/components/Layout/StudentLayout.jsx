@@ -453,21 +453,21 @@ const StudentLayout = ({ children }) => {
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-3 mb-6">
+                        <div className="grid grid-cols-4 gap-2 mb-4">
                             {mobileSecondaryItems.map((item) => (
                                 item.isExternal ? (
                                     <a
                                         key={item.path}
                                         href={item.isTicketApp ? getTicketAppUrl(item.path) : item.path}
                                         className={`
-                                            flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
+                                            flex flex-col items-center gap-1.5 p-1.5 rounded-2xl transition-all border
                                             bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95
                                         `}
                                     >
                                         <div className={`p-2 rounded-xl bg-gray-50`}>
-                                            <item.icon size={20} />
+                                            <item.icon size={18} />
                                         </div>
-                                        <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
+                                        <span className="text-[9px] font-bold text-center line-clamp-1 leading-tight w-full">
                                             {item.label}
                                         </span>
                                     </a>
@@ -477,7 +477,7 @@ const StudentLayout = ({ children }) => {
                                         to={item.path}
                                         onClick={(e) => handleNavigation(e, item.path)}
                                         className={({ isActive }) => `
-                                            flex flex-col items-center gap-2 p-2 rounded-2xl transition-all border
+                                            flex flex-col items-center gap-1.5 p-1.5 rounded-2xl transition-all border
                                             ${isActive
                                                 ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200'
                                                 : 'bg-white text-gray-600 border-gray-100 shadow-sm hover:shadow-md active:scale-95'}
@@ -488,9 +488,9 @@ const StudentLayout = ({ children }) => {
                                             return (
                                                 <>
                                                     <div className={`p-2 rounded-xl ${isActive ? 'bg-white/20' : 'bg-gray-50'}`}>
-                                                        <Icon size={20} />
+                                                        <Icon size={18} />
                                                     </div>
-                                                    <span className="text-[10px] font-bold text-center line-clamp-1 leading-tight w-full">
+                                                    <span className="text-[9px] font-bold text-center line-clamp-1 leading-tight w-full">
                                                         {item.label === 'Sem Registration' ? 'Reg.' : item.label}
                                                     </span>
                                                 </>

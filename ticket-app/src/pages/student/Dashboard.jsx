@@ -76,14 +76,15 @@ const Dashboard = () => {
             className="student-page-container"
         >
             {/* Welcome Header */}
-            <motion.div variants={itemVariants} className="page-header">
+            {/* Welcome Header */}
+            <div className="page-header animate-fade-in-up">
                 <h1 className="page-title">
                     Ticket Management
                 </h1>
                 <p className="page-subtitle">
                     Manage and track your support requests and issues.
                 </p>
-            </motion.div>
+            </div>
 
             {/* Stats Overview */}
             <div className="stats-grid">
@@ -97,6 +98,16 @@ const Dashboard = () => {
                         key={idx}
                         variants={itemVariants}
                         className="stat-card"
+                        style={{
+                            background: stat.color === 'blue' ? 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)' :
+                                stat.color === 'yellow' ? 'linear-gradient(135deg, #ffffff 0%, #fefce8 100%)' :
+                                    stat.color === 'purple' ? 'linear-gradient(135deg, #ffffff 0%, #f3e8ff 100%)' :
+                                        'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+                            borderColor: stat.color === 'blue' ? '#bfdbfe' :
+                                stat.color === 'yellow' ? '#fde047' :
+                                    stat.color === 'purple' ? '#e9d5ff' :
+                                        '#bbf7d0'
+                        }}
                     >
                         <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div className="stat-icon-box" style={{

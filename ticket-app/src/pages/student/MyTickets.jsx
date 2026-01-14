@@ -111,11 +111,7 @@ const MyTickets = () => {
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="student-page-container"
-        >
+        <div className="student-page-container animate-fade-in-up">
             {/* Header Section */}
             <div className="flex-col md:flex-row flex-between pb-2 border-b border-gray-100" style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '1rem', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                 <div className="page-header" style={{ marginBottom: 0 }}>
@@ -265,7 +261,7 @@ const MyTickets = () => {
                     loading={feedbackMutation.isPending}
                 />
             )}
-        </motion.div>
+        </div>
     );
 };
 

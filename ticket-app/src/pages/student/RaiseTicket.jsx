@@ -150,11 +150,7 @@ const RaiseTicket = () => {
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="student-page-container"
-        >
+        <div className="student-page-container animate-fade-in-up">
             {/* Header Section */}
             <div className="flex-col md:flex-row flex-between pb-2 border-b border-gray-100" style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '0.5rem', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                 <div className="page-header" style={{ marginBottom: 0 }}>
@@ -201,11 +197,7 @@ const RaiseTicket = () => {
 
                 {/* Sub-Category Selection (if available) */}
                 {selectedCategory && selectedCategory.has_sub_categories && selectedCategory.sub_categories.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="form-group"
-                    >
+                    <div className="form-group animate-fade-in">
                         <label className="form-label">
                             Specific Issue <span style={{ color: '#9ca3af', fontSize: '0.75rem', fontWeight: 500, marginLeft: '0.25rem' }}>(Optional)</span>
                         </label>
@@ -221,7 +213,7 @@ const RaiseTicket = () => {
                                 </option>
                             ))}
                         </select>
-                    </motion.div>
+                    </div>
                 )}
 
                 {/* Title */}
@@ -284,7 +276,7 @@ const RaiseTicket = () => {
                                 alt="Preview"
                                 style={{ width: '100%', maxHeight: '18rem', objectFit: 'cover', borderRadius: '1rem' }}
                             />
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', opacity: 0, transition: 'opacity 0.2s', ':hover': { opacity: 1 } }} className="group-hover:opacity-100">
+                            <div className="group-hover:opacity-100" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', opacity: 0, transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} onMouseLeave={(e) => e.currentTarget.style.opacity = 0}>
                                 <button
                                     type="button"
                                     onClick={removePhoto}
@@ -335,10 +327,8 @@ const RaiseTicket = () => {
             </form>
 
             {/* Info Box */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
+            <div
+                className="animate-fade-in"
                 style={{ background: 'linear-gradient(to bottom right, #eff6ff, #e0e7ff)', border: '1px solid #dbeafe', borderRadius: '1.5rem', padding: '1.5rem 2rem' }}
             >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
@@ -363,8 +353,8 @@ const RaiseTicket = () => {
                         </div>
                     </div>
                 </div>
-            </motion.div>
-        </motion.div>
+            </div>
+        </div>
     );
 };
 

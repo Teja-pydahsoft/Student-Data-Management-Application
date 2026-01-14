@@ -115,8 +115,8 @@
 /* Dashboard Grid */
 .stats-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
 }
 
 @media (min-width: 768px) {
@@ -573,5 +573,8 @@
 
     .student-page-container {
         gap: 1.5rem;
+        overflow-x: hidden;
+        width: 100%;
+        box-sizing: border-box;
     }
 }
