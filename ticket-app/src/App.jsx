@@ -7,10 +7,16 @@ import AdminLayout from './components/Layout/AdminLayout';
 import StudentLayout from './components/Layout/StudentLayout';
 
 // Pages
+// Pages
 import Login from './pages/Login';
-import TicketManagement from './pages/TicketManagement';
-import TaskManagement from './pages/TaskManagement';
 import AuthCallback from './pages/AuthCallback';
+
+// Admin Pages
+import AdminDashboard from './pages/admin/Dashboard';
+import TicketConfiguration from './pages/admin/TicketConfiguration';
+import EmployeeManagement from './pages/admin/EmployeeManagement';
+import TaskManagement from './pages/admin/TaskManagement';
+import SubAdminCreation from './pages/admin/SubAdminCreation';
 
 // Student Pages
 import Dashboard from './pages/student/Dashboard';
@@ -44,6 +50,8 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
   }
 
   if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    // Check if role is sub_admin which might not be in allowedRoles if checking specifically for others
+    // But usually allowedRoles should include sub_admin if they are allowed
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -95,28 +103,21 @@ const App = () => {
         {/* Admin Routes */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={['super_admin', 'admin', 'staff']}>
+            <ProtectedRoute allowedRoles={['super_admin', 'admin', 'staff', 'sub_admin']}>
               <AdminLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<Navigate to="/tickets" replace />} />
-          <Route
-            path="/tickets"
-            element={
-              <ProtectedRoute requiredPermission={FRONTEND_MODULES.TICKETS}>
-                <TicketManagement />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/task-management"
-            element={
-              <ProtectedRoute requiredPermission={FRONTEND_MODULES.TASK_MANAGEMENT}>
-                <TaskManagement />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<AdminDashboard />} />
+
+          <Route path="/configuration" element={<TicketConfiguration />} />
+          <Route path="/employees" element={<EmployeeManagement />} />
+          <Route path="/task-management" element={<TaskManagement />} />
+          <Route path="/sub-admins" element={<SubAdminCreation />} />
+
+          {/* Legacy redirects */}
+          <Route path="/tickets" element={<Navigate to="/task-management" replace />} />
         </Route>
 
         <Route

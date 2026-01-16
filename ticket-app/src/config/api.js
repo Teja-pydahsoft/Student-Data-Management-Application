@@ -11,7 +11,8 @@ if (rawApiUrl) {
     // Ensure it includes /api
     API_BASE_URL = cleanUrl.endsWith('/api') ? cleanUrl : cleanUrl + '/api';
 } else {
-    API_BASE_URL = 'http://localhost:5000/api';
+    // Default to Ticket Backend (5001)
+    API_BASE_URL = 'http://localhost:5001/api';
 }
 
 export const API_URL = API_BASE_URL;

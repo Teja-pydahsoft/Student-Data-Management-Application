@@ -110,28 +110,12 @@ const NAV_ITEMS = [
     permission: FRONTEND_MODULES.REPORTS,
   },
   {
-    path: "/tickets",
+    path: "/dashboard",
     icon: Ticket,
     label: "Ticket Management",
     permission: FRONTEND_MODULES.TICKETS,
     isExternal: true,
     isTicketApp: true,
-    subItems: [
-      {
-        path: "/tickets",
-        label: "Tickets",
-        permission: FRONTEND_MODULES.TICKETS,
-        isExternal: true,
-        isTicketApp: true,
-      },
-      {
-        path: "/task-management",
-        label: "Task Management",
-        permission: FRONTEND_MODULES.TASK_MANAGEMENT,
-        isExternal: true,
-        isTicketApp: true,
-      },
-    ],
   },
   {
     path: "/services",

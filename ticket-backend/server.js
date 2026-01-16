@@ -31,10 +31,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const ticketRoutes = require('./routes/ticketRoutes');
 const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
 const authRoutes = require('./routes/authRoutes');
+const rbacUserRoutes = require('./routes/rbacUserRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
 
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/complaint-categories', complaintCategoryRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/rbac/users', rbacUserRoutes);
+app.use('/api/employees', employeeRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {
@@ -65,13 +69,24 @@ const startServer = async () => {
     // Test Database Connection
     const isConnected = await testConnection();
     if (isConnected) {
+        // Run pending migrations
+        console.log('\n📦 Checking for pending migrations...');
+        try {
+            const { runMigrations } = require('./migrations/migrate');
+            await runMigrations();
+        } catch (error) {
+            console.warn('⚠️  Migration check failed:', error.message);
+            console.warn('Continuing server startup...\n');
+        }
+
         // HTTP 431 Fix: Increase header size limit
         const server = require('http').createServer({
             maxHttpHeaderSize: 32768 // 32KB
         }, app);
 
         server.listen(PORT, () => {
-            console.log(`Ticket Backend Service running on port ${PORT}`);
+            console.log(`\n✅ Ticket Backend Service running on port ${PORT}`);
+            console.log(`🌐 API available at: http://localhost:${PORT}/api`);
         });
     } else {
         console.error('Failed to connect to database. Server not started.');
