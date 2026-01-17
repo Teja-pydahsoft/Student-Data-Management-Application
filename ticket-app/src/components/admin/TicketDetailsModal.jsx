@@ -169,18 +169,58 @@ const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddCo
                                     </button>
                                 </div>
                                 {ticket.assignments && ticket.assignments.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        {ticket.assignments.map((assignment) => (
-                                            <div key={assignment.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem' }}>
-                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', backgroundColor: assignment.assigned_to_role === 'staff' ? '#f3e8ff' : '#eff6ff', color: assignment.assigned_to_role === 'staff' ? '#7e22ce' : '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.75rem' }}>
-                                                    {assignment.assigned_to_name.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1f2937' }}>{assignment.assigned_to_name}</p>
-                                                    <p style={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'capitalize' }}>{assignment.assigned_to_role === 'staff' ? 'Manager' : 'Worker'}</p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                        {/* Managers List (Anyone who is NOT a worker) */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ fontSize: '0.625rem', fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>Managers</label>
+                                            {ticket.assignments.filter(a => (a.assigned_to_role?.toLowerCase() !== 'worker')).length > 0 ? (
+                                                ticket.assignments.filter(a => (a.assigned_to_role?.toLowerCase() !== 'worker')).map((assignment) => (
+                                                    <div key={assignment.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', backgroundColor: '#f3e8ff', borderRadius: '0.75rem', border: '1px solid #e9d5ff' }}>
+                                                        <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', backgroundColor: 'white', color: '#7e22ce', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.75rem', border: '1px solid #d8b4fe' }}>
+                                                            {assignment.assigned_to_name.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1f2937' }}>{assignment.assigned_to_name}</p>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#7e22ce', textTransform: 'uppercase' }}>
+                                                                    {assignment.assigned_to_role === 'staff' ? 'Manager' : assignment.assigned_to_role}
+                                                                </p>
+                                                                <span style={{ fontSize: '0.625rem', color: '#9ca3af' }}>
+                                                                    {new Date(assignment.assigned_at).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic', paddingLeft: '0.5rem' }}>No manager assigned</p>
+                                            )}
+                                        </div>
+
+                                        {/* Workers List */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ fontSize: '0.625rem', fontWeight: 800, color: '#6b7280', textTransform: 'uppercase' }}>Workers</label>
+                                            {ticket.assignments.filter(a => (a.assigned_to_role?.toLowerCase() === 'worker')).length > 0 ? (
+                                                ticket.assignments.filter(a => (a.assigned_to_role?.toLowerCase() === 'worker')).map((assignment) => (
+                                                    <div key={assignment.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', backgroundColor: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #dbeafe' }}>
+                                                        <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', backgroundColor: 'white', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.75rem', border: '1px solid #bfdbfe' }}>
+                                                            {assignment.assigned_to_name.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1f2937' }}>{assignment.assigned_to_name}</p>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase' }}>Worker</p>
+                                                                <span style={{ fontSize: '0.625rem', color: '#9ca3af' }}>
+                                                                    {new Date(assignment.assigned_at).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic', paddingLeft: '0.5rem' }}>No workers assigned</p>
+                                            )}
+                                        </div>
                                     </div>
                                 ) : (
                                     <div style={{ textAlign: 'center', padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', border: '1px dashed #e5e7eb' }}>
