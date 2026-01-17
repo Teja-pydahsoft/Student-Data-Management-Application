@@ -243,15 +243,12 @@ const MyTickets = () => {
 
                                         {ticket.status === 'completed' && !ticket.feedback && (
                                             <button
-                                                onClick={() => {
-                                                    setSelectedTicket(ticket);
-                                                    setShowFeedbackModal(true);
-                                                }}
+                                                onClick={() => setSelectedTicket(ticket)}
                                                 className="btn-primary"
                                                 style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)' }}
                                             >
                                                 <MessageSquare size={18} />
-                                                Feedback
+                                                Review
                                             </button>
                                         )}
                                     </div>
@@ -506,17 +503,19 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback, onReopen }) => {
 
 // Feedback Modal
 const FeedbackModal = ({ ticket, form, setForm, onClose, onSubmit, loading }) => {
-    return (
+    return createPortal(
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="modal-overlay"
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
+            <div style={{ position: 'absolute', inset: 0 }} onClick={onClose} />
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 className="modal-content"
-                style={{ maxWidth: '28rem', borderRadius: '2.5rem', overflow: 'hidden' }}
+                style={{ maxWidth: '28rem', borderRadius: '2.5rem', overflow: 'hidden', position: 'relative', zIndex: 10000, margin: '1rem' }}
             >
                 <div style={{ padding: '2rem', borderBottom: '1px solid #f9fafb', textAlign: 'center' }}>
                     <div style={{ width: '4rem', height: '4rem', backgroundColor: '#f0fdf4', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
@@ -577,7 +576,8 @@ const FeedbackModal = ({ ticket, form, setForm, onClose, onSubmit, loading }) =>
                     </div>
                 </div>
             </motion.div>
-        </motion.div>
+        </motion.div>,
+        document.body
     );
 };
 
