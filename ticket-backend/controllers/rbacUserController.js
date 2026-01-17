@@ -39,12 +39,20 @@ exports.getUsers = async (req, res) => {
 
         const [rows] = await masterPool.query(`
             SELECT 
-                id, name, email, phone, username, role, 
-                is_active, created_at, updated_at,
-                college_id, course_id, branch_id
-            FROM rbac_users 
-            WHERE is_active = 1 
-            ORDER BY created_at DESC
+                u.id, u.name, u.email, u.phone, u.username, u.role, 
+                u.is_active, u.created_at, u.updated_at,
+                u.college_id, u.course_id, u.branch_id,
+                (
+                    SELECT COUNT(DISTINCT ta.ticket_id)
+                    FROM ticket_assignments ta
+                    JOIN tickets t ON ta.ticket_id = t.id
+                    WHERE ta.assigned_to = u.id 
+                    AND ta.is_active = TRUE
+                    AND t.status NOT IN ('closed', 'completed')
+                ) as active_tickets_count
+            FROM rbac_users u
+            WHERE u.is_active = 1 
+            ORDER BY u.created_at DESC
         `);
 
         // If we strictly want to filter by "Ticket App Users", we could add WHERE role IN (...)

@@ -1,4 +1,5 @@
 const { masterPool } = require('../config/database');
+const bcrypt = require('bcryptjs');
 
 /**
  * Get all ticket employees with their RBAC user details
@@ -16,12 +17,20 @@ exports.getEmployees = async (req, res) => {
                 te.assigned_subcategories,
                 te.created_at,
                 te.updated_at,
-                ru.name,
-                ru.email,
-                ru.phone,
-                ru.username
+                COALESCE(te.name, ru.name) as name,
+                COALESCE(te.email, ru.email) as email,
+                COALESCE(te.phone, ru.phone) as phone,
+                COALESCE(te.username, ru.username) as username,
+                (
+                    SELECT COUNT(DISTINCT ta.ticket_id)
+                    FROM ticket_assignments ta
+                    JOIN tickets t ON ta.ticket_id = t.id
+                    WHERE (ta.assigned_to = ru.id OR ta.assigned_to = te.id) 
+                    AND ta.is_active = TRUE
+                    AND t.status NOT IN ('closed', 'completed')
+                ) as active_tickets_count
             FROM ticket_employees te
-            INNER JOIN rbac_users ru ON te.rbac_user_id = ru.id
+            LEFT JOIN rbac_users ru ON te.rbac_user_id = ru.id
             WHERE te.is_active = 1
             ORDER BY te.created_at DESC
         `);
@@ -48,6 +57,9 @@ exports.getEmployees = async (req, res) => {
 
             return {
                 ...row,
+                // Ensure we return consistent ID for assignment logic
+                // If rbac_user_id is missing (worker), we might need to rely on te.id or handle it in frontend
+                // For now, let's keep the structure but note that rbac_user_id might be null
                 assigned_categories: Array.isArray(categories) ? categories : [],
                 assigned_subcategories: Array.isArray(subcategories) ? subcategories : []
             };
@@ -71,122 +83,89 @@ exports.getEmployees = async (req, res) => {
  */
 exports.createEmployee = async (req, res) => {
     try {
-        const { rbac_user_id, role, assigned_categories, assigned_subcategories } = req.body;
+        const { rbac_user_id, role, assigned_categories, assigned_subcategories, name, email, username, password, phone } = req.body;
 
-        if (!rbac_user_id || !role) {
-            return res.status(400).json({
-                success: false,
-                message: 'rbac_user_id and role are required'
-            });
-        }
-
-        if (!['staff', 'worker'].includes(role)) {
+        if (!role || !['staff', 'worker'].includes(role)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid role. Must be staff or worker'
             });
         }
 
-        // Check if user exists in rbac_users
-        const [userCheck] = await masterPool.query(
-            'SELECT id, name FROM rbac_users WHERE id = ?',
-            [rbac_user_id]
-        );
-
-        if (userCheck.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found in RBAC users'
-            });
-        }
-
-        // Check if already assigned
-        const [existingEmployee] = await masterPool.query(
-            'SELECT id FROM ticket_employees WHERE rbac_user_id = ? AND is_active = 1',
-            [rbac_user_id]
-        );
-
-        if (existingEmployee.length > 0) {
-            return res.status(409).json({
-                success: false,
-                message: 'User is already assigned as an employee'
-            });
-        }
-
-        // Prepare category data (only for staff/managers)
-        const categoriesJson = role === 'staff' && assigned_categories ? JSON.stringify(assigned_categories) : null;
-        const subcategoriesJson = role === 'staff' && assigned_subcategories ? JSON.stringify(assigned_subcategories) : null;
-
-        // Create employee assignment
-        const [result] = await masterPool.query(
-            `INSERT INTO ticket_employees (rbac_user_id, role, assigned_categories, assigned_subcategories) 
-             VALUES (?, ?, ?, ?)`,
-            [rbac_user_id, role, categoriesJson, subcategoriesJson]
-        );
-
-        // Sync role to rbac_users
-        await masterPool.query(
-            'UPDATE rbac_users SET role = ? WHERE id = ?',
-            [role, rbac_user_id]
-        );
-
-        // Fetch the created employee with user details
-        const [newEmployee] = await masterPool.query(`
-            SELECT 
-                te.id,
-                te.rbac_user_id,
-                te.role,
-                te.is_active,
-                te.assigned_date,
-                te.assigned_categories,
-                te.assigned_subcategories,
-                ru.name,
-                ru.email,
-                ru.phone,
-                ru.username
-            FROM ticket_employees te
-            INNER JOIN rbac_users ru ON te.rbac_user_id = ru.id
-            WHERE te.id = ?
-        `, [result.insertId]);
-
-        // Safe parse for response
-        let categories = [];
-        let subcategories = [];
-        try {
-            if (newEmployee[0].assigned_categories) {
-                categories = typeof newEmployee[0].assigned_categories === 'string'
-                    ? JSON.parse(newEmployee[0].assigned_categories)
-                    : newEmployee[0].assigned_categories;
+        // Logic split based on role
+        if (role === 'staff') {
+            // STAFF (Manager): Must select existing RBAC user
+            if (!rbac_user_id) {
+                return res.status(400).json({ success: false, message: 'rbac_user_id is required for Managers' });
             }
-            if (newEmployee[0].assigned_subcategories) {
-                subcategories = typeof newEmployee[0].assigned_subcategories === 'string'
-                    ? JSON.parse(newEmployee[0].assigned_subcategories)
-                    : newEmployee[0].assigned_subcategories;
+
+            // Check if user exists in rbac_users
+            const [userCheck] = await masterPool.query('SELECT id, name FROM rbac_users WHERE id = ?', [rbac_user_id]);
+            if (userCheck.length === 0) {
+                return res.status(404).json({ success: false, message: 'User not found in RBAC users' });
             }
-        } catch (e) {
-            console.error('Error parsing categories in creation:', e);
+
+            // Check if already assigned
+            const [existing] = await masterPool.query('SELECT id FROM ticket_employees WHERE rbac_user_id = ? AND is_active = 1', [rbac_user_id]);
+            if (existing.length > 0) {
+                return res.status(409).json({ success: false, message: 'User is already assigned as an employee' });
+            }
+
+            const categoriesJson = assigned_categories ? JSON.stringify(assigned_categories) : null;
+            const subcategoriesJson = assigned_subcategories ? JSON.stringify(assigned_subcategories) : null;
+
+            await masterPool.query(
+                `INSERT INTO ticket_employees (rbac_user_id, role, assigned_categories, assigned_subcategories) VALUES (?, ?, ?, ?)`,
+                [rbac_user_id, role, categoriesJson, subcategoriesJson]
+            );
+
+            // Sync role
+            await masterPool.query('UPDATE rbac_users SET role = ? WHERE id = ?', [role, rbac_user_id]);
+
+        } else if (role === 'worker') {
+            // WORKER: Create standalone Identity in ticket_employees
+            // validate phone is present
+            if (!name || !username || !password || !phone) {
+                return res.status(400).json({ success: false, message: 'Name, username, password, and mobile number are required for Workers' });
+            }
+
+            // Check if username exists in ticket_employees OR rbac_users to avoid confusion
+            const [existingUser] = await masterPool.query(
+                'SELECT id FROM ticket_employees WHERE username = ? UNION SELECT id FROM rbac_users WHERE username = ?',
+                [username, username]
+            );
+            if (existingUser.length > 0) {
+                return res.status(409).json({ success: false, message: 'Username already exists' });
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            // Insert standalone worker
+            await masterPool.query(
+                `INSERT INTO ticket_employees (role, name, email, username, password_hash, phone) VALUES (?, ?, ?, ?, ?, ?)`,
+                [role, name, email || null, username, hashedPassword, phone]
+            );
         }
 
-        const employee = {
-            ...newEmployee[0],
-            assigned_categories: Array.isArray(categories) ? categories : [],
-            assigned_subcategories: Array.isArray(subcategories) ? subcategories : []
-        };
+        // Fetch the created/assigned employee
+        // We need a way to get the ID we just inserted or the rbac_user_id one.
+        // Simplest is to just return success and let UI refresh, or do a quick lookup.
+        // For current flow simplicity:
 
         res.status(201).json({
             success: true,
-            message: 'Employee assigned successfully',
-            data: employee
+            message: role === 'worker' ? 'Worker created successfully' : 'Manager assigned successfully'
         });
 
     } catch (error) {
         console.error('Create Employee Error:', error);
         res.status(500).json({
             success: false,
-            message: error.message || 'Server error creating employee'
+            message: 'Server error creating employee'
         });
     }
 };
+
 
 /**
  * Update employee role

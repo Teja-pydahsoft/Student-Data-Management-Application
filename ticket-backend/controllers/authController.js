@@ -66,13 +66,88 @@ exports.verifyToken = async (req, res) => {
 };
 
 // Unified Login (Optional fallback if direct login is needed in ticket-app)
+// Unified Login
 exports.unifiedLogin = async (req, res) => {
-    // This is a placeholder. Primarily we rely on SSO from the main app.
-    // If we need standalone login, we'd replicate the logic from the main backend here
-    // checking both User and Student tables.
+    try {
+        const { username, password } = req.body;
 
-    res.status(501).json({
-        success: false,
-        message: 'Please login via the Main Student Portal or Admin Portal'
-    });
+        if (!username || !password) {
+            return res.status(400).json({ success: false, message: 'Username and password are required' });
+        }
+
+        // 1. Check RBAC Users (Managers, Admins, etc.)
+        const [rbacUsers] = await require('../config/database').masterPool.query(
+            'SELECT id, username, password, role, name, email FROM rbac_users WHERE username = ? AND is_active = 1',
+            [username]
+        );
+
+        if (rbacUsers.length > 0) {
+            const user = rbacUsers[0];
+            // Verify password (assuming rbac_users use bcrypt)
+            const isMatch = await require('bcryptjs').compare(password, user.password);
+
+            if (isMatch) {
+                const token = jwt.sign(
+                    { id: user.id, role: user.role, username: user.username },
+                    process.env.JWT_SECRET || 'secret_key',
+                    { expiresIn: '24h' }
+                );
+
+                return res.status(200).json({
+                    success: true,
+                    token,
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        role: user.role,
+                        name: user.name,
+                        email: user.email
+                    }
+                });
+            }
+        }
+
+        // 2. Check Ticket Employees (Standalone Workers)
+        const [employees] = await require('../config/database').masterPool.query(
+            'SELECT id, username, password_hash, role, name, email FROM ticket_employees WHERE username = ? AND is_active = 1',
+            [username]
+        );
+
+        if (employees.length > 0) {
+            const employee = employees[0];
+            // Check if this is a standalone worker (role should be worker)
+            if (employee.role === 'worker' && employee.password_hash) {
+                const isMatch = await require('bcryptjs').compare(password, employee.password_hash);
+
+                if (isMatch) {
+                    const token = jwt.sign(
+                        { id: employee.id, role: employee.role, username: employee.username, is_worker: true },
+                        process.env.JWT_SECRET || 'ticket_app_secret',
+                        { expiresIn: '24h' }
+                    );
+
+                    return res.status(200).json({
+                        success: true,
+                        token,
+                        user: {
+                            id: employee.id,
+                            username: employee.username,
+                            role: employee.role,
+                            name: employee.name,
+                            email: employee.email
+                        }
+                    });
+                }
+            }
+        }
+
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error during login'
+        });
+    }
 };

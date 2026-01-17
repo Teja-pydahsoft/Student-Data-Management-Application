@@ -44,6 +44,7 @@ const TaskManagement = () => {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [showCommentModal, setShowCommentModal] = useState(false);
+    const [assignTab, setAssignTab] = useState('managers'); // 'managers' | 'workers'
 
     // Forms state
     const [assignForm, setAssignForm] = useState({ assigned_to: [], notes: '' });
@@ -88,6 +89,14 @@ const TaskManagement = () => {
         queryKey: ['complaint-categories'],
         queryFn: async () => {
             const response = await api.get('/complaint-categories');
+            return response.data?.data || [];
+        }
+    });
+
+    const { data: employeesData } = useQuery({
+        queryKey: ['employees'],
+        queryFn: async () => {
+            const response = await api.get('/employees');
             return response.data?.data || [];
         }
     });
@@ -331,55 +340,131 @@ const TaskManagement = () => {
                             <h2 className="modal-title">Assign Ticket</h2>
                             <button onClick={() => setShowAssignModal(false)} className="modal-close-btn"><XCircle size={24} /></button>
                         </div>
-                        <div className="modal-body">
-                            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl mb-6 p-2 custom-scrollbar bg-gray-50/50">
-                                {usersData?.filter(u => u.role === 'staff').length > 0 && (
-                                    <div className="mb-3">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">Staff (Managers)</h4>
-                                        {usersData.filter(u => u.role === 'staff').map((user) => (
-                                            <label key={user.id} className="flex items-center p-3 hover:bg-white hover:shadow-sm cursor-pointer rounded-lg transition-all border border-transparent hover:border-gray-100 mb-1">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={assignForm.assigned_to.includes(user.id)}
-                                                    onChange={() => {
-                                                        const newAssigned = assignForm.assigned_to.includes(user.id)
-                                                            ? assignForm.assigned_to.filter(id => id !== user.id)
-                                                            : [...assignForm.assigned_to, user.id];
-                                                        setAssignForm({ ...assignForm, assigned_to: newAssigned });
-                                                    }}
-                                                    className="w-5 h-5 text-blue-600 rounded bg-gray-100 border-gray-300 focus:ring-blue-500"
-                                                />
-                                                <div className="ml-3">
-                                                    <div className="font-medium text-gray-900">{user.name}</div>
-                                                    <div className="text-xs text-blue-600 font-medium capitalize">{user.role}</div>
-                                                </div>
-                                            </label>
-                                        ))}
+                        <div className="modal-body p-6">
+                            {/* Tabs */}
+                            <div className="flex items-center p-1 bg-gray-100/80 rounded-xl mb-6 select-none relative z-10">
+                                <button
+                                    onClick={() => setAssignTab('managers')}
+                                    className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ease-out ${assignTab === 'managers'
+                                            ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5'
+                                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                                        }`}
+                                >
+                                    <span>Managers</span>
+                                    <span className={`ml-1.5 text-xs px-2 py-0.5 rounded-full font-bold transition-colors ${assignTab === 'managers' ? 'bg-gray-100 text-gray-900' : 'bg-gray-200/50 text-gray-500'
+                                        }`}>
+                                        {employeesData?.filter(u => u.role === 'staff').length || 0}
+                                    </span>
+                                </button>
+                                <button
+                                    onClick={() => setAssignTab('workers')}
+                                    className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ease-out ${assignTab === 'workers'
+                                            ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5'
+                                            : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                                        }`}
+                                >
+                                    <span>Workers</span>
+                                    <span className={`ml-1.5 text-xs px-2 py-0.5 rounded-full font-bold transition-colors ${assignTab === 'workers' ? 'bg-gray-100 text-gray-900' : 'bg-gray-200/50 text-gray-500'
+                                        }`}>
+                                        {employeesData?.filter(u => u.role === 'worker').length || 0}
+                                    </span>
+                                </button>
+                            </div>
+
+                            <div className="max-h-[320px] overflow-y-auto -mx-2 px-2 custom-scrollbar">
+                                {assignTab === 'managers' && (
+                                    <div className="space-y-1 animate-fade-in">
+                                        {employeesData?.filter(u => u.role === 'staff').length > 0 ? (
+                                            employeesData.filter(u => u.role === 'staff').map((user) => (
+                                                <label key={user.rbac_user_id} className={`group flex items-start p-3 rounded-xl cursor-pointer transition-all border border-transparent ${assignForm.assigned_to.includes(user.rbac_user_id)
+                                                        ? 'bg-blue-50/50 border-blue-100 shadow-sm'
+                                                        : 'hover:bg-gray-50/80 border-gray-100'
+                                                    }`}>
+                                                    <div className="mt-1 relative">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={assignForm.assigned_to.includes(user.rbac_user_id)}
+                                                            onChange={() => {
+                                                                const newAssigned = assignForm.assigned_to.includes(user.rbac_user_id)
+                                                                    ? assignForm.assigned_to.filter(id => id !== user.rbac_user_id)
+                                                                    : [...assignForm.assigned_to, user.rbac_user_id];
+                                                                setAssignForm({ ...assignForm, assigned_to: newAssigned });
+                                                            }}
+                                                            className="peer appearance-none w-5 h-5 rounded border border-gray-300 checked:bg-blue-600 checked:border-blue-600 focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer"
+                                                        />
+                                                        <CheckCircle className="w-3.5 h-3.5 text-white absolute top-[3px] left-[3px] opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" strokeWidth={3} />
+                                                    </div>
+
+                                                    <div className="ml-3.5 flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between mb-0.5">
+                                                            <span className={`font-semibold text-sm ${assignForm.assigned_to.includes(user.rbac_user_id) ? 'text-gray-900' : 'text-gray-700'}`}>
+                                                                {user.name}
+                                                            </span>
+                                                            <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${user.active_tickets_count > 0
+                                                                    ? 'bg-orange-50 text-orange-600'
+                                                                    : 'bg-green-50 text-green-600'
+                                                                }`}>
+                                                                {user.active_tickets_count || 0} active
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-blue-600 font-medium truncate">{user.username}</div>
+                                                    </div>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                                <UserPlus size={48} className="text-gray-200 mb-3" strokeWidth={1.5} />
+                                                <p className="text-sm font-medium">No managers found</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
-                                {usersData?.filter(u => u.role === 'worker').length > 0 && (
-                                    <div>
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-2 mt-4">Workers</h4>
-                                        {usersData.filter(u => u.role === 'worker').map((user) => (
-                                            <label key={user.id} className="flex items-center p-3 hover:bg-white hover:shadow-sm cursor-pointer rounded-lg transition-all border border-transparent hover:border-gray-100 mb-1">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={assignForm.assigned_to.includes(user.id)}
-                                                    onChange={() => {
-                                                        const newAssigned = assignForm.assigned_to.includes(user.id)
-                                                            ? assignForm.assigned_to.filter(id => id !== user.id)
-                                                            : [...assignForm.assigned_to, user.id];
-                                                        setAssignForm({ ...assignForm, assigned_to: newAssigned });
-                                                    }}
-                                                    className="w-5 h-5 text-blue-600 rounded bg-gray-100 border-gray-300 focus:ring-blue-500"
-                                                />
-                                                <div className="ml-3">
-                                                    <div className="font-medium text-gray-900">{user.name}</div>
-                                                    <div className="text-xs text-gray-500 capitalize">{user.role}</div>
-                                                </div>
-                                            </label>
-                                        ))}
+                                {assignTab === 'workers' && (
+                                    <div className="space-y-1 animate-fade-in">
+                                        {employeesData?.filter(u => u.role === 'worker').length > 0 ? (
+                                            employeesData.filter(u => u.role === 'worker').map((user) => (
+                                                <label key={user.rbac_user_id} className={`group flex items-start p-3 rounded-xl cursor-pointer transition-all border border-transparent ${assignForm.assigned_to.includes(user.rbac_user_id)
+                                                        ? 'bg-blue-50/50 border-blue-100 shadow-sm'
+                                                        : 'hover:bg-gray-50/80 border-gray-100'
+                                                    }`}>
+                                                    <div className="mt-1 relative">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={assignForm.assigned_to.includes(user.rbac_user_id)}
+                                                            onChange={() => {
+                                                                const newAssigned = assignForm.assigned_to.includes(user.rbac_user_id)
+                                                                    ? assignForm.assigned_to.filter(id => id !== user.rbac_user_id)
+                                                                    : [...assignForm.assigned_to, user.rbac_user_id];
+                                                                setAssignForm({ ...assignForm, assigned_to: newAssigned });
+                                                            }}
+                                                            className="peer appearance-none w-5 h-5 rounded border border-gray-300 checked:bg-blue-600 checked:border-blue-600 focus:ring-4 focus:ring-blue-100 transition-all cursor-pointer"
+                                                        />
+                                                        <CheckCircle className="w-3.5 h-3.5 text-white absolute top-[3px] left-[3px] opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" strokeWidth={3} />
+                                                    </div>
+
+                                                    <div className="ml-3.5 flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between mb-0.5">
+                                                            <span className={`font-semibold text-sm ${assignForm.assigned_to.includes(user.rbac_user_id) ? 'text-gray-900' : 'text-gray-700'}`}>
+                                                                {user.name}
+                                                            </span>
+                                                            <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${user.active_tickets_count > 0
+                                                                    ? 'bg-orange-50 text-orange-600'
+                                                                    : 'bg-green-50 text-green-600'
+                                                                }`}>
+                                                                {user.active_tickets_count || 0} active
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 font-medium truncate">{user.username}</div>
+                                                    </div>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                                <UserPlus size={48} className="text-gray-200 mb-3" strokeWidth={1.5} />
+                                                <p className="text-sm font-medium">No workers found</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
