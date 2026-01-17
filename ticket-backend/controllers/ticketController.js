@@ -65,10 +65,10 @@ exports.createTicket = async (req, res) => {
             });
         }
 
-        if (!category_id || !title || !description) {
+        if (!category_id || !title) {
             return res.status(400).json({
                 success: false,
-                message: 'Category, title, and description are required'
+                message: 'Category and title are required'
             });
         }
 
@@ -116,7 +116,7 @@ exports.createTicket = async (req, res) => {
 
         // Get student ID
         const [studentData] = await masterPool.query(
-            'SELECT id FROM students WHERE admission_number = ?',
+            'SELECT id, admission_number FROM students WHERE admission_number = ?',
             [student.admission_number]
         );
 
@@ -149,11 +149,11 @@ exports.createTicket = async (req, res) => {
             [
                 ticketNumber,
                 studentId,
-                admissionNumber,
+                studentData[0].admission_number,
                 category_id,
                 sub_category_id || null,
                 title.trim(),
-                description.trim(),
+                description ? description.trim() : '',
                 photoUrl
             ]
         );
@@ -300,7 +300,7 @@ exports.getTicket = async (req, res) => {
         sc.description as sub_category_description,
         s.student_name,
         s.student_mobile,
-        s.student_email
+        s.student_mobile
       FROM tickets t
       LEFT JOIN complaint_categories c ON t.category_id = c.id
       LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
@@ -425,6 +425,8 @@ exports.getStudentTickets = async (req, res) => {
             });
         }
 
+        console.log('Fetching tickets for student:', admissionNumber);
+
         const [tickets] = await masterPool.query(
             `SELECT 
         t.*,
@@ -437,6 +439,8 @@ exports.getStudentTickets = async (req, res) => {
       ORDER BY t.created_at DESC`,
             [admissionNumber]
         );
+
+        console.log('Tickets found:', tickets.length);
 
         res.json({
             success: true,
@@ -599,7 +603,14 @@ exports.changeTicketStatus = async (req, res) => {
             });
         }
 
-        await updateTicketStatus(id, status, user.id, notes);
+        // Fix: If user is a student, we cannot pass user.id as changedBy because it might conflict with RBAC users 
+        // or fail foreign key constraints if ticket_status_history expects rbac_users.id.
+        // We'll pass null for changedBy if it's a student and mention it in notes.
+        const isStudent = !!(user.role === 'student' || user.admission_number);
+        const changedBy = isStudent ? null : user.id;
+        const statusNotes = notes || (isStudent ? 'Status updated by student' : null);
+
+        await updateTicketStatus(id, status, changedBy, statusNotes);
 
         res.json({
             success: true,

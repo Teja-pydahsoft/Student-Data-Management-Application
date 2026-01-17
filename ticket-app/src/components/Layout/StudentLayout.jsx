@@ -28,6 +28,24 @@ const StudentLayout = ({ children }) => {
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
 
+    // Push Notification Registration
+    React.useEffect(() => {
+        const initPush = async () => {
+            // Only run if user is logged in
+            if (user) {
+                const { registerServiceWorker, subscribeUser, getSubscriptionStatus } = await import('../../services/pushService');
+                const status = await getSubscriptionStatus();
+                if (status !== 'granted') {
+                    const registration = await registerServiceWorker();
+                    if (registration) {
+                        await subscribeUser(registration);
+                    }
+                }
+            }
+        };
+        initPush();
+    }, [user]);
+
     const handleLogout = () => {
         logout();
         toast.success('Logged out successfully');

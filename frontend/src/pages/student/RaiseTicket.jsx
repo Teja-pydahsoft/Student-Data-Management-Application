@@ -114,11 +114,7 @@ const RaiseTicket = () => {
       return;
     }
 
-    if (!formData.description.trim()) {
-      toast.error('Please enter a description');
-      return;
-    }
-
+    // Description is now optional
     createMutation.mutate(formData);
   };
 
@@ -245,14 +241,13 @@ const RaiseTicket = () => {
         {/* Description */}
         <div className="relative z-10">
           <label className="block text-sm font-bold text-gray-700 mb-2 px-1">
-            Detailed Description <span className="text-red-500">*</span>
+            Detailed Description <span className="text-gray-400 text-xs font-medium ml-1">(Optional)</span>
           </label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            required
             rows={5}
-            placeholder="Please provide as much detail as possible to help us resolve this quickly..."
+            placeholder="Please provide details (optional)..."
             className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all outline-none font-medium resize-none shadow-inner"
           />
         </div>

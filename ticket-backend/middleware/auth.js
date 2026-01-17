@@ -26,6 +26,11 @@ const authMiddleware = (req, res, next) => {
 
         // Attach to request
         // Note: The main backend provides 'id' (MongoDB ID or MySQL ID) and 'role'
+        // FIX: Map admissionNumber (camelCase from token) to admission_number (snake_case expected by controllers)
+        if (decoded.admissionNumber && !decoded.admission_number) {
+            decoded.admission_number = decoded.admissionNumber;
+        }
+
         req.user = decoded;
         // Legacy support for admin checks if needed
         req.admin = decoded;

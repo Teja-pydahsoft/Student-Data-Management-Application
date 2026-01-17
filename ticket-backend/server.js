@@ -33,12 +33,14 @@ const complaintCategoryRoutes = require('./routes/complaintCategoryRoutes');
 const authRoutes = require('./routes/authRoutes');
 const rbacUserRoutes = require('./routes/rbacUserRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
+const pushRoutes = require('./routes/pushRoutes');
 
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/complaint-categories', complaintCategoryRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/rbac/users', rbacUserRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/push', pushRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

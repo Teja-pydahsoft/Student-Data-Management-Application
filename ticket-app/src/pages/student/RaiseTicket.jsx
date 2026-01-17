@@ -61,11 +61,15 @@ const RaiseTicket = () => {
             return response.data;
         },
         onSuccess: (data) => {
+            console.log('Ticket creation successful:', data);
             toast.success('Ticket raised successfully!');
             queryClient.invalidateQueries(['tickets']);
+            console.log('Navigating to /student/my-tickets');
             navigate('/student/my-tickets');
         },
         onError: (error) => {
+            console.error('Ticket creation failed:', error);
+            console.log('Error response:', error.response);
             toast.error(error.response?.data?.message || 'Failed to raise ticket');
         }
     });
@@ -115,11 +119,7 @@ const RaiseTicket = () => {
             return;
         }
 
-        if (!formData.description.trim()) {
-            toast.error('Please enter a description');
-            return;
-        }
-
+        // Description is optional now
         createMutation.mutate(formData);
     };
 
@@ -234,12 +234,11 @@ const RaiseTicket = () => {
                 {/* Description */}
                 <div className="form-group">
                     <label className="form-label">
-                        Detailed Description <span style={{ color: '#ef4444' }}>*</span>
+                        Detailed Description <span style={{ color: '#9ca3af', fontSize: '0.75rem', fontWeight: 500, marginLeft: '0.25rem' }}>(Optional)</span>
                     </label>
                     <textarea
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        required
                         rows={5}
                         placeholder="Please provide as much detail as possible to help us resolve this quickly..."
                         className="form-textarea"

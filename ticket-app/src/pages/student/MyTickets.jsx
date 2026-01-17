@@ -78,6 +78,33 @@ const MyTickets = () => {
     const tickets = ticketsData || [];
     const ticket = ticketDetails || selectedTicket;
 
+    const reopenMutation = useMutation({
+        mutationFn: async (ticketId) => {
+            const response = await api.put(`/tickets/${ticketId}/status`, {
+                status: 'pending',
+                notes: 'Reopened by student (Not Satisfied)'
+            });
+            return response.data;
+        },
+        onSuccess: () => {
+            toast.success('Ticket reopened successfully');
+            setSelectedTicket(null);
+            // Invalidate queries to refresh list
+            // queryClient.invalidateQueries(['student-tickets']); // If we had access to queryClient here
+            window.location.reload(); // Simple reload to refresh state for now or use queryClient if available
+        },
+        onError: (error) => {
+            toast.error(error.response?.data?.message || 'Failed to reopen ticket');
+        }
+    });
+
+    const handleReopen = () => {
+        if (!selectedTicket) return;
+        if (window.confirm('Are you sure you want to reopen this ticket? logic will restart.')) {
+            reopenMutation.mutate(selectedTicket.id);
+        }
+    };
+
     const handleFeedbackSubmit = () => {
         if (!feedbackForm.rating) {
             toast.error('Please provide a rating');
@@ -201,7 +228,7 @@ const MyTickets = () => {
                                         </div>
 
                                         {ticket.description && (
-                                            <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5, fontStyle: 'italic', maxWidth: '40rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>"{ticket.description}"</p>
+                                            <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.5, maxWidth: '40rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
                                         )}
                                     </div>
 
@@ -245,6 +272,7 @@ const MyTickets = () => {
                             setShowFeedbackModal(true);
                         }
                     }}
+                    onReopen={handleReopen}
                 />
             )}
 
@@ -266,18 +294,87 @@ const MyTickets = () => {
 };
 
 // Ticket Details Modal
-const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
+import { createPortal } from 'react-dom';
+
+const TicketStepper = ({ status }) => {
+    const steps = [
+        { label: 'Submitted', value: 'pending' },
+        { label: 'Assigned', value: 'approaching' },
+        { label: 'In Progress', value: 'resolving' },
+        { label: 'Resolved', value: 'completed' }
+    ];
+
+    const currentStepIndex = steps.findIndex(s => s.value === status) === -1
+        ? (status === 'closed' ? 3 : 0)
+        : steps.findIndex(s => s.value === status);
+
     return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', margin: '2rem 0' }}>
+            {/* Progress Bar Background */}
+            <div style={{ position: 'absolute', top: '1.25rem', left: '0', right: '0', height: '0.25rem', backgroundColor: '#eff6ff', zIndex: 0 }}></div>
+            {/* Active Progress Bar */}
+            <div style={{
+                position: 'absolute',
+                top: '1.25rem',
+                left: '0',
+                height: '0.25rem',
+                backgroundColor: '#2563eb',
+                zIndex: 0,
+                width: `${(currentStepIndex / (steps.length - 1)) * 100}%`,
+                transition: 'width 0.5s ease'
+            }}></div>
+
+            {steps.map((step, index) => {
+                const isCompleted = index <= currentStepIndex;
+                const isCurrent = index === currentStepIndex;
+
+                return (
+                    <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', zIndex: 1, flex: 1 }}>
+                        <div style={{
+                            width: '2.5rem',
+                            height: '2.5rem',
+                            borderRadius: '50%',
+                            backgroundColor: isCompleted ? '#2563eb' : '#eff6ff',
+                            border: isCurrent ? '4px solid #dbeafe' : '4px solid white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: isCompleted ? 'white' : '#9ca3af',
+                            transition: 'all 0.3s ease',
+                            boxShadow: isCurrent ? '0 0 0 2px #2563eb' : 'none'
+                        }}>
+                            {isCompleted ? <CheckCircle size={16} /> : <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{index + 1}</span>}
+                        </div>
+                        <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: isCompleted ? '#111827' : '#9ca3af',
+                            textAlign: 'center'
+                        }}>
+                            {step.label}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const TicketDetailsModal = ({ ticket, onClose, onFeedback, onReopen }) => {
+    return createPortal(
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="modal-overlay"
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
+            <div style={{ position: 'absolute', inset: 0 }} onClick={onClose} />
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 className="modal-content"
+                style={{ position: 'relative', zIndex: 10000, maxHeight: '85vh', margin: '2rem' }}
             >
                 {/* Header Container */}
                 <div className="modal-header">
@@ -290,17 +387,9 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
                     </button>
                 </div>
 
-                <div style={{ padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-                    {/* Status Ribbon */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                        <div className={`status-badge ${STATUS_CLASSES[ticket.status] || 'status-pending'}`} style={{ fontSize: '0.75rem', padding: '0.5rem 1.5rem' }}>
-                            {STATUS_LABELS[ticket.status] || ticket.status}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#9ca3af', fontSize: '0.875rem', fontWeight: 500 }}>
-                            <Clock size={16} />
-                            <span>Created {new Date(ticket.created_at).toLocaleString()}</span>
-                        </div>
-                    </div>
+                <div style={{ padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto' }}>
+                    {/* Status Stepper */}
+                    <TicketStepper status={ticket.status} />
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -334,8 +423,12 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Detailed Description</label>
-                        <div style={{ padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '1.5rem', border: '1px solid #f3f4f6' }}>
-                            <p style={{ color: '#374151', lineHeight: 1.6, fontWeight: 500, whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>"{ticket.description}"</p>
+                        <div style={{ padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '1.5rem', border: '1px solid #f3f4f6', minHeight: '6rem' }}>
+                            {ticket.description ? (
+                                <p style={{ color: '#374151', lineHeight: 1.6, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{ticket.description}</p>
+                            ) : (
+                                <p style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '0.875rem' }}>No detailed description provided.</p>
+                            )}
                         </div>
                     </div>
 
@@ -360,35 +453,54 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback }) => {
                                 <span style={{ fontWeight: 900, color: '#15803d', marginLeft: '0.5rem', fontSize: '1.25rem' }}>{ticket.feedback.rating}/5</span>
                             </div>
                             {ticket.feedback.feedback_text && (
-                                <p style={{ color: '#166534', fontWeight: 500, lineHeight: 1.6, fontStyle: 'italic' }}>"{ticket.feedback.feedback_text}"</p>
+                                <p style={{ color: '#166534', fontWeight: 500, lineHeight: 1.6 }}>{ticket.feedback.feedback_text}</p>
                             )}
                         </div>
                     )}
 
                     {/* Footer Actions */}
-                    <div style={{ paddingTop: '2rem', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            {ticket.status === 'completed' && !ticket.feedback && (
+                    <div style={{ paddingTop: '2rem', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+                        {ticket.status === 'completed' && !ticket.feedback && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4b5563' }}>Are you satisfied with the resolution?</span>
+
+                                <button
+                                    onClick={onReopen}
+                                    style={{
+                                        padding: '0.75rem 1.5rem',
+                                        borderRadius: '0.75rem',
+                                        border: '1px solid #fecaca',
+                                        backgroundColor: '#fef2f2',
+                                        color: '#dc2626',
+                                        fontWeight: 700,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Not Satisfied
+                                </button>
+
                                 <button
                                     onClick={onFeedback}
                                     className="btn-primary"
-                                    style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', paddingLeft: '2rem', paddingRight: '2rem' }}
+                                    style={{ backgroundColor: '#16a34a' }}
                                 >
-                                    <Star size={18} />
-                                    Rate Resolution
+                                    Satisfied
                                 </button>
-                            )}
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="btn-secondary"
-                        >
-                            Close Details
-                        </button>
+                            </div>
+                        )}
+                        {(!ticket.status?.includes('completed') || ticket.feedback) && (
+                            <button
+                                onClick={onClose}
+                                className="btn-secondary"
+                            >
+                                Close Details
+                            </button>
+                        )}
                     </div>
                 </div>
             </motion.div>
-        </motion.div>
+        </motion.div>,
+        document.body
     );
 };
 
