@@ -33,216 +33,193 @@ const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddCo
     if (!ticket) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+            className="modal-overlay"
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+        >
+            <div style={{ position: 'absolute', inset: 0 }} onClick={onClose} />
             <div
-                className="fixed inset-0"
-                onClick={onClose}
-                aria-hidden="true"
-            />
-            <div className="relative bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] shadow-xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
-
-                {/* Header */}
-                <div className="px-8 py-6 border-b-2 border-blue-500 flex items-center justify-between bg-white z-20">
+                className="modal-content animate-in zoom-in-95 duration-200"
+                style={{ position: 'relative', zIndex: 10000, maxHeight: '85vh', width: '100%', maxWidth: '1000px', margin: '2rem', backgroundColor: 'white', borderRadius: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', display: 'flex', flexDirection: 'column' }}
+            >
+                {/* Header Container */}
+                <div className="modal-header" style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Ticket Details</h2>
-                        <div className="flex items-center gap-3 mt-1.5">
-                            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                                Ref: {ticket.ticket_number}
-                            </span>
-                            <span className="text-xs text-gray-500 flex items-center gap-1.5 font-medium">
-                                <Clock size={14} className="text-gray-400" />
-                                {new Date(ticket.created_at).toLocaleString()}
-                            </span>
+                        <h2 className="heading-font" style={{ fontSize: '1.5rem', fontWeight: 900, color: '#111827' }}>Ticket Details</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+                            <p style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>REF: {ticket.ticket_number}</p>
+                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#d1d5db' }}></span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: '#6b7280' }}>
+                                <Clock size={12} />
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{new Date(ticket.created_at).toLocaleString()}</span>
+                            </div>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2.5 hover:bg-gray-50 rounded-full text-gray-400 hover:text-gray-600 transition-all active:scale-95"
-                    >
-                        <X size={26} />
+                    <button onClick={onClose} style={{ padding: '0.75rem', backgroundColor: '#f3f4f6', color: '#6b7280', borderRadius: '1rem', border: 'none', cursor: 'pointer', transition: 'background-color 0.2s' }} className="hover:bg-gray-200">
+                        <X size={24} />
                     </button>
                 </div>
 
-                {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
-
-                    {/* Stepper */}
-                    <div className="py-2 px-4">
+                <div style={{ padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flex: 1 }}>
+                    {/* Status Stepper */}
+                    <div style={{ padding: '0 1rem' }}>
                         <TicketStepper status={ticket.status} />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2.5rem' }}>
                         {/* Left Column: Details */}
-                        <div className="md:col-span-2 space-y-8">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
-                            {/* Main Info Card */}
-                            <div className="space-y-6">
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Subject</label>
-                                    <h3 className="text-xl font-bold text-gray-900 leading-snug">{ticket.title}</h3>
+                            {/* Title & Type */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '1.5rem', border: '1px solid #f3f4f6' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Subject</label>
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#111827', lineHeight: 1.3 }}>{ticket.title}</h3>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-6 p-5 bg-gray-50/50 rounded-2xl border border-gray-100">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Category</label>
-                                        <div className="font-semibold text-gray-900 text-lg">
+                                <div style={{ display: 'flex', gap: '2rem', borderTop: '1px solid #e5e7eb', paddingTop: '1.5rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                        <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Category</label>
+                                        <p style={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>
                                             {ticket.category_name}
-                                            {ticket.sub_category_name && (
-                                                <span className="text-gray-500 text-sm block font-normal mt-0.5">› {ticket.sub_category_name}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Student</label>
-                                        <div className="font-semibold text-gray-900 text-lg">{ticket.student_name}</div>
-                                        <div className="text-sm text-gray-500 font-medium">{ticket.admission_number || ticket.admissionNumber}</div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Description</label>
-                                    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-                                        <p className="text-gray-700 whitespace-pre-wrap text-base leading-relaxed">
-                                            {ticket.description || <span className="italic text-gray-400">No description provided.</span>}
+                                            {ticket.sub_category_name && <span style={{ color: '#6b7280', fontWeight: 500, fontSize: '0.875rem' }}> › {ticket.sub_category_name}</span>}
                                         </p>
                                     </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                        <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Student</label>
+                                        <p style={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>{ticket.student_name}</p>
+                                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', fontFamily: 'monospace' }}>{ticket.admission_number}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Description */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Detailed Description</label>
+                                <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                                    <p style={{ color: '#374151', lineHeight: 1.7, fontWeight: 500, whiteSpace: 'pre-wrap', fontSize: '0.95rem' }}>
+                                        {ticket.description || <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No detailed description provided.</span>}
+                                    </p>
                                 </div>
                             </div>
 
                             {/* Photo */}
                             {ticket.photo_url && (
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Attachment</label>
-                                    <div className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                                        <img src={ticket.photo_url} alt="Ticket attachment" className="w-full h-auto max-h-[300px] object-contain" />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Attachment</label>
+                                    <div style={{ borderRadius: '1.5rem', overflow: 'hidden', border: '4px solid #f9fafb', boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.06)' }}>
+                                        <img src={ticket.photo_url} alt="Ticket attachment" style={{ width: '100%', maxHeight: '400px', objectFit: 'contain', backgroundColor: '#f3f4f6' }} />
                                     </div>
                                 </div>
                             )}
 
-                            {/* Comments Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            {/* Comments */}
+                            <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '2rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                                    <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                         <MessageSquare size={20} className="text-gray-400" />
-                                        Comments History
+                                        Discussion History
                                     </h3>
                                 </div>
 
                                 {ticket.comments && ticket.comments.length > 0 ? (
-                                    <div className="space-y-4">
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                         {ticket.comments.map((comment) => (
-                                            <div
-                                                key={comment.id}
-                                                className={`p-4 rounded-xl border ${comment.is_internal ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-gray-100'}`}
-                                            >
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${comment.is_internal ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                            {comment.user_name.charAt(0)}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-900">{comment.user_name}</p>
-                                                            <p className="text-xs text-gray-500">{new Date(comment.created_at).toLocaleString()}</p>
-                                                        </div>
-                                                    </div>
-                                                    {comment.is_internal && (
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">Internal Note</span>
-                                                    )}
+                                            <div key={comment.id} style={{ display: 'flex', gap: '1rem' }}>
+                                                <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '50%', backgroundColor: comment.is_internal ? '#fef3c7' : '#e0f2fe', color: comment.is_internal ? '#d97706' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.875rem', flexShrink: 0 }}>
+                                                    {comment.user_name.charAt(0)}
                                                 </div>
-                                                <p className="text-sm text-gray-700 ml-10">{comment.comment_text}</p>
+                                                <div style={{ flex: 1, backgroundColor: comment.is_internal ? '#fffbeb' : '#f0f9ff', padding: '1rem', borderRadius: '0 1rem 1rem 1rem', border: `1px solid ${comment.is_internal ? '#fde68a' : '#e0f2fe'}` }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                                        <span style={{ fontWeight: 700, color: '#1f2937', fontSize: '0.875rem' }}>{comment.user_name}</span>
+                                                        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{new Date(comment.created_at).toLocaleString()}</span>
+                                                    </div>
+                                                    <p style={{ color: '#4b5563', fontSize: '0.875rem', lineHeight: 1.5 }}>{comment.comment_text}</p>
+                                                    {comment.is_internal && <div style={{ display: 'inline-block', marginTop: '0.5rem', fontSize: '0.625rem', fontWeight: 800, textTransform: 'uppercase', color: '#d97706', backgroundColor: '#fef3c7', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>Internal Note</div>}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                        <MessageSquare className="mx-auto text-gray-300 mb-2" size={24} />
-                                        <p className="text-sm text-gray-500">No comments yet.</p>
+                                    <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '1rem', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '0.875rem' }}>
+                                        No comments yet. Start a discussion below.
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Right Column: Meta & Actions */}
-                        <div className="space-y-6">
-                            {/* Status Box */}
-                            <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Current Status</label>
-                                <div className={`inline-flex px-3 py-1 rounded-full text-sm font-bold border ${STATUS_COLORS[ticket.status] || 'bg-gray-100'}`}>
-                                    {STATUS_LABELS[ticket.status] || ticket.status}
+                        {/* Right Column: Actions & Meta */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {/* Current Status */}
+                            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                                <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em', marginBottom: '0.75rem', display: 'block' }}>Current Status</label>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span className={`status-badge ${STATUS_COLORS[ticket.status] || 'bg-gray-100'}`} style={{ padding: '0.5rem 1rem', borderRadius: '2rem', fontWeight: 700, fontSize: '0.875rem', display: 'inline-block' }}>
+                                        {STATUS_LABELS[ticket.status] || ticket.status}
+                                    </span>
+                                    <button onClick={onStatusUpdate} style={{ color: '#2563eb', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', background: 'none', border: 'none' }}>Change</button>
                                 </div>
                             </div>
 
-                            {/* Assignments Box */}
-                            <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">Assigned Staff</label>
+                            {/* Assigned Staff */}
+                            <div style={{ padding: '1.5rem', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                    <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#9ca3af', letterSpacing: '0.05em' }}>Assigned Team</label>
+                                    <button onClick={onAssign} style={{ color: '#2563eb', fontWeight: 600, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', background: 'none', border: 'none' }}>
+                                        <UserPlus size={14} /> Manage
+                                    </button>
+                                </div>
                                 {ticket.assignments && ticket.assignments.length > 0 ? (
-                                    <div className="space-y-3">
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                         {ticket.assignments.map((assignment) => (
-                                            <div key={assignment.id} className="flex items-start gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                                                    <User size={14} />
+                                            <div key={assignment.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem' }}>
+                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', backgroundColor: assignment.assigned_to_role === 'staff' ? '#f3e8ff' : '#eff6ff', color: assignment.assigned_to_role === 'staff' ? '#7e22ce' : '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                                                    {assignment.assigned_to_name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-900">{assignment.assigned_to_name}</p>
-                                                    <p className="text-xs text-gray-500 capitalize">{assignment.assigned_to_role}</p>
-                                                    <p className="text-[10px] text-gray-400 mt-0.5">
-                                                        {new Date(assignment.assigned_at).toLocaleDateString()}
-                                                    </p>
+                                                    <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1f2937' }}>{assignment.assigned_to_name}</p>
+                                                    <p style={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'capitalize' }}>{assignment.assigned_to_role === 'staff' ? 'Manager' : 'Worker'}</p>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="text-sm text-gray-500 italic flex items-center gap-2">
-                                        <AlertCircle size={14} /> Not assigned yet
+                                    <div style={{ textAlign: 'center', padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', border: '1px dashed #e5e7eb' }}>
+                                        <User size={20} className="text-gray-300 mx-auto mb-2" />
+                                        <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>No staff assigned</p>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Feedback Box (if completed) */}
+                            {/* Feedback (if exists) */}
                             {ticket.feedback && (
-                                <div className="bg-green-50 rounded-xl border border-green-100 p-4">
-                                    <label className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2 block flex items-center gap-1">
-                                        <Star size={12} className="fill-green-700" /> Student Feedback
+                                <div style={{ padding: '1.5rem', backgroundColor: '#f0fdf4', borderRadius: '1.5rem', border: '1px solid #bbf7d0' }}>
+                                    <label style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, color: '#15803d', letterSpacing: '0.05em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                        <Star size={12} fill="currentColor" /> Student Feedback
                                     </label>
-                                    <div className="flex items-center gap-1 mb-2">
-                                        <span className="text-2xl font-bold text-green-800">{ticket.feedback.rating}</span>
-                                        <span className="text-sm text-green-600 font-medium">/ 5</span>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                        <span style={{ fontSize: '2rem', fontWeight: 900, color: '#166534', lineHeight: 1 }}>{ticket.feedback.rating}</span>
+                                        <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#15803d', opacity: 0.7 }}>/ 5.0</span>
                                     </div>
                                     {ticket.feedback.feedback_text && (
-                                        <p className="text-sm text-green-800 italic">"{ticket.feedback.feedback_text}"</p>
+                                        <p style={{ fontSize: '0.875rem', color: '#14532d', fontStyle: 'italic', fontWeight: 500 }}>"{ticket.feedback.feedback_text}"</p>
                                     )}
                                 </div>
                             )}
+
+                            {/* Actions Panel */}
+                            <div style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
+                                <button
+                                    onClick={onAddComment}
+                                    style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: 'white', borderRadius: '1rem', fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', cursor: 'pointer', transition: 'transform 0.1s' }}
+                                    className="hover:scale-[1.02] active:scale-95 shadow-lg"
+                                >
+                                    <MessageSquare size={18} />
+                                    Add Response
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Footer Actions */}
-                <div className="p-4 border-t border-gray-100 bg-gray-50 flex flex-wrap items-center justify-end gap-3 z-20">
-                    <button
-                        onClick={onAssign}
-                        className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 shadow-sm transition-all"
-                    >
-                        <UserPlus size={18} />
-                        Assign Staff
-                    </button>
-                    <button
-                        onClick={onStatusUpdate}
-                        className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 shadow-sm transition-all"
-                    >
-                        <Edit size={18} />
-                        Update Status
-                    </button>
-                    <button
-                        onClick={onAddComment}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 shadow-sm transition-all"
-                    >
-                        <MessageSquare size={18} />
-                        Add Comment
-                    </button>
-                </div>
-
             </div>
         </div>,
         document.body
