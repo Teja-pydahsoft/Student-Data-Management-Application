@@ -241,11 +241,10 @@ const MyTickets = () => {
                                             <Eye size={22} />
                                         </button>
 
-                                        {ticket.status === 'completed' && !ticket.feedback && (
+                                        {ticket.status === 'completed' && (!ticket.feedback || (ticket.feedback && !ticket.feedback.id)) && (
                                             <button
                                                 onClick={() => setSelectedTicket(ticket)}
-                                                className="btn-primary"
-                                                style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)' }}
+                                                style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)', color: 'white' }}
                                             >
                                                 <MessageSquare size={18} />
                                                 Review

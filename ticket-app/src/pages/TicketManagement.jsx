@@ -63,12 +63,19 @@ const TicketManagement = () => {
         }
     });
 
-    // Fetch RBAC users for assignment
+    // Fetch Ticket Employees for assignment (Managers/Workers)
     const { data: usersData } = useQuery({
-        queryKey: ['rbac-users'],
+        queryKey: ['ticket-employees'],
         queryFn: async () => {
-            const response = await api.get('/rbac/users');
-            return response.data?.data || [];
+            const response = await api.get('/employees');
+            // Map the employee structure to what the modal expects (basic user info)
+            // The API returns complex object, we need to extract rbac_user_id as id and name/username/role
+            return response.data?.data?.map(emp => ({
+                id: emp.rbac_user_id, // Use RBAC ID for assignment FK
+                name: emp.name,
+                username: emp.username,
+                role: emp.role // 'staff' or 'worker'
+            })) || [];
         }
     });
 
@@ -195,8 +202,12 @@ const TicketManagement = () => {
 
     const openAssignModal = (ticket) => {
         setSelectedTicket(ticket);
+        const assignments = typeof ticket.assignments === 'string'
+            ? JSON.parse(ticket.assignments)
+            : (ticket.assignments || []);
+
         setAssignForm({
-            assigned_to: ticket.assignments?.map(a => a.assigned_to) || [],
+            assigned_to: assignments.map(a => a.assigned_to) || [],
             notes: ''
         });
         setShowAssignModal(true);
@@ -444,6 +455,76 @@ const TicketManagement = () => {
     );
 };
 
+// Ticket Stepper Component (Visual Progress)
+const TicketStepper = ({ status }) => {
+    const steps = [
+        { label: 'Submitted', value: 'pending' },
+        { label: 'Assigned', value: 'approaching' },
+        { label: 'In Progress', value: 'resolving' },
+        { label: 'Resolved', value: 'completed' }
+    ];
+
+    const currentStepIndex = steps.findIndex(s => s.value === status) === -1
+        ? (status === 'closed' ? 3 : 0)
+        : steps.findIndex(s => s.value === status);
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', margin: '1rem 0 2rem 0' }}>
+            {/* Progress Bar Background */}
+            <div style={{ position: 'absolute', top: '1.25rem', left: '0', right: '0', height: '0.25rem', backgroundColor: '#eff6ff', zIndex: 0 }}></div>
+            {/* Active Progress Bar */}
+            <div style={{
+                position: 'absolute',
+                top: '1.25rem',
+                left: '0',
+                height: '0.25rem',
+                backgroundColor: '#2563eb',
+                zIndex: 0,
+                width: `${(currentStepIndex / (steps.length - 1)) * 100}%`,
+                transition: 'width 0.5s ease'
+            }}></div>
+
+            {steps.map((step, index) => {
+                const isCompleted = index <= currentStepIndex;
+                const isCurrent = index === currentStepIndex;
+
+                return (
+                    <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', zIndex: 1, flex: 1 }}>
+                        <div style={{
+                            width: '2.5rem',
+                            height: '2.5rem',
+                            borderRadius: '50%',
+                            backgroundColor: isCompleted ? '#2563eb' : '#eff6ff',
+                            border: isCurrent ? '4px solid #dbeafe' : '4px solid white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: isCompleted ? 'white' : '#9ca3af',
+                            transition: 'all 0.3s ease',
+                            boxShadow: isCurrent ? '0 0 0 2px #2563eb' : 'none'
+                        }}>
+                            {/* CheckCircle icon or number */}
+                            {isCompleted ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            ) : (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>{index + 1}</span>
+                            )}
+                        </div>
+                        <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: isCompleted ? '#111827' : '#9ca3af',
+                            textAlign: 'center'
+                        }}>
+                            {step.label}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // Ticket Details Modal Component
 const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddComment }) => {
     return (
@@ -456,6 +537,9 @@ const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddCo
                     </button>
                 </div>
                 <div className="p-6 space-y-6">
+                    {/* Status Stepper */}
+                    <TicketStepper status={ticket.status} />
+
                     {/* Ticket Info */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -493,22 +577,54 @@ const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddCo
                     </div>
 
                     {/* Assignments */}
-                    {ticket.assignments && ticket.assignments.length > 0 && (
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Assigned To</h3>
-                            <div className="space-y-2">
-                                {ticket.assignments.map((assignment) => (
-                                    <div key={assignment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div>
-                                            <p className="font-medium text-gray-900">{assignment.assigned_to_name}</p>
-                                            <p className="text-sm text-gray-500">{assignment.assigned_to_role}</p>
-                                        </div>
-                                        <p className="text-sm text-gray-500">{new Date(assignment.assigned_at).toLocaleDateString()}</p>
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Assigned Team</h3>
+                        {ticket.assignments && ticket.assignments.length > 0 ? (
+                            <div className="space-y-4">
+                                {/* Managers */}
+                                <div>
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Managers</h4>
+                                    <div className="space-y-2">
+                                        {ticket.assignments.filter(a => a.assigned_to_role === 'staff').length > 0 ? (
+                                            ticket.assignments.filter(a => a.assigned_to_role === 'staff').map((assignment) => (
+                                                <div key={assignment.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{assignment.assigned_to_name}</p>
+                                                        <p className="text-xs text-blue-600 font-medium">Manager</p>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500">{new Date(assignment.assigned_at).toLocaleDateString()}</p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 italic px-2">No manager assigned</p>
+                                        )}
                                     </div>
-                                ))}
+                                </div>
+
+                                {/* Workers */}
+                                <div>
+                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Workers</h4>
+                                    <div className="space-y-2">
+                                        {ticket.assignments.filter(a => a.assigned_to_role === 'worker').length > 0 ? (
+                                            ticket.assignments.filter(a => a.assigned_to_role === 'worker').map((assignment) => (
+                                                <div key={assignment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{assignment.assigned_to_name}</p>
+                                                        <p className="text-xs text-gray-600 font-medium">Worker</p>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500">{new Date(assignment.assigned_at).toLocaleDateString()}</p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 italic px-2">No workers assigned (Pending)</p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">No one assigned yet.</p>
+                        )}
+                    </div>
 
                     {/* Comments */}
                     {ticket.comments && ticket.comments.length > 0 && (

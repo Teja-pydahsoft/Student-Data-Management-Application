@@ -163,6 +163,70 @@ exports.createTicket = async (req, res) => {
             fs.unlinkSync(req.file.path);
         }
 
+        // --- AUTO-ASSIGNMENT LOGIC ---
+        // Find managers (staff) who are assigned to this category
+        try {
+            const [managers] = await masterPool.query(`
+                SELECT rbac_user_id, assigned_categories 
+                FROM ticket_employees 
+                WHERE role = 'staff' AND is_active = 1
+            `);
+
+            const assignedManagerIds = [];
+
+            for (const manager of managers) {
+                let categories = [];
+                try {
+                    categories = typeof manager.assigned_categories === 'string'
+                        ? JSON.parse(manager.assigned_categories)
+                        : manager.assigned_categories;
+                } catch (e) {
+                    console.error('Error parsing categories for auto-assign:', e);
+                    continue;
+                }
+
+                if (Array.isArray(categories)) {
+                    // Convert all to numbers for comparison
+                    const categoryIds = categories.map(c => Number(c));
+                    const targetCategoryId = Number(category_id);
+
+                    console.log(`Checking manager ${manager.rbac_user_id} with categories:`, categoryIds, `against ${targetCategoryId}`);
+
+                    if (categoryIds.includes(targetCategoryId)) {
+                        assignedManagerIds.push(manager.rbac_user_id);
+                        console.log(`>> MATCH! Auto-assigning manager ${manager.rbac_user_id}`);
+                    }
+                }
+            }
+
+            if (assignedManagerIds.length > 0) {
+                // Insert assignments
+                const assignmentValues = assignedManagerIds.map(userId => [
+                    result.insertId,
+                    userId,
+                    null, // assigned_by is null for system/auto-assignment
+                    'Auto-assigned based on Category'
+                ]);
+
+                await masterPool.query(
+                    `INSERT INTO ticket_assignments (ticket_id, assigned_to, assigned_by, notes) VALUES ?`,
+                    [assignmentValues]
+                );
+
+                // Update status to 'approaching' since it's assigned
+                await masterPool.query(
+                    `UPDATE tickets SET status = 'approaching' WHERE id = ?`,
+                    [result.insertId]
+                );
+            } else {
+                console.log('No managers found for auto-assignment for category:', category_id);
+            }
+        } catch (assignError) {
+            console.error('Auto-assignment failed:', assignError);
+            // Don't fail the request, just log it
+        }
+        // -----------------------------
+
         // Get created ticket
         const [ticket] = await masterPool.query(
             `SELECT t.*, 
@@ -210,7 +274,21 @@ exports.getTickets = async (req, res) => {
         sc.name as sub_category_name,
         s.student_name,
         s.student_mobile,
-        GROUP_CONCAT(DISTINCT CONCAT(ru.name, ' (', ru.username, ')') SEPARATOR ', ') as assigned_users
+        GROUP_CONCAT(DISTINCT CONCAT(ru.name, ' (', ru.username, ')') SEPARATOR ', ') as assigned_users,
+        (
+            SELECT JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'id', ta_sub.id,
+                    'assigned_to', ta_sub.assigned_to,
+                    'assigned_at', ta_sub.assigned_at,
+                    'assigned_to_name', ru_sub.name,
+                    'assigned_to_role', ru_sub.role
+                )
+            )
+            FROM ticket_assignments ta_sub
+            JOIN rbac_users ru_sub ON ta_sub.assigned_to = ru_sub.id
+            WHERE ta_sub.ticket_id = t.id AND ta_sub.is_active = TRUE
+        ) as assignments
       FROM tickets t
       LEFT JOIN complaint_categories c ON t.category_id = c.id
       LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
@@ -764,6 +842,19 @@ exports.submitFeedback = async (req, res) => {
             [result.insertId]
         );
 
+        // Auto-close ticket after feedback
+        await masterPool.query(
+            "UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = ?",
+            [id]
+        );
+
+        // Record status change in history
+        await masterPool.query(
+            `INSERT INTO ticket_status_history (ticket_id, old_status, new_status, changed_by, notes)
+             VALUES (?, 'completed', 'closed', ?, 'Ticket closed automatically after student feedback')`,
+            [id, student.id] // Using student ID as they triggered the feedback
+        );
+
         res.status(201).json({
             success: true,
             message: 'Feedback submitted successfully',
@@ -807,8 +898,8 @@ exports.getTicketStats = async (req, res) => {
         res.json({
             success: true,
             data: {
-                status_stats: stats,
-                category_stats: categoryStats
+                by_status: stats,
+                by_category: categoryStats
             }
         });
     } catch (error) {

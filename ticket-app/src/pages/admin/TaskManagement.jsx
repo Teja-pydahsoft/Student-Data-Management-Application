@@ -14,6 +14,7 @@ import {
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../../components/LoadingAnimation';
+import TicketDetailsModal from '../../components/admin/TicketDetailsModal';
 import '../../styles/admin-pages.css';
 
 const STATUS_COLORS = {
@@ -310,45 +311,16 @@ const TaskManagement = () => {
 
             {/* Modals */}
             {selectedTicket && !showAssignModal && !showStatusModal && !showCommentModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content animate-fade-in modal-lg">
-                        <div className="modal-header">
-                            <h2 className="modal-title">Ticket Details</h2>
-                            <button onClick={() => setSelectedTicket(null)} className="modal-close-btn"><XCircle size={24} /></button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="flex flex-col md:flex-row justify-between gap-6 border-b border-gray-100 pb-6">
-                                <div>
-                                    <h3 className="text-2xl font-bold text-gray-900 mb-2">{selectedTicket.ticket_number}</h3>
-                                    <div className="flex gap-2">
-                                        <span className={`status-badge ${STATUS_COLORS[selectedTicket.status]}`}>
-                                            {STATUS_LABELS[selectedTicket.status]}
-                                        </span>
-                                        <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full border border-gray-200">
-                                            {selectedTicket.category_name}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-sm text-gray-500">Created on</div>
-                                    <div className="font-medium text-gray-900">{new Date(selectedTicket.created_at).toLocaleDateString()}</div>
-                                    <div className="text-sm text-gray-500 mt-1">by {selectedTicket.student_name}</div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">Issue Description</h4>
-                                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100 text-gray-700 whitespace-pre-wrap leading-relaxed shadow-sm">
-                                    {selectedTicket.description}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="modal-footer">
-                            <button onClick={() => setSelectedTicket(null)} className="btn-secondary">Close</button>
-                            <button onClick={() => openAssignModal(selectedTicket)} className="btn-primary">Assign To</button>
-                        </div>
-                    </div>
-                </div>
+                <TicketDetailsModal
+                    ticket={selectedTicket}
+                    onClose={() => setSelectedTicket(null)}
+                    onAssign={() => openAssignModal(selectedTicket)}
+                    onStatusUpdate={() => openStatusModal(selectedTicket)}
+                    onAddComment={() => {
+                        setSelectedTicket(selectedTicket);
+                        setShowCommentModal(true);
+                    }}
+                />
             )}
 
             {/* Assign Modal */}
@@ -361,25 +333,55 @@ const TaskManagement = () => {
                         </div>
                         <div className="modal-body">
                             <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl mb-6 p-2 custom-scrollbar bg-gray-50/50">
-                                {usersData?.map((user) => (
-                                    <label key={user.id} className="flex items-center p-3 hover:bg-white hover:shadow-sm cursor-pointer rounded-lg transition-all border border-transparent hover:border-gray-100 mb-1">
-                                        <input
-                                            type="checkbox"
-                                            checked={assignForm.assigned_to.includes(user.id)}
-                                            onChange={() => {
-                                                const newAssigned = assignForm.assigned_to.includes(user.id)
-                                                    ? assignForm.assigned_to.filter(id => id !== user.id)
-                                                    : [...assignForm.assigned_to, user.id];
-                                                setAssignForm({ ...assignForm, assigned_to: newAssigned });
-                                            }}
-                                            className="w-5 h-5 text-blue-600 rounded bg-gray-100 border-gray-300 focus:ring-blue-500"
-                                        />
-                                        <div className="ml-3">
-                                            <div className="font-medium text-gray-900">{user.name}</div>
-                                            <div className="text-xs text-gray-500">{user.role}</div>
-                                        </div>
-                                    </label>
-                                ))}
+                                {usersData?.filter(u => u.role === 'staff').length > 0 && (
+                                    <div className="mb-3">
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-2">Staff (Managers)</h4>
+                                        {usersData.filter(u => u.role === 'staff').map((user) => (
+                                            <label key={user.id} className="flex items-center p-3 hover:bg-white hover:shadow-sm cursor-pointer rounded-lg transition-all border border-transparent hover:border-gray-100 mb-1">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={assignForm.assigned_to.includes(user.id)}
+                                                    onChange={() => {
+                                                        const newAssigned = assignForm.assigned_to.includes(user.id)
+                                                            ? assignForm.assigned_to.filter(id => id !== user.id)
+                                                            : [...assignForm.assigned_to, user.id];
+                                                        setAssignForm({ ...assignForm, assigned_to: newAssigned });
+                                                    }}
+                                                    className="w-5 h-5 text-blue-600 rounded bg-gray-100 border-gray-300 focus:ring-blue-500"
+                                                />
+                                                <div className="ml-3">
+                                                    <div className="font-medium text-gray-900">{user.name}</div>
+                                                    <div className="text-xs text-blue-600 font-medium capitalize">{user.role}</div>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {usersData?.filter(u => u.role === 'worker').length > 0 && (
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-2 mt-4">Workers</h4>
+                                        {usersData.filter(u => u.role === 'worker').map((user) => (
+                                            <label key={user.id} className="flex items-center p-3 hover:bg-white hover:shadow-sm cursor-pointer rounded-lg transition-all border border-transparent hover:border-gray-100 mb-1">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={assignForm.assigned_to.includes(user.id)}
+                                                    onChange={() => {
+                                                        const newAssigned = assignForm.assigned_to.includes(user.id)
+                                                            ? assignForm.assigned_to.filter(id => id !== user.id)
+                                                            : [...assignForm.assigned_to, user.id];
+                                                        setAssignForm({ ...assignForm, assigned_to: newAssigned });
+                                                    }}
+                                                    className="w-5 h-5 text-blue-600 rounded bg-gray-100 border-gray-300 focus:ring-blue-500"
+                                                />
+                                                <div className="ml-3">
+                                                    <div className="font-medium text-gray-900">{user.name}</div>
+                                                    <div className="text-xs text-gray-500 capitalize">{user.role}</div>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="modal-footer">
@@ -419,6 +421,52 @@ const TaskManagement = () => {
                             <button onClick={() => setShowStatusModal(false)} className="btn-secondary">Cancel</button>
                             <button onClick={handleStatusUpdate} disabled={statusMutation.isPending} className="btn-primary">
                                 {statusMutation.isPending ? 'Updating...' : 'Update Status'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Comment Modal */}
+            {showCommentModal && selectedTicket && (
+                <div className="modal-overlay">
+                    <div className="modal-content animate-fade-in modal-md">
+                        <div className="modal-header">
+                            <h2 className="modal-title">Add Comment</h2>
+                            <button onClick={() => setShowCommentModal(false)} className="modal-close-btn"><XCircle size={24} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="form-label">Comment</label>
+                                    <textarea
+                                        value={commentForm.comment_text}
+                                        onChange={(e) => setCommentForm({ ...commentForm, comment_text: e.target.value })}
+                                        className="form-input min-h-[100px]"
+                                        placeholder="Type your comment here..."
+                                    />
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={commentForm.is_internal}
+                                        onChange={(e) => setCommentForm({ ...commentForm, is_internal: e.target.checked })}
+                                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">Internal Note (Visible only to staff)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button onClick={() => setShowCommentModal(false)} className="btn-secondary">Cancel</button>
+                            <button
+                                onClick={() => {
+                                    if (!commentForm.comment_text.trim()) return toast.error('Please enter a comment');
+                                    commentMutation.mutate({ ticketId: selectedTicket.id, data: commentForm });
+                                }}
+                                disabled={commentMutation.isPending}
+                                className="btn-primary"
+                            >
+                                {commentMutation.isPending ? 'Adding...' : 'Add Comment'}
                             </button>
                         </div>
                     </div>

@@ -22,6 +22,7 @@ import {
 import api from '../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../components/LoadingAnimation';
+import TicketDetailsModal from '../components/Admin/TicketDetailsModal';
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -454,143 +455,8 @@ const TicketManagement = () => {
 };
 
 // Ticket Details Modal Component
-const TicketDetailsModal = ({ ticket, onClose, onAssign, onStatusUpdate, onAddComment }) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Ticket Details</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <XCircle size={24} />
-          </button>
-        </div>
-        <div className="p-6 space-y-6">
-          {/* Ticket Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Ticket Number</label>
-              <p className="text-lg font-semibold text-gray-900">{ticket.ticket_number}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Status</label>
-              <p className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${STATUS_COLORS[ticket.status] || 'bg-gray-100'}`}>
-                {STATUS_LABELS[ticket.status] || ticket.status}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Student</label>
-              <p className="text-gray-900">{ticket.student_name} ({ticket.admission_number})</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Category</label>
-              <p className="text-gray-900">{ticket.category_name} {ticket.sub_category_name && `> ${ticket.sub_category_name}`}</p>
-            </div>
-            <div className="col-span-2">
-              <label className="text-sm font-medium text-gray-500">Title</label>
-              <p className="text-gray-900">{ticket.title}</p>
-            </div>
-            <div className="col-span-2">
-              <label className="text-sm font-medium text-gray-500">Description</label>
-              <p className="text-gray-900 whitespace-pre-wrap">{ticket.description}</p>
-            </div>
-            {ticket.photo_url && (
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-500">Photo</label>
-                <img src={ticket.photo_url} alt="Ticket photo" className="mt-2 max-w-md rounded-lg border" />
-              </div>
-            )}
-          </div>
-
-          {/* Assignments */}
-          {ticket.assignments && ticket.assignments.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Assigned To</h3>
-              <div className="space-y-2">
-                {ticket.assignments.map((assignment) => (
-                  <div key={assignment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">{assignment.assigned_to_name}</p>
-                      <p className="text-sm text-gray-500">{assignment.assigned_to_role}</p>
-                    </div>
-                    <p className="text-sm text-gray-500">{new Date(assignment.assigned_at).toLocaleDateString()}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Comments */}
-          {ticket.comments && ticket.comments.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Comments</h3>
-              <div className="space-y-3">
-                {ticket.comments.map((comment) => (
-                  <div key={comment.id} className={`p-3 rounded-lg ${comment.is_internal ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium text-gray-900">{comment.user_name}</p>
-                      <p className="text-xs text-gray-500">{new Date(comment.created_at).toLocaleString()}</p>
-                    </div>
-                    <p className="text-gray-700">{comment.comment_text}</p>
-                    {comment.is_internal && (
-                      <span className="inline-block mt-2 text-xs px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Internal Note</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Feedback */}
-          {ticket.feedback && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Feedback</h3>
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <Star className="text-yellow-500 fill-yellow-500" size={20} />
-                  <span className="font-semibold text-gray-900">{ticket.feedback.rating}/5</span>
-                </div>
-                {ticket.feedback.feedback_text && (
-                  <p className="text-gray-700">{ticket.feedback.feedback_text}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-4 border-t">
-            <button
-              onClick={onAssign}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-            >
-              <UserPlus size={18} />
-              Assign
-            </button>
-            <button
-              onClick={onStatusUpdate}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
-            >
-              <Edit size={18} />
-              Update Status
-            </button>
-            <button
-              onClick={onAddComment}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <MessageSquare size={18} />
-              Add Comment
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+// Removed inline component to use the one from src/components/Admin/TicketDetailsModal.jsx 
+// Make sure to import it at the top of the file
 
 // Assign Modal Component
 const AssignModal = ({ ticket, users, form, setForm, onClose, onAssign, loading }) => {
