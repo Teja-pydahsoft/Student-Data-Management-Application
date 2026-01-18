@@ -49,7 +49,18 @@ const EmployeeModal = ({
         password: ''
     });
 
-    const totalSteps = formData.role === 'staff' ? 3 : 2;
+    // Dynamic steps configuration
+    const shouldShowRoleSelection = activeRole === 'all';
+    const shouldShowCategorySelection = formData.role === 'staff';
+
+    const steps = [
+        { type: 'info', title: editingUser ? 'Employee Info' : 'Select User', icon: UserCircle },
+        ...(shouldShowRoleSelection ? [{ type: 'role', title: 'Assign Role', icon: Shield }] : []),
+        ...(shouldShowCategorySelection ? [{ type: 'categories', title: 'Assign Tasks', icon: Briefcase }] : [])
+    ].map((step, index) => ({ ...step, number: index + 1 }));
+
+    const totalSteps = steps.length;
+    const currentStepObj = steps[currentStep - 1] || steps[0];
 
     useEffect(() => {
         if (isOpen) {
@@ -110,7 +121,9 @@ const EmployeeModal = ({
         if (!formData.role) return;
 
         if (mode === 'create') {
-            if (!formData.name || !formData.email || !formData.username || !formData.password) {
+            // For workers, email is optional
+            const isWorker = formData.role === 'worker';
+            if (!formData.name || (!isWorker && !formData.email) || !formData.username || !formData.password) {
                 return;
             }
             onCreateNewUser(formData);
@@ -121,11 +134,15 @@ const EmployeeModal = ({
     };
 
     const canProceedToNextStep = () => {
-        if (currentStep === 1) {
+        if (currentStepObj.type === 'info') {
             if (mode === 'select') return formData.rbac_user_id !== null;
-            if (mode === 'create') return formData.name && formData.email && formData.username && formData.password;
+            if (mode === 'create') {
+                const isWorker = formData.role === 'worker';
+                const hasPhone = isWorker ? !!formData.phone : true;
+                return formData.name && (isWorker || formData.email) && formData.username && formData.password && hasPhone;
+            }
         }
-        if (currentStep === 2) return formData.role !== null;
+        if (currentStepObj.type === 'role') return formData.role !== null;
         return true;
     };
 
@@ -197,12 +214,6 @@ const EmployeeModal = ({
 
     const mainCategories = categories.filter(c => !c.parent_id);
 
-    const steps = [
-        { number: 1, title: editingUser ? 'Employee Info' : 'Select User', icon: UserCircle },
-        { number: 2, title: 'Assign Role', icon: Shield },
-        ...(formData.role === 'staff' ? [{ number: 3, title: 'Assign Tasks', icon: Briefcase }] : [])
-    ];
-
     return (
         <div className="employee-modal-overlay">
             <div className="employee-modal-container">
@@ -225,39 +236,41 @@ const EmployeeModal = ({
                 </div>
 
                 {/* Progress Steps */}
-                <div className="employee-steps-container">
-                    <div className="employee-steps-wrapper">
-                        {steps.map((step, index) => (
-                            <React.Fragment key={step.number}>
-                                <div className="step-item">
-                                    <div
-                                        className={`step-circle ${currentStep >= step.number ? 'active' : 'inactive'}`}
-                                    >
-                                        {currentStep > step.number ? <Check size={14} strokeWidth={3} /> : step.number}
-                                    </div>
-                                    <span
-                                        className={`step-label ${currentStep >= step.number ? 'active' : 'inactive'}`}
-                                    >
-                                        {step.title}
-                                    </span>
-                                </div>
-                                {index < steps.length - 1 && (
-                                    <div className="step-connector">
+                {totalSteps > 1 && (
+                    <div className="employee-steps-container">
+                        <div className="employee-steps-wrapper">
+                            {steps.map((step, index) => (
+                                <React.Fragment key={step.number}>
+                                    <div className="step-item">
                                         <div
-                                            className="step-connector-progress"
-                                            style={{ width: currentStep > step.number ? '100%' : '0%' }}
-                                        />
+                                            className={`step-circle ${currentStep >= step.number ? 'active' : 'inactive'}`}
+                                        >
+                                            {currentStep > step.number ? <Check size={14} strokeWidth={3} /> : step.number}
+                                        </div>
+                                        <span
+                                            className={`step-label ${currentStep >= step.number ? 'active' : 'inactive'}`}
+                                        >
+                                            {step.title}
+                                        </span>
                                     </div>
-                                )}
-                            </React.Fragment>
-                        ))}
+                                    {index < steps.length - 1 && (
+                                        <div className="step-connector">
+                                            <div
+                                                className="step-connector-progress"
+                                                style={{ width: currentStep > step.number ? '100%' : '0%' }}
+                                            />
+                                        </div>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Body - Scrollable Area */}
                 <div className="employee-modal-content custom-scrollbar">
                     {/* Step 1: Select/Create User */}
-                    {currentStep === 1 && !editingUser && (
+                    {currentStepObj.type === 'info' && !editingUser && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {/* Tab Switcher */}
                             <div className="user-type-switcher">
@@ -348,7 +361,7 @@ const EmployeeModal = ({
                                             {/* Email */}
                                             <div>
                                                 <label className="form-label">
-                                                    Email <span style={{ color: 'var(--red-500)' }}>*</span>
+                                                    Email {formData.role !== 'worker' && <span style={{ color: 'var(--red-500)' }}>*</span>}
                                                 </label>
                                                 <input
                                                     type="email"
@@ -362,7 +375,7 @@ const EmployeeModal = ({
                                             {/* Phone */}
                                             <div>
                                                 <label className="form-label">
-                                                    Phone (Optional)
+                                                    Phone {formData.role === 'worker' ? <span style={{ color: 'var(--red-500)' }}>*</span> : '(Optional)'}
                                                 </label>
                                                 <input
                                                     type="tel"
@@ -419,7 +432,7 @@ const EmployeeModal = ({
                     )}
 
                     {/* Step 1: Editing User Info */}
-                    {currentStep === 1 && editingUser && (
+                    {currentStepObj.type === 'info' && editingUser && (
                         <div className="animate-fade-in">
                             <div className="edit-user-highlight">
                                 <div className="edit-user-highlight-bg"></div>
@@ -440,7 +453,7 @@ const EmployeeModal = ({
                     )}
 
                     {/* Step 2: Role Selection */}
-                    {currentStep === 2 && (
+                    {currentStepObj.type === 'role' && (
                         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                             <div style={{ textAlign: 'center' }}>
                                 <h3 className="employee-modal-title">Choose Role</h3>
@@ -490,7 +503,7 @@ const EmployeeModal = ({
                     )}
 
                     {/* Step 3: Category Assignment (Managers Only) */}
-                    {currentStep === 3 && formData.role === 'staff' && (
+                    {currentStepObj.type === 'categories' && (
                         <div className="category-selection-container animate-fade-in">
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                                 <div>

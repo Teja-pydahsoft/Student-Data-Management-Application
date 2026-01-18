@@ -128,22 +128,34 @@ const EmployeeManagement = () => {
     };
 
     const handleCreateNewUser = (userData) => {
+        const isWorker = userData.role === 'worker';
+
         // Validate required fields
-        if (!userData.name || !userData.email || !userData.username || !userData.password) {
+        // Phone is required for workers in backend
+        if (!userData.name || (!isWorker && !userData.email) || !userData.username || !userData.password) {
             return toast.error('All fields are required');
         }
 
-        // Create RBAC user with the selected role and categories
-        createRbacUserMutation.mutate({
-            name: userData.name,
-            email: userData.email,
-            phone: userData.phone,
-            username: userData.username,
-            password: userData.password,
-            role: userData.role,
-            assigned_categories: userData.assigned_categories,
-            assigned_subcategories: userData.assigned_subcategories
-        });
+        if (isWorker && !userData.phone) {
+            return toast.error('Phone number is required for workers');
+        }
+
+        if (isWorker) {
+            // Workers are standalone, create directly in employee table
+            createMutation.mutate(userData);
+        } else {
+            // Managers need RBAC user first
+            createRbacUserMutation.mutate({
+                name: userData.name,
+                email: userData.email,
+                phone: userData.phone,
+                username: userData.username,
+                password: userData.password,
+                role: userData.role,
+                assigned_categories: userData.assigned_categories,
+                assigned_subcategories: userData.assigned_subcategories
+            });
+        }
     };
 
     const openModal = (user = null) => {

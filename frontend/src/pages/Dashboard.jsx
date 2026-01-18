@@ -27,6 +27,8 @@ import LoadingAnimation from '../components/LoadingAnimation';
 import { formatDate } from '../utils/dateUtils';
 import { useStudentStats } from '../hooks/useStudents';
 
+import DashboardSkeleton from '../components/skeletons/DashboardSkeleton';
+
 const Dashboard = () => {
   // Use React Query for stats
   const { data: stats, isLoading: loadingStats } = useStudentStats();
@@ -117,13 +119,7 @@ const Dashboard = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-white to-gray-50">
-        <div className="text-center space-y-4">
-          <LoadingAnimation width={32} height={32} message="Loading dashboard..." />
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
