@@ -21,6 +21,7 @@ import {
     RiCloseLine,
     RiLogoutBoxRLine,
     RiUser3Line,
+    RiUser3Fill,
     RiMore2Fill,
     RiNotification3Line,
     RiCustomerService2Line,
