@@ -293,3 +293,80 @@ exports.getAvailableUsers = async (req, res) => {
         });
     }
 };
+/**
+ * Get employee ticket history and stats
+ */
+exports.getEmployeeHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Get employee details to find their RBAC ID if it exists
+        const [employee] = await masterPool.query(
+            'SELECT * FROM ticket_employees WHERE id = ?',
+            [id]
+        );
+
+        if (employee.length === 0) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        const emp = employee[0];
+        const identifiers = [emp.id];
+        // Ensure strictly parsing rbac_user_id
+        if (emp.rbac_user_id !== undefined && emp.rbac_user_id !== null) {
+            identifiers.push(emp.rbac_user_id);
+        }
+
+        // 2. Get Overall Stats
+        // We'll query tickets assigned to either their emp ID or RBAC ID
+        // Removing is_active check to include all historical assignments
+        const [stats] = await masterPool.query(`
+            SELECT 
+                COUNT(*) as total_assigned,
+                SUM(CASE WHEN t.status = 'open' THEN 1 ELSE 0 END) as open_tickets,
+                SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tickets,
+                SUM(CASE WHEN t.status IN ('resolved', 'completed') THEN 1 ELSE 0 END) as completed_tickets,
+                SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) as closed_tickets,
+                SUM(CASE WHEN t.priority = 'critical' AND t.status NOT IN ('resolved', 'closed', 'completed') THEN 1 ELSE 0 END) as critical_pending
+            FROM ticket_assignments ta
+            JOIN tickets t ON ta.ticket_id = t.id
+            WHERE ta.assigned_to IN (?)
+        `, [identifiers]);
+
+        // 3. Get Recent History (Last 50 interactions)
+        // Including when they were assigned
+        const [history] = await masterPool.query(`
+            SELECT 
+                t.id,
+                t.ticket_number,
+                t.title,
+                t.priority,
+                t.status,
+                t.created_at,
+                ta.assigned_at,
+                c.name as category_name
+            FROM ticket_assignments ta
+            JOIN tickets t ON ta.ticket_id = t.id
+            LEFT JOIN complaint_categories c ON t.category_id = c.id
+            WHERE ta.assigned_to IN (?)
+            ORDER BY ta.assigned_at DESC
+            LIMIT 50
+        `, [identifiers]);
+
+        res.json({
+            success: true,
+            data: {
+                employee: emp,
+                stats: stats[0],
+                history: history
+            }
+        });
+
+    } catch (error) {
+        console.error('Get Employee History Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error fetching employee history'
+        });
+    }
+};

@@ -8,12 +8,14 @@ import {
     Search,
     Phone,
     Mail,
-    Filter
+    Filter,
+    TrendingUp
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../../components/LoadingAnimation';
 import EmployeeModal from '../../components/admin/EmployeeModal';
+import EmployeeHistoryModal from '../../components/admin/EmployeeHistoryModal';
 import '../../styles/admin-pages.css';
 
 const EmployeeManagement = () => {
@@ -21,6 +23,7 @@ const EmployeeManagement = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [viewingHistoryUser, setViewingHistoryUser] = useState(null);
 
     const queryClient = useQueryClient();
 
@@ -241,9 +244,28 @@ const EmployeeManagement = () => {
                                                 <p className="text-xs text-gray-500 uppercase font-semibold tracking-wider">{employee.role}</p>
                                             </div>
                                         </div>
-                                        <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => openModal(employee)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
-                                            <button onClick={() => { if (window.confirm('Remove employee?')) deleteMutation.mutate(employee.id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => setViewingHistoryUser(employee)}
+                                                className="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                                                title="View Track"
+                                            >
+                                                <TrendingUp size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => openModal(employee)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                title="Edit"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => { if (window.confirm('Remove employee?')) deleteMutation.mutate(employee.id); }}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="space-y-2 text-sm text-gray-600">
@@ -284,6 +306,12 @@ const EmployeeManagement = () => {
                 onSubmit={handleModalSubmit}
                 onCreateNewUser={handleCreateNewUser}
                 isSubmitting={createMutation.isPending || updateMutation.isPending || createRbacUserMutation.isPending}
+            />
+
+            <EmployeeHistoryModal
+                isOpen={!!viewingHistoryUser}
+                onClose={() => setViewingHistoryUser(null)}
+                employee={viewingHistoryUser}
             />
         </div>
     );

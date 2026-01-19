@@ -18,6 +18,9 @@ router.post('/', employeeController.createEmployee);
 // Update employee role
 router.put('/:id', employeeController.updateEmployee);
 
+// Get employee history
+router.get('/:id/history', employeeController.getEmployeeHistory);
+
 // Delete employee (soft delete)
 router.delete('/:id', employeeController.deleteEmployee);
 
