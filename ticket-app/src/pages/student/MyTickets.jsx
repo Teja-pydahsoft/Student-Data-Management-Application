@@ -383,7 +383,7 @@ const TicketDetailsModal = ({ ticket, onClose, onFeedback, onReopen }) => {
                     </button>
                 </div>
 
-                <div style={{ padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto' }}>
+                <div className="modal-body-responsive">
                     {/* Status Stepper */}
                     <TicketStepper status={ticket.status} />
 

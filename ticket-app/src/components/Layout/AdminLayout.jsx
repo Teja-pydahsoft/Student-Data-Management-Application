@@ -62,6 +62,12 @@ const AdminLayout = () => {
             permission: FRONTEND_MODULES.USERS
         },
         {
+            icon: Shield,
+            label: 'Role Management',
+            path: '/roles',
+            permission: FRONTEND_MODULES.USERS
+        },
+        {
             icon: ArrowLeftCircle,
             label: 'Back to Portal',
             path: '/',

@@ -22,36 +22,24 @@ const USER_ROLES = {
     SUPPORT_STAFF: 'support_staff'
 };
 
-// Module mappings
+// Module mappings - Ticket App Specific
 const MODULES = {
-    DASHBOARD: 'dashboard',
-    ANNOUNCEMENTS: 'announcements',
-    STUDENTS: 'student_management',
-    SUBMISSIONS: 'submissions', // Self-registration/edits
-    PROMOTIONS: 'promotions',
-    ATTENDANCE: 'attendance',
-    COURSES: 'course_management',
-    USERS: 'user_management',
-    REPORTS: 'reports',
-    TICKETS: 'ticket_management',
-    SERVICES: 'student_services',
-    TASK_MANAGEMENT: 'task_management'
+    DASHBOARD: 'ticket_dashboard',
+    TICKET_MANAGEMENT: 'ticket_management',
+    EMPLOYEE_MANAGEMENT: 'employee_management',
+    CATEGORY_MANAGEMENT: 'category_management',
+    REPORTS: 'ticket_reports',
+    SETTINGS: 'ticket_settings'
 };
 
 // Map backend modules to frontend routes
 const MODULE_ROUTE_MAP = {
     [MODULES.DASHBOARD]: '/',
-    [MODULES.ANNOUNCEMENTS]: '/announcements',
-    [MODULES.STUDENTS]: '/students',
-    [MODULES.SUBMISSIONS]: '/students/self-registration',
-    [MODULES.PROMOTIONS]: '/promotions',
-    [MODULES.ATTENDANCE]: '/attendance',
-    [MODULES.COURSES]: '/courses',
-    [MODULES.USERS]: '/users',
+    [MODULES.TICKET_MANAGEMENT]: '/tickets',
+    [MODULES.EMPLOYEE_MANAGEMENT]: '/employees',
+    [MODULES.CATEGORY_MANAGEMENT]: '/categories',
     [MODULES.REPORTS]: '/reports',
-    [MODULES.TICKETS]: '/tickets',
-    [MODULES.SERVICES]: '/services',
-    [MODULES.TASK_MANAGEMENT]: '/task-management'
+    [MODULES.SETTINGS]: '/settings'
 };
 
 // Permission Levels
@@ -87,6 +75,34 @@ const validateRoleRequirements = (role, data) => {
     return true;
 };
 
+// Create default ticket permissions (all false)
+const createDefaultTicketPermissions = () => {
+    const permissions = {};
+    Object.values(MODULES).forEach(module => {
+        permissions[module] = {
+            read: false,
+            write: false,
+            update: false,
+            delete: false
+        };
+    });
+    return permissions;
+};
+
+// Create super admin ticket permissions (all true)
+const createSuperAdminTicketPermissions = () => {
+    const permissions = {};
+    Object.values(MODULES).forEach(module => {
+        permissions[module] = {
+            read: true,
+            write: true,
+            update: true,
+            delete: true
+        };
+    });
+    return permissions;
+};
+
 module.exports = {
     USER_ROLES,
     MODULES,
@@ -94,5 +110,7 @@ module.exports = {
     MODULE_ROUTE_MAP,
     hasPermission,
     canCreateRole,
-    validateRoleRequirements
+    validateRoleRequirements,
+    createDefaultTicketPermissions,
+    createSuperAdminTicketPermissions
 };

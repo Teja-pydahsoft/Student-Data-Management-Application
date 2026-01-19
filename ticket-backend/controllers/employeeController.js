@@ -11,6 +11,9 @@ exports.getEmployees = async (req, res) => {
                 te.id,
                 te.rbac_user_id,
                 te.role,
+                te.custom_role_id,
+                te.role_name,
+                te.permissions as user_permissions,
                 te.is_active,
                 te.assigned_date,
                 te.assigned_categories,
@@ -21,6 +24,8 @@ exports.getEmployees = async (req, res) => {
                 COALESCE(te.email, ru.email) as email,
                 COALESCE(te.phone, ru.phone) as phone,
                 COALESCE(te.username, ru.username) as username,
+                tr.display_name as role_display_name,
+                tr.permissions as role_permissions,
                 (
                     SELECT COUNT(DISTINCT ta.ticket_id)
                     FROM ticket_assignments ta
@@ -31,6 +36,7 @@ exports.getEmployees = async (req, res) => {
                 ) as active_tickets_count
             FROM ticket_employees te
             LEFT JOIN rbac_users ru ON te.rbac_user_id = ru.id
+            LEFT JOIN ticket_roles tr ON te.custom_role_id = tr.id
             WHERE te.is_active = 1
             ORDER BY te.created_at DESC
         `);
@@ -39,6 +45,8 @@ exports.getEmployees = async (req, res) => {
         const parsedRows = rows.map(row => {
             let categories = [];
             let subcategories = [];
+            let userPermissions = null;
+            let rolePermissions = null;
 
             try {
                 if (row.assigned_categories) {
@@ -51,17 +59,28 @@ exports.getEmployees = async (req, res) => {
                         ? JSON.parse(row.assigned_subcategories)
                         : row.assigned_subcategories;
                 }
+                if (row.user_permissions) {
+                    userPermissions = typeof row.user_permissions === 'string'
+                        ? JSON.parse(row.user_permissions)
+                        : row.user_permissions;
+                }
+                if (row.role_permissions) {
+                    rolePermissions = typeof row.role_permissions === 'string'
+                        ? JSON.parse(row.role_permissions)
+                        : row.role_permissions;
+                }
             } catch (e) {
-                console.error('Error parsing categories:', e);
+                console.error('Error parsing JSON fields:', e);
             }
 
             return {
                 ...row,
-                // Ensure we return consistent ID for assignment logic
-                // If rbac_user_id is missing (worker), we might need to rely on te.id or handle it in frontend
-                // For now, let's keep the structure but note that rbac_user_id might be null
                 assigned_categories: Array.isArray(categories) ? categories : [],
-                assigned_subcategories: Array.isArray(subcategories) ? subcategories : []
+                assigned_subcategories: Array.isArray(subcategories) ? subcategories : [],
+                user_permissions: userPermissions,
+                role_permissions: rolePermissions,
+                // Effective permissions: user overrides take precedence over role permissions
+                effective_permissions: userPermissions || rolePermissions
             };
         });
 
@@ -83,78 +102,144 @@ exports.getEmployees = async (req, res) => {
  */
 exports.createEmployee = async (req, res) => {
     try {
-        const { rbac_user_id, role, assigned_categories, assigned_subcategories, name, email, username, password, phone } = req.body;
+        const {
+            rbac_user_id,
+            role,
+            custom_role_id,  // NEW: Reference to ticket_roles
+            assigned_categories,
+            assigned_subcategories,
+            name,
+            email,
+            username,
+            password,
+            phone,
+            permissions  // NEW: Optional user-specific permission overrides
+        } = req.body;
 
-        if (!role || !['staff', 'worker'].includes(role)) {
+        // Validate role or custom_role_id is provided
+        if (!role && !custom_role_id) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid role. Must be staff or worker'
+                message: 'Either role or custom_role_id must be provided'
             });
         }
 
-        // Logic split based on role
-        if (role === 'staff') {
-            // STAFF (Manager): Must select existing RBAC user
-            if (!rbac_user_id) {
-                return res.status(400).json({ success: false, message: 'rbac_user_id is required for Managers' });
+        let roleInfo = null;
+        let roleName = role;
+
+        // If custom_role_id is provided, fetch role details
+        if (custom_role_id) {
+            const [roleData] = await masterPool.query(
+                'SELECT role_name, display_name, permissions FROM ticket_roles WHERE id = ? AND is_active = 1',
+                [custom_role_id]
+            );
+
+            if (roleData.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Custom role not found or inactive'
+                });
             }
 
+            roleInfo = roleData[0];
+            roleName = roleInfo.role_name;
+        } else {
+            // Legacy role validation
+            if (!['staff', 'worker', 'manager'].includes(role)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid role. Must be staff, worker, or manager (or provide custom_role_id)'
+                });
+            }
+        }
+
+        // Logic split based on whether RBAC user is provided
+        if (rbac_user_id) {
+            // RBAC User Assignment (Manager, Principal, etc.)
             // Check if user exists in rbac_users
-            const [userCheck] = await masterPool.query('SELECT id, name FROM rbac_users WHERE id = ?', [rbac_user_id]);
+            const [userCheck] = await masterPool.query(
+                'SELECT id, name FROM rbac_users WHERE id = ?',
+                [rbac_user_id]
+            );
+
             if (userCheck.length === 0) {
-                return res.status(404).json({ success: false, message: 'User not found in RBAC users' });
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found in RBAC users'
+                });
             }
 
             // Check if already assigned
-            const [existing] = await masterPool.query('SELECT id FROM ticket_employees WHERE rbac_user_id = ? AND is_active = 1', [rbac_user_id]);
+            const [existing] = await masterPool.query(
+                'SELECT id FROM ticket_employees WHERE rbac_user_id = ? AND is_active = 1',
+                [rbac_user_id]
+            );
+
             if (existing.length > 0) {
-                return res.status(409).json({ success: false, message: 'User is already assigned as an employee' });
+                return res.status(409).json({
+                    success: false,
+                    message: 'User is already assigned as an employee'
+                });
             }
 
             const categoriesJson = assigned_categories ? JSON.stringify(assigned_categories) : null;
             const subcategoriesJson = assigned_subcategories ? JSON.stringify(assigned_subcategories) : null;
+            const permissionsJson = permissions ? JSON.stringify(permissions) : null;
 
             await masterPool.query(
-                `INSERT INTO ticket_employees (rbac_user_id, role, assigned_categories, assigned_subcategories) VALUES (?, ?, ?, ?)`,
-                [rbac_user_id, role, categoriesJson, subcategoriesJson]
+                `INSERT INTO ticket_employees 
+                (rbac_user_id, role, custom_role_id, role_name, assigned_categories, assigned_subcategories, permissions) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [rbac_user_id, role || 'staff', custom_role_id || null, roleName, categoriesJson, subcategoriesJson, permissionsJson]
             );
 
-            // Sync role
-            await masterPool.query('UPDATE rbac_users SET role = ? WHERE id = ?', [role, rbac_user_id]);
-
-        } else if (role === 'worker') {
-            // WORKER: Create standalone Identity in ticket_employees
-            // validate phone is present
-            if (!name || !username || !password || !phone) {
-                return res.status(400).json({ success: false, message: 'Name, username, password, and mobile number are required for Workers' });
+            // Sync role to rbac_users if it's a legacy role
+            if (role && ['staff', 'worker', 'manager'].includes(role)) {
+                await masterPool.query(
+                    'UPDATE rbac_users SET role = ? WHERE id = ?',
+                    [role, rbac_user_id]
+                );
             }
 
-            // Check if username exists in ticket_employees OR rbac_users to avoid confusion
+        } else {
+            // Standalone Worker/Employee Creation
+            if (!name || !username || !password || !phone) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Name, username, password, and mobile number are required for standalone employees'
+                });
+            }
+
+            // Check if username exists
             const [existingUser] = await masterPool.query(
                 'SELECT id FROM ticket_employees WHERE username = ? UNION SELECT id FROM rbac_users WHERE username = ?',
                 [username, username]
             );
+
             if (existingUser.length > 0) {
-                return res.status(409).json({ success: false, message: 'Username already exists' });
+                return res.status(409).json({
+                    success: false,
+                    message: 'Username already exists'
+                });
             }
 
             const hashedPassword = await bcrypt.hash(password, 10);
+            const permissionsJson = permissions ? JSON.stringify(permissions) : null;
 
-            // Insert standalone worker
+            // Insert standalone employee
             await masterPool.query(
-                `INSERT INTO ticket_employees (role, name, email, username, password_hash, phone) VALUES (?, ?, ?, ?, ?, ?)`,
-                [role, name, email || null, username, hashedPassword, phone]
+                `INSERT INTO ticket_employees 
+                (role, custom_role_id, role_name, name, email, username, password_hash, phone, permissions) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [role || 'worker', custom_role_id || null, roleName, name, email || null, username, hashedPassword, phone, permissionsJson]
             );
         }
 
-        // Fetch the created/assigned employee
-        // We need a way to get the ID we just inserted or the rbac_user_id one.
-        // Simplest is to just return success and let UI refresh, or do a quick lookup.
-        // For current flow simplicity:
-
         res.status(201).json({
             success: true,
-            message: role === 'worker' ? 'Worker created successfully' : 'Manager assigned successfully'
+            message: rbac_user_id
+                ? `${roleInfo?.display_name || role} assigned successfully`
+                : `${roleInfo?.display_name || role} created successfully`
         });
 
     } catch (error) {

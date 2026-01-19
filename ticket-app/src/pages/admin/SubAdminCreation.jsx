@@ -13,7 +13,11 @@ import {
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../../components/LoadingAnimation';
-import { BACKEND_MODULES, MODULE_LABELS, createDefaultPermissions } from '../../constants/rbac';
+import {
+    TICKET_MODULES,
+    TICKET_MODULE_LABELS,
+    createDefaultTicketPermissions
+} from '../../constants/ticketRbac';
 import '../../styles/admin-pages.css';
 
 const SubAdminCreation = () => {
@@ -84,7 +88,7 @@ const SubAdminCreation = () => {
                 email: admin.email,
                 phone_number: admin.phone_number || '',
                 password: '',
-                permissions: admin.permissions || createDefaultPermissions('sub_admin')
+                permissions: admin.permissions || createDefaultTicketPermissions('sub_admin')
             });
         } else {
             setEditingAdmin(null);
@@ -93,7 +97,7 @@ const SubAdminCreation = () => {
                 email: '',
                 phone_number: '',
                 password: '',
-                permissions: createDefaultPermissions('sub_admin') // All false by default for sub_admin usually, or whatever default
+                permissions: createDefaultTicketPermissions('sub_admin') // All false by default for sub_admin
             });
         }
         setShowModal(true);
@@ -199,7 +203,7 @@ const SubAdminCreation = () => {
                                             if (activeCount === 0) return null;
                                             return (
                                                 <span key={module} className="px-3 py-1 bg-gray-50 text-gray-700 text-xs rounded-lg font-medium border border-gray-200">
-                                                    {MODULE_LABELS[module] || module}: <span className="text-blue-600">{activeCount} rights</span>
+                                                    {TICKET_MODULE_LABELS[module] || module}: <span className="text-blue-600">{activeCount} rights</span>
                                                 </span>
                                             );
                                         })}
@@ -246,11 +250,11 @@ const SubAdminCreation = () => {
                             <div className="space-y-6">
                                 <h3 className="font-bold text-gray-900 border-b pb-2">Module Permissions</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                                    {Object.values(BACKEND_MODULES).map((module) => (
+                                    {Object.values(TICKET_MODULES).map((module) => (
                                         <div key={module} className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <Lock size={16} className="text-gray-400" />
-                                                <span className="font-bold text-gray-700">{MODULE_LABELS[module] || module}</span>
+                                                <span className="font-bold text-gray-700">{TICKET_MODULE_LABELS[module] || module}</span>
                                             </div>
                                             <div className="flex gap-2">
                                                 {['read', 'write', 'update', 'delete'].map(action => (

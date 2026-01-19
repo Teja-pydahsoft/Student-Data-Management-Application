@@ -112,7 +112,20 @@ exports.createUser = async (req, res) => {
         // 4. Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 5. Insert
+        // 5. Determine initial permissions based on role
+        const { createDefaultTicketPermissions, createSuperAdminTicketPermissions } = require('../constants/rbac');
+        let initialPermissions = {};
+
+        if (role === 'super_admin' || role === 'admin') {
+            initialPermissions = createSuperAdminTicketPermissions();
+        } else if (role === 'sub_admin') {
+            initialPermissions = createDefaultTicketPermissions();
+        } else {
+            // For staff and worker, empty permissions (they don't use RBAC permissions)
+            initialPermissions = {};
+        }
+
+        // 6. Insert
         // JSON fields (college_ids etc) are set to null/empty as these are global roles usually
         const [result] = await masterPool.query(
             `INSERT INTO rbac_users 
@@ -127,7 +140,7 @@ exports.createUser = async (req, res) => {
                 hashedPassword,
                 role,
                 currentUser.id,
-                JSON.stringify({}), // Empty permissions
+                JSON.stringify(initialPermissions), // Proper permissions based on role
                 JSON.stringify([]), // Empty college_ids
                 JSON.stringify([]), // Empty course_ids
                 JSON.stringify([])  // Empty branch_ids

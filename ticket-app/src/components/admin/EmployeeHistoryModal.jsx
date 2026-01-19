@@ -45,40 +45,102 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
 
     const StatCard = ({ title, value, icon: Icon, color }) => {
         let colorClasses = {
-            wrapper: 'from-white to-blue-50 border-blue-100',
-            icon: 'bg-blue-50 text-blue-600',
-            text: 'text-blue-600'
+            wrapper: 'from-blue-50 via-white to-blue-50/30',
+            border: 'border-blue-200/60',
+            iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600',
+            iconGlow: 'shadow-blue-500/25',
+            valueText: 'text-blue-600',
+            hoverShadow: 'hover:shadow-blue-200/50',
+            ringColor: 'ring-blue-100'
         };
 
         if (color?.includes('orange') || color?.includes('yellow')) {
             colorClasses = {
-                wrapper: 'from-white to-orange-50 border-orange-100',
-                icon: 'bg-orange-50 text-orange-600',
-                text: 'text-orange-600'
+                wrapper: 'from-orange-50 via-white to-orange-50/30',
+                border: 'border-orange-200/60',
+                iconBg: 'bg-gradient-to-br from-orange-500 to-amber-600',
+                iconGlow: 'shadow-orange-500/25',
+                valueText: 'text-orange-600',
+                hoverShadow: 'hover:shadow-orange-200/50',
+                ringColor: 'ring-orange-100'
             };
         } else if (color?.includes('green') || color?.includes('teal')) {
             colorClasses = {
-                wrapper: 'from-white to-emerald-50 border-emerald-100',
-                icon: 'bg-emerald-50 text-emerald-600',
-                text: 'text-emerald-600'
+                wrapper: 'from-emerald-50 via-white to-emerald-50/30',
+                border: 'border-emerald-200/60',
+                iconBg: 'bg-gradient-to-br from-emerald-500 to-teal-600',
+                iconGlow: 'shadow-emerald-500/25',
+                valueText: 'text-emerald-600',
+                hoverShadow: 'hover:shadow-emerald-200/50',
+                ringColor: 'ring-emerald-100'
             };
         } else if (color?.includes('red')) {
             colorClasses = {
-                wrapper: 'from-white to-red-50 border-red-100',
-                icon: 'bg-red-50 text-red-600',
-                text: 'text-red-600'
+                wrapper: 'from-red-50 via-white to-red-50/30',
+                border: 'border-red-200/60',
+                iconBg: 'bg-gradient-to-br from-red-500 to-rose-600',
+                iconGlow: 'shadow-red-500/25',
+                valueText: 'text-red-600',
+                hoverShadow: 'hover:shadow-red-200/50',
+                ringColor: 'ring-red-100'
             };
         }
 
         return (
-            <div className={`flex flex-col p-5 rounded-2xl border bg-gradient-to-br shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-1 ${colorClasses.wrapper}`}>
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${colorClasses.icon}`}>
-                    <Icon size={24} />
+            <div className={`
+                group relative flex flex-col p-6 rounded-2xl border-2 
+                bg-gradient-to-br ${colorClasses.wrapper} ${colorClasses.border}
+                shadow-lg ${colorClasses.hoverShadow}
+                hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1
+                transition-all duration-300 ease-out
+                overflow-hidden
+            `}>
+                {/* Subtle background pattern */}
+                <div className="absolute inset-0 opacity-[0.02]" style={{
+                    backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)',
+                    backgroundSize: '24px 24px'
+                }}></div>
+
+                {/* Icon with glow effect */}
+                <div className={`
+                    relative w-14 h-14 rounded-xl flex items-center justify-center mb-5
+                    ${colorClasses.iconBg} ${colorClasses.iconGlow}
+                    shadow-lg
+                    group-hover:scale-110 group-hover:rotate-3
+                    transition-all duration-300 ease-out
+                    ring-4 ${colorClasses.ringColor}
+                `}>
+                    <Icon size={26} className="text-white drop-shadow-sm" strokeWidth={2.5} />
+
+                    {/* Animated glow pulse */}
+                    <div className={`
+                        absolute inset-0 rounded-xl ${colorClasses.iconBg} 
+                        opacity-0 group-hover:opacity-20 
+                        animate-pulse transition-opacity duration-300
+                    `}></div>
                 </div>
-                <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">{title}</h3>
-                    <p className="text-2xl font-black text-gray-900">{value || 0}</p>
+
+                {/* Content */}
+                <div className="relative z-10">
+                    <h3 className="text-[11px] font-extrabold uppercase tracking-widest text-gray-500 mb-2 leading-tight">
+                        {title}
+                    </h3>
+                    <p className={`
+                        text-4xl font-black ${colorClasses.valueText} 
+                        tracking-tight leading-none
+                        group-hover:scale-105 transition-transform duration-300
+                        inline-block
+                    `}>
+                        {value || 0}
+                    </p>
                 </div>
+
+                {/* Decorative corner accent */}
+                <div className={`
+                    absolute -bottom-2 -right-2 w-20 h-20 
+                    ${colorClasses.iconBg} opacity-5 rounded-full blur-2xl
+                    group-hover:opacity-10 transition-opacity duration-300
+                `}></div>
             </div>
         );
     };
@@ -130,8 +192,7 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
                 </div>
 
                 {/* Content */}
-                {/* Content */}
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-gray-50" style={{ backgroundColor: '#F9FAFB' }}>
+                <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-gray-50" style={{ backgroundColor: '#F9FAFB' }}>
                     {loading ? (
                         <div className="flex items-center justify-center h-full min-h-[400px]">
                             <div className="flex flex-col items-center gap-4">
@@ -142,12 +203,12 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
                     ) : (
                         <div className="space-y-8">
                             {/* Stats Section */}
-                            <div className="border-b border-gray-200 pb-8">
+                            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
                                 <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-3">
                                     <div className="w-3 h-3 bg-blue-500 rounded-full ring-4 ring-blue-50"></div>
                                     Performance Overview
                                 </h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 lg:gap-7">
                                     <StatCard
                                         title="Total Assigned"
                                         value={stats.total_assigned}
@@ -176,13 +237,13 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
                             </div>
 
                             {/* Recent History Section */}
-                            <div>
+                            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
                                 <div className="flex items-center justify-between mb-6">
                                     <h3 className="text-lg font-bold text-gray-900 flex items-center gap-3">
                                         <div className="w-3 h-3 bg-teal-500 rounded-full ring-4 ring-teal-50"></div>
                                         Interaction History
                                     </h3>
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm">
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-200 shadow-sm">
                                         Last 50 interactions
                                     </span>
                                 </div>
@@ -193,12 +254,12 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
                                             {tickets.map((ticket) => (
                                                 <div
                                                     key={ticket.id}
-                                                    className="group bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 h-full flex flex-col"
+                                                    className="group bg-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 h-full flex flex-col"
                                                 >
                                                     <div className="flex flex-col gap-3 flex-1">
                                                         {/* Header: ID & Status */}
                                                         <div className="flex items-center justify-between gap-2">
-                                                            <span className="text-xs font-mono font-bold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                                                            <span className="text-xs font-mono font-bold text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-100">
                                                                 #{ticket.ticket_number}
                                                             </span>
                                                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(ticket.status)}`}>
@@ -212,14 +273,14 @@ const EmployeeHistoryModal = ({ isOpen, onClose, employee }) => {
                                                                 {ticket.title}
                                                             </h4>
                                                             {ticket.category_name && (
-                                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 rounded-md text-gray-600 text-[10px] font-medium border border-gray-100 mb-2">
+                                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded-md text-gray-600 text-[10px] font-medium border border-gray-100 mb-2">
                                                                     {ticket.category_name}
                                                                 </span>
                                                             )}
                                                         </div>
 
                                                         {/* Footer: Date */}
-                                                        <div className="pt-3 mt-auto border-t border-gray-50 flex items-center text-xs text-gray-400 font-medium">
+                                                        <div className="pt-3 mt-auto border-t border-gray-200 flex items-center text-xs text-gray-400 font-medium">
                                                             <Calendar size={12} className="mr-1.5" />
                                                             {format(new Date(ticket.assigned_at), 'MMM d, yyyy • h:mm a')}
                                                         </div>

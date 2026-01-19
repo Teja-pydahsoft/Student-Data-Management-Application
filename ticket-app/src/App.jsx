@@ -17,6 +17,7 @@ import TicketConfiguration from './pages/admin/TicketConfiguration';
 import EmployeeManagement from './pages/admin/EmployeeManagement';
 import TaskManagement from './pages/admin/TaskManagement';
 import SubAdminCreation from './pages/admin/SubAdminCreation';
+import RoleManagement from './pages/admin/RoleManagement';
 
 // Student Pages
 import Dashboard from './pages/student/Dashboard';
@@ -115,6 +116,7 @@ const App = () => {
           <Route path="/employees" element={<EmployeeManagement />} />
           <Route path="/task-management" element={<TaskManagement />} />
           <Route path="/sub-admins" element={<SubAdminCreation />} />
+          <Route path="/roles" element={<RoleManagement />} />
 
           {/* Legacy redirects */}
           <Route path="/tickets" element={<Navigate to="/task-management" replace />} />
