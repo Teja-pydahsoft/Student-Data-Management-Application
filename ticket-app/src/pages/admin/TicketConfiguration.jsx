@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -9,12 +10,45 @@ import {
     Save,
     ChevronDown,
     ChevronRight,
-    List
+    List,
+    CheckCircle2,
+    XCircle
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import LoadingAnimation from '../../components/LoadingAnimation';
 import '../../styles/admin-pages.css';
+
+const ToggleSwitch = ({ checked, onChange, label }) => (
+    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            onClick={() => onChange(!checked)}
+            className={`
+                relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 
+                focus:ring-blue-600 focus:ring-offset-2
+                ${checked ? 'bg-green-500' : 'bg-gray-300'}
+            `}
+        >
+            <span
+                aria-hidden="true"
+                className={`
+                    pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 
+                    transition duration-200 ease-in-out
+                    ${checked ? 'translate-x-5' : 'translate-x-0'}
+                `}
+            />
+        </button>
+        {label && (
+            <span className={`text-sm font-medium ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
+                {label}
+            </span>
+        )}
+    </div>
+);
 
 const TicketConfiguration = () => {
     const [expandedHeaders, setExpandedHeaders] = useState(new Set());
@@ -68,7 +102,7 @@ const TicketConfiguration = () => {
 
     const deleteMutation = useMutation({
         mutationFn: async (id) => {
-            const response = await api.delete(`/complaint-categories/${id}`);
+            const response = await api.delete(`/ complaint - categories / ${id} `);
             return response.data;
         },
         onSuccess: () => {
@@ -93,7 +127,7 @@ const TicketConfiguration = () => {
     };
 
     const handleDelete = (header) => {
-        if (window.confirm(`Delete "${header.name}"?`)) deleteMutation.mutate(header.id);
+        if (window.confirm(`Delete "${header.name}" ? `)) deleteMutation.mutate(header.id);
     };
 
     const openAddModal = (parentId = null) => {
@@ -144,8 +178,9 @@ const TicketConfiguration = () => {
                                 onToggle={() => toggleHeader(header.id)}
                                 onAddSub={() => openAddModal(header.id)}
                                 isEditing={editingHeader?.id === header.id}
+                                editingHeader={editingHeader}
                                 setEditing={setEditingHeader}
-                                onUpdate={(data) => updateMutation.mutate({ id: header.id, data })}
+                                onUpdate={(id, data) => updateMutation.mutate({ id, data })}
                                 onDelete={() => handleDelete(header)}
                             />
                         ))
@@ -186,6 +221,13 @@ const TicketConfiguration = () => {
                                     placeholder="Optional description"
                                 />
                             </div>
+                            <div className="flex items-center gap-2 pt-2">
+                                <ToggleSwitch
+                                    checked={formData.is_active}
+                                    onChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                                    label="Active"
+                                />
+                            </div>
                         </div>
                         <div className="modal-footer">
                             <button onClick={() => setShowAddModal(false)} className="btn-secondary">Cancel</button>
@@ -200,9 +242,22 @@ const TicketConfiguration = () => {
     );
 };
 
-const HeaderItem = ({ header, expanded, onToggle, onAddSub, isEditing, setEditing, onUpdate, onDelete }) => {
+const HeaderItem = ({ header, expanded, onToggle, onAddSub, isEditing, editingHeader, setEditing, onUpdate, onDelete }) => {
     const [editForm, setEditForm] = useState({ ...header });
     const hasSub = header.sub_categories?.length > 0;
+
+    // Reset edit form when entering edit mode
+    React.useEffect(() => {
+        if (isEditing) {
+            setEditForm({ ...header });
+        }
+    }, [isEditing, header]);
+
+    // Handle sub-category update
+    const handleSubUpdate = (subId, data) => {
+        onUpdate(subId, data);
+        setEditing(null);
+    };
 
     if (isEditing) {
         return (
@@ -216,7 +271,7 @@ const HeaderItem = ({ header, expanded, onToggle, onAddSub, isEditing, setEditin
                     />
                     <div className="edit-actions">
                         <button onClick={() => setEditing(null)} className="btn-secondary py-1 px-3 text-sm">Cancel</button>
-                        <button onClick={() => onUpdate(editForm)} className="btn-primary py-1 px-3 text-sm">Save</button>
+                        <button onClick={() => onUpdate(header.id, editForm)} className="btn-primary py-1 px-3 text-sm">Save</button>
                     </div>
                 </div>
             </div>
@@ -228,9 +283,14 @@ const HeaderItem = ({ header, expanded, onToggle, onAddSub, isEditing, setEditin
             <div className="p-4 flex items-center justify-between hover:bg-gray-50/50">
                 <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={hasSub ? onToggle : undefined}>
                     {hasSub ? (expanded ? <ChevronDown size={20} className="text-gray-400" /> : <ChevronRight size={20} className="text-gray-400" />) : <div className="w-5" />}
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center gap-4">
                         <span className="font-bold text-gray-900">{header.name}</span>
-                        {!header.is_active && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Inactive</span>}
+                        <ToggleSwitch
+                            checked={header.is_active}
+                            onChange={(checked) => onUpdate(header.id, { is_active: checked })}
+                            label={header.is_active ? 'Active' : 'Inactive'}
+                        />
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -241,17 +301,61 @@ const HeaderItem = ({ header, expanded, onToggle, onAddSub, isEditing, setEditin
             </div>
             {expanded && hasSub && (
                 <div className="sub-list-container">
-                    {header.sub_categories.map(sub => (
-                        <div key={sub.id} className="sub-list-item">
-                            <span className="sub-item-text">{sub.name}</span>
-                            <div className="flex gap-1">
-                                <button onClick={() => setEditing(sub)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
-                                <button onClick={() => onDelete(sub)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
+                    {header.sub_categories.map(sub => {
+                        const isSubEditing = editingHeader?.id === sub.id;
+
+                        if (isSubEditing) {
+                            return (
+                                <SubHeaderEdit
+                                    key={sub.id}
+                                    sub={sub}
+                                    onCancel={() => setEditing(null)}
+                                    onSave={(data) => handleSubUpdate(sub.id, data)}
+                                />
+                            );
+                        }
+
+                        return (
+                            <div key={sub.id} className="sub-list-item">
+                                <div className="flex items-center gap-4 flex-1">
+                                    <span className={`sub - item - text ${!sub.is_active ? 'text-gray-400' : ''} `}>{sub.name}</span>
+                                    <ToggleSwitch
+                                        checked={sub.is_active}
+                                        onChange={(checked) => onUpdate(sub.id, { is_active: checked })}
+                                    />
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => setEditing(sub)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit size={16} /></button>
+                                    <button onClick={() => onDelete(sub)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
+        </div>
+    );
+};
+
+const SubHeaderEdit = ({ sub, onCancel, onSave }) => {
+    const [name, setName] = useState(sub.name);
+
+    return (
+        <div className="sub-list-item bg-blue-50/50">
+            <input
+                className="form-input py-1 px-2 text-sm h-8"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                autoFocus
+                onKeyDown={e => {
+                    if (e.key === 'Enter') onSave({ name });
+                    if (e.key === 'Escape') onCancel();
+                }}
+            />
+            <div className="flex gap-1 ml-2">
+                <button onClick={() => onSave({ name })} className="p-1.5 text-green-600 hover:bg-green-50 rounded"><CheckCircle2 size={16} /></button>
+                <button onClick={onCancel} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><XCircle size={16} /></button>
+            </div>
         </div>
     );
 };

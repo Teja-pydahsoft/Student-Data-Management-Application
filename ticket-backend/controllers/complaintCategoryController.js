@@ -160,10 +160,15 @@ exports.createCategory = async (req, res) => {
 /**
  * Update a category
  */
+/**
+ * Update a category
+ */
 exports.updateCategory = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, description, parent_id, is_active, display_order } = req.body;
+
+        console.log(`Updating category ${id} with:`, req.body);
 
         // Check if category exists
         const [existing] = await masterPool.query(
@@ -227,7 +232,7 @@ exports.updateCategory = async (req, res) => {
         }
         if (is_active !== undefined) {
             updateFields.push('is_active = ?');
-            updateValues.push(is_active);
+            updateValues.push(is_active ? 1 : 0);
         }
         if (display_order !== undefined) {
             updateFields.push('display_order = ?');
@@ -241,14 +246,16 @@ exports.updateCategory = async (req, res) => {
             });
         }
 
+        // Update timestamp
+        updateFields.push('updated_at = NOW()');
+
         updateValues.push(id);
 
-        await masterPool.query(
-            `UPDATE complaint_categories 
-       SET ${updateFields.join(', ')}
-       WHERE id = ?`,
-            updateValues
-        );
+        const query = `UPDATE complaint_categories 
+        SET ${updateFields.join(', ')}
+        WHERE id = ?`;
+
+        await masterPool.query(query, updateValues);
 
         const [updated] = await masterPool.query(
             'SELECT * FROM complaint_categories WHERE id = ?',
