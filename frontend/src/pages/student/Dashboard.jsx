@@ -371,23 +371,29 @@ const Dashboard = () => {
             {/* Announcement Popup */}
             {showAnnouncement && currentAnnouncement && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-scale-in flex flex-col md:flex-row max-h-[85vh] min-h-[250px]">
                         {currentAnnouncement.image_url && (
-                            <div className="h-48 w-full bg-gray-100">
-                                <img src={currentAnnouncement.image_url} alt="Announcement" className="w-full h-full object-cover" />
+                            <div className="md:w-7/12 h-64 md:h-auto relative bg-white shrink-0 flex items-center justify-center">
+                                <img
+                                    src={currentAnnouncement.image_url}
+                                    alt="Announcement"
+                                    className="w-full h-full object-contain absolute inset-0"
+                                />
                             </div>
                         )}
-                        <div className="p-6">
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">{currentAnnouncement.title}</h3>
-                            <p className="text-gray-600 mb-6 text-sm leading-relaxed max-h-60 overflow-y-auto">
+                        <div className="p-6 md:p-8 flex flex-col flex-1 overflow-y-auto bg-white">
+                            <h3 className="text-2xl font-bold text-gray-900 mb-4 leading-tight">{currentAnnouncement.title}</h3>
+                            <div className="text-gray-600 mb-8 text-base leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto custom-scrollbar">
                                 {currentAnnouncement.content}
-                            </p>
-                            <button
-                                onClick={closeAnnouncement}
-                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors cursor-pointer"
-                            >
-                                Close & Continue
-                            </button>
+                            </div>
+                            <div className="mt-auto">
+                                <button
+                                    onClick={closeAnnouncement}
+                                    className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors cursor-pointer shadow-lg shadow-blue-100 transform active:scale-[0.98]"
+                                >
+                                    Close & Continue
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

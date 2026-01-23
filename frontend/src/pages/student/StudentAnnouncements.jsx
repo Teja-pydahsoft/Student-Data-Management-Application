@@ -227,56 +227,66 @@ const StudentAnnouncements = () => {
                 </div>
             )}
             {/* Announcement Details Modal */}
+            {/* Announcement Details Modal */}
             {selectedAnnouncement && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedAnnouncement(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-in" onClick={e => e.stopPropagation()}>
-                        <div className="sticky top-0 right-0 p-4 bg-white/80 backdrop-blur-md flex justify-between items-start z-10 border-b">
-                            <h2 className="text-xl font-bold text-gray-900 pr-8">{selectedAnnouncement.title}</h2>
-                            <button
-                                onClick={() => setSelectedAnnouncement(null)}
-                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                            >
-                                <X size={24} className="text-gray-500" />
-                            </button>
-                        </div>
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] min-h-[400px] flex flex-col md:flex-row overflow-hidden animate-scale-in"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Image Section - Left Panel */}
+                        {selectedAnnouncement.image_url && (
+                            <div className="md:w-1/2 bg-gray-100 relative shrink-0 h-64 md:h-auto">
+                                <img
+                                    src={selectedAnnouncement.image_url}
+                                    alt={selectedAnnouncement.title}
+                                    className="w-full h-full object-contain absolute inset-0"
+                                />
+                            </div>
+                        )}
 
-                        <div className="p-6">
-                            {selectedAnnouncement.image_url && (
-                                <div className="mb-6 rounded-xl overflow-hidden bg-gray-100 shadow-inner">
-                                    <img
-                                        src={selectedAnnouncement.image_url}
-                                        alt={selectedAnnouncement.title}
-                                        className="w-full h-auto object-contain max-h-[400px]"
-                                    />
-                                </div>
-                            )}
-
-                            <div className="flex items-center gap-2 text-sm text-gray-500 font-medium mb-4">
-                                <Calendar size={16} />
-                                {new Date(selectedAnnouncement.created_at).toLocaleDateString(undefined, {
-                                    weekday: 'long',
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
+                        {/* Content Section - Right Panel */}
+                        <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+                            {/* Sticky Header */}
+                            <div className="sticky top-0 right-0 p-4 bg-white/80 backdrop-blur-md flex justify-between items-start z-10 border-b shrink-0">
+                                <h2 className="text-xl font-bold text-gray-900 pr-8 leading-tight">{selectedAnnouncement.title}</h2>
+                                <button
+                                    onClick={() => setSelectedAnnouncement(null)}
+                                    className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
+                                >
+                                    <X size={24} className="text-gray-500" />
+                                </button>
                             </div>
 
-                            <div className="prose prose-blue max-w-none">
-                                <p className="whitespace-pre-wrap text-gray-700 leading-relaxed text-lg">
-                                    {selectedAnnouncement.content}
-                                </p>
-                            </div>
-
-                            {selectedAnnouncement.target_college && (
-                                <div className="mt-8 pt-6 border-t flex flex-wrap gap-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Targeted to:</span>
-                                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_college}</span>
-                                    {selectedAnnouncement.target_course && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_course}</span>}
-                                    {selectedAnnouncement.target_branch && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_branch}</span>}
+                            {/* Scrollable Body */}
+                            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                                <div className="flex items-center gap-2 text-sm text-gray-500 font-medium mb-4">
+                                    <Calendar size={16} />
+                                    {new Date(selectedAnnouncement.created_at).toLocaleDateString(undefined, {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
                                 </div>
-                            )}
+
+                                <div className="prose prose-blue max-w-none mb-6">
+                                    <p className="whitespace-pre-wrap text-gray-700 leading-relaxed text-base lg:text-lg">
+                                        {selectedAnnouncement.content}
+                                    </p>
+                                </div>
+
+                                {selectedAnnouncement.target_college && (
+                                    <div className="mt-8 pt-6 border-t flex flex-wrap gap-2">
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Targeted to:</span>
+                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_college}</span>
+                                        {selectedAnnouncement.target_course && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_course}</span>}
+                                        {selectedAnnouncement.target_branch && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_branch}</span>}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
