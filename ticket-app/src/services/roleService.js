@@ -1,20 +1,11 @@
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_TICKET_API_URL || 'http://localhost:5001/api';
-
-// Get auth token
-const getAuthHeader = () => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-};
+import api from '../config/api';
 
 /**
  * Get all roles
  */
 export const getRoles = async (includeInactive = false) => {
     try {
-        const response = await axios.get(`${API_URL}/roles`, {
-            headers: getAuthHeader(),
+        const response = await api.get('/roles', {
             params: { include_inactive: includeInactive }
         });
         return response.data;
@@ -29,9 +20,7 @@ export const getRoles = async (includeInactive = false) => {
  */
 export const getRole = async (roleId) => {
     try {
-        const response = await axios.get(`${API_URL}/roles/${roleId}`, {
-            headers: getAuthHeader()
-        });
+        const response = await api.get(`/roles/${roleId}`);
         return response.data;
     } catch (error) {
         console.error('Get Role Error:', error);
@@ -44,9 +33,7 @@ export const getRole = async (roleId) => {
  */
 export const createRole = async (roleData) => {
     try {
-        const response = await axios.post(`${API_URL}/roles`, roleData, {
-            headers: getAuthHeader()
-        });
+        const response = await api.post('/roles', roleData);
         return response.data;
     } catch (error) {
         console.error('Create Role Error:', error);
@@ -59,9 +46,7 @@ export const createRole = async (roleData) => {
  */
 export const updateRole = async (roleId, roleData) => {
     try {
-        const response = await axios.put(`${API_URL}/roles/${roleId}`, roleData, {
-            headers: getAuthHeader()
-        });
+        const response = await api.put(`/roles/${roleId}`, roleData);
         return response.data;
     } catch (error) {
         console.error('Update Role Error:', error);
@@ -74,9 +59,7 @@ export const updateRole = async (roleId, roleData) => {
  */
 export const deleteRole = async (roleId) => {
     try {
-        const response = await axios.delete(`${API_URL}/roles/${roleId}`, {
-            headers: getAuthHeader()
-        });
+        const response = await api.delete(`/roles/${roleId}`);
         return response.data;
     } catch (error) {
         console.error('Delete Role Error:', error);
@@ -89,9 +72,7 @@ export const deleteRole = async (roleId) => {
  */
 export const getModulesStructure = async () => {
     try {
-        const response = await axios.get(`${API_URL}/roles/modules`, {
-            headers: getAuthHeader()
-        });
+        const response = await api.get('/roles/modules');
         return response.data;
     } catch (error) {
         console.error('Get Modules Structure Error:', error);
