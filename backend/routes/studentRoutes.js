@@ -73,6 +73,15 @@ router.get(
   attachUserScope,
   studentController.getDashboardStats
 );
+
+router.get(
+  '/batch-status',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.getBatchAcademicStatus
+);
+
 router.get(
   '/reports/registration',
   authMiddleware,

@@ -701,53 +701,50 @@ const AddStudent = () => {
     }
   };
 
-  // Auto-calculate current year based on batch year
+  // Auto-fetch current year/sem from backend based on existing students in the same batch
   useEffect(() => {
-    if (!studentData.batch || !activeStructure) {
-      return;
-    }
-
-    const batchYear = parseInt(studentData.batch, 10);
-    const currentCalendarYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1; // 1-12
-
-    // Calculate which academic year the student should be in
-    // Assuming academic year starts in June
-    let calculatedYear = currentCalendarYear - batchYear + 1;
-    if (currentMonth < 6) {
-      // Before June, student is still in the previous academic year
-      calculatedYear = calculatedYear - 1;
-    }
-
-    const totalYears = Number(activeStructure.totalYears) || 4;
-    const semestersPerYear = Number(activeStructure.semestersPerYear) || 2;
-
-    // Clamp to valid range
-    calculatedYear = Math.max(1, Math.min(calculatedYear, totalYears));
-
-    // Calculate current semester (default to 1 for first half, 2 for second half of academic year)
-    let calculatedSemester = 1;
-    if (currentMonth >= 6 && currentMonth <= 11) {
-      calculatedSemester = 1; // First semester (June - November)
-    } else {
-      calculatedSemester = Math.min(2, semestersPerYear); // Second semester (December - May)
-    }
-
-    setStudentData((prev) => {
-      const shouldUpdate =
-        prev.current_year !== String(calculatedYear) ||
-        prev.current_semester !== String(calculatedSemester);
-
-      if (shouldUpdate) {
-        return {
-          ...prev,
-          current_year: String(calculatedYear),
-          current_semester: String(calculatedSemester)
-        };
+    const fetchBatchStatus = async () => {
+      // Need all three to be precise
+      if (!studentData.batch || !studentData.course || !studentData.branch) {
+        return;
       }
-      return prev;
-    });
-  }, [studentData.batch, activeStructure]);
+
+      try {
+        const response = await api.get('/students/batch-status', {
+          params: {
+            batch: studentData.batch,
+            course: studentData.course,
+            branch: studentData.branch
+          }
+        });
+
+        if (response.data.success && response.data.data) {
+          const { current_year, current_semester } = response.data.data;
+
+          setStudentData((prev) => {
+            const shouldUpdate =
+              prev.current_year !== String(current_year) ||
+              prev.current_semester !== String(current_semester);
+
+            if (shouldUpdate) {
+              return {
+                ...prev,
+                current_year: String(current_year),
+                current_semester: String(current_semester)
+              };
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch batch status:', error);
+        // If error or no data, we might default to 1-1 or let user choose.
+        // For now, we leave it as is, or let the validation effect clamp it.
+      }
+    };
+
+    fetchBatchStatus();
+  }, [studentData.batch, studentData.course, studentData.branch]);
 
   useEffect(() => {
     if (!activeStructure) {
@@ -1194,13 +1191,17 @@ const AddStudent = () => {
                 <div className="relative">
                   <input
                     type="text"
-                    value={`Year ${studentData.current_year || '-'}`}
+                    value={
+                      studentData.batch && studentData.course && studentData.branch
+                        ? `Year ${studentData.current_year || '-'}`
+                        : '-'
+                    }
                     disabled
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
                   />
-                  {!studentData.batch && (
+                  {(!studentData.batch || !studentData.course || !studentData.branch) && (
                     <p className="absolute -bottom-5 left-0 text-xs text-orange-500 whitespace-nowrap">
-                      Select batch to calculate
+                      Select batch, course & branch
                     </p>
                   )}
                 </div>
@@ -1211,12 +1212,23 @@ const AddStudent = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Current Semester <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={`Semester ${studentData.current_semester || '-'}`}
-                  disabled
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={
+                      studentData.batch && studentData.course && studentData.branch
+                        ? `Semester ${studentData.current_semester || '-'}`
+                        : '-'
+                    }
+                    disabled
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed outline-none touch-manipulation min-h-[44px]"
+                  />
+                  {(!studentData.batch || !studentData.course || !studentData.branch) && (
+                    <p className="absolute -bottom-5 left-0 text-xs text-orange-500 whitespace-nowrap">
+                      Select details to calculate
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* 7. Student Type */}

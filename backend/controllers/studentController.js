@@ -6471,4 +6471,69 @@ exports.getStudentPhoto = async (req, res) => {
   }
 };
 
+// Get academic status (year/sem) for a given batch/course/branch context
+exports.getBatchAcademicStatus = async (req, res) => {
+  try {
+    const { batch, course, branch } = req.query;
+
+    if (!batch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch is required'
+      });
+    }
+
+    let query = `
+      SELECT current_year, current_semester, COUNT(*) as count 
+      FROM students 
+      WHERE batch = ?
+    `;
+    const params = [batch];
+
+    if (course) {
+      query += ` AND course = ?`;
+      params.push(course);
+    }
+
+    if (branch) {
+      query += ` AND branch = ?`;
+      params.push(branch);
+    }
+
+    // Only consider students with valid year/sem (exclude 0 or null if any)
+    query += ` AND current_year > 0 AND current_semester > 0`;
+
+    query += `
+      GROUP BY current_year, current_semester
+      ORDER BY count DESC
+      LIMIT 1
+    `;
+
+    const [rows] = await masterPool.query(query, params);
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No existing records found to derive status'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        current_year: rows[0].current_year,
+        current_semester: rows[0].current_semester
+      }
+    });
+
+  } catch (error) {
+    console.error('Get batch status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching batch status'
+    });
+  }
+};
+
 
