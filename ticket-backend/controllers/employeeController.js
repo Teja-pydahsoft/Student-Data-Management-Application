@@ -258,24 +258,55 @@ exports.createEmployee = async (req, res) => {
 exports.updateEmployee = async (req, res) => {
     try {
         const { id } = req.params;
-        const { role, assigned_categories, assigned_subcategories } = req.body;
+        const { role, custom_role_id, assigned_categories, assigned_subcategories } = req.body;
 
-        if (!role || !['staff', 'worker'].includes(role)) {
+        // Validation
+        if (!role && !custom_role_id) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid role. Must be staff or worker'
+                message: 'Either role or custom_role_id must be provided'
             });
         }
 
-        // Prepare category data (only for staff/managers)
-        const categoriesJson = role === 'staff' && assigned_categories ? JSON.stringify(assigned_categories) : null;
-        const subcategoriesJson = role === 'staff' && assigned_subcategories ? JSON.stringify(assigned_subcategories) : null;
+        let roleName = role;
+        let roleInfo = null;
+
+        if (custom_role_id) {
+            const [roleData] = await masterPool.query(
+                'SELECT role_name, display_name FROM ticket_roles WHERE id = ? AND is_active = 1',
+                [custom_role_id]
+            );
+
+            if (roleData.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Custom role not found or inactive'
+                });
+            }
+            roleInfo = roleData[0];
+            roleName = roleInfo.role_name;
+        } else {
+            // Legacy validation
+            if (!['staff', 'worker'].includes(role)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid role. Must be staff or worker (or provide custom_role_id)'
+                });
+            }
+        }
+
+        // Prepare category data (only for staff/managers/custom roles)
+        // Workers typically don't have categories, but we'll allow updating if provided, unless strictly worker?
+        // Logic: if role contains 'worker', maybe skip? But custom roles might correspond to workers. 
+        // We'll trust the input for now as frontend handles visibility.
+        const categoriesJson = assigned_categories ? JSON.stringify(assigned_categories) : null;
+        const subcategoriesJson = assigned_subcategories ? JSON.stringify(assigned_subcategories) : null;
 
         const [result] = await masterPool.query(
             `UPDATE ticket_employees 
-             SET role = ?, assigned_categories = ?, assigned_subcategories = ?, updated_at = NOW() 
+             SET role = ?, custom_role_id = ?, role_name = ?, assigned_categories = ?, assigned_subcategories = ?, updated_at = NOW() 
              WHERE id = ?`,
-            [role, categoriesJson, subcategoriesJson, id]
+            [role || roleName, custom_role_id || null, roleName, categoriesJson, subcategoriesJson, id]
         );
 
         if (result.affectedRows === 0) {
@@ -286,16 +317,30 @@ exports.updateEmployee = async (req, res) => {
         }
 
         // Sync role back to rbac_users
-        // First get the rbac_user_id for this assignment
         const [assignment] = await masterPool.query(
             'SELECT rbac_user_id FROM ticket_employees WHERE id = ?',
             [id]
         );
 
-        if (assignment.length > 0) {
+        if (assignment.length > 0 && assignment[0].rbac_user_id) {
+            // Only sync standard roles to RBAC users table if compatible, 
+            // or maybe we map custom roles to 'staff' or 'worker' broadly?
+            // For now, if it's a standard role, sync it. Custom roles might simply remain 'staff' in core RBAC for login purposes.
+            // But let's sync the literal role_name if it fits or default.
+
+            // If custom role, we might want to keep the underlying RBAC role as 'staff' (privileged) or 'worker' (restricted) 
+            // depending on the base type, but we don't strictly know the base type here. 
+            // Assuming 'staff' for most custom roles unless explicit 'worker'.
+
+            let rbacRole = role;
+            if (custom_role_id) {
+                // heuristic: if role_name contains worker -> worker, else staff
+                rbacRole = roleName.includes('worker') ? 'worker' : 'staff';
+            }
+
             await masterPool.query(
                 'UPDATE rbac_users SET role = ? WHERE id = ?',
-                [role, assignment[0].rbac_user_id]
+                [rbacRole, assignment[0].rbac_user_id]
             );
         }
 

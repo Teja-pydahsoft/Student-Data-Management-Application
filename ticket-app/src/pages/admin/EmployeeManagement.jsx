@@ -45,6 +45,15 @@ const EmployeeManagement = () => {
         }
     });
 
+    // Fetch available roles
+    const { data: rolesData } = useQuery({
+        queryKey: ['ticket-roles'],
+        queryFn: async () => {
+            const response = await api.get('/roles');
+            return response.data?.data || [];
+        }
+    });
+
     // Mutations
     const mutationConfig = {
         onSuccess: () => {
@@ -86,6 +95,7 @@ const EmployeeManagement = () => {
                 createMutation.mutate({
                     rbac_user_id: newUserId,
                     role: variables.role,
+                    custom_role_id: variables.custom_role_id,
                     assigned_categories: variables.assigned_categories || [],
                     assigned_subcategories: variables.assigned_subcategories || []
                 });
@@ -115,6 +125,7 @@ const EmployeeManagement = () => {
             createMutation.mutate({
                 rbac_user_id: payload.rbac_user_id,
                 role: payload.role,
+                custom_role_id: payload.custom_role_id,
                 assigned_categories: payload.assigned_categories,
                 assigned_subcategories: payload.assigned_subcategories
             });
@@ -123,6 +134,7 @@ const EmployeeManagement = () => {
                 id: payload.id,
                 data: {
                     role: payload.role,
+                    custom_role_id: payload.custom_role_id,
                     assigned_categories: payload.assigned_categories,
                     assigned_subcategories: payload.assigned_subcategories
                 }
@@ -155,6 +167,7 @@ const EmployeeManagement = () => {
                 username: userData.username,
                 password: userData.password,
                 role: userData.role,
+                custom_role_id: userData.custom_role_id,
                 assigned_categories: userData.assigned_categories,
                 assigned_subcategories: userData.assigned_subcategories
             });
@@ -303,6 +316,7 @@ const EmployeeManagement = () => {
                 user={editingUser}
                 activeRole={activeRole}
                 existingUsers={availableUsersData}
+                availableRoles={rolesData || []}
                 onSubmit={handleModalSubmit}
                 onCreateNewUser={handleCreateNewUser}
                 isSubmitting={createMutation.isPending || updateMutation.isPending || createRbacUserMutation.isPending}

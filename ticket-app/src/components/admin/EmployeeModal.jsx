@@ -28,6 +28,7 @@ const EmployeeModal = ({
     user: editingUser,
     activeRole,
     existingUsers,
+    availableRoles,
     onSubmit,
     onCreateNewUser,
     isSubmitting
@@ -40,6 +41,7 @@ const EmployeeModal = ({
     const [formData, setFormData] = useState({
         rbac_user_id: null,
         role: 'staff',
+        custom_role_id: null,
         assigned_categories: [],
         assigned_subcategories: [],
         name: '',
@@ -50,12 +52,12 @@ const EmployeeModal = ({
     });
 
     // Dynamic steps configuration
-    const shouldShowRoleSelection = activeRole === 'all';
-    const shouldShowCategorySelection = formData.role === 'staff';
+    const shouldShowRoleSelection = true;
+    const shouldShowCategorySelection = formData.role !== 'worker' && formData.role !== 'ticket_worker';
 
     const steps = [
         { type: 'info', title: editingUser ? 'Employee Info' : 'Select User', icon: UserCircle },
-        ...(shouldShowRoleSelection ? [{ type: 'role', title: 'Assign Role', icon: Shield }] : []),
+        { type: 'role', title: 'Assign Role', icon: Shield },
         ...(shouldShowCategorySelection ? [{ type: 'categories', title: 'Assign Tasks', icon: Briefcase }] : [])
     ].map((step, index) => ({ ...step, number: index + 1 }));
 
@@ -93,6 +95,7 @@ const EmployeeModal = ({
                     id: editingUser.id,
                     rbac_user_id: editingUser.rbac_user_id,
                     role: editingUser.role,
+                    custom_role_id: editingUser.custom_role_id || null,
                     assigned_categories: editingUser.assigned_categories || [],
                     assigned_subcategories: editingUser.assigned_subcategories || []
                 });
@@ -100,10 +103,10 @@ const EmployeeModal = ({
                 setCurrentStep(2);
             } else {
                 setMode('select');
-                const defaultRole = activeRole === 'worker' ? 'worker' : 'staff';
                 setFormData({
                     rbac_user_id: null,
-                    role: defaultRole,
+                    role: null,
+                    custom_role_id: null,
                     assigned_categories: [],
                     assigned_subcategories: [],
                     name: '',
@@ -121,8 +124,7 @@ const EmployeeModal = ({
         if (!formData.role) return;
 
         if (mode === 'create') {
-            // For workers, email is optional
-            const isWorker = formData.role === 'worker';
+            const isWorker = formData.role === 'worker' || formData.role === 'ticket_worker';
             if (!formData.name || (!isWorker && !formData.email) || !formData.username || !formData.password) {
                 return;
             }
@@ -137,7 +139,7 @@ const EmployeeModal = ({
         if (currentStepObj.type === 'info') {
             if (mode === 'select') return formData.rbac_user_id !== null;
             if (mode === 'create') {
-                const isWorker = formData.role === 'worker';
+                const isWorker = formData.role === 'worker' || formData.role === 'ticket_worker';
                 const hasPhone = isWorker ? !!formData.phone : true;
                 return formData.name && (isWorker || formData.email) && formData.username && formData.password && hasPhone;
             }
@@ -337,14 +339,12 @@ const EmployeeModal = ({
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                                     {/* Section 1: Basic Information */}
-
                                     <div className="form-group-container">
                                         <h2 className="employee-section-title">
                                             <div className="employee-section-dot"></div>
                                             Basic Information
                                         </h2>
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
-                                            {/* Full Name */}
                                             <div style={{ gridColumn: '1 / -1' }}>
                                                 <label className="form-label">
                                                     Full Name <span style={{ color: 'var(--red-500)' }}>*</span>
@@ -357,8 +357,6 @@ const EmployeeModal = ({
                                                     placeholder="Enter full name"
                                                 />
                                             </div>
-
-                                            {/* Email */}
                                             <div>
                                                 <label className="form-label">
                                                     Email {formData.role !== 'worker' && <span style={{ color: 'var(--red-500)' }}>*</span>}
@@ -371,8 +369,6 @@ const EmployeeModal = ({
                                                     placeholder="john@example.com"
                                                 />
                                             </div>
-
-                                            {/* Phone */}
                                             <div>
                                                 <label className="form-label">
                                                     Phone {formData.role === 'worker' ? <span style={{ color: 'var(--red-500)' }}>*</span> : '(Optional)'}
@@ -395,7 +391,6 @@ const EmployeeModal = ({
                                             Account Credentials
                                         </h2>
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
-                                            {/* Username */}
                                             <div>
                                                 <label className="form-label">
                                                     Username <span style={{ color: 'var(--red-500)' }}>*</span>
@@ -409,8 +404,6 @@ const EmployeeModal = ({
                                                     autoComplete="off"
                                                 />
                                             </div>
-
-                                            {/* Password */}
                                             <div>
                                                 <label className="form-label">
                                                     Password <span style={{ color: 'var(--red-500)' }}>*</span>
@@ -461,48 +454,44 @@ const EmployeeModal = ({
                             </div>
 
                             <div className="role-select-grid">
-                                {(activeRole === 'all' || activeRole === 'staff') && (
-                                    <button
-                                        onClick={() => setFormData({ ...formData, role: 'staff' })}
-                                        className={`role-card role-staff ${formData.role === 'staff' ? 'active' : ''}`}
-                                    >
-                                        <div className="role-icon">
-                                            <Shield size={28} />
-                                        </div>
-                                        <h4 style={{ fontWeight: 'bold', fontSize: '1.125rem', color: 'var(--gray-900)', marginBottom: '0.5rem' }}>Manager</h4>
-                                        <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', lineHeight: '1.625' }}>Full access to manage categories, assign tasks, and oversee workers.</p>
-
-                                        {formData.role === 'staff' && (
-                                            <div className="role-selection-check">
-                                                <Check size={14} style={{ color: 'white' }} strokeWidth={3} />
+                                {availableRoles && availableRoles.length > 0 ? (
+                                    availableRoles.map(role => (
+                                        <button
+                                            key={role.id}
+                                            onClick={() => setFormData({
+                                                ...formData,
+                                                role: role.role_name,
+                                                custom_role_id: role.id
+                                            })}
+                                            className={`role-card ${formData.custom_role_id === role.id ? 'active' : ''}`}
+                                        >
+                                            <div className="role-icon">
+                                                {role.role_name.includes('worker') ? <Briefcase size={28} /> : <Shield size={28} />}
                                             </div>
-                                        )}
-                                    </button>
-                                )}
+                                            <h4 style={{ fontWeight: 'bold', fontSize: '1.125rem', color: 'var(--gray-900)', marginBottom: '0.5rem' }}>
+                                                {role.display_name}
+                                            </h4>
+                                            <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', lineHeight: '1.625' }}>
+                                                {role.description || 'No description provided.'}
+                                            </p>
 
-                                {(activeRole === 'all' || activeRole === 'worker') && (
-                                    <button
-                                        onClick={() => setFormData({ ...formData, role: 'worker' })}
-                                        className={`role-card role-worker ${formData.role === 'worker' ? 'active' : ''}`}
-                                    >
-                                        <div className="role-icon worker-icon-hover">
-                                            <Briefcase size={28} />
-                                        </div>
-                                        <h4 style={{ fontWeight: 'bold', fontSize: '1.125rem', color: 'var(--gray-900)', marginBottom: '0.5rem' }}>Worker</h4>
-                                        <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', lineHeight: '1.625' }}>Limited access focused on completing assigned tasks and field work.</p>
-
-                                        {formData.role === 'worker' && (
-                                            <div className="role-selection-check">
-                                                <Check size={14} style={{ color: 'white' }} strokeWidth={3} />
-                                            </div>
-                                        )}
-                                    </button>
+                                            {formData.custom_role_id === role.id && (
+                                                <div className="role-selection-check">
+                                                    <Check size={14} style={{ color: 'white' }} strokeWidth={3} />
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--gray-500)' }}>
+                                        No roles available.
+                                    </div>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {/* Step 3: Category Assignment (Managers Only) */}
+                    {/* Step 3: Category Assignment */}
                     {currentStepObj.type === 'categories' && (
                         <div className="category-selection-container animate-fade-in">
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -554,7 +543,6 @@ const EmployeeModal = ({
                                                 </div>
                                             </div>
 
-                                            {/* Subcategories */}
                                             {isExpanded && hasSubcategories && (
                                                 <div className="subcategory-list">
                                                     {category.subcategories.map(sub => {
