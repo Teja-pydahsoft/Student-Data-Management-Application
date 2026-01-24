@@ -169,20 +169,40 @@ exports.getUsers = async (req, res) => {
     // Super admin (including legacy 'admin') sees all users
     if (!isSuperAdmin(user)) {
       // College Principal / College AO sees users in their college
-      if (user.role === USER_ROLES.COLLEGE_PRINCIPAL || user.role === USER_ROLES.COLLEGE_AO) {
+      if (user.role === USER_ROLES.COLLEGE_PRINCIPAL || user.role === USER_ROLES.COLLEGE_AO || user.role === USER_ROLES.COLLEGE_ATTENDER) {
         const [userRows] = await masterPool.query(
           'SELECT college_id, college_ids FROM rbac_users WHERE id = ?',
           [user.id]
         );
+
+        let allowedCollegeIds = [];
         if (userRows && userRows.length > 0) {
-          const collegeIds = parseScopeData(userRows[0].college_ids);
-          if (collegeIds.length > 0) {
-            conditions.push(`(u.college_id IN (${collegeIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.college_ids, ?))`);
-            params.push(...collegeIds, JSON.stringify(collegeIds));
-          } else if (userRows[0].college_id) {
-            conditions.push('u.college_id = ?');
-            params.push(userRows[0].college_id);
+          allowedCollegeIds = parseScopeData(userRows[0].college_ids);
+          // Add primary college_id if not already in the list
+          if (userRows[0].college_id && !allowedCollegeIds.includes(userRows[0].college_id)) {
+            allowedCollegeIds.push(userRows[0].college_id);
           }
+        }
+
+        if (allowedCollegeIds.length > 0) {
+          // STRICT SUBSET CHECK:
+          // 1. User's primary college_id (if set) MUST be in allowed list
+          // 2. User's college_ids array (if set) MUST be a subset of allowed list
+          // 3. User MUST have at least one college assigned (to be "under" a college)
+
+          conditions.push(`(
+            (u.college_id IS NULL OR u.college_id IN (${allowedCollegeIds.map(() => '?').join(',')}))
+            AND JSON_CONTAINS(?, COALESCE(u.college_ids, '[]'))
+            AND (u.college_id IS NOT NULL OR JSON_LENGTH(COALESCE(u.college_ids, '[]')) > 0)
+          )`);
+
+          // Params: 
+          // 1. IN clause values
+          // 2. JSON_CONTAINS target (My Allowed List)
+          params.push(...allowedCollegeIds, JSON.stringify(allowedCollegeIds));
+        } else {
+          // No scope assigned - show no users
+          conditions.push('1=0');
         }
       }
       // Branch HOD sees only users in their branch
@@ -191,33 +211,26 @@ exports.getUsers = async (req, res) => {
           'SELECT branch_id, branch_ids FROM rbac_users WHERE id = ?',
           [user.id]
         );
+
+        let allowedBranchIds = [];
         if (userRows && userRows.length > 0) {
-          const branchIds = parseScopeData(userRows[0].branch_ids);
-          if (branchIds.length > 0) {
-            conditions.push(`(u.branch_id IN (${branchIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.branch_ids, ?))`);
-            params.push(...branchIds, JSON.stringify(branchIds));
-          } else if (userRows[0].branch_id) {
-            conditions.push('u.branch_id = ?');
-            params.push(userRows[0].branch_id);
+          allowedBranchIds = parseScopeData(userRows[0].branch_ids);
+          if (userRows[0].branch_id && !allowedBranchIds.includes(userRows[0].branch_id)) {
+            allowedBranchIds.push(userRows[0].branch_id);
           }
         }
-      }
-      // College Attender sees users in their college
-      else if (user.role === USER_ROLES.COLLEGE_ATTENDER) {
-        const [userRows] = await masterPool.query(
-          'SELECT college_id, college_ids FROM rbac_users WHERE id = ?',
-          [user.id]
-        );
-        if (userRows && userRows.length > 0) {
-          const collegeIds = parseScopeData(userRows[0].college_ids);
-          if (collegeIds.length > 0) {
-            conditions.push(`(u.college_id IN (${collegeIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(u.college_ids, ?))`);
-            params.push(...collegeIds, JSON.stringify(collegeIds));
-          } else if (userRows[0].college_id) {
-            conditions.push('u.college_id = ?');
-            params.push(userRows[0].college_id);
-          }
+
+        if (allowedBranchIds.length > 0) {
+          conditions.push(`(u.branch_id IN (${allowedBranchIds.map(() => '?').join(',')}) OR JSON_OVERLAPS(COALESCE(u.branch_ids, '[]'), ?))`);
+          params.push(...allowedBranchIds, JSON.stringify(allowedBranchIds));
+        } else {
+          conditions.push('1=0');
         }
+      } else {
+        // Fallback for any other role not explicitly handled: prevent viewing all users
+        // Only allow viewing themselves to avoid breaking their own profile view if used
+        conditions.push('u.id = ?');
+        params.push(user.id);
       }
     }
 
