@@ -35,7 +35,9 @@ const generateAttendanceReportPDF = async ({
   attendanceRecords,
   allBatchesData = null, // Optional: all batches data for comprehensive report
   excludeCourse = false, // Optional: exclude course column from tables (for email reports)
-  statsOnly = false // Optional: if true, only include stats (exclude detailed student list)
+  statsOnly = false, // Optional: if true, only include stats (exclude detailed student list)
+  summaryStats = null, // Optional: pre-calculated stats
+  ...args // Catch-all for any other props
 }) => {
   // Filter out cancelled/discontinued/course completed students (already filtered in query, but double-check)
   const validStudents = students.filter(s => {
@@ -367,20 +369,27 @@ const generateAttendanceReportPDF = async ({
   doc.text('Attendance %:', rightCol, yPos + (lineHeight * 6));
 
   // Calculate statistics (only for valid students, excluding course completed)
-  const totalStudents = validStudents.length;
-  const markedCount = markedStudents.length;
-  const unmarkedCount = unmarkedStudents.length;
-  const presentCount = attendanceRecords.filter(r => {
-    const student = validStudents.find(s => s.id === r.studentId);
-    return student && r.status === 'present';
-  }).length;
-  const absentCount = attendanceRecords.filter(r => {
-    const student = validStudents.find(s => s.id === r.studentId);
-    return student && r.status === 'absent';
-  }).length;
-  const attendancePercentage = totalStudents > 0
-    ? ((presentCount / totalStudents) * 100).toFixed(2) + '%'
-    : '0.00%';
+  // Calculate statistics (only for valid students, excluding course completed)
+  let totalStudents, markedCount, unmarkedCount, presentCount, absentCount, attendancePercentage;
+
+  if (summaryStats) {
+    ({ totalStudents, markedCount, unmarkedCount, presentCount, absentCount, attendancePercentage } = summaryStats);
+  } else {
+    totalStudents = validStudents.length;
+    markedCount = markedStudents.length;
+    unmarkedCount = unmarkedStudents.length;
+    presentCount = attendanceRecords.filter(r => {
+      const student = validStudents.find(s => s.id === r.studentId);
+      return student && r.status === 'present';
+    }).length;
+    absentCount = attendanceRecords.filter(r => {
+      const student = validStudents.find(s => s.id === r.studentId);
+      return student && r.status === 'absent';
+    }).length;
+    attendancePercentage = totalStudents > 0
+      ? ((presentCount / totalStudents) * 100).toFixed(2) + '%'
+      : '0.00%';
+  }
 
   // Calculate Present Percentage based on Total / Absent relationship requested by user
   // "insted of the present show the persentage of the attendance based upon the total / absent"
@@ -865,8 +874,332 @@ const generateAttendanceReportPDF = async ({
 
 // Duplicate certificate functions removed (refactored to ./pdf/certificateGenerators.js)
 
+
+/**
+ * Generate Registration Report PDF with comprehensive sections:
+ * 1. Overall Summary Report (Abstract)
+ * 2. Detailed Student List
+ */
+/**
+ * Generate Registration Report PDF with Abstract Table
+ */
+const generateRegistrationReportPDF = async ({
+  collegeName,
+  batch,
+  courseName,
+  branchName,
+  year,
+  semester,
+  reportDate,
+  students, // Detailed student list with status
+  statistics, // Overall statistics
+  filters // Filter context
+}) => {
+  // Create a temporary file path
+  const tempDir = os.tmpdir();
+  const fileName = `registration_report_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+  const filePath = path.join(tempDir, fileName);
+
+  // Create PDF document - LANDSCAPE for wider table
+  const doc = new PDFDocument({
+    size: 'A4',
+    layout: 'landscape',
+    margin: 30
+  });
+
+  // Pipe to file
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  // Helper function to add a new page if needed
+  const checkPageBreak = (requiredSpace = 20) => {
+    if (doc.y + requiredSpace > doc.page.height - 30) {
+      doc.addPage();
+      return true;
+    }
+    return false;
+  };
+
+  // ============================================
+  // AGGREGATE DATA FOR ABSTRACT TABLE
+  // ============================================
+  // Group students by Batch > Course > Branch > Year > Sem
+  const groupedData = {};
+
+  students.forEach(student => {
+    // Extract keys
+    const batchKey = (student['Batch'] || student.student_data?.Batch || student.student_data?.batch || 'Unknown').toString();
+    const courseKey = (student['Course'] || 'Unknown').toString();
+    const branchKey = (student['Branch'] || 'Unknown').toString();
+    const yearKey = (student['Year'] || '0').toString();
+    const semKey = (student['Semester'] || '0').toString();
+
+    const uniqueKey = `${batchKey}|${courseKey}|${branchKey}|${yearKey}|${semKey}`;
+
+    if (!groupedData[uniqueKey]) {
+      groupedData[uniqueKey] = {
+        batch: batchKey,
+        course: courseKey,
+        branch: branchKey,
+        year: yearKey,
+        sem: semKey,
+        total: 0,
+        overall_completed: 0,
+        pending: 0,
+        verification_completed: 0,
+        certificates_verified: 0,
+        fee_cleared: 0,
+        promotion_completed: 0,
+        scholarship_assigned: 0
+      };
+    }
+
+    const group = groupedData[uniqueKey];
+    group.total++;
+
+    // Check statuses
+    // Frontend logic for overall completed: Verification + Certs + Fees
+    // From controller processing: 'overall_status' is mapped to 'Completed' or 'Pending'
+    const isOverallCompleted = student['overall_status'] === 'Completed';
+    if (isOverallCompleted) group.overall_completed++;
+    else group.pending++;
+
+    // 5 Stages Breakdown
+    if (student['Verification'] === 'Completed') group.verification_completed++;
+    if (student['Certificates'] === 'Verified') group.certificates_verified++;
+    if (student['Fees'] === 'No Due' || student['Fees'] === 'Permitted') group.fee_cleared++;
+    if (student['Promotion'] === 'Completed') group.promotion_completed++;
+    if (student['Scholarship'] !== 'Pending') group.scholarship_assigned++;
+  });
+
+  // Convert to array and sort
+  const abstractRows = Object.values(groupedData).sort((a, b) => {
+    if (a.batch !== b.batch) return a.batch.localeCompare(b.batch);
+    if (a.course !== b.course) return a.course.localeCompare(b.course);
+    if (a.branch !== b.branch) return a.branch.localeCompare(b.branch);
+    if (a.year !== b.year) return a.year.localeCompare(b.year);
+    return a.sem.localeCompare(b.sem);
+  });
+
+  // Calculate Totals for Footer
+  const totals = abstractRows.reduce((acc, row) => {
+    acc.total += row.total;
+    acc.overall_completed += row.overall_completed;
+    acc.pending += row.pending;
+    acc.verification_completed += row.verification_completed;
+    acc.certificates_verified += row.certificates_verified;
+    acc.fee_cleared += row.fee_cleared;
+    acc.promotion_completed += row.promotion_completed;
+    acc.scholarship_assigned += row.scholarship_assigned;
+    return acc;
+  }, {
+    total: 0, overall_completed: 0, pending: 0,
+    verification_completed: 0, certificates_verified: 0, fee_cleared: 0,
+    promotion_completed: 0, scholarship_assigned: 0
+  });
+
+
+  // ============================================
+  // HEADER SECTION
+  // ============================================
+  const headerTop = 30;
+  const pageWidth = doc.page.width; // Landscape width (~842)
+  const leftMargin = 30;
+  const rightMargin = 30;
+  const contentWidth = pageWidth - leftMargin - rightMargin;
+  const headerHeight = 80;
+
+  // Render Logo
+  const logoWidth = 70;
+  const logoHeight = 70;
+  const logoLeft = leftMargin + 10;
+  const logoTop = headerTop;
+
+  // Try to load logo
+  let logoLoaded = false;
+  try {
+    const localLogoPath = path.join(process.cwd(), 'frontend', 'public', 'logo.png');
+    if (fs.existsSync(localLogoPath)) {
+      doc.image(localLogoPath, logoLeft, logoTop, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight], align: 'left' });
+      logoLoaded = true;
+    } else {
+      const tempLogoPath = await downloadLogo();
+      if (fs.existsSync(tempLogoPath)) {
+        doc.image(tempLogoPath, logoLeft, logoTop, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight], align: 'left' });
+        logoLoaded = true;
+        setTimeout(() => { try { fs.unlinkSync(tempLogoPath); } catch (e) { } }, 5000);
+      }
+    }
+  } catch (error) { }
+
+  if (!logoLoaded) {
+    doc.rect(logoLeft, logoTop, logoWidth, logoHeight).fillColor('#FF6B35').fill().strokeColor('#FF6B35').stroke();
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('#FFFFFF').text('PYDAH', logoLeft + 5, logoTop + 20, { width: logoWidth - 10, align: 'center' });
+  }
+
+  // Header Details
+  const infoLeft = logoLeft + logoWidth + 20;
+  const infoWidth = contentWidth - logoWidth - 30;
+
+  doc.fontSize(18).font('Helvetica-Bold').fillColor('#1F2937');
+  doc.text(collegeName || 'Pydah Group of Educational Institutions', infoLeft, headerTop + 10, { width: infoWidth, align: 'left' });
+
+  doc.fontSize(10).font('Helvetica').fillColor('#6B7280');
+  doc.text('An Autonomous Institution Kakinada | Andhra Pradesh | INDIA', infoLeft, headerTop + 35);
+
+  const formattedDate = new Date(reportDate || new Date()).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  doc.fontSize(14).font('Helvetica-Bold').fillColor('#FF6B35');
+  doc.text('Registration Summary Report (Abstract)', infoLeft, headerTop + 50);
+
+  doc.fontSize(10).font('Helvetica').fillColor('#374151');
+  // Align date with title line but on the right
+  doc.text(`Generated On: ${formattedDate}`, leftMargin, headerTop + 54, { width: contentWidth, align: 'right' });
+
+  // Divider
+  doc.rect(leftMargin, headerTop + headerHeight + 5, contentWidth, 2).fillColor('#FF6B35').fill();
+  doc.fillColor('#000000');
+  doc.y = headerTop + headerHeight + 20;
+
+  // ============================================
+  // ABSTRACT TABLE
+  // ============================================
+
+  // Table Configuration
+  const tableHeaderHeight = 30;
+  const rowHeight = 25;
+
+  // Columns: Batch(50), Course(90), Branch(90), Yr(30), Sem(30), Total(45), Comp(45), Pend(45), Ver(55), Cert(55), Fee(55), Pro(55), Schol(55)
+  // Total Width ~ 700. Landscape A4 width is 842. Margins 30+30=60. Content ~782.
+  // We have space.
+  const cols = [
+    { name: 'Batch', width: 60, align: 'left' },
+    { name: 'Course', width: 100, align: 'left' },
+    { name: 'Branch', width: 100, align: 'left' },
+    { name: 'Yr', width: 40, align: 'center' },
+    { name: 'Sem', width: 40, align: 'center' },
+    { name: 'Total', width: 50, align: 'center' },
+    { name: 'Done', width: 50, align: 'center' },
+    { name: 'Left', width: 50, align: 'center' },
+    // 5 Stages
+    { name: 'Verify', width: 55, align: 'center' },
+    { name: 'Certs', width: 55, align: 'center' },
+    { name: 'Fees', width: 55, align: 'center' },
+    { name: 'Promo', width: 55, align: 'center' },
+    { name: 'Schol', width: 55, align: 'center' },
+  ];
+
+  const drawTableHeader = (y) => {
+    doc.rect(leftMargin, y, contentWidth, tableHeaderHeight).fillColor('#1E40AF').fill();
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF');
+
+    let x = leftMargin + 5;
+    cols.forEach(col => {
+      doc.text(col.name, x, y + 10, { width: col.width - 5, align: col.align });
+      x += col.width;
+    });
+    doc.fillColor('#000000');
+  };
+
+  drawTableHeader(doc.y);
+  let currentY = doc.y + tableHeaderHeight;
+
+  doc.font('Helvetica').fontSize(9);
+
+  abstractRows.forEach((row, idx) => {
+    if (currentY + rowHeight > doc.page.height - 40) {
+      doc.addPage();
+      currentY = 40;
+      drawTableHeader(currentY);
+      currentY += tableHeaderHeight;
+    }
+
+    // Row Background
+    if (idx % 2 === 1) doc.rect(leftMargin, currentY, contentWidth, rowHeight).fillColor('#F8FAFC').fill();
+    doc.rect(leftMargin, currentY, contentWidth, rowHeight).strokeColor('#E2E8F0').stroke();
+
+    let x = leftMargin + 5;
+
+    // Cell Data
+    const cells = [
+      row.batch,
+      row.course,
+      row.branch.substring(0, 18) + (row.branch.length > 18 ? '...' : ''), // Truncate branch
+      row.year,
+      row.sem,
+      row.total,
+      row.overall_completed,
+      row.pending,
+      `${row.verification_completed}/${row.total - row.verification_completed}`,
+      `${row.certificates_verified}/${row.total - row.certificates_verified}`,
+      `${row.fee_cleared}/${row.total - row.fee_cleared}`,
+      `${row.promotion_completed}/${row.total - row.promotion_completed}`,
+      `${row.scholarship_assigned}/${row.total - row.scholarship_assigned}`,
+    ];
+
+    cells.forEach((val, i) => {
+      let color = '#000000';
+      if (i === 6) color = '#10B981'; // Completed (Green)
+      if (i === 7) color = '#EF4444'; // Pending (Red)
+      // Stages colors (Blue/Red pair usually handled by text, here we just use black or dark gray)
+      if (i >= 8) color = '#4B5563'; // Gray-600
+
+      doc.fillColor(color).text(val.toString(), x, currentY + 8, { width: cols[i].width - 5, align: cols[i].align });
+      x += cols[i].width;
+    });
+
+    currentY += rowHeight;
+  });
+
+  // GRAND TOTAL ROW
+  if (currentY + rowHeight > doc.page.height - 40) {
+    doc.addPage();
+    currentY = 40;
+  }
+
+  doc.rect(leftMargin, currentY, contentWidth, rowHeight).fillColor('#F3F4F6').fill();
+  doc.rect(leftMargin, currentY, contentWidth, rowHeight).strokeColor('#94A3B8').stroke();
+
+  doc.font('Helvetica-Bold').fillColor('#000000');
+
+  let x = leftMargin + 5;
+  // Span first 5 columns for "Total" label
+  const labelWidth = cols[0].width + cols[1].width + cols[2].width + cols[3].width + cols[4].width;
+  doc.text('TOTAL', x, currentY + 8, { width: labelWidth, align: 'center' });
+  x += labelWidth;
+
+  // Totals
+  const totalCells = [
+    totals.total,
+    totals.overall_completed,
+    totals.pending,
+    totals.verification_completed,
+    totals.certificates_verified,
+    totals.fee_cleared,
+    totals.promotion_completed,
+    totals.scholarship_assigned
+  ];
+
+  totalCells.forEach((val, i) => {
+    let color = '#000000';
+    if (i === 1) color = '#10B981';
+    if (i === 2) color = '#EF4444';
+
+    doc.fillColor(color).text(val.toString(), x, currentY + 8, { width: cols[5 + i].width - 5, align: 'center' });
+    x += cols[5 + i].width;
+  });
+
+
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
+};
+
 module.exports = {
   generateAttendanceReportPDF,
+  generateRegistrationReportPDF,
   generateStudyCertificate,
   generateRefundApplication,
   generateCustodianCertificate,

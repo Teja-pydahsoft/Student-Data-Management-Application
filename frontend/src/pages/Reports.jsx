@@ -23,8 +23,6 @@ import toast from 'react-hot-toast';
 import RegistrationDownloadModal from '../components/Reports/RegistrationDownloadModal';
 import api from '../config/api';
 
-const EXCLUDED_COURSES = new Set(['M.Tech', 'MBA', 'MCA', 'M Sc Aqua', 'MSC Aqua', 'MCS', 'M.Pharma', 'M Pharma']);
-
 const StatusBadge = ({ status, type = 'icon' }) => {
   const isCompleted = status === 'completed' || status === 'Verified' || status === 'No Due';
   const isPermitted = status === 'Permitted';
@@ -64,7 +62,7 @@ const Reports = () => {
     totalRecords: 0
   });
   const [stats, setStats] = useState(null);
-  const [activeTab, setActiveTab] = useState('sheet');
+  const [activeTab, setActiveTab] = useState('abstract');
 
   const [filters, setFilters] = useState({
     college: '',
@@ -84,6 +82,41 @@ const Reports = () => {
     semesters: []
   });
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+
+  // Abstract Data State
+  const [abstractData, setAbstractData] = useState([]);
+  const [groupingParams, setGroupingParams] = useState({ key: 'college', label: 'College' });
+
+  // Fetch Abstract Data
+  useEffect(() => {
+    if (activeTab === 'abstract') {
+      const fetchAbstract = async () => {
+        setLoading(true);
+        try {
+          const params = new URLSearchParams();
+          if (filters.college) params.append('filter_college', filters.college);
+          if (filters.batch) params.append('filter_batch', filters.batch);
+          if (filters.course) params.append('filter_course', filters.course);
+          if (filters.branch) params.append('filter_branch', filters.branch);
+          if (filters.year) params.append('filter_year', filters.year);
+          if (filters.semester) params.append('filter_semester', filters.semester);
+          if (filters.search) params.append('search', filters.search);
+
+          const response = await api.get(`/students/reports/registration/abstract?${params.toString()}`);
+          if (response.data?.success) {
+            setAbstractData(response.data.data || []);
+            setGroupingParams(response.data.groupingParams || { key: 'college', label: 'College' });
+          }
+        } catch (error) {
+          console.error('Failed to load abstract:', error);
+          toast.error('Failed to load abstract report');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchAbstract();
+    }
+  }, [activeTab, filters]);
 
   // Debounced search
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,7 +179,7 @@ const Reports = () => {
   useEffect(() => {
     const fetchInitialOptions = async () => {
       try {
-        const response = await api.get('/students/quick-filters');
+        const response = await api.get('/students/quick-filters?applyExclusions=true');
         if (response.data?.success) {
           const data = response.data.data || {};
           setFilterOptions(prev => ({
@@ -173,6 +206,7 @@ const Reports = () => {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
         if (filters.batch) params.append('batch', filters.batch);
+        params.append('applyExclusions', 'true');
 
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
         if (response.data?.success) {
@@ -203,6 +237,7 @@ const Reports = () => {
         if (filters.college) params.append('college', filters.college);
         if (filters.batch) params.append('batch', filters.batch);
         params.append('course', filters.course);
+        params.append('applyExclusions', 'true');
 
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
         if (response.data?.success) {
@@ -232,6 +267,7 @@ const Reports = () => {
         if (filters.batch) params.append('batch', filters.batch);
         if (filters.course) params.append('course', filters.course);
         params.append('branch', filters.branch);
+        params.append('applyExclusions', 'true');
 
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
         if (response.data?.success) {
@@ -261,6 +297,7 @@ const Reports = () => {
         if (filters.course) params.append('course', filters.course);
         if (filters.branch) params.append('branch', filters.branch);
         params.append('year', filters.year);
+        params.append('applyExclusions', 'true');
 
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
         if (response.data?.success) {
@@ -529,6 +566,15 @@ const Reports = () => {
               Sheets
             </button>
             <button
+              onClick={() => setActiveTab('abstract')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'abstract'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Abstract
+            </button>
+            <button
               onClick={() => setActiveTab('analytics')}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'analytics'
                 ? 'bg-white text-gray-900 shadow-sm'
@@ -538,6 +584,10 @@ const Reports = () => {
               Graphs
             </button>
           </div>
+
+
+
+
           <button
             onClick={() => loadReport(filters)}
             disabled={loading}
@@ -560,17 +610,7 @@ const Reports = () => {
         {/* Filters and Actions Row */}
         <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 w-full">
-            {/* Search */}
-            <div className="md:col-span-2 lg:col-span-2 xl:col-span-2 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+
 
             {/* College */}
             <select
@@ -608,7 +648,6 @@ const Reports = () => {
             >
               <option value="">All Courses</option>
               {(filterOptions.courses || [])
-                .filter((courseOption) => !EXCLUDED_COURSES.has(courseOption))
                 .map((course) => (
                   <option key={course} value={course}>
                     {course}
@@ -670,6 +709,134 @@ const Reports = () => {
           )}
         </div>
       </section>
+
+      {/* Abstract View */}
+      {activeTab === 'abstract' && (
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden animate-in fade-in duration-300 gap-4">
+          {/* Stats Grid - Shared */}
+          {stats && (
+            <div className="flex-shrink-0">
+              <StatsGrid />
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500" >
+              <RefreshCw className="animate-spin" size={24} />
+              Loading abstract data...
+            </div>
+          ) : abstractData.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500">
+              <AlertCircle size={32} />
+              <p>No summary data found matching current filters.</p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-sm text-left relative">
+                  <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Batch</th>
+
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Course</th>
+                      <th className="px-4 py-3 bg-gray-50 max-w-[200px] whitespace-normal">Branch</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Year</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Sem</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center">Total Students</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center">Overall Completed</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center">Pending</th>
+                      {/* Removed Completion % */}
+                      {/* Detailed Breakdowns - Unified (No border-l) */}
+                      <th className="px-4 py-3 whitespace-nowrap text-center text-xs text-gray-500">Verification</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center text-xs text-gray-500">Certificates</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center text-xs text-gray-500">Fees</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center text-xs text-gray-500">Promotion</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-center text-xs text-gray-500">Scholarship</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {abstractData.map((row, idx) => {
+                      const total = parseInt(row.total || 0);
+                      const completed = parseInt(row.overall_completed || 0);
+                      const pending = total - completed;
+
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-gray-700">{row.batch || '-'}</td>
+                          <td className="px-4 py-3 font-medium text-gray-900">{row.course || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700">{row.branch || '-'}</td>
+                          <td className="px-4 py-3 text-center text-gray-700">{row.current_year || '-'}</td>
+                          <td className="px-4 py-3 text-center text-gray-700">{row.current_semester || '-'}</td>
+                          <td className="px-4 py-3 text-center font-semibold">{total}</td>
+                          <td className="px-4 py-3 text-center text-green-600 font-medium">{completed}</td>
+                          <td className="px-4 py-3 text-center text-red-500 font-medium">{pending}</td>
+                          {/* Removed Completion % Cell */}
+
+                          {/* Breakdown Columns - Matches Header */}
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">{row.verification_completed}</span> / <span className="text-red-400">{total - row.verification_completed}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">{row.certificates_verified}</span> / <span className="text-red-400">{total - row.certificates_verified}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">{row.fee_cleared}</span> / <span className="text-red-400">{total - row.fee_cleared}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">{row.promotion_completed}</span> / <span className="text-red-400">{total - row.promotion_completed}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            <div className="text-xs">
+                              <span className="text-green-600 font-medium">{row.scholarship_assigned}</span> / <span className="text-red-400">{total - row.scholarship_assigned}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
+                    {/* Grand Total Row */}
+                    {abstractData.length > 0 && (
+                      <tr>
+                        <td className="px-4 py-3" colSpan={5}>Total</td>
+                        <td className="px-4 py-3 text-center">{abstractData.reduce((acc, r) => acc + parseInt(r.total || 0), 0)}</td>
+                        <td className="px-4 py-3 text-center text-green-700">{abstractData.reduce((acc, r) => acc + parseInt(r.overall_completed || 0), 0)}</td>
+                        <td className="px-4 py-3 text-center text-red-600">{
+                          abstractData.reduce((acc, r) => acc + (parseInt(r.total || 0) - parseInt(r.overall_completed || 0)), 0)
+                        }</td>
+                        {/* Removed % Total Cell */}
+                        <td className="px-4 py-3 text-center">
+                          {abstractData.reduce((acc, r) => acc + parseInt(r.verification_completed || 0), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {abstractData.reduce((acc, r) => acc + parseInt(r.certificates_verified || 0), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {abstractData.reduce((acc, r) => acc + parseInt(r.fee_cleared || 0), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {abstractData.reduce((acc, r) => acc + parseInt(r.promotion_completed || 0), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {abstractData.reduce((acc, r) => acc + parseInt(r.scholarship_assigned || 0), 0)}
+                        </td>
+                      </tr>
+                    )}
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Analytics View */}
       {activeTab === 'analytics' && (

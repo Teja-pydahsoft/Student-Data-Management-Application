@@ -13,6 +13,7 @@ const { listCustomHolidays } = require('../services/customHolidayService');
 const { getPublicHolidaysForYear } = require('../services/holidayService');
 const { getScopeConditionString } = require('../utils/scoping');
 const { sendNotificationToUser } = require('./pushController');
+const { generateAttendanceReportPDF } = require('../services/pdfService');
 
 // Helper function to replace template variables
 const replaceTemplateVariables = (template, variables) => {
@@ -3791,6 +3792,23 @@ exports.downloadAttendanceReport = async (req, res) => {
     }
 
     // First, get all students matching filters (to include students with no attendance)
+    // Fetch exclude settings
+    let excludedCourses = [];
+    let excludedStudents = [];
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+        if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch attendance config for download report:', err);
+    }
+
     let studentQuery = `
       SELECT
         s.id,
@@ -3807,6 +3825,16 @@ exports.downloadAttendanceReport = async (req, res) => {
       WHERE 1=1
     `;
     const studentParams = [];
+
+    if (excludedCourses.length > 0) {
+      studentQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+      studentParams.push(...excludedCourses);
+    }
+
+    if (excludedStudents.length > 0) {
+      studentQuery += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+      studentParams.push(...excludedStudents);
+    }
 
     if (statusFilter) {
       studentQuery += ' AND s.student_status = ?';
@@ -4132,6 +4160,23 @@ exports.downloadDayEndReport = async (req, res) => {
       });
     }
 
+    // Fetch exclude settings
+    let excludedCourses = [];
+    let excludedStudents = [];
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+        if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch attendance config for day-end report:', err);
+    }
+
     const filters = {
       batch: normalizeTextFilter(batch),
       course: normalizeTextFilter(course),
@@ -4144,6 +4189,20 @@ exports.downloadDayEndReport = async (req, res) => {
 
     // Build filter conditions
     const countFilter = buildWhereClause(filters, 's');
+
+    // Add exclusions to filter clause
+    let exclusionClause = '';
+    const exclusionParams = [];
+
+    if (excludedCourses.length > 0) {
+      exclusionClause += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+      exclusionParams.push(...excludedCourses);
+    }
+
+    if (excludedStudents.length > 0) {
+      exclusionClause += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+      exclusionParams.push(...excludedStudents);
+    }
 
     // Apply user scope filtering
     let scopeCondition = '';
@@ -4176,11 +4235,11 @@ exports.downloadDayEndReport = async (req, res) => {
         LEFT JOIN attendance_records ar 
           ON ar.student_id = s.id 
           AND ar.attendance_date = ?
-        WHERE 1=1${countFilter.clause}${scopeCondition}
+        WHERE 1=1${countFilter.clause}${exclusionClause}${scopeCondition}
         GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
         ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
       `,
-      [attendanceDate, ...countFilter.params, ...scopeParams]
+      [attendanceDate, ...countFilter.params, ...exclusionParams, ...scopeParams]
     );
 
     // Transform grouped data to match frontend format
@@ -4209,8 +4268,8 @@ exports.downloadDayEndReport = async (req, res) => {
 
     // Get total statistics
     const [countRows] = await masterPool.query(
-      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${scopeCondition}`,
-      [...countFilter.params, ...scopeParams]
+      `SELECT COUNT(*) AS totalStudents FROM students s WHERE 1=1${countFilter.clause}${exclusionClause}${scopeCondition}`,
+      [...countFilter.params, ...exclusionParams, ...scopeParams]
     );
     const totalStudents = countRows[0]?.totalStudents || 0;
 
@@ -4219,10 +4278,10 @@ exports.downloadDayEndReport = async (req, res) => {
         SELECT ar.status, COUNT(*) AS count
         FROM attendance_records ar
         INNER JOIN students s ON s.id = ar.student_id
-        WHERE ar.attendance_date = ?${countFilter.clause}${scopeCondition}
+        WHERE ar.attendance_date = ?${countFilter.clause}${exclusionClause}${scopeCondition}
         GROUP BY ar.status
       `,
-      [attendanceDate, ...countFilter.params, ...scopeParams]
+      [attendanceDate, ...countFilter.params, ...exclusionParams, ...scopeParams]
     );
 
     const presentToday = Number(dailyRows.find(r => r.status === 'present')?.count || 0);
@@ -4232,112 +4291,52 @@ exports.downloadDayEndReport = async (req, res) => {
     const unmarkedToday = Math.max(0, totalStudents - markedToday);
 
     if (normalizedFormat === 'pdf') {
-      // Generate PDF
-      const PDFDocument = require('pdfkit');
-      const fs = require('fs');
-      const os = require('os');
-      const path = require('path');
+      // Use shared PDF service for consistent design with abstract
+      const attendancePercentage = totalStudents > 0
+        ? ((presentToday / totalStudents) * 100).toFixed(2) + '%'
+        : '0.00%';
 
-      const tempDir = os.tmpdir();
-      const fileName = `day_end_report_${Date.now()}.pdf`;
-      const filePath = path.join(tempDir, fileName);
+      const summaryStats = {
+        totalStudents,
+        markedCount: markedToday,
+        unmarkedCount: unmarkedToday,
+        presentCount: presentToday,
+        absentCount: absentToday,
+        attendancePercentage
+      };
 
-      const doc = new PDFDocument({ size: 'A4', margin: 40 });
-      const stream = fs.createWriteStream(filePath);
-      doc.pipe(stream);
-
-      // Header
-      doc.fontSize(18).font('Helvetica-Bold').text('Day End Attendance Report', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.fontSize(12).font('Helvetica').text(`Date: ${attendanceDate}`, { align: 'center' });
-      doc.moveDown(1);
-
-      // Summary statistics
-      doc.fontSize(14).font('Helvetica-Bold').text('Summary', { underline: true });
-      doc.moveDown(0.5);
-      doc.fontSize(10).font('Helvetica');
-      doc.text(`Total Students: ${totalStudents}`);
-      doc.text(`Marked Today: ${markedToday}`);
-      doc.text(`Present: ${presentToday} | Absent: ${absentToday} | No Class Work: ${holidayToday}`);
-      doc.text(`Unmarked: ${unmarkedToday}`);
-      doc.moveDown(1);
-
-      // Filters
-      const filterTexts = [];
-      if (filters.batch) filterTexts.push(`Batch: ${filters.batch}`);
-      if (filters.course) filterTexts.push(`Course: ${filters.course}`);
-      if (filters.branch) filterTexts.push(`Branch: ${filters.branch}`);
-      if (filters.year) filterTexts.push(`Year: ${filters.year}`);
-      if (filters.semester) filterTexts.push(`Semester: ${filters.semester}`);
-      if (filterTexts.length > 0) {
-        doc.fontSize(10).font('Helvetica').text(`Filters: ${filterTexts.join(', ')}`);
-        doc.moveDown(1);
-      }
-
-      // Table
-      doc.fontSize(12).font('Helvetica-Bold').text('Grouped Summary', { underline: true });
-      doc.moveDown(0.5);
-
-      // Table headers
-      const startX = 40;
-      let currentY = doc.y;
-      const rowHeight = 20;
-      // Adjusted widths to fit "Time Stamp"
-      const colWidths = [50, 40, 50, 40, 25, 25, 35, 35, 35, 35, 35, 35, 60];
-      const headers = ['College', 'Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Present', 'Absent', 'Marked', 'Pending', 'No Class', 'Time Stamp'];
-
-      doc.fontSize(7).font('Helvetica-Bold');
-      let x = startX;
-      headers.forEach((header, i) => {
-        doc.text(header, x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
-        x += colWidths[i];
-      });
-      currentY += rowHeight;
-      doc.moveTo(startX, currentY).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), currentY).stroke();
-      currentY += 5;
-
-      // Table rows
-      doc.fontSize(7).font('Helvetica');
-      groupedData.forEach((row) => {
-        if (currentY > doc.page.height - 60) {
-          doc.addPage();
-          currentY = 40;
-        }
-
-        x = startX;
-        const timeStamp = row.lastUpdated
-          ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
-          : '—';
-
-        const values = [
-          row.college, row.batch, row.course, row.branch,
-          String(row.year), String(row.semester),
-          String(row.totalStudents), String(row.presentToday),
-          String(row.absentToday), String(row.markedToday),
-          String(row.pendingToday), String(row.holidayToday),
-          timeStamp
-        ];
-
-        values.forEach((value, i) => {
-          doc.text(String(value || '—'), x, currentY, { width: colWidths[i], align: i >= 6 ? 'right' : 'left' });
-          x += colWidths[i];
+      try {
+        const pdfPath = await generateAttendanceReportPDF({
+          collegeName: college || 'All Colleges',
+          attendanceDate,
+          batch,
+          courseName: course || 'All Courses',
+          branchName: branch || 'All Branches',
+          year,
+          semester,
+          students: [], // Not used when statsOnly is true
+          attendanceRecords: [], // Not used when statsOnly is true
+          allBatchesData: groupedData.map(d => ({
+            ...d,
+            total: d.totalStudents,
+            present: d.presentToday,
+            absent: d.absentToday
+          })),
+          summaryStats, // Pre-calculated stats
+          statsOnly: true, // Do not list students
+          excludeCourse: false // Include course column in table
         });
-        currentY += rowHeight;
-      });
 
-      doc.end();
+        const fileBuffer = require('fs').readFileSync(pdfPath);
+        require('fs').unlinkSync(pdfPath);
 
-      await new Promise((resolve, reject) => {
-        stream.on('finish', resolve);
-        stream.on('error', reject);
-      });
-
-      const fileBuffer = fs.readFileSync(filePath);
-      fs.unlinkSync(filePath); // Clean up temp file
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.pdf"`);
-      res.send(fileBuffer);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="day_end_report_${attendanceDate}.pdf"`);
+        return res.send(fileBuffer);
+      } catch (pdfError) {
+        console.error('PDF Generation failed:', pdfError);
+        return res.status(500).json({ success: false, message: 'PDF Generation failed' });
+      }
     } else {
       // Generate Excel
       const XLSX = require('xlsx');

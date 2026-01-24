@@ -15,50 +15,127 @@ const getTodayDate = () => {
 /**
  * Generate Report HTML
  */
+/**
+ * Generate Report HTML with Multiple Tables (Grouped by College)
+ */
 const generateReportHtml = (rows, title, attendanceDate) => {
-    // Calculate Totals
-    let totalStudents = 0;
-    let totalPresent = 0;
-    let totalAbsent = 0;
-    let totalHoliday = 0;
-    let totalMarked = 0;
-    let totalUnmarked = 0;
+    // Group rows by college
+    const rowsByCollege = rows.reduce((acc, row) => {
+        const college = row.college || 'Unknown College';
+        if (!acc[college]) acc[college] = [];
+        acc[college].push(row);
+        return acc;
+    }, {});
 
-    const tableRows = rows.map(row => {
-        const rowTotal = Number(row.total_students) || 0;
-        const rowPresent = Number(row.present) || 0;
-        const rowAbsent = Number(row.absent) || 0;
-        const rowHoliday = Number(row.holiday) || 0;
-        const rowMarked = rowPresent + rowAbsent + rowHoliday;
-        const rowUnmarked = Math.max(0, rowTotal - rowMarked);
+    const colleges = Object.keys(rowsByCollege).sort();
 
-        totalStudents += rowTotal;
-        totalPresent += rowPresent;
-        totalAbsent += rowAbsent;
-        totalHoliday += rowHoliday;
-        totalMarked += rowMarked;
-        totalUnmarked += rowUnmarked;
+    // Calculate Global Totals
+    let globalStats = {
+        totalStudents: 0,
+        totalPresent: 0,
+        totalAbsent: 0,
+        totalHoliday: 0,
+        totalMarked: 0,
+        totalUnmarked: 0
+    };
 
-        const timeStamp = row.last_updated
-            ? new Date(row.last_updated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
-            : '-';
+    rows.forEach(row => {
+        globalStats.totalStudents += Number(row.total_students) || 0;
+        globalStats.totalPresent += Number(row.present) || 0;
+        globalStats.totalAbsent += Number(row.absent) || 0;
+        globalStats.totalHoliday += Number(row.holiday) || 0;
+    });
+    globalStats.totalMarked = globalStats.totalPresent + globalStats.totalAbsent + globalStats.totalHoliday;
+    globalStats.totalUnmarked = Math.max(0, globalStats.totalStudents - globalStats.totalMarked);
+
+    // Generate Tables for each college
+    const collegeTables = colleges.map(college => {
+        const collegeRows = rowsByCollege[college];
+
+        let collegeStats = {
+            totalStudents: 0,
+            present: 0,
+            absent: 0,
+            holiday: 0,
+            marked: 0,
+            unmarked: 0
+        };
+
+        const tableBody = collegeRows.map(row => {
+            const rowTotal = Number(row.total_students) || 0;
+            const rowPresent = Number(row.present) || 0;
+            const rowAbsent = Number(row.absent) || 0;
+            const rowHoliday = Number(row.holiday) || 0;
+            const rowMarked = rowPresent + rowAbsent + rowHoliday;
+            const rowUnmarked = Math.max(0, rowTotal - rowMarked);
+
+            collegeStats.totalStudents += rowTotal;
+            collegeStats.present += rowPresent;
+            collegeStats.absent += rowAbsent;
+            collegeStats.holiday += rowHoliday;
+            collegeStats.marked += rowMarked;
+            collegeStats.unmarked += rowUnmarked;
+
+            const timeStamp = row.last_updated
+                ? new Date(row.last_updated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+                : '-';
+
+            // Calculate Attendance % for the row
+            const attPercent = rowTotal > 0 ? ((rowPresent / rowTotal) * 100).toFixed(1) + '%' : '0.0%';
+
+            return `
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #ddd;">${row.batch || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd;">${row.course || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd;">${row.branch || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${row.year || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${row.semester || '-'}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowTotal}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowPresent}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowAbsent}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowMarked}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowUnmarked}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${attPercent}</td>
+                    <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${timeStamp}</td>
+                </tr>
+            `;
+        }).join('');
 
         return `
-            <tr>
-                <td style="padding: 4px; border: 1px solid #ddd;">${row.college || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd;">${row.batch || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd;">${row.course || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd;">${row.branch || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${row.year || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${row.semester || '-'}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowTotal}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowPresent}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowAbsent}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowMarked}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowUnmarked}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: right;">${rowHoliday}</td>
-                <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">${timeStamp}</td>
-            </tr>
+            <div style="margin-bottom: 30px;">
+                <h3 style="color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-bottom: 10px;">${college}</h3>
+                
+                <div style="margin-bottom: 10px; font-size: 11px; background: #f8f9fa; padding: 5px; border-radius: 4px;">
+                    <strong>Summary:</strong> 
+                    Total: ${collegeStats.totalStudents} | 
+                    Marked: ${collegeStats.marked} | 
+                    <span style="color: green;">Present: ${collegeStats.present}</span> | 
+                    <span style="color: red;">Absent: ${collegeStats.absent}</span> | 
+                    <span style="color: orange;">Pending: ${collegeStats.unmarked}</span>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Batch</th>
+                            <th style="width: 20%;">Course</th>
+                            <th style="width: 15%;">Branch</th>
+                            <th style="width: 5%;">Yr</th>
+                            <th style="width: 5%;">Sem</th>
+                            <th style="width: 7%; text-align: right;">Total</th>
+                            <th style="width: 7%; text-align: right;">Pres</th>
+                            <th style="width: 7%; text-align: right;">Abs</th>
+                            <th style="width: 7%; text-align: right;">Mkrd</th>
+                            <th style="width: 7%; text-align: right;">Pend</th>
+                            <th style="width: 7%; text-align: right;">%</th>
+                            <th style="width: 10%; text-align: center;">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableBody}
+                    </tbody>
+                </table>
+            </div>
         `;
     }).join('');
 
@@ -85,35 +162,14 @@ const generateReportHtml = (rows, title, attendanceDate) => {
             </div>
 
             <div class="stats-box">
-                <span class="stat">Total Students: ${totalStudents}</span>
-                <span class="stat">Marked: ${totalMarked}</span>
-                <span class="stat" style="color: green;">Present: ${totalPresent}</span>
-                <span class="stat" style="color: red;">Absent: ${totalAbsent}</span>
-                <span class="stat" style="color: orange;">Pending: ${totalUnmarked}</span>
+                <span class="stat">Global Total: ${globalStats.totalStudents}</span>
+                <span class="stat">Marked: ${globalStats.totalMarked}</span>
+                <span class="stat" style="color: green;">Present: ${globalStats.totalPresent}</span>
+                <span class="stat" style="color: red;">Absent: ${globalStats.totalAbsent}</span>
+                <span class="stat" style="color: orange;">Pending: ${globalStats.totalUnmarked}</span>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 12%;">College</th>
-                        <th style="width: 8%;">Batch</th>
-                        <th style="width: 15%;">Course</th>
-                        <th style="width: 10%;">Branch</th>
-                        <th style="width: 5%;">Yr</th>
-                        <th style="width: 5%;">Sem</th>
-                        <th style="width: 6%; text-align: right;">Total</th>
-                        <th style="width: 6%; text-align: right;">Pres</th>
-                        <th style="width: 6%; text-align: right;">Abs</th>
-                        <th style="width: 6%; text-align: right;">Mkrd</th>
-                        <th style="width: 6%; text-align: right;">Pend</th>
-                        <th style="width: 6%; text-align: right;">N.C.W</th>
-                        <th style="width: 9%; text-align: center;">Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
+            ${collegeTables}
 
             <div class="footer">
                 This is an automated report sent at 4:00 PM IST.
@@ -134,9 +190,25 @@ const sendDailyAttendanceReports = async () => {
         const attendanceDate = getTodayDate();
         const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
 
-        // 1. Fetch Day End Report Data (Grouped Summary)
-        const [groupedRows] = await masterPool.query(
-            `
+        // 0. Fetch Excluded Courses/Students Config
+        let excludedCourses = [];
+        let excludedStudents = [];
+        try {
+            const [settings] = await masterPool.query(
+                'SELECT value FROM settings WHERE `key` = ?',
+                ['attendance_config']
+            );
+            if (settings && settings.length > 0) {
+                const config = JSON.parse(settings[0].value);
+                if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+                if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+            }
+        } catch (err) {
+            console.warn('Failed to fetch attendance config for daily report:', err);
+        }
+
+        // 1. Fetch Day End Report Data (Grouped Summary) with Exclusions
+        let query = `
               SELECT 
                 s.college AS college,
                 s.batch AS batch,
@@ -154,11 +226,26 @@ const sendDailyAttendanceReports = async () => {
                 ON ar.student_id = s.id 
                 AND ar.attendance_date = ?
               WHERE s.student_status = 'Regular'
+        `;
+        const params = [attendanceDate];
+
+        // Apply Exclusions
+        if (excludedCourses.length > 0) {
+            query += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+            params.push(...excludedCourses);
+        }
+
+        if (excludedStudents.length > 0) {
+            query += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+            params.push(...excludedStudents);
+        }
+
+        query += `
               GROUP BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
               ORDER BY s.college, s.batch, s.course, s.branch, s.current_year, s.current_semester
-            `,
-            [attendanceDate]
-        );
+        `;
+
+        const [groupedRows] = await masterPool.query(query, params);
 
         // 2. Send Super Admin Report (Global)
         const globalHtml = generateReportHtml(groupedRows, 'Day End Attendance Report (Global)', attendanceDate);

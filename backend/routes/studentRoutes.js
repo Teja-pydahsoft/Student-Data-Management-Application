@@ -83,6 +83,14 @@ router.get(
 );
 
 router.get(
+  '/reports/registration/abstract',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  attachUserScope,
+  studentController.getRegistrationAbstract
+);
+
+router.get(
   '/reports/registration',
   authMiddleware,
   verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),

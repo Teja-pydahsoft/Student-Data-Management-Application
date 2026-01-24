@@ -35,7 +35,7 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
             params.append('limit', 5); // Fetch only 5 for preview
             params.append('page', 1);
 
-            const response = await api.get(`/students/reports/registration?${params.toString()}`);
+            const response = await api.get(`/students/reports/registration/abstract?${params.toString()}`);
             if (response.data?.success) {
                 setPreviewData(response.data.data || []);
                 toast.success('Preview loaded successfully');
@@ -59,26 +59,21 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
             });
             params.append('format', format);
 
-            // Trigger download logic here (assuming backend supports it or we generate on frontend)
-            // For now, implementing frontend generation logic placeholder or backend call
-
             if (format === 'excel') {
-                // Call backend export endpoint if available, otherwise suggest implementation
                 const response = await api.get(`/students/reports/registration/export?${params.toString()}`, { responseType: 'blob' });
                 const url = window.URL.createObjectURL(new Blob([response.data]));
                 const link = document.createElement('a');
                 link.href = url;
-                link.setAttribute('download', `registration_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+                link.setAttribute('download', `registration_abstract_report_${new Date().toISOString().split('T')[0]}.xlsx`);
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
             } else if (format === 'pdf') {
-                // Similar logic for PDF
                 const response = await api.get(`/students/reports/registration/export?${params.toString()}&type=pdf`, { responseType: 'blob' });
                 const url = window.URL.createObjectURL(new Blob([response.data]));
                 const link = document.createElement('a');
                 link.href = url;
-                link.setAttribute('download', `registration_report_${new Date().toISOString().split('T')[0]}.pdf`);
+                link.setAttribute('download', `registration_abstract_report_${new Date().toISOString().split('T')[0]}.pdf`);
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
@@ -103,7 +98,7 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900">Download Registration Report</h2>
-                        <p className="text-sm text-gray-500">Select filters and format to download</p>
+                        <p className="text-sm text-gray-500">Select filters and format to download (Abstract Summary)</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
                         <X size={20} />
@@ -198,7 +193,7 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                                 className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors border border-blue-200"
                             >
                                 {loading ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" /> : <Search size={16} />}
-                                Generate Preview
+                                Generate Preview (Abstract)
                             </button>
                         </div>
                     </div>
@@ -208,78 +203,57 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                         <div className="border border-gray-200 rounded-xl overflow-hidden">
                             <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                                 <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Preview (First 5 records)</h3>
-                                <span className="text-xs text-gray-500">{previewData.length} records shown</span>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-xs text-gray-500">{previewData.length} records shown</span>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
                                     <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
                                         <tr>
-                                            <th className="px-4 py-3 whitespace-nowrap">Pin No</th>
-                                            <th className="px-4 py-3 whitespace-nowrap">Student Name</th>
+                                            <th className="px-4 py-3 whitespace-nowrap">Batch</th>
                                             <th className="px-4 py-3 whitespace-nowrap">Course</th>
                                             <th className="px-4 py-3 whitespace-nowrap">Branch</th>
                                             <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
                                             <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>
-                                            <th className="px-4 py-3 whitespace-nowrap">Registration Status</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-center">Information Verification</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-center">Certificates</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-center">Fees</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-center">Promotion</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-center">Scholarship</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center">Total</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center">Completed</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center">Pending</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center text-xs">Verification</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center text-xs">Certificates</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center text-xs">Fees</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center text-xs">Promotion</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-center text-xs">Scholarship</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {previewData.map((student, idx) => (
-                                            <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-4 py-3 font-medium text-gray-900">{student.pin_no || '-'}</td>
-                                                <td className="px-4 py-3 text-gray-700">
-                                                    <div>
-                                                        <div className="font-medium">{student.student_name}</div>
-                                                        <div className="text-xs text-gray-500">{student.admission_number}</div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-gray-600">{student.course}</td>
-                                                <td className="px-4 py-3 text-gray-600">{student.branch}</td>
-                                                <td className="px-4 py-3 text-center text-gray-600">{student.current_year}</td>
-                                                <td className="px-4 py-3 text-center text-gray-600">{student.current_semester}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.overall_status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.overall_status === 'completed' ? 'Completed' : 'Pending'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.stages?.verification === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.stages?.verification === 'completed' ? 'Completed' : 'Pending'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.stages?.certificates === 'Verified' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.stages?.certificates || 'Pending'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.stages?.fee === 'No Due' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.stages?.fee || 'Pending'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.stages?.promotion === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.stages?.promotion === 'completed' ? 'Completed' : 'Pending'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-1 text-xs rounded-full font-medium ${student.stages?.scholarship !== 'Pending' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                        {student.stages?.scholarship || 'Pending'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {previewData.map((row, idx) => {
+                                            const total = parseInt(row.total || 0);
+                                            const completed = parseInt(row.overall_completed || 0);
+                                            const pending = total - completed;
+
+                                            // Ensure limit to 5 if API returns more
+                                            if (idx >= 5) return null;
+
+                                            return (
+                                                <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-4 py-3 text-gray-900">{row.batch || '-'}</td>
+                                                    <td className="px-4 py-3 text-gray-900 font-medium">{row.course || '-'}</td>
+                                                    <td className="px-4 py-3 text-gray-700">{row.branch || '-'}</td>
+                                                    <td className="px-4 py-3 text-center text-gray-600">{row.current_year}</td>
+                                                    <td className="px-4 py-3 text-center text-gray-600">{row.current_semester}</td>
+                                                    <td className="px-4 py-3 text-center font-semibold">{total}</td>
+                                                    <td className="px-4 py-3 text-center text-green-600 font-medium">{completed}</td>
+                                                    <td className="px-4 py-3 text-center text-red-500 font-medium">{pending}</td>
+
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.verification_completed}/{total - row.verification_completed}</td>
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.certificates_verified}/{total - row.certificates_verified}</td>
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.fee_cleared}/{total - row.fee_cleared}</td>
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.promotion_completed}/{total - row.promotion_completed}</td>
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.scholarship_assigned}/{total - row.scholarship_assigned}</td>
+                                                </tr>
+                                            )
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
