@@ -117,6 +117,8 @@ const Students = () => {
   const canViewSms = user?.role === 'super_admin' || user?.role === 'admin' || hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'view_sms');
   // Check if user has access to Attendance module
   const canViewAttendance = hasModuleAccess(userPermissions, FRONTEND_MODULES.ATTENDANCE);
+  // Check if user has edit_student permission for maintenance tasks
+  const canEditStudentsReal = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'edit_student');
 
   const isCashier = user?.role === USER_ROLES.CASHIER;
 
@@ -689,7 +691,8 @@ const Students = () => {
     };
 
     // Check on mount and when students data is available
-    if (students && students.length > 0) {
+    // Only perform this check if user has permission to edit students
+    if (students && students.length > 0 && canEditStudentsReal) {
       checkExpiredPermits();
     }
   }, [students, invalidateStudents]);
