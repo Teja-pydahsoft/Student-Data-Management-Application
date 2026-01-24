@@ -1,4 +1,4 @@
-const { USER_ROLES, canCreateRole, hasPermission, validateRoleRequirements } = require('../constants/rbac');
+const { USER_ROLES, canCreateRole, hasPermission, validateRoleRequirements, MODULES } = require('../constants/rbac');
 const { masterPool } = require('../config/database');
 
 /**
@@ -411,6 +411,12 @@ const verifyCanManageUser = async (req, res, next) => {
           message: 'You can only manage users in your branch'
         });
       }
+      return next();
+    }
+
+    // Check if user has explicit permission to manage users (e.g. "Full Access" custom roles)
+    // This allows non-academic roles (like HR, Generic Admins) to manage users if they have the permission
+    if (hasPermission(user.permissions, MODULES.USER_MANAGEMENT, 'control')) {
       return next();
     }
 

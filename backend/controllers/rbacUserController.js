@@ -12,7 +12,8 @@ const {
   createDefaultPermissions,
   createSuperAdminPermissions,
   MODULES,
-  ALL_MODULES
+  ALL_MODULES,
+  hasPermission
 } = require('../constants/rbac');
 const { sendCredentialsEmail, sendPasswordResetEmail, sendBrevoEmail } = require('../utils/emailService');
 const { getNotificationSetting } = require('./settingsController');
@@ -1313,11 +1314,12 @@ exports.permanentDeleteUser = async (req, res) => {
     const { id } = req.params;
     const user = req.user || req.admin;
 
-    // Only super admin can permanently delete users
-    if (!isSuperAdmin(user)) {
+    // Only super admin or users with full control permission can permanently delete users
+    const hasControl = hasPermission(user.permissions, MODULES.USER_MANAGEMENT, 'control');
+    if (!isSuperAdmin(user) && !hasControl) {
       return res.status(403).json({
         success: false,
-        message: 'Only Super Admin can permanently delete users'
+        message: 'Insufficient permissions to permanently delete users'
       });
     }
 

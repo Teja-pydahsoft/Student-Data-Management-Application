@@ -35,7 +35,7 @@ router.get(
 // Requires user_management write permission and role creation check
 router.post(
   '/',
-  verifyPermission('user_management', 'write'),
+  verifyPermission('user_management', 'control'),
   verifyCanCreateRole,
   rbacUserController.createUser
 );
@@ -44,7 +44,7 @@ router.post(
 // Requires user_management write permission and management check
 router.put(
   '/:id',
-  verifyPermission('user_management', 'write'),
+  verifyPermission('user_management', 'control'),
   verifyCanManageUser,
   rbacUserController.updateUser
 );
@@ -53,7 +53,7 @@ router.put(
 // Requires user_management write permission and management check
 router.delete(
   '/:id',
-  verifyPermission('user_management', 'write'),
+  verifyPermission('user_management', 'control'),
   verifyCanManageUser,
   rbacUserController.deleteUser
 );
@@ -62,7 +62,7 @@ router.delete(
 // Requires user_management write permission and super admin role
 router.delete(
   '/:id/permanent',
-  verifyPermission('user_management', 'write'),
+  verifyPermission('user_management', 'control'),
   verifyCanManageUser,
   rbacUserController.permanentDeleteUser
 );
@@ -71,7 +71,7 @@ router.delete(
 // Requires user_management write permission
 router.post(
   '/:id/reset-password',
-  verifyPermission('user_management', 'write'),
+  verifyPermission('user_management', 'control'),
   verifyCanManageUser,
   rbacUserController.resetPassword
 );

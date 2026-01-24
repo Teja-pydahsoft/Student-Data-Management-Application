@@ -39,7 +39,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../config/api';
 import useAuthStore from '../store/authStore';
-import { ROLE_LABELS, ROLE_COLORS, isFullAccessRole, hasModuleAccess, BACKEND_MODULES, MODULE_PERMISSIONS, MODULE_LABELS, createDefaultPermissions } from '../constants/rbac';
+import { ROLE_LABELS, ROLE_COLORS, isFullAccessRole, hasModuleAccess, hasWriteAccess, FRONTEND_MODULES, BACKEND_MODULES, MODULE_PERMISSIONS, MODULE_LABELS, createDefaultPermissions } from '../constants/rbac';
 
 const ROLE_AVATAR_COLORS = {
   college_principal: 'from-indigo-400 to-indigo-600',
@@ -347,6 +347,20 @@ const UserManagement = () => {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+
+  // Check if user has management permissions
+  const canManageUsers = useMemo(() => {
+    if (!user) return false;
+    if (isFullAccessRole(user.role)) return true;
+    return hasWriteAccess(user.permissions, FRONTEND_MODULES.USERS);
+  }, [user]);
+
+  // Redirect to users tab if user doesn't have create permission
+  useEffect(() => {
+    if (!canManageUsers && activeTab === 'create') {
+      setActiveTab('users');
+    }
+  }, [canManageUsers, activeTab]);
 
   // Delete user modal states
   const [deleteUserModal, setDeleteUserModal] = useState(null);
@@ -1151,17 +1165,19 @@ const UserManagement = () => {
       {/* Tabs */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
         <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab('create')}
-            className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs transition-all touch-manipulation min-h-[40px] flex-1 sm:flex-none ${activeTab === 'create'
-              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
-              }`}
-          >
-            <UserPlus size={14} />
-            <span className="hidden sm:inline">Create User</span>
-            <span className="sm:hidden">Create</span>
-          </button>
+          {canManageUsers && (
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs transition-all touch-manipulation min-h-[40px] flex-1 sm:flex-none ${activeTab === 'create'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+                }`}
+            >
+              <UserPlus size={14} />
+              <span className="hidden sm:inline">Create User</span>
+              <span className="sm:hidden">Create</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('users')}
             className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs transition-all touch-manipulation min-h-[40px] flex-1 sm:flex-none ${activeTab === 'users'
@@ -1633,30 +1649,49 @@ const UserManagement = () => {
                               </div>
                             </td>
                             <td className="px-2 py-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setModuleAccessUser(userData);
-                                  setSelectedModuleKey(null);
-                                  setShowModuleAccessModal(true);
-                                }}
-                                className={`w-full max-w-[150px] inline-flex items-center justify-between gap-1.5 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all ${hasModuleAccess
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                                  }`}
-                              >
-                                <span className="flex items-center gap-1">
-                                  {hasModuleAccess ? (
-                                    <CheckCircle2 size={11} />
-                                  ) : (
-                                    <AlertCircle size={11} />
-                                  )}
-                                  <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
-                                </span>
-                                <span className="text-[9px] bg-white/70 px-1 py-0.5 rounded text-slate-500">
-                                  {permStatus.granted}/{permStatus.total}
-                                </span>
-                              </button>
+                              {canManageUsers ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModuleAccessUser(userData);
+                                    setSelectedModuleKey(null);
+                                    setShowModuleAccessModal(true);
+                                  }}
+                                  className={`w-full max-w-[150px] inline-flex items-center justify-between gap-1.5 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all ${hasModuleAccess
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                    }`}
+                                >
+                                  <span className="flex items-center gap-1">
+                                    {hasModuleAccess ? (
+                                      <CheckCircle2 size={11} />
+                                    ) : (
+                                      <AlertCircle size={11} />
+                                    )}
+                                    <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
+                                  </span>
+                                  <span className="text-[9px] bg-white/70 px-1 py-0.5 rounded text-slate-500">
+                                    {permStatus.granted}/{permStatus.total}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className={`w-full max-w-[150px] inline-flex items-center justify-between gap-1.5 px-2 py-1 rounded-md border text-[10px] font-semibold ${hasModuleAccess
+                                  ? 'bg-emerald-50/50 text-emerald-700/70 border-emerald-100'
+                                  : 'bg-slate-50 text-slate-400 border-slate-100'
+                                  }`}>
+                                  <span className="flex items-center gap-1">
+                                    {hasModuleAccess ? (
+                                      <CheckCircle2 size={11} />
+                                    ) : (
+                                      <Shield size={11} />
+                                    )}
+                                    <span>{hasModuleAccess ? 'Configured' : 'Read Only'}</span>
+                                  </span>
+                                  <span className="text-[9px] bg-white/50 px-1 py-0.5 rounded text-slate-400">
+                                    {permStatus.granted}/{permStatus.total}
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-2 py-1.5">
                               {userData.isActive ? (
@@ -1673,46 +1708,50 @@ const UserManagement = () => {
                             </td>
                             <td className="px-2 py-1.5">
                               <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => openEditModal(userData)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
-                                  title="Edit User"
-                                >
-                                  <Edit size={11} />
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => openResetPasswordModal(userData)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 transition-colors"
-                                  title="Reset Password"
-                                >
-                                  <KeyRound size={11} />
-                                  Reset
-                                </button>
-                                {userData.isActive ? (
-                                  <button
-                                    onClick={() => handleDeactivateUser(userData.id)}
-                                    className="p-1.5 rounded-md bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
-                                    title="Deactivate User"
-                                  >
-                                    <ToggleRight size={14} className="text-emerald-500" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleActivateUser(userData.id)}
-                                    className="p-1.5 rounded-md bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-200 transition-colors"
-                                    title="Activate User"
-                                  >
-                                    <ToggleLeft size={14} />
-                                  </button>
+                                {canManageUsers && (
+                                  <>
+                                    <button
+                                      onClick={() => openEditModal(userData)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                      title="Edit User"
+                                    >
+                                      <Edit size={11} />
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => openResetPasswordModal(userData)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200 transition-colors"
+                                      title="Reset Password"
+                                    >
+                                      <KeyRound size={11} />
+                                      Reset
+                                    </button>
+                                    {userData.isActive ? (
+                                      <button
+                                        onClick={() => handleDeactivateUser(userData.id)}
+                                        className="p-1.5 rounded-md bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
+                                        title="Deactivate User"
+                                      >
+                                        <ToggleRight size={14} className="text-emerald-500" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleActivateUser(userData.id)}
+                                        className="p-1.5 rounded-md bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-200 transition-colors"
+                                        title="Activate User"
+                                      >
+                                        <ToggleLeft size={14} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => openDeleteModal(userData)}
+                                      className="p-1.5 rounded-md bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 border border-red-100 transition-colors"
+                                      title="Delete User"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  </>
                                 )}
-                                <button
-                                  onClick={() => openDeleteModal(userData)}
-                                  className="p-1.5 rounded-md bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 border border-red-100 transition-colors"
-                                  title="Delete User"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1772,30 +1811,49 @@ const UserManagement = () => {
                           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                             <div>
                               <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Module Access</h4>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setModuleAccessUser(userData);
-                                  setSelectedModuleKey(null);
-                                  setShowModuleAccessModal(true);
-                                }}
-                                className={`w-full inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${hasModuleAccess
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                                  }`}
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  {hasModuleAccess ? (
-                                    <CheckCircle2 size={12} />
-                                  ) : (
-                                    <AlertCircle size={12} />
-                                  )}
-                                  <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
-                                </span>
-                                <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
-                                  {permStatus.granted}/{permStatus.total}
-                                </span>
-                              </button>
+                              {canManageUsers ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModuleAccessUser(userData);
+                                    setSelectedModuleKey(null);
+                                    setShowModuleAccessModal(true);
+                                  }}
+                                  className={`w-full inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${hasModuleAccess
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                    }`}
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    {hasModuleAccess ? (
+                                      <CheckCircle2 size={12} />
+                                    ) : (
+                                      <AlertCircle size={12} />
+                                    )}
+                                    <span>{hasModuleAccess ? 'Configured' : 'Configure'}</span>
+                                  </span>
+                                  <span className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md text-slate-500">
+                                    {permStatus.granted}/{permStatus.total}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className={`w-full inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold ${hasModuleAccess
+                                  ? 'bg-emerald-50/50 text-emerald-700/70 border-emerald-100'
+                                  : 'bg-slate-50 text-slate-400 border-slate-100'
+                                  }`}>
+                                  <span className="flex items-center gap-1.5">
+                                    {hasModuleAccess ? (
+                                      <CheckCircle2 size={12} />
+                                    ) : (
+                                      <Shield size={12} />
+                                    )}
+                                    <span>{hasModuleAccess ? 'Configured' : 'Read Only'}</span>
+                                  </span>
+                                  <span className="text-[10px] bg-white/50 px-1.5 py-0.5 rounded-md text-slate-400">
+                                    {permStatus.granted}/{permStatus.total}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <div>
                               <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</h4>
@@ -1815,46 +1873,50 @@ const UserManagement = () => {
 
                           {/* Actions */}
                           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                            <button
-                              onClick={() => openEditModal(userData)}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 transition-colors touch-manipulation min-h-[44px]"
-                              title="Edit User"
-                            >
-                              <Edit size={13} />
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => openResetPasswordModal(userData)}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 transition-colors touch-manipulation min-h-[44px]"
-                              title="Reset Password"
-                            >
-                              <KeyRound size={13} />
-                              Reset
-                            </button>
-                            {userData.isActive ? (
-                              <button
-                                onClick={() => handleDeactivateUser(userData.id)}
-                                className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                title="Deactivate User"
-                              >
-                                <ToggleRight size={18} className="text-emerald-500" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleActivateUser(userData.id)}
-                                className="p-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                title="Activate User"
-                              >
-                                <ToggleLeft size={18} />
-                              </button>
+                            {canManageUsers && (
+                              <>
+                                <button
+                                  onClick={() => openEditModal(userData)}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 transition-colors touch-manipulation min-h-[44px]"
+                                  title="Edit User"
+                                >
+                                  <Edit size={13} />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => openResetPasswordModal(userData)}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 active:bg-amber-200 border border-amber-200 transition-colors touch-manipulation min-h-[44px]"
+                                  title="Reset Password"
+                                >
+                                  <KeyRound size={13} />
+                                  Reset
+                                </button>
+                                {userData.isActive ? (
+                                  <button
+                                    onClick={() => handleDeactivateUser(userData.id)}
+                                    className="p-2 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                    title="Deactivate User"
+                                  >
+                                    <ToggleRight size={18} className="text-emerald-500" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleActivateUser(userData.id)}
+                                    className="p-2 rounded-lg bg-slate-50 text-slate-400 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                    title="Activate User"
+                                  >
+                                    <ToggleLeft size={18} />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openDeleteModal(userData)}
+                                  className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                  title="Delete User Permanently"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
                             )}
-                            <button
-                              onClick={() => openDeleteModal(userData)}
-                              className="p-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                              title="Delete User Permanently"
-                            >
-                              <Trash2 size={14} />
-                            </button>
                           </div>
                         </div>
                       </div>
