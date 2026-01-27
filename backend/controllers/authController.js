@@ -226,6 +226,219 @@ exports.unifiedLogin = async (req, res) => {
 // Legacy Login (Admin Only - kept for backward compatibility if needed, else replace)
 exports.login = exports.unifiedLogin;
 
+// CRM Backend URL for SSO token verification (Portal receives SSO from CRM)
+const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'http://localhost:8000';
+
+/**
+ * Create SSO session from CRM token (Portal SSO flow).
+ * CRM redirects user to this app with ?token=<encryptedToken>.
+ * Frontend calls CRM /auth/verify-token, then this endpoint with { userId, role, portalId, ssoToken }.
+ * We optionally re-verify with CRM, look up user (rbac_users or students), issue local JWT.
+ * Token and user shape match unified-login for RBAC and Student so verifyToken and frontend work identically.
+ * @route POST /api/auth/sso-session
+ * @access Public
+ */
+exports.createSSOSession = async (req, res) => {
+  try {
+    const { userId, role, portalId, ssoToken } = req.body;
+
+    if (!userId || !ssoToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID and SSO token are required'
+      });
+    }
+
+    // 1) Optional: verify token with CRM backend
+    try {
+      const verifyRes = await fetch(`${CRM_BACKEND_URL}/auth/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encryptedToken: ssoToken })
+      });
+      const text = await verifyRes.text();
+      if (!text || !text.trim()) {
+        throw new Error(`CRM verify-token returned empty response (status ${verifyRes.status})`);
+      }
+      let verifyResult;
+      try {
+        verifyResult = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`CRM verify-token returned invalid JSON (status ${verifyRes.status})`);
+      }
+
+      if (!verifyResult.success || !verifyResult.valid) {
+        return res.status(401).json({
+          success: false,
+          message: verifyResult.message || 'Invalid SSO token'
+        });
+      }
+
+      const data = verifyResult.data || {};
+      if (String(data.userId) !== String(userId)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Token user ID mismatch'
+        });
+      }
+    } catch (verifyErr) {
+      console.error('SSO token verification with CRM failed:', verifyErr.message);
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(502).json({
+          success: false,
+          message: 'SSO verification failed'
+        });
+      }
+      // In dev, continue if CRM is down
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not set');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error'
+      });
+    }
+
+    // 2a) Student SSO: userId = students.id
+    if (role === 'student') {
+      const [credentials] = await masterPool.query(
+        `SELECT id, student_id, admission_number, username
+         FROM student_credentials
+         WHERE student_id = ?
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (!credentials || credentials.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found in portal database'
+        });
+      }
+
+      const studentCred = credentials[0];
+      const [studentDetails] = await masterPool.query(
+        `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+          CASE
+            WHEN
+              (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
+              (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
+              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+            THEN 'Completed'
+            ELSE s.registration_status
+          END AS registration_status_computed,
+          s.registration_status, s.student_data
+         FROM students s
+         WHERE s.id = ? LIMIT 1`,
+        [studentCred.student_id]
+      );
+
+      if (!studentDetails || studentDetails.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found in portal database'
+        });
+      }
+
+      const s = studentDetails[0];
+      let parsedData = {};
+      try {
+        parsedData = (s.student_data && typeof s.student_data === 'string')
+          ? JSON.parse(s.student_data)
+          : (s.student_data || {});
+      } catch (e) {}
+
+      const resolvedStatus = s.registration_status_computed ||
+        ((s.registration_status && String(s.registration_status).trim().length > 0)
+          ? s.registration_status
+          : (parsedData?.registration_status || parsedData?.['Registration Status'] || 'Pending'));
+
+      const user = {
+        admission_number: studentCred.admission_number,
+        username: studentCred.username,
+        name: s.student_name,
+        current_year: s.current_year,
+        current_semester: s.current_semester,
+        course: s.course,
+        branch: s.branch,
+        college: s.college,
+        student_photo: s.student_photo,
+        registration_status: resolvedStatus,
+        role: 'student'
+      };
+
+      const token = jwt.sign(
+        { id: studentCred.student_id, admissionNumber: studentCred.admission_number, role: 'student' },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      masterPool.query(
+        `UPDATE student_credentials SET last_login = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE student_id = ?`,
+        [studentCred.student_id]
+      ).catch(() => {});
+
+      return res.json({
+        success: true,
+        message: 'SSO session created successfully',
+        token,
+        user
+      });
+    }
+
+    // 2b) RBAC SSO: userId = rbac_users.id
+    const [rows] = await masterPool.query(
+      `SELECT id, name, username, email, phone, role, college_id, course_id, branch_id,
+              college_ids, course_ids, branch_ids, permissions, is_active
+       FROM rbac_users
+       WHERE id = ? AND is_active = 1
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found in portal database'
+      });
+    }
+
+    const rbacUser = rows[0];
+    const user = buildRBACUserResponse(rbacUser);
+
+    const token = jwt.sign(
+      {
+        id: rbacUser.id,
+        username: rbacUser.username,
+        role: rbacUser.role,
+        collegeId: rbacUser.college_id,
+        courseId: rbacUser.course_id,
+        branchId: rbacUser.branch_id,
+        collegeIds: rbacUser.college_ids,
+        courseIds: rbacUser.course_ids,
+        branchIds: rbacUser.branch_ids,
+        permissions: rbacUser.permissions
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'SSO session created successfully',
+      token,
+      user
+    });
+  } catch (err) {
+    console.error('SSO session error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to create SSO session'
+    });
+  }
+};
+
 // Verify token
 exports.verifyToken = async (req, res) => {
   try {

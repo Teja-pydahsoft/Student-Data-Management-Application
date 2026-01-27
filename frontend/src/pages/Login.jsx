@@ -1,21 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { LogIn, Loader2, Eye, EyeOff, Users, Shield } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { LogIn, Loader2, Eye, EyeOff, Users } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
-import LoadingAnimation from '../components/LoadingAnimation';
-import api from '../config/api';
+import api, { CRM_BACKEND_URL, CRM_FRONTEND_URL } from '../config/api';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginAsStudent, isAuthenticated, userType } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { login, loginFromSSO, isAuthenticated, userType } = useAuthStore();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // SSO state
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [ssoError, setSsoError] = useState(null);
+  const [showLoginForm, setShowLoginForm] = useState(false);
 
   // Forgot Password State
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -51,15 +56,81 @@ const Login = () => {
   // Determine if this is a student login based on route
   const isStudentLogin = location.pathname.startsWith('/student/login');
 
+  const handleSSOLogin = useCallback(async (encryptedToken) => {
+    setIsVerifying(true);
+    setSsoError(null);
+    try {
+      const verifyRes = await fetch(`${CRM_BACKEND_URL}/auth/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encryptedToken }),
+      });
+      const text = await verifyRes.text();
+      if (!text || !text.trim()) {
+        throw new Error(`CRM verify-token returned empty response (status ${verifyRes.status}). Is the CRM backend running?`);
+      }
+      let verifyResult;
+      try {
+        verifyResult = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`CRM verify-token returned invalid JSON (status ${verifyRes.status}). Check CRM /auth/verify-token.`);
+      }
+
+      if (!verifyResult.success || !verifyResult.valid) {
+        throw new Error(verifyResult.message || 'Token validation failed');
+      }
+
+      const { userId, role, portalId, expiresAt } = verifyResult.data || {};
+      if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+        throw new Error('Token has expired');
+      }
+
+      const sessionRes = await api.post('/auth/sso-session', {
+        userId,
+        role,
+        portalId,
+        ssoToken: encryptedToken,
+      });
+
+      if (!sessionRes.data?.success || !sessionRes.data?.token || !sessionRes.data?.user) {
+        throw new Error('Failed to create local session');
+      }
+
+      const { token, user } = sessionRes.data;
+      const result = loginFromSSO(token, user);
+      toast.success('Login successful!');
+      navigate(result.redirectPath, { replace: true });
+    } catch (err) {
+      console.error('SSO login error:', err);
+      const msg = err.response?.data?.message || err.message || 'SSO login failed';
+      setSsoError(msg);
+      setShowLoginForm(true);
+      toast.error(msg);
+      setSearchParams({});
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [navigate, loginFromSSO, setSearchParams]);
+
   useEffect(() => {
-    if (isAuthenticated) {
+    const token = searchParams.get('token');
+    if (token) {
+      handleSSOLogin(token);
+    } else {
+      setShowLoginForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; token from URL
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && !isVerifying) {
       if (userType === 'student' || isStudentLogin) {
         navigate('/student/dashboard');
       } else {
         navigate('/');
       }
     }
-  }, [isAuthenticated, navigate, userType, isStudentLogin]);
+  }, [isAuthenticated, navigate, userType, isStudentLogin, isVerifying]);
 
   const handleChange = (e) => {
     setFormData({
@@ -90,6 +161,25 @@ const Login = () => {
     }
   };
 
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+          <p className="mt-4 text-gray-600">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!showLoginForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
       {/* Decorative background accents */}
@@ -97,6 +187,19 @@ const Login = () => {
         <div className="absolute top-[-5%] left-[10%] w-80 h-80 bg-blue-100 rounded-full blur-3xl opacity-60 animate-pulse" />
         <div className="absolute bottom-[-10%] right-[5%] w-96 h-96 bg-blue-200 rounded-full blur-3xl opacity-70 animate-pulse" />
       </div>
+
+      {/* SSO error banner */}
+      {ssoError && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 max-w-md w-full mx-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 z-20">
+          <p className="text-sm text-amber-800">{ssoError}</p>
+          <a
+            href={CRM_FRONTEND_URL}
+            className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+          >
+            Return to CRM Portal
+          </a>
+        </div>
+      )}
 
       {/* Login card */}
       <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-border-light shadow-xl rounded-2xl sm:rounded-3xl relative z-10 p-6 sm:p-8 transition-transform duration-500">
@@ -207,8 +310,14 @@ const Login = () => {
         </div>
 
         {/* Footer */}
-        <div className="text-center text-xs text-muted-text mt-6">
-          © {new Date().getFullYear()} Student Management System
+        <div className="text-center text-xs text-muted-text mt-6 space-y-1">
+          <p>© {new Date().getFullYear()} Student Management System</p>
+          <a
+            href={CRM_FRONTEND_URL}
+            className="text-blue-600 hover:text-blue-800 font-medium inline-block"
+          >
+            Return to CRM Portal
+          </a>
         </div>
       </div>
 

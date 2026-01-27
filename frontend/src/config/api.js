@@ -16,6 +16,10 @@ if (rawApiUrl) {
 
 export const API_URL = API_BASE_URL;
 
+// CRM SSO: backend (verify-token) and frontend (return link)
+export const CRM_BACKEND_URL = import.meta.env.VITE_CRM_BACKEND_URL || 'http://localhost:8000';
+export const CRM_FRONTEND_URL = import.meta.env.VITE_CRM_FRONTEND_URL || 'http://localhost:5174';
+
 // Also create a base URL for static files (without /api)
 export const STATIC_BASE_URL = rawApiUrl ? rawApiUrl.replace(/\/api$/, '') : 'http://localhost:5000';
 
@@ -79,7 +83,8 @@ api.interceptors.response.use(
       // Don't redirect if this is a login attempt (login endpoints should handle their own errors)
       const isLoginEndpoint = error.config?.url?.includes('/login') ||
         error.config?.url?.includes('/auth/login') ||
-        error.config?.url?.includes('unified-login');
+        error.config?.url?.includes('unified-login') ||
+        error.config?.url?.includes('sso-session');
 
       if (!isLoginEndpoint) {
         toast.error('Session expired. Please log in again.');

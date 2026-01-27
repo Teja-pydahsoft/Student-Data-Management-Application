@@ -9,6 +9,7 @@ const { attachUserScope } = require('../middleware/rbac');
 // Public routes
 router.post('/login', authController.login);
 router.post('/unified-login', authController.unifiedLogin);
+router.post('/sso-session', authController.createSSOSession);
 router.post('/rbac/forgot-password', rbacUserController.forgotPassword);
 router.get('/login-stats', authController.getStudentLoginStats); // Currently public for testing
 

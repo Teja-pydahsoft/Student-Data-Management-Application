@@ -118,6 +118,17 @@ const useAuthStore = create((set) => {
       set({ user, token, isAuthenticated: true, userType });
     },
 
+    /** SSO: store token/user from sso-session and return redirect path */
+    loginFromSSO: (token, user) => {
+      const userType = user.role === 'student' ? 'student' : 'admin';
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('userType', userType);
+      localStorage.removeItem('admin');
+      set({ user, token, isAuthenticated: true, userType });
+      return { success: true, redirectPath: resolveDefaultRoute(user, userType === 'student') };
+    },
+
     updateUser: (userData) => set((state) => ({
       user: { ...state.user, ...userData }
     })),
