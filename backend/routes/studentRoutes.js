@@ -257,7 +257,7 @@ router.post('/otp/verify', authMiddleware, studentController.verifyOtp);
 router.get(
   '/:admissionNumber/sms-logs',
   authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view_sms'),
   attachUserScope,
   studentController.getStudentSmsLogs
 );

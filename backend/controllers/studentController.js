@@ -5766,7 +5766,7 @@ exports.getStudentSmsLogs = async (req, res) => {
 
     // Apply scope check if userScope exists
     if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope);
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
       if (scopeCondition) {
         query += ` AND ${scopeCondition}`;
         params = [...params, ...scopeParams];
