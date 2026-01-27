@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { masterPool } = require('../config/database');
 const { sendBrevoEmail } = require('../utils/emailService');
+const { checkAndSendBirthdayNotifications } = require('./birthdayNotificationService');
 
 // Helper to get today's date in YYYY-MM-DD format (IST)
 const getTodayDate = () => {
@@ -312,6 +313,21 @@ const initScheduledJobs = () => {
     });
 
     console.log('✅ 4 PM Daily Attendance Report scheduled.');
+
+    // Schedule Birthday Check for 9:00 AM IST
+    cron.schedule('0 9 * * *', async () => {
+        console.log('⏰ Triggering 9 AM Birthday Check...');
+        try {
+            await checkAndSendBirthdayNotifications();
+        } catch (err) {
+            console.error("❌ Scheduled birthday check failed:", err);
+        }
+    }, {
+        scheduled: true,
+        timezone: "Asia/Kolkata"
+    });
+
+    console.log('✅ 9 AM Birthday Check scheduled.');
 };
 
 module.exports = {

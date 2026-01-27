@@ -280,44 +280,10 @@ app.use((err, req, res, next) => {
 });
 
 // Scheduled Tasks
-const {
-  checkAndSendBirthdayNotifications,
-} = require("./services/birthdayNotificationService");
 const { initScheduledJobs } = require("./services/schedulerService");
 
-// Initialize 4 PM Daily Report Scheduler
+// Initialize 4 PM Daily Report & 9 AM Birthday Scheduler
 initScheduledJobs();
-
-const scheduleDailyBirthdayCheck = () => {
-  const now = new Date();
-  const targetTime = new Date(now);
-
-  // Set target time to 9:00 AM
-  targetTime.setHours(9, 0, 0, 0);
-
-  // If 9 AM has passed today, schedule for tomorrow
-  if (now > targetTime) {
-    targetTime.setDate(targetTime.getDate() + 1);
-  }
-
-  const timeUntilRun = targetTime - now;
-  console.log(
-    `🕒 Birthday notifications scheduled for ${targetTime.toLocaleString()}`,
-  );
-
-  setTimeout(async () => {
-    try {
-      await checkAndSendBirthdayNotifications();
-    } catch (err) {
-      console.error("Scheduled birthday check failed:", err);
-    }
-    // Schedule next run (recursion)
-    scheduleDailyBirthdayCheck();
-  }, timeUntilRun);
-};
-
-// Start scheduler
-scheduleDailyBirthdayCheck();
 
 // Start server
 const startServer = async () => {

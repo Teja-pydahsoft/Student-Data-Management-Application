@@ -57,7 +57,6 @@ const MODULES = {
   USER_MANAGEMENT: 'user_management',
   REPORTS: 'reports',
   TICKET_MANAGEMENT: 'ticket_management',
-  TICKET_MANAGEMENT: 'ticket_management',
   SERVICES: 'services',
   ANNOUNCEMENTS: 'announcements'
 };
@@ -81,7 +80,7 @@ const MODULE_PERMISSIONS = {
     }
   },
   [MODULES.STUDENT_MANAGEMENT]: {
-    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export', 'view_details', 'edit_details'],
+    permissions: ['view', 'add_student', 'bulk_upload', 'edit_student', 'delete_student', 'update_pin', 'export', 'view_details', 'edit_details', 'view_sms'],
     labels: {
       view: 'View Students',
       add_student: 'Add Student',
@@ -91,7 +90,8 @@ const MODULE_PERMISSIONS = {
       update_pin: 'Update PIN Number',
       export: 'Export Students',
       view_details: 'View Student Details (Full Profile)',
-      edit_details: 'Edit Student Details (Individual Fields)'
+      edit_details: 'Edit Student Details (Individual Fields)',
+      view_sms: 'View SMS Logs'
     }
   },
   [MODULES.PROMOTIONS]: {
@@ -175,7 +175,6 @@ const MODULE_LABELS = {
   [MODULES.USER_MANAGEMENT]: 'User Management',
   [MODULES.USER_MANAGEMENT]: 'User Management',
   [MODULES.REPORTS]: 'Reports',
-  [MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
   [MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
   [MODULES.SERVICES]: 'Services',
   [MODULES.ANNOUNCEMENTS]: 'Announcements'
@@ -339,14 +338,10 @@ const parsePermissions = (permissionsJson) => {
       if (ALL_MODULES.includes(module)) {
         const moduleDef = MODULE_PERMISSIONS[module];
         if (moduleDef) {
-          // Handle old format (read/write)
-          if (parsed[module]?.read !== undefined || parsed[module]?.write !== undefined) {
-            // Convert old format to new format - if they had read/write, give them all permissions
-            const hasAccess = parsed[module]?.read || parsed[module]?.write;
-            moduleDef.permissions.forEach(perm => {
-              permissions[module][perm] = hasAccess;
-            });
-          } else {
+          // Check if any granular permission key exists in the input
+          const hasGranularKeys = moduleDef.permissions.some(perm => parsed[module]?.[perm] !== undefined);
+
+          if (hasGranularKeys) {
             // New format - individual permissions
             moduleDef.permissions.forEach(perm => {
               permissions[module][perm] = !!parsed[module]?.[perm];
@@ -357,6 +352,12 @@ const parsePermissions = (permissionsJson) => {
             if (module === MODULES.STUDENT_MANAGEMENT && parsed[module]?.field_permissions) {
               permissions[module].field_permissions = parsed[module].field_permissions;
             }
+          } else if (parsed[module]?.read !== undefined || parsed[module]?.write !== undefined) {
+            // Handle old format (read/write) - ONLY if no granular keys are found
+            const hasAccess = parsed[module]?.read || parsed[module]?.write;
+            moduleDef.permissions.forEach(perm => {
+              permissions[module][perm] = hasAccess;
+            });
           }
         }
       }

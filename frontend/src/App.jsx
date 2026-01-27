@@ -19,6 +19,7 @@ import UserManagement from './pages/UserManagement';
 import StudentFieldPermissions from './pages/StudentFieldPermissions';
 import Reports from './pages/Reports';
 import StudentPromotions from './pages/StudentPromotions';
+import CollegeTransfer from './pages/CollegeTransfer';
 import TicketManagement from './pages/TicketManagement';
 import TaskManagement from './pages/TaskManagement';
 import Announcements from './pages/Announcements';
@@ -144,6 +145,7 @@ function App() {
           <Route path="students/add" element={<AddStudent />} />
           <Route path="students/self-registration" element={<Submissions />} />
           <Route path="promotions" element={<StudentPromotions />} />
+          <Route path="college-transfer" element={<CollegeTransfer />} />
           <Route path="courses" element={<Settings />} />
           <Route path="attendance" element={<Attendance />} />
 

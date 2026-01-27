@@ -6867,4 +6867,223 @@ exports.getBatchAcademicStatus = async (req, res) => {
   }
 };
 
+// Perform transfer for a single student
+const performTransfer = async ({ connection, admissionNumber, targetBatch, targetCourse, targetBranch, targetStage, adminId }) => {
+  const [students] = await connection.query(
+    `SELECT id, admission_number, admission_no, current_year, current_semester, course, branch, batch, student_data
+     FROM students WHERE admission_number = ? OR admission_no = ? FOR UPDATE`,
+    [admissionNumber, admissionNumber]
+  );
 
+  if (students.length === 0) {
+    return { status: 'NOT_FOUND' };
+  }
+
+  const student = students[0];
+  const parsedStudentData = parseJSON(student.student_data) || {};
+
+  const currentStage = resolveStageFromData(parsedStudentData, {
+    year: student.current_year || 1,
+    semester: student.current_semester || 1
+  });
+
+  // Prepare new data
+  const nextStage = targetStage;
+
+  // Update payload with new stage
+  applyStageToPayload(parsedStudentData, nextStage);
+
+  // Update payload with new academic details if provided
+  if (targetBatch) parsedStudentData['Batch'] = targetBatch;
+  if (targetCourse) parsedStudentData['Course'] = targetCourse;
+  if (targetBranch) parsedStudentData['Branch'] = targetBranch;
+
+  const serializedStudentData = JSON.stringify(parsedStudentData);
+
+  let updateQuery = `UPDATE students
+     SET current_year = ?, current_semester = ?, student_data = ?, updated_at = CURRENT_TIMESTAMP`;
+  const updateParams = [nextStage.year, nextStage.semester, serializedStudentData];
+
+  if (targetBatch) {
+    updateQuery += `, batch = ?`;
+    updateParams.push(targetBatch);
+  }
+  if (targetCourse) {
+    updateQuery += `, course = ?`;
+    updateParams.push(targetCourse);
+  }
+  if (targetBranch) {
+    updateQuery += `, branch = ?`;
+    updateParams.push(targetBranch);
+  }
+
+  // Set fee_status to 'due' and registration_status to 'pending'
+  const hasFeeStatusColumn = await columnExists('fee_status');
+  const hasRegStatusColumn = await columnExists('registration_status');
+
+  if (hasFeeStatusColumn) {
+    updateQuery += `, fee_status = 'due'`;
+  }
+  if (hasRegStatusColumn) {
+    updateQuery += `, registration_status = 'pending'`;
+  }
+
+  updateQuery += ` WHERE id = ?`;
+  updateParams.push(student.id);
+
+  await connection.query(updateQuery, updateParams);
+
+  // Audit Log
+  let validAdminId = null;
+  if (adminId) {
+    try {
+      const [adminRows] = await connection.query('SELECT id FROM admins WHERE id = ? LIMIT 1', [adminId]);
+      if (adminRows.length > 0) validAdminId = adminId;
+    } catch (e) { console.warn('Admin check failed', e); }
+  }
+
+  await connection.query(
+    `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      'TRANSFER',
+      'STUDENT',
+      student.admission_number || admissionNumber,
+      validAdminId,
+      JSON.stringify({
+        from: {
+          batch: student.batch,
+          course: student.course,
+          branch: student.branch,
+          ...currentStage
+        },
+        to: {
+          batch: targetBatch || student.batch,
+          course: targetCourse || student.course,
+          branch: targetBranch || student.branch,
+          ...nextStage
+        }
+      })
+    ]
+  );
+
+  return {
+    status: 'SUCCESS',
+    student: { ...student, admission_number: admissionNumber },
+    currentStage,
+    nextStage
+  };
+};
+
+// Bulk transfer endpoint
+exports.bulkTransferStudents = async (req, res) => {
+  try {
+    const { students, leftOutStudents, targetBatch, targetCourse, targetBranch, targetYear, targetSemester } = req.body || {};
+
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ success: false, message: 'students array is required' });
+    }
+
+    if (!targetYear || !targetSemester) {
+      return res.status(400).json({ success: false, message: 'Target Year and Semester are required for transfer.' });
+    }
+
+    let targetStage;
+    try {
+      targetStage = normalizeStage(targetYear, targetSemester);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: 'Invalid Target Year/Semester' });
+    }
+
+    const results = [];
+    const totalToProcess = students.length;
+    let processedCount = 0;
+    let errorCount = 0;
+    let successCount = 0;
+
+    for (const entry of students) {
+      const admissionNumber = entry.admissionNumber || entry.admission_no;
+      processedCount++;
+      const progress = {
+        current: processedCount,
+        total: totalToProcess,
+        label: `${processedCount}/${totalToProcess}`
+      };
+
+      if (!admissionNumber) {
+        results.push({ admissionNumber: null, status: 'error', message: 'Missing Admission Number', progress, statusSymbol: 'error' });
+        errorCount++;
+        continue;
+      }
+
+      let connection = null;
+      try {
+        connection = await masterPool.getConnection();
+        await connection.beginTransaction();
+
+        const transferResult = await performTransfer({
+          connection,
+          admissionNumber,
+          targetBatch,
+          targetCourse,
+          targetBranch,
+          targetStage,
+          adminId: req.admin?.id || null
+        });
+
+        if (transferResult.status === 'NOT_FOUND') {
+          await connection.rollback();
+          results.push({ admissionNumber, status: 'error', message: 'Student not found', progress, statusSymbol: 'error' });
+          errorCount++;
+        } else {
+          await connection.commit();
+          results.push({
+            admissionNumber,
+            status: 'success',
+            message: 'Transferred successfully',
+            progress,
+            statusSymbol: 'completed',
+            currentYear: targetStage.year,
+            currentSemester: targetStage.semester
+          });
+          successCount++;
+        }
+
+      } catch (err) {
+        if (connection) await connection.rollback();
+        console.error(`Transfer failed for ${admissionNumber}`, err);
+        results.push({ admissionNumber, status: 'error', message: err.message, progress, statusSymbol: 'error' });
+        errorCount++;
+      } finally {
+        if (connection) connection.release();
+      }
+    }
+
+    // Handle Left Out Students
+    if (Array.isArray(leftOutStudents) && leftOutStudents.length > 0) {
+      let connection = null;
+      try {
+        connection = await masterPool.getConnection();
+        for (const leftOut of leftOutStudents) {
+          if (!leftOut.admissionNumber && !leftOut.admission_number) continue;
+          await connection.query(
+            `UPDATE students SET student_status = ?, student_data = JSON_SET(COALESCE(student_data, '{}'), '$.Remarks', ?) WHERE admission_number = ?`,
+            [leftOut.student_status || 'Regular', leftOut.remarks || '', leftOut.admissionNumber || leftOut.admission_number]
+          );
+        }
+      } catch (e) { console.warn('Left out update failed', e); }
+      finally { if (connection) connection.release(); }
+    }
+
+    res.json({
+      success: true,
+      message: 'Bulk transfer process completed',
+      results,
+      summary: { total: totalToProcess, success: successCount, errors: errorCount, skipped: 0 }
+    });
+
+  } catch (error) {
+    console.error('Bulk transfer error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error during transfer' });
+  }
+};

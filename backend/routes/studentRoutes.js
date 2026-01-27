@@ -149,6 +149,13 @@ router.post(
   studentController.bulkPromoteStudents
 );
 router.post(
+  '/transfers/bulk',
+  authMiddleware,
+  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
+  attachUserScope,
+  studentController.bulkTransferStudents
+);
+router.post(
   '/',
   authMiddleware,
   verifyPermission(MODULES.STUDENT_MANAGEMENT, 'add_student'),
