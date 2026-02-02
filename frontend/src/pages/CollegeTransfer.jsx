@@ -40,6 +40,9 @@ const CollegeTransfer = () => {
         semesters: []
     });
 
+    // 3b. Courses with branches for target options (from /courses endpoint)
+    const [coursesWithBranches, setCoursesWithBranches] = useState([]);
+
     // 4. Students Data
     const [students, setStudents] = useState([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
@@ -77,6 +80,11 @@ const CollegeTransfer = () => {
                     years: yearRes.data.success ? yearRes.data.data.map(y => ({ label: y.name, value: y.name, id: y.id, batchId: y.batch_id })) : [],
                     semesters: semRes.data.success ? semRes.data.data.map(s => ({ label: s.name, value: s.name, id: s.id, batchId: s.batch_id })) : []
                 });
+
+                // Store courses with branches for target options (from /courses endpoint)
+                if (courRes.data.success) {
+                    setCoursesWithBranches(courRes.data.data || []);
+                }
             } catch (error) {
                 console.error("Metadata load error", error);
             }
@@ -137,26 +145,62 @@ const CollegeTransfer = () => {
 
     // --- Derived Options for Target ---
     const targetOptions = useMemo(() => {
-        // Filter Courses based on College
-        let courses = rawMetadata.courses;
-        if (targetDetails.college) {
-            const selectedCollege = rawMetadata.colleges.find(c => c.value === targetDetails.college);
-            if (selectedCollege) {
-                courses = courses.filter(c => c.collegeId == selectedCollege.id);
-            }
+        // Get selected college for filtering
+        const selectedCollege = targetDetails.college 
+            ? rawMetadata.colleges.find(c => c.value === targetDetails.college)
+            : null;
+
+        // Filter Courses based on College (from coursesWithBranches)
+        let courses = coursesWithBranches.map(c => ({ 
+            label: c.name, 
+            value: c.name, 
+            id: c.id, 
+            collegeId: c.collegeId || c.college_id 
+        }));
+        
+        if (selectedCollege) {
+            courses = courses.filter(c => c.collegeId == selectedCollege.id);
         }
 
-        // Filter Branches based on Course
-        let branches = rawMetadata.branches;
-        if (targetDetails.course) {
-            const selectedCourse = rawMetadata.courses.find(c => c.value === targetDetails.course);
-            if (selectedCourse) {
-                branches = branches.filter(b => b.courseId === selectedCourse.value);
+        // Get branches from coursesWithBranches (includes all branches from course_branches table)
+        // Filter branches based on Course and Batch (academic year)
+        let allBranches = [];
+        coursesWithBranches.forEach(course => {
+            if (course.branches && Array.isArray(course.branches)) {
+                course.branches.forEach(branch => {
+                    // Include branch if:
+                    // 1. It belongs to a course that matches the filter
+                    // 2. It matches the selected batch's academic year OR has no academic year (applies to all batches)
+                    const matchesCourse = !targetDetails.course || course.name === targetDetails.course;
+                    const matchesCollege = !targetDetails.college || course.collegeId == selectedCollege?.id;
+                    const matchesBatch = !targetDetails.batch || 
+                        !branch.academicYearLabel || 
+                        branch.academicYearLabel === targetDetails.batch;
+                    
+                    if (matchesCourse && matchesCollege && matchesBatch) {
+                        allBranches.push({
+                            label: branch.name,
+                            value: branch.name,
+                            id: branch.id,
+                            courseId: course.name, // Use course name for filtering
+                            academicYearLabel: branch.academicYearLabel || null
+                        });
+                    }
+                });
             }
+        });
+
+        // Filter branches based on selected course
+        let branches = allBranches;
+        if (targetDetails.course) {
+            branches = branches.filter(b => b.courseId === targetDetails.course);
         } else if (targetDetails.college) {
             const validCourseNames = courses.map(c => c.value);
             branches = branches.filter(b => validCourseNames.includes(b.courseId));
         }
+
+        // Deduplicate branches by name (in case same branch exists for multiple academic years)
+        branches = [...new Map(branches.map(b => [b.value, b])).values()];
 
         // Filter and Deduplicate Years
         let years = rawMetadata.years;
@@ -180,7 +224,7 @@ const CollegeTransfer = () => {
             years,
             semesters
         };
-    }, [targetDetails, rawMetadata]);
+    }, [targetDetails, rawMetadata, coursesWithBranches]);
 
 
     // --- Handlers ---
@@ -207,10 +251,36 @@ const CollegeTransfer = () => {
         });
     };
 
-    const toggleSelectAll = (checked) => {
+    const toggleSelectAll = async (checked) => {
         if (checked) {
-            setSelectedAdmissionNumbers(new Set(students.map(s => s.admission_number)));
+            // Fetch all students matching current filters to select them all (only Regular status)
+            try {
+                const params = new URLSearchParams();
+                if (filters.college) params.append('filter_college', filters.college);
+                if (filters.batch) params.append('filter_batch', filters.batch);
+                if (filters.course) params.append('filter_course', filters.course);
+                if (filters.branch) params.append('filter_branch', filters.branch);
+                if (filters.year) params.append('filter_year', filters.year);
+                if (filters.semester) params.append('filter_semester', filters.semester);
+                params.append('filter_student_status', 'Regular'); // Only Regular students
+                params.append('limit', 'all'); // Fetch all matching students
+
+                const response = await api.get(`/students?${params.toString()}`);
+                const allStudents = response.data?.data || [];
+                const allAdmissionNumbers = allStudents.map(s => s.admission_number);
+                setSelectedAdmissionNumbers(new Set(allAdmissionNumbers));
+                toast.success(`Selected all ${allAdmissionNumbers.length} students matching filters`);
+            } catch (error) {
+                // Fallback: select all from current page if fetch fails
+                setSelectedAdmissionNumbers(prev => {
+                    const updated = new Set(prev);
+                    students.forEach(s => updated.add(s.admission_number));
+                    return updated;
+                });
+                toast.error('Failed to select all students. Selected current page only.');
+            }
         } else {
+            // Clear all selections
             setSelectedAdmissionNumbers(new Set());
         }
     };
@@ -252,15 +322,38 @@ const CollegeTransfer = () => {
         fetchStudents();
     }, [filters, currentPage, pageSize]);
 
-    const prepareTransfer = () => {
+    const prepareTransfer = async () => {
         // Validate
         if (selectedAdmissionNumbers.size === 0) return toast.error('Select at least one student');
         if (!targetDetails.year || !targetDetails.semester || !targetDetails.batch || !targetDetails.course || !targetDetails.college) {
             return toast.error('Please complete all Target Details (College, Batch, Course, Year, Semester)');
         }
 
-        setTransferPlan(students.filter(s => selectedAdmissionNumbers.has(s.admission_number)));
-        setConfirmationOpen(true);
+        // Fetch all selected students (may include students from other pages)
+        try {
+            const params = new URLSearchParams();
+            if (filters.college) params.append('filter_college', filters.college);
+            if (filters.batch) params.append('filter_batch', filters.batch);
+            if (filters.course) params.append('filter_course', filters.course);
+            if (filters.branch) params.append('filter_branch', filters.branch);
+            if (filters.year) params.append('filter_year', filters.year);
+            if (filters.semester) params.append('filter_semester', filters.semester);
+            params.append('filter_student_status', 'Regular');
+            params.append('limit', 'all'); // Fetch all matching students
+
+            const response = await api.get(`/students?${params.toString()}`);
+            const allStudents = response.data?.data || [];
+            const selectedStudents = allStudents.filter(s => selectedAdmissionNumbers.has(s.admission_number));
+            
+            setTransferPlan(selectedStudents);
+            setConfirmationOpen(true);
+        } catch (error) {
+            // Fallback: use current page students if fetch fails
+            const selectedStudents = students.filter(s => selectedAdmissionNumbers.has(s.admission_number));
+            setTransferPlan(selectedStudents);
+            setConfirmationOpen(true);
+            toast.error('Could not fetch all selected students. Showing current page only.');
+        }
     };
 
     const executeTransfer = async () => {
@@ -437,7 +530,7 @@ const CollegeTransfer = () => {
                                 <tr>
                                     <th className="px-6 w-12 text-center">
                                         <input type="checkbox"
-                                            checked={students.length > 0 && selectedAdmissionNumbers.size >= students.length}
+                                            checked={students.length > 0 && students.every(s => selectedAdmissionNumbers.has(s.admission_number))}
                                             onChange={e => toggleSelectAll(e.target.checked)}
                                             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                                         />
