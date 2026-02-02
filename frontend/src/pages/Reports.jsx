@@ -604,69 +604,23 @@ const Reports = () => {
     }
 
     try {
-      const xlsx = require('xlsx');
-      const workbook = xlsx.utils.book_new();
+      const params = new URLSearchParams();
+      params.append('fromDate', attendanceReportData.fromDate);
+      params.append('toDate', attendanceReportData.toDate);
+      params.append('format', 'excel');
+      
+      if (attendanceFilters.college) params.append('college', attendanceFilters.college);
+      if (attendanceFilters.batch) params.append('batch', attendanceFilters.batch);
+      if (attendanceFilters.course) params.append('course', attendanceFilters.course);
+      if (attendanceFilters.branch) params.append('branch', attendanceFilters.branch);
+      if (attendanceFilters.year) params.append('year', attendanceFilters.year);
+      if (attendanceFilters.semester) params.append('semester', attendanceFilters.semester);
 
-      // Summary sheet
-      const summaryData = [
-        ['Attendance Report Summary'],
-        [''],
-        ['Report Period', `${attendanceReportData.fromDate} to ${attendanceReportData.toDate}`],
-        [''],
-        ['Total Students', attendanceReportData.statistics.totalStudents],
-        ['Working Days', attendanceReportData.statistics.totalWorkingDays],
-        ['Total Present', attendanceReportData.statistics.totalPresent],
-        ['Total Absent', attendanceReportData.statistics.totalAbsent],
-        ['Overall Attendance Percentage', `${attendanceReportData.statistics.overallAttendancePercentage.toFixed(2)}%`]
-      ];
-
-      const summarySheet = xlsx.utils.aoa_to_sheet(summaryData);
-      xlsx.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-      // Detailed sheet
-      const headerRow = [
-        'PIN Number',
-        'Student Name',
-        'Admission Number',
-        'Batch',
-        'Course',
-        'Branch',
-        'Year',
-        'Semester',
-        'Working Days',
-        'Present Days',
-        'Absent Days',
-        'Holidays',
-        'Unmarked Days',
-        'Attendance Percentage'
-      ];
-
-      const attendanceRows = [headerRow];
-      attendanceReportData.students.forEach((student) => {
-        attendanceRows.push([
-          student.pinNumber || '',
-          student.studentName || '',
-          student.admissionNumber || '',
-          student.batch || '',
-          student.course || '',
-          student.branch || '',
-          student.year || '',
-          student.semester || '',
-          student.statistics.workingDays,
-          student.statistics.presentDays,
-          student.statistics.absentDays,
-          student.statistics.holidays,
-          student.statistics.unmarkedDays,
-          `${student.statistics.attendancePercentage.toFixed(2)}%`
-        ]);
+      const response = await api.get(`/attendance/download?${params.toString()}`, {
+        responseType: 'blob'
       });
 
-      const attendanceSheet = xlsx.utils.aoa_to_sheet(attendanceRows);
-      xlsx.utils.book_append_sheet(workbook, attendanceSheet, 'Attendance Details');
-
-      // Generate buffer
-      const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      const url = window.URL.createObjectURL(new Blob([buffer]));
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `attendance_report_${attendanceReportData.fromDate}_to_${attendanceReportData.toDate}.xlsx`);
@@ -677,8 +631,219 @@ const Reports = () => {
 
       toast.success('Excel file downloaded successfully');
     } catch (error) {
-      console.error('Failed to generate Excel:', error);
-      toast.error('Failed to generate Excel file');
+      console.error('Failed to download Excel:', error);
+      toast.error(error.response?.data?.message || 'Failed to download Excel file');
+    }
+  };
+
+  // Download attendance abstract as Excel
+  const downloadAbstractExcel = async () => {
+    if (!attendanceAbstractData || attendanceAbstractData.length === 0) {
+      toast.error('Please generate the abstract report first');
+      return;
+    }
+
+    if (!attendanceDateRange.fromDate || !attendanceDateRange.toDate) {
+      toast.error('Please select both from and to dates');
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.append('fromDate', attendanceDateRange.fromDate);
+      params.append('toDate', attendanceDateRange.toDate);
+      params.append('format', 'excel');
+      
+      // Only add filters if they are set (empty filters mean "all students" which generates aggregated report)
+      if (attendanceFilters.college) params.append('college', attendanceFilters.college);
+      if (attendanceFilters.batch) params.append('batch', attendanceFilters.batch);
+      if (attendanceFilters.course) params.append('course', attendanceFilters.course);
+      if (attendanceFilters.branch) params.append('branch', attendanceFilters.branch);
+      if (attendanceFilters.year) params.append('year', attendanceFilters.year);
+      if (attendanceFilters.semester) params.append('semester', attendanceFilters.semester);
+
+      const response = await api.get(`/attendance/download?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `attendance_abstract_${attendanceDateRange.fromDate}_to_${attendanceDateRange.toDate}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Excel file downloaded successfully');
+    } catch (error) {
+      console.error('Failed to download Excel:', error);
+      toast.error(error.response?.data?.message || 'Failed to download Excel file');
+    }
+  };
+
+  // Download attendance abstract as PDF
+  const downloadAbstractPDF = async () => {
+    if (!attendanceAbstractData || attendanceAbstractData.length === 0) {
+      toast.error('Please generate the abstract report first');
+      return;
+    }
+
+    if (!attendanceDateRange.fromDate || !attendanceDateRange.toDate) {
+      toast.error('Please select both from and to dates');
+      return;
+    }
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF('landscape', 'mm', 'a4');
+
+      // Title
+      doc.setFontSize(18);
+      doc.text('Attendance Abstract Report', 14, 15);
+      doc.setFontSize(12);
+      doc.text(`Period: ${attendanceDateRange.fromDate} to ${attendanceDateRange.toDate}`, 14, 22);
+
+      // Calculate totals
+      const totalStudents = attendanceAbstractData.reduce((sum, row) => sum + (row.totalStudents || 0), 0);
+      const workingDays = attendanceAbstractData[0]?.workingDays || 0;
+      const totalPresent = attendanceAbstractData.reduce((sum, row) => sum + (row.totalPresentDays || 0), 0);
+      const totalAbsent = attendanceAbstractData.reduce((sum, row) => sum + (row.totalAbsentDays || 0), 0);
+      const totalMarked = totalPresent + totalAbsent;
+      
+      const overallPresentPercentage = workingDays > 0 && totalStudents > 0
+        ? ((totalPresent / (totalStudents * workingDays)) * 100).toFixed(2)
+        : '0.00';
+      const overallAbsentPercentage = workingDays > 0 && totalStudents > 0
+        ? ((totalAbsent / (totalStudents * workingDays)) * 100).toFixed(2)
+        : '0.00';
+      const overallAttendancePercentage = workingDays > 0 && totalStudents > 0
+        ? ((totalPresent / (totalStudents * workingDays)) * 100).toFixed(2)
+        : '0.00';
+
+      let yPos = 30;
+
+      // Statistics
+      doc.setFontSize(11);
+      doc.text(`Total Students: ${totalStudents}`, 14, yPos);
+      yPos += 6;
+      doc.text(`Working Days: ${workingDays}`, 14, yPos);
+      yPos += 6;
+      doc.text(`Overall Present %: ${overallPresentPercentage}%`, 14, yPos);
+      yPos += 6;
+      doc.text(`Overall Absent %: ${overallAbsentPercentage}%`, 14, yPos);
+      yPos += 6;
+      doc.text(`Overall Attendance %: ${overallAttendancePercentage}%`, 14, yPos);
+      yPos += 10;
+
+      // Table headers
+      doc.setFontSize(10);
+      const headers = ['College', 'Batch', 'Branch', 'Year', 'Sem', 'Students', 'Working Days', 'Present %', 'Absent %', 'Attendance %'];
+      const colWidths = [45, 20, 35, 15, 12, 18, 25, 18, 18, 20];
+      const headerStartX = 14;
+      const tableWidth = colWidths.reduce((sum, width) => sum + width, 0);
+      
+      // Draw header background
+      doc.setFillColor(240, 240, 240);
+      doc.rect(headerStartX, yPos - 5, tableWidth, 7, 'F');
+      
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      let xPos = headerStartX;
+      headers.forEach((header, idx) => {
+        doc.text(header, xPos + 2, yPos);
+        xPos += colWidths[idx];
+      });
+      doc.setFont(undefined, 'normal');
+      
+      // Draw header bottom line
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.line(headerStartX, yPos + 2, headerStartX + tableWidth, yPos + 2);
+      yPos += 7;
+
+      // Table rows
+      attendanceAbstractData.forEach((row, idx) => {
+        if (yPos > 180) {
+          doc.addPage();
+          yPos = 20;
+          // Redraw headers
+          doc.setFillColor(240, 240, 240);
+          doc.rect(headerStartX, yPos - 5, tableWidth, 7, 'F');
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'bold');
+          xPos = headerStartX;
+          headers.forEach((header, i) => {
+            doc.text(header, xPos + 2, yPos);
+            xPos += colWidths[i];
+          });
+          doc.setFont(undefined, 'normal');
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.5);
+          doc.line(headerStartX, yPos + 2, headerStartX + tableWidth, yPos + 2);
+          yPos += 7;
+        }
+
+        // Alternating row background
+        if (idx % 2 === 1) {
+          doc.setFillColor(248, 248, 248);
+          doc.rect(headerStartX, yPos - 4, tableWidth, 6, 'F');
+        }
+
+        // Draw cell borders
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.05);
+        xPos = headerStartX;
+        headers.forEach((_, i) => {
+          if (i > 0) {
+            doc.line(xPos, yPos - 4, xPos, yPos + 2);
+          }
+          xPos += colWidths[i];
+        });
+        doc.line(headerStartX + tableWidth, yPos - 4, headerStartX + tableWidth, yPos + 2);
+        doc.line(headerStartX, yPos + 2, headerStartX + tableWidth, yPos + 2);
+
+        // Row data
+        xPos = headerStartX;
+        doc.setFontSize(8);
+        doc.setTextColor(0, 0, 0);
+        doc.text((row.college || '-').substring(0, 20), xPos + 2, yPos, { maxWidth: colWidths[0] - 4 });
+        xPos += colWidths[0];
+        doc.text((row.batch || '-').substring(0, 8), xPos + 2, yPos);
+        xPos += colWidths[1];
+        doc.text((row.branch || '-').substring(0, 12), xPos + 2, yPos);
+        xPos += colWidths[2];
+        doc.text(String(row.year || '-'), xPos + 2, yPos);
+        xPos += colWidths[3];
+        doc.text(String(row.semester || '-'), xPos + 2, yPos);
+        xPos += colWidths[4];
+        doc.text(String(row.totalStudents || 0), xPos + 2, yPos);
+        xPos += colWidths[5];
+        doc.text(String(row.workingDays || 0), xPos + 2, yPos);
+        xPos += colWidths[6];
+        doc.setTextColor(0, 128, 0);
+        doc.text(`${(row.presentPercentage || 0).toFixed(2)}%`, xPos + 2, yPos);
+        xPos += colWidths[7];
+        doc.setTextColor(200, 0, 0);
+        doc.text(`${(row.absentPercentage || 0).toFixed(2)}%`, xPos + 2, yPos);
+        xPos += colWidths[8];
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${(row.attendancePercentage || 0).toFixed(2)}%`, xPos + 2, yPos);
+
+        yPos += 6;
+      });
+
+      // Draw closing line
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.line(headerStartX, yPos - 4, headerStartX + tableWidth, yPos - 4);
+
+      // Save PDF
+      doc.save(`attendance_abstract_${attendanceDateRange.fromDate}_to_${attendanceDateRange.toDate}.pdf`);
+      toast.success('PDF downloaded successfully');
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      toast.error('Failed to generate PDF');
     }
   };
 
@@ -1592,7 +1757,7 @@ const Reports = () => {
                   </select>
                 </div>
 
-                {/* Download Buttons - Inline with filters (only in detailed view) */}
+                {/* Download Buttons - Inline with filters */}
                 {showDetailedView && attendanceReportData && (
                   <>
                     <div>
@@ -1609,6 +1774,31 @@ const Reports = () => {
                       <label className="block text-xs font-medium text-gray-700 mb-1">&nbsp;</label>
                       <button
                         onClick={downloadAttendanceExcel}
+                        className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-green-500 text-green-600 hover:bg-green-50 text-sm font-medium transition-colors"
+                      >
+                        <Download size={16} />
+                        Excel
+                      </button>
+                    </div>
+                  </>
+                )}
+                {/* Download Buttons for Abstract View - Inline with filters */}
+                {!showDetailedView && attendanceAbstractData.length > 0 && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">&nbsp;</label>
+                      <button
+                        onClick={downloadAbstractPDF}
+                        className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-500 text-red-600 hover:bg-red-50 text-sm font-medium transition-colors"
+                      >
+                        <Download size={16} />
+                        PDF
+                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">&nbsp;</label>
+                      <button
+                        onClick={downloadAbstractExcel}
                         className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-green-500 text-green-600 hover:bg-green-50 text-sm font-medium transition-colors"
                       >
                         <Download size={16} />
@@ -1862,16 +2052,22 @@ const Reports = () => {
                         <td className="px-4 py-3 text-center font-bold text-blue-700 bg-blue-50/50 border-r border-gray-100">{student.statistics.workingDays}</td>
                         <td className="px-4 py-3 text-center font-bold bg-green-50/50 border-r border-gray-100">
                           <span className="text-green-700">
-                            {student.statistics.workingDays > 0 
-                              ? ((student.statistics.presentDays / student.statistics.workingDays) * 100).toFixed(2)
-                              : '0.00'}%
+                            {(() => {
+                              const markedDays = (student.statistics.presentDays || 0) + (student.statistics.absentDays || 0);
+                              return markedDays > 0 
+                                ? ((student.statistics.presentDays / markedDays) * 100).toFixed(2)
+                                : '0.00';
+                            })()}%
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center font-bold bg-red-50/50 border-r border-gray-100">
                           <span className="text-red-700">
-                            {student.statistics.workingDays > 0 
-                              ? ((student.statistics.absentDays / student.statistics.workingDays) * 100).toFixed(2)
-                              : '0.00'}%
+                            {(() => {
+                              const markedDays = (student.statistics.presentDays || 0) + (student.statistics.absentDays || 0);
+                              return markedDays > 0 
+                                ? ((student.statistics.absentDays / markedDays) * 100).toFixed(2)
+                                : '0.00';
+                            })()}%
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center font-bold bg-purple-50/50">

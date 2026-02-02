@@ -3550,14 +3550,20 @@ const generateAggregatedReport = async (req, res, from, to, format, holidayInfo,
       totalHolidays: holidayInfo.dates.size || 0
     };
 
-    if (format === 'json') {
+    // Normalize format: accept both 'excel' and 'xlsx' for Excel format
+    let excelFormat = (format || 'json').toLowerCase();
+    if (excelFormat === 'excel') {
+      excelFormat = 'xlsx';
+    }
+
+    if (excelFormat === 'json') {
       return res.json({
         success: true,
         data: reportData
       });
     }
 
-    if (format === 'excel') {
+    if (excelFormat === 'xlsx') {
       const xlsx = require('xlsx');
       const workbook = xlsx.utils.book_new();
 
@@ -3709,12 +3715,16 @@ exports.downloadAttendanceReport = async (req, res) => {
       studentStatus
     } = req.query;
     const statusFilter = student_status || studentStatus || null;
-    const normalizedFormat = (format || 'xlsx').toLowerCase();
+    // Normalize format: accept both 'excel' and 'xlsx' for Excel format
+    let reportFormat = (format || 'xlsx').toLowerCase();
+    if (reportFormat === 'excel') {
+      reportFormat = 'xlsx';
+    }
 
-    if (normalizedFormat !== 'xlsx') {
+    if (reportFormat !== 'xlsx' && reportFormat !== 'json') {
       return res.status(400).json({
         success: false,
-        message: 'Only Excel (xlsx) export is supported for day-end reports currently.'
+        message: 'Format must be either excel/xlsx or json'
       });
     }
 
@@ -4019,7 +4029,13 @@ exports.downloadAttendanceReport = async (req, res) => {
       }
     };
 
-    if (format === 'json') {
+    // Normalize format: accept both 'excel' and 'xlsx' for Excel format
+    let downloadFormat = (format || 'json').toLowerCase();
+    if (downloadFormat === 'excel') {
+      downloadFormat = 'xlsx';
+    }
+
+    if (downloadFormat === 'json') {
       return res.json({
         success: true,
         data: reportData
@@ -4028,7 +4044,7 @@ exports.downloadAttendanceReport = async (req, res) => {
 
     // For Excel and PDF, we'll return JSON and let frontend handle generation
     // Or we can generate on backend - let's do backend for better control
-    if (format === 'excel') {
+    if (downloadFormat === 'xlsx') {
       const xlsx = require('xlsx');
 
       // Create workbook

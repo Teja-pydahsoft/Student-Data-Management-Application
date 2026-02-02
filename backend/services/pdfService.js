@@ -420,7 +420,13 @@ const generateAttendanceReportPDF = async ({
   doc.text(absentCount.toString(), rightCol + 70, yPos + (lineHeight * 5));
   doc.fillColor('#1E40AF'); // Blue for percentage
   doc.font('Helvetica-Bold');
-  doc.text(`${attendancePercentage}%`, rightCol + 70, yPos + (lineHeight * 6));
+  // attendancePercentage is already a string with '%' appended, so don't add another '%'
+  const percentageDisplay = attendancePercentage && typeof attendancePercentage === 'string' 
+    ? attendancePercentage 
+    : (attendancePercentage && typeof attendancePercentage === 'number' 
+      ? `${attendancePercentage.toFixed(2)}%` 
+      : '0.00%');
+  doc.text(percentageDisplay, rightCol + 70, yPos + (lineHeight * 6));
   doc.fillColor('#000000'); // Reset to black
   doc.font('Helvetica');
 
@@ -593,7 +599,9 @@ const generateAttendanceReportPDF = async ({
         doc.fillColor('#1E40AF'); // Blue
         doc.font('Helvetica-Bold');
         const presVal = group.present || group.statistics?.presentCount || 0;
-        const attP = totalVal > 0 ? ((presVal / totalVal) * 100).toFixed(1) : '0.0';
+        const attP = totalVal > 0 && !isNaN(presVal) && !isNaN(totalVal)
+          ? ((presVal / totalVal) * 100).toFixed(1)
+          : '0.0';
         doc.text(`${attP}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[7] - 3, ellipsis: true });
 
       } else {
@@ -642,7 +650,9 @@ const generateAttendanceReportPDF = async ({
         // Attendance %
         const attPercentColIdx = excludeCourse ? 6 : 7;
         const presentForPercent = group.present || group.statistics?.presentCount || 0;
-        const attPercent = totalVal > 0 ? ((presentForPercent / totalVal) * 100).toFixed(1) : '0.0';
+        const attPercent = totalVal > 0 && !isNaN(presentForPercent) && !isNaN(totalVal)
+          ? ((presentForPercent / totalVal) * 100).toFixed(1)
+          : '0.0';
         doc.fillColor('#1E40AF'); // Blue
         doc.font('Helvetica-Bold');
         doc.text(`${attPercent}%`, summaryXPos, summaryCurrentY + 5, { width: summaryColWidths[attPercentColIdx] - 3, ellipsis: true });
