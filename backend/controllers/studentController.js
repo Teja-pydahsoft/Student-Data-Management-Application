@@ -6868,9 +6868,9 @@ exports.getBatchAcademicStatus = async (req, res) => {
 };
 
 // Perform transfer for a single student
-const performTransfer = async ({ connection, admissionNumber, targetBatch, targetCourse, targetBranch, targetStage, adminId }) => {
+const performTransfer = async ({ connection, admissionNumber, targetCollege, targetBatch, targetCourse, targetBranch, targetStage, adminId }) => {
   const [students] = await connection.query(
-    `SELECT id, admission_number, admission_no, current_year, current_semester, course, branch, batch, student_data
+    `SELECT id, admission_number, admission_no, current_year, current_semester, college, course, branch, batch, student_data
      FROM students WHERE admission_number = ? OR admission_no = ? FOR UPDATE`,
     [admissionNumber, admissionNumber]
   );
@@ -6894,6 +6894,7 @@ const performTransfer = async ({ connection, admissionNumber, targetBatch, targe
   applyStageToPayload(parsedStudentData, nextStage);
 
   // Update payload with new academic details if provided
+  if (targetCollege) parsedStudentData['College'] = targetCollege;
   if (targetBatch) parsedStudentData['Batch'] = targetBatch;
   if (targetCourse) parsedStudentData['Course'] = targetCourse;
   if (targetBranch) parsedStudentData['Branch'] = targetBranch;
@@ -6904,6 +6905,10 @@ const performTransfer = async ({ connection, admissionNumber, targetBatch, targe
      SET current_year = ?, current_semester = ?, student_data = ?, updated_at = CURRENT_TIMESTAMP`;
   const updateParams = [nextStage.year, nextStage.semester, serializedStudentData];
 
+  if (targetCollege) {
+    updateQuery += `, college = ?`;
+    updateParams.push(targetCollege);
+  }
   if (targetBatch) {
     updateQuery += `, batch = ?`;
     updateParams.push(targetBatch);
@@ -6917,16 +6922,8 @@ const performTransfer = async ({ connection, admissionNumber, targetBatch, targe
     updateParams.push(targetBranch);
   }
 
-  // Set fee_status to 'due' and registration_status to 'pending'
-  const hasFeeStatusColumn = await columnExists('fee_status');
-  const hasRegStatusColumn = await columnExists('registration_status');
-
-  if (hasFeeStatusColumn) {
-    updateQuery += `, fee_status = 'due'`;
-  }
-  if (hasRegStatusColumn) {
-    updateQuery += `, registration_status = 'pending'`;
-  }
+  // No changes to fee_status or registration_status as requested by user
+  // Checks removed to prevent resetting these fields
 
   updateQuery += ` WHERE id = ?`;
   updateParams.push(student.id);
@@ -6952,12 +6949,14 @@ const performTransfer = async ({ connection, admissionNumber, targetBatch, targe
       validAdminId,
       JSON.stringify({
         from: {
+          college: student.college,
           batch: student.batch,
           course: student.course,
           branch: student.branch,
           ...currentStage
         },
         to: {
+          college: targetCollege || student.college,
           batch: targetBatch || student.batch,
           course: targetCourse || student.course,
           branch: targetBranch || student.branch,
@@ -6978,7 +6977,7 @@ const performTransfer = async ({ connection, admissionNumber, targetBatch, targe
 // Bulk transfer endpoint
 exports.bulkTransferStudents = async (req, res) => {
   try {
-    const { students, leftOutStudents, targetBatch, targetCourse, targetBranch, targetYear, targetSemester } = req.body || {};
+    const { students, leftOutStudents, targetCollege, targetBatch, targetCourse, targetBranch, targetYear, targetSemester } = req.body || {};
 
     if (!Array.isArray(students) || students.length === 0) {
       return res.status(400).json({ success: false, message: 'students array is required' });
@@ -7024,6 +7023,7 @@ exports.bulkTransferStudents = async (req, res) => {
         const transferResult = await performTransfer({
           connection,
           admissionNumber,
+          targetCollege,
           targetBatch,
           targetCourse,
           targetBranch,

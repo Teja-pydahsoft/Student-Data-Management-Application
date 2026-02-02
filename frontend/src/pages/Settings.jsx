@@ -19,7 +19,8 @@ import {
   GraduationCap,
   FileText,
   Calendar,
-  Bell
+  Bell,
+  TrendingUp
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -29,6 +30,7 @@ import useAuthStore from '../store/authStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import AcademicCalendar from '../components/AcademicCalendar';
 import NotificationSettings from '../components/NotificationSettings';
+import CollegeTransfer from './CollegeTransfer';
 import { isFullAccessRole } from '../constants/rbac';
 
 // Field categorization function (same as PublicForm.jsx)
@@ -1986,6 +1988,25 @@ const Settings = () => {
             </div>
           </button>
 
+          <button
+            onClick={() => setActiveSection('college-transfer')}
+            className={`rounded-lg border-2 p-3 text-left transition-all ${activeSection === 'college-transfer'
+              ? 'border-orange-500 bg-orange-50 shadow-md'
+              : 'border-gray-200 bg-white hover:border-orange-300 hover:shadow-sm'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`rounded-full p-2 ${activeSection === 'college-transfer' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'
+                }`}>
+                <TrendingUp size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">College Transfer</h2>
+                <p className="text-xs text-gray-500">Manual student transfers</p>
+              </div>
+            </div>
+          </button>
+
         </div>
 
         {/* Content Section */}
@@ -3392,6 +3413,12 @@ const Settings = () => {
           </div>
         )}
 
+        {/* College Transfer Section */}
+        {activeSection === 'college-transfer' && (
+          <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden p-4">
+            <CollegeTransfer />
+          </div>
+        )}
 
         {/* Edit College Modal */}
         {editingCollegeId && (
