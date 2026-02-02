@@ -109,6 +109,18 @@ const NAV_ITEMS = [
     icon: BarChart3,
     label: "Reports",
     permission: FRONTEND_MODULES.REPORTS,
+    subItems: [
+      {
+        path: "/reports",
+        label: "Registration Reports",
+        permission: FRONTEND_MODULES.REPORTS,
+      },
+      {
+        path: "/reports/attendance",
+        label: "Attendance Reports",
+        permission: FRONTEND_MODULES.REPORTS,
+      },
+    ],
   },
   {
     path: "/dashboard",

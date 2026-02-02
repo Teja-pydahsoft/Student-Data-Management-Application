@@ -13,6 +13,8 @@ router.get('/summary', attachUserScope, attendanceController.getAttendanceSummar
 router.get('/student/:studentId/history', attachUserScope, attendanceController.getStudentAttendanceHistory);
 router.get('/download', attachUserScope, attendanceController.downloadAttendanceReport);
 router.get('/day-end-download', attachUserScope, attendanceController.downloadDayEndReport);
+router.get('/report-for-students', attachUserScope, attendanceController.getAttendanceReportForStudents);
+router.get('/report/abstract', attachUserScope, attendanceController.getAttendanceAbstract);
 router.get('/student', attendanceController.getStudentAttendance);
 router.get('/', attachUserScope, attendanceController.getAttendance);
 router.post('/', attachUserScope, attendanceController.markAttendance);

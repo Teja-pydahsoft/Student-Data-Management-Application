@@ -152,6 +152,7 @@ function App() {
           <Route path="users" element={<UserManagement />} />
           <Route path="users/field-permissions/:userId" element={<StudentFieldPermissions />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="reports/attendance" element={<Reports />} />
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
           <Route path="announcements" element={<Announcements />} />

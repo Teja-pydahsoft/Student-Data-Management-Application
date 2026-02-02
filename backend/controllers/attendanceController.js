@@ -14,6 +14,10 @@ const { getPublicHolidaysForYear } = require('../services/holidayService');
 const { getScopeConditionString } = require('../utils/scoping');
 const { sendNotificationToUser } = require('./pushController');
 const { generateAttendanceReportPDF } = require('../services/pdfService');
+const {
+  processAttendanceData,
+  getHolidayInfoForRange
+} = require('../services/attendancePercentageService');
 
 // Helper function to replace template variables
 const replaceTemplateVariables = (template, variables) => {
@@ -4426,3 +4430,525 @@ exports.getStudentAttendance = async (req, res) => {
   return exports.getStudentAttendanceHistory(req, res);
 };
 
+// Get attendance report for selected students with percentage calculation
+// Get Attendance Abstract (Grouped by batch, college, branch, year, semester)
+exports.getAttendanceAbstract = async (req, res) => {
+  try {
+    const {
+      fromDate,
+      toDate,
+      batch,
+      course,
+      branch,
+      year,
+      semester,
+      college
+    } = req.query;
+
+    if (!fromDate || !toDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'From date and to date are required'
+      });
+    }
+
+    const from = getDateOnlyString(fromDate);
+    const to = getDateOnlyString(toDate);
+
+    if (!from || !to) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    if (new Date(from) > new Date(to)) {
+      return res.status(400).json({
+        success: false,
+        message: 'From date must be before or equal to to date'
+      });
+    }
+
+    // Get holiday info for the date range
+    const holidayInfo = await getHolidayInfoForRange(from, to);
+    
+    // Calculate working days (total days minus holidays)
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    let totalDays = 0;
+    const holidayDates = holidayInfo.dates || new Set();
+    
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateStr = [
+        currentDate.getFullYear(),
+        String(currentDate.getMonth() + 1).padStart(2, '0'),
+        String(currentDate.getDate()).padStart(2, '0')
+      ].join('-');
+      
+      if (!holidayDates.has(dateStr)) {
+        totalDays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    const workingDays = totalDays;
+
+    // Fetch attendance configuration to exclude courses
+    let excludedCourses = [];
+    let excludedStudents = [];
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+        if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch attendance config for abstract:', err);
+    }
+
+    // Build student query with filters
+    let studentQuery = `
+      SELECT
+        s.id,
+        s.college,
+        s.batch,
+        s.course,
+        s.branch,
+        s.current_year,
+        s.current_semester
+      FROM students s
+      WHERE s.student_status = 'Regular'
+    `;
+    const studentParams = [];
+
+    // Apply excluded courses
+    if (excludedCourses.length > 0) {
+      studentQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+      studentParams.push(...excludedCourses);
+    }
+
+    // Apply excluded students
+    if (excludedStudents.length > 0) {
+      studentQuery += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+      studentParams.push(...excludedStudents);
+    }
+
+    // Apply user scope
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        studentQuery += ` AND ${scopeCondition}`;
+        studentParams.push(...scopeParams);
+      }
+    }
+
+    // Apply filters
+    if (college) {
+      studentQuery += ' AND s.college = ?';
+      studentParams.push(college);
+    }
+    if (batch) {
+      studentQuery += ' AND s.batch = ?';
+      studentParams.push(batch);
+    }
+    if (course) {
+      studentQuery += ' AND s.course = ?';
+      studentParams.push(course);
+    }
+    if (branch) {
+      studentQuery += ' AND s.branch = ?';
+      studentParams.push(branch);
+    }
+    if (year) {
+      const parsedYear = parseInt(year, 10);
+      if (!Number.isNaN(parsedYear)) {
+        studentQuery += ' AND s.current_year = ?';
+        studentParams.push(parsedYear);
+      }
+    }
+    if (semester) {
+      const parsedSemester = parseInt(semester, 10);
+      if (!Number.isNaN(parsedSemester)) {
+        studentQuery += ' AND s.current_semester = ?';
+        studentParams.push(parsedSemester);
+      }
+    }
+
+    // Get all students matching filters
+    const [studentRows] = await masterPool.query(studentQuery, studentParams);
+
+    if (studentRows.length === 0) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    const studentIdsList = studentRows.map(row => row.id);
+
+    // Get attendance records for all students in date range
+    let attendanceRows = [];
+    if (studentIdsList.length > 0) {
+      const attendanceQuery = `
+        SELECT
+          ar.student_id,
+          ar.attendance_date,
+          ar.status AS attendance_status
+        FROM attendance_records ar
+        WHERE ar.student_id IN (${studentIdsList.map(() => '?').join(',')})
+          AND ar.attendance_date BETWEEN ? AND ?
+        ORDER BY ar.student_id, ar.attendance_date
+      `;
+      const attendanceParams = [...studentIdsList, from, to];
+      [attendanceRows] = await masterPool.query(attendanceQuery, attendanceParams);
+    }
+
+    // Group students by batch, college, branch, year, semester
+    const groupedData = new Map();
+
+    studentRows.forEach(student => {
+      const key = `${student.college || 'N/A'}|${student.batch || 'N/A'}|${student.branch || 'N/A'}|${student.current_year || 'N/A'}|${student.current_semester || 'N/A'}`;
+      
+      if (!groupedData.has(key)) {
+        groupedData.set(key, {
+          college: student.college || 'N/A',
+          batch: student.batch || 'N/A',
+          branch: student.branch || 'N/A',
+          year: student.current_year || 'N/A',
+          semester: student.current_semester || 'N/A',
+          studentIds: [],
+          totalStudents: 0
+        });
+      }
+
+      const group = groupedData.get(key);
+      group.studentIds.push(student.id);
+      group.totalStudents++;
+    });
+
+    // Calculate attendance statistics for each group
+    const abstractData = [];
+
+    for (const [key, group] of groupedData.entries()) {
+      const groupStudentIds = new Set(group.studentIds);
+      const groupAttendance = attendanceRows.filter(ar => groupStudentIds.has(ar.student_id));
+
+      // Calculate present and absent days per student
+      const studentAttendanceMap = new Map();
+      
+      groupAttendance.forEach(att => {
+        if (!studentAttendanceMap.has(att.student_id)) {
+          studentAttendanceMap.set(att.student_id, { present: 0, absent: 0 });
+        }
+        const studentAtt = studentAttendanceMap.get(att.student_id);
+        if (att.attendance_status === 'present') {
+          studentAtt.present++;
+        } else if (att.attendance_status === 'absent') {
+          studentAtt.absent++;
+        }
+      });
+
+      // Calculate totals
+      let totalPresentDays = 0;
+      let totalAbsentDays = 0;
+      let totalMarkedDays = 0;
+      
+      studentAttendanceMap.forEach((att, studentId) => {
+        totalPresentDays += att.present;
+        totalAbsentDays += att.absent;
+        totalMarkedDays += (att.present + att.absent);
+      });
+
+      // Calculate percentages based on actual attendance vs working days
+      // For each student, calculate their attendance percentage, then average
+      let totalAttendancePercentage = 0;
+      let studentCountWithAttendance = 0;
+      
+      studentAttendanceMap.forEach((att, studentId) => {
+        const studentTotalDays = att.present + att.absent;
+        if (studentTotalDays > 0 && workingDays > 0) {
+          const studentAttendancePct = (att.present / studentTotalDays) * 100;
+          totalAttendancePercentage += studentAttendancePct;
+          studentCountWithAttendance++;
+        }
+      });
+
+      const avgAttendancePercentage = studentCountWithAttendance > 0
+        ? totalAttendancePercentage / studentCountWithAttendance
+        : 0;
+
+      // Calculate present and absent percentages based on total marked days
+      const presentPercentage = totalMarkedDays > 0
+        ? ((totalPresentDays / totalMarkedDays) * 100)
+        : 0;
+      const absentPercentage = totalMarkedDays > 0
+        ? ((totalAbsentDays / totalMarkedDays) * 100)
+        : 0;
+
+      abstractData.push({
+        college: group.college,
+        batch: group.batch,
+        branch: group.branch,
+        year: group.year,
+        semester: group.semester,
+        totalStudents: group.totalStudents,
+        workingDays: workingDays,
+        totalPresentDays: totalPresentDays,
+        totalAbsentDays: totalAbsentDays,
+        totalMarkedDays: totalMarkedDays,
+        attendancePercentage: parseFloat(avgAttendancePercentage.toFixed(2)),
+        presentPercentage: parseFloat(presentPercentage.toFixed(2)),
+        absentPercentage: parseFloat(absentPercentage.toFixed(2))
+      });
+    }
+
+    // Sort by college, batch, branch, year, semester
+    abstractData.sort((a, b) => {
+      if (a.college !== b.college) return (a.college || '').localeCompare(b.college || '');
+      if (a.batch !== b.batch) return (a.batch || '').localeCompare(b.batch || '');
+      if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
+      if (a.year !== b.year) return (a.year || 0) - (b.year || 0);
+      return (a.semester || 0) - (b.semester || 0);
+    });
+
+    return res.json({
+      success: true,
+      data: abstractData
+    });
+  } catch (error) {
+    console.error('Failed to get attendance abstract:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching attendance abstract'
+    });
+  }
+};
+
+exports.getAttendanceReportForStudents = async (req, res) => {
+  try {
+    const {
+      fromDate,
+      toDate,
+      studentIds, // Comma-separated student IDs
+      batch,
+      course,
+      branch,
+      year,
+      semester,
+      college
+    } = req.query;
+
+    if (!fromDate || !toDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'From date and to date are required'
+      });
+    }
+
+    const from = getDateOnlyString(fromDate);
+    const to = getDateOnlyString(toDate);
+
+    if (!from || !to) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    if (new Date(from) > new Date(to)) {
+      return res.status(400).json({
+        success: false,
+        message: 'From date must be before or equal to to date'
+      });
+    }
+
+    // Get holiday info for the date range
+    const holidayInfo = await getHolidayInfoForRange(from, to);
+
+    // Fetch attendance configuration to exclude courses
+    let excludedCourses = [];
+    let excludedStudents = [];
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+        if (Array.isArray(config.excludedStudents)) excludedStudents = config.excludedStudents;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch attendance config for report:', err);
+    }
+
+    // Build student query
+    let studentQuery = `
+      SELECT
+        s.id,
+        s.admission_number,
+        s.pin_no,
+        s.student_name,
+        s.batch,
+        s.course,
+        s.branch,
+        s.current_year,
+        s.current_semester,
+        s.college,
+        s.student_data
+      FROM students s
+      WHERE s.student_status = 'Regular'
+    `;
+    const studentParams = [];
+
+    // Apply excluded courses
+    if (excludedCourses.length > 0) {
+      studentQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+      studentParams.push(...excludedCourses);
+    }
+
+    // Apply excluded students
+    if (excludedStudents.length > 0) {
+      studentQuery += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+      studentParams.push(...excludedStudents);
+    }
+
+    // Apply user scope
+    if (req.userScope) {
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      if (scopeCondition) {
+        studentQuery += ` AND ${scopeCondition}`;
+        studentParams.push(...scopeParams);
+      }
+    }
+
+    // If specific student IDs provided, filter by them
+    if (studentIds) {
+      const ids = studentIds.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !Number.isNaN(id));
+      if (ids.length > 0) {
+        studentQuery += ` AND s.id IN (${ids.map(() => '?').join(',')})`;
+        studentParams.push(...ids);
+      }
+    }
+
+    // Apply filters
+    if (college) {
+      studentQuery += ' AND s.college = ?';
+      studentParams.push(college);
+    }
+    if (batch) {
+      studentQuery += ' AND s.batch = ?';
+      studentParams.push(batch);
+    }
+    if (course) {
+      studentQuery += ' AND s.course = ?';
+      studentParams.push(course);
+    }
+    if (branch) {
+      studentQuery += ' AND s.branch = ?';
+      studentParams.push(branch);
+    }
+    if (year) {
+      const parsedYear = parseInt(year, 10);
+      if (!Number.isNaN(parsedYear)) {
+        studentQuery += ' AND s.current_year = ?';
+        studentParams.push(parsedYear);
+      }
+    }
+    if (semester) {
+      const parsedSemester = parseInt(semester, 10);
+      if (!Number.isNaN(parsedSemester)) {
+        studentQuery += ' AND s.current_semester = ?';
+        studentParams.push(parsedSemester);
+      }
+    }
+
+    // Get students
+    const [studentRows] = await masterPool.query(studentQuery, studentParams);
+
+    if (studentRows.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          fromDate: from,
+          toDate: to,
+          students: [],
+          dates: [],
+          statistics: {
+            totalStudents: 0,
+            totalWorkingDays: 0,
+            totalPresentDays: 0,
+            totalAbsentDays: 0,
+            presentStudentsPercentage: 0.00,
+            absentStudentsPercentage: 0.00,
+            overallAttendancePercentage: 0.00
+          },
+          holidayInfo: {
+            dates: [],
+            details: []
+          }
+        }
+      });
+    }
+
+    const studentIdsList = studentRows.map(row => row.id);
+
+    // Get attendance records
+    let attendanceRows = [];
+    if (studentIdsList.length > 0) {
+      const attendanceQuery = `
+        SELECT
+          ar.student_id,
+          ar.attendance_date,
+          ar.status AS attendance_status
+        FROM attendance_records ar
+        WHERE ar.student_id IN (${studentIdsList.map(() => '?').join(',')})
+          AND ar.attendance_date BETWEEN ? AND ?
+        ORDER BY ar.student_id, ar.attendance_date
+      `;
+      const attendanceParams = [...studentIdsList, from, to];
+      [attendanceRows] = await masterPool.query(attendanceQuery, attendanceParams);
+    }
+
+    // Process attendance data using the service
+    const processedData = await processAttendanceData(
+      studentRows,
+      attendanceRows,
+      from,
+      to,
+      holidayInfo,
+      parseStudentData
+    );
+
+    const { students, dates, statistics } = processedData;
+
+    return res.json({
+      success: true,
+      data: {
+        fromDate: from,
+        toDate: to,
+        students,
+        dates,
+        statistics,
+        holidayInfo: {
+          dates: Array.from(holidayInfo.dates),
+          details: Array.from(holidayInfo.details.entries()).map(([date, info]) => ({
+            date,
+            ...info
+          }))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to get attendance report for students:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching attendance report'
+    });
+  }
+};

@@ -179,15 +179,19 @@ const CalendarWidget = ({
 
                         let cellClass = "bg-white text-gray-700";
                         if (isHoliday) {
-                            if (publicHoliday) cellClass = "bg-orange-50 text-orange-700 font-medium";
-                            else if (customHoliday) cellClass = "bg-purple-50 text-purple-700 font-medium";
-                            else if (isSunday) cellClass = "bg-amber-50 text-amber-700";
+                            // Holidays in yellow
+                            if (publicHoliday) cellClass = "bg-yellow-100 text-yellow-800 font-medium border border-yellow-200";
+                            else if (customHoliday) cellClass = "bg-yellow-100 text-yellow-800 font-medium border border-yellow-200";
+                            else if (isSunday) cellClass = "bg-yellow-100 text-yellow-800 font-medium border border-yellow-200";
                         } else if (status === 'present') {
-                            cellClass = "bg-green-50 text-green-700 font-bold border border-green-100";
+                            // Marked days (present) in green
+                            cellClass = "bg-green-100 text-green-800 font-bold border border-green-300";
                         } else if (status === 'absent') {
-                            cellClass = "bg-red-50 text-red-700 font-bold border border-red-100";
+                            // Unmarked days in red
+                            cellClass = "bg-red-100 text-red-800 font-bold border border-red-300";
                         } else if (cell.isCurrentMonth) {
-                            cellClass = "bg-gray-50 text-gray-400";
+                            // Unmarked working days in red
+                            cellClass = "bg-red-50 text-red-400 border border-red-100";
                         }
 
                         if (!cell.isCurrentMonth) {
@@ -205,9 +209,9 @@ const CalendarWidget = ({
             </div>
 
             <div className="mt-auto p-3 border-t border-gray-100 bg-gray-50/30 text-xs text-gray-500 space-y-1">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div> Present</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Absent</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-purple-400"></div> Holiday</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div> Marked Days</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Unmarked Days</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-400"></div> Holiday</div>
             </div>
         </div>
     );
