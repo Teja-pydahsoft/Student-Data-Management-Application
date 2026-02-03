@@ -205,7 +205,7 @@ exports.deleteAcademicYear = async (req, res) => {
 
     // Check if any branches are using this academic year
     const [branches] = await masterPool.query(
-      'SELECT COUNT(*) as count FROM course_branches WHERE academic_year_id = ?',
+      'SELECT COUNT(*) as count FROM branch_academic_years WHERE academic_year_id = ?',
       [yearId]
     );
 

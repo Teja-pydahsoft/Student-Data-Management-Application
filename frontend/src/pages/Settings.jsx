@@ -259,7 +259,7 @@ const Settings = () => {
   const [branchBatchFilter, setBranchBatchFilter] = useState(''); // Filter branches by batch
   const [isAddBranchModalOpen, setIsAddBranchModalOpen] = useState(false);
   const [branchModalCourseId, setBranchModalCourseId] = useState(null);
-  const [newBranch, setNewBranch] = useState({ name: '', code: '', academicYearIds: [] });
+  const [newBranch, setNewBranch] = useState({ name: '', code: '' });
 
   // Academic Years state
   const [academicYears, setAcademicYears] = useState([]);
@@ -1571,7 +1571,7 @@ const Settings = () => {
   };
 
   const resetNewBranch = () => {
-    setNewBranch({ name: '', code: '', academicYearIds: [] });
+    setNewBranch({ name: '', code: '' });
     setIsAddBranchModalOpen(false);
     setBranchModalCourseId(null);
   };
@@ -1591,11 +1591,6 @@ const Settings = () => {
       return;
     }
 
-    if (!payload.academicYearIds || !Array.isArray(payload.academicYearIds) || payload.academicYearIds.length === 0) {
-      toast.error('Please select at least one batch year for the branch');
-      return;
-    }
-
     // If course is null, find the course from branchModalCourseId
     // Otherwise, use the provided course
     const courseToUse = course || coursesForSelectedCollege.find(c => c.id === branchModalCourseId);
@@ -1611,10 +1606,10 @@ const Settings = () => {
         code: payload.code.trim(),
         totalYears: Number(payload.totalYears || courseToUse.totalYears),
         semestersPerYear: Number(payload.semestersPerYear || courseToUse.semestersPerYear),
-        academicYearIds: payload.academicYearIds.map(id => Number(id)),
+        academicYearIds: [],
         isActive: true
       });
-      toast.success(`Branch added successfully for ${payload.academicYearIds.length} batch(es)`);
+      toast.success('Branch added successfully. You can add batches later if needed.');
       resetNewBranch();
       setBranchForms((prev) => {
         const updated = { ...prev };
@@ -3839,55 +3834,6 @@ const Settings = () => {
               }}
               className="p-6 space-y-4"
             >
-              {/* Batch Selection - Multiple */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Batches (Academic Years) <span className="text-red-500">*</span>
-                </label>
-                <div className="border border-gray-300 rounded-md bg-white p-3 max-h-48 overflow-y-auto">
-                  {academicYears.filter(y => y.isActive).length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-2">No active batches available</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {academicYears.filter(y => y.isActive).map((year) => (
-                        <label
-                          key={year.id}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={newBranch.academicYearIds.includes(year.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setNewBranch((prev) => ({
-                                  ...prev,
-                                  academicYearIds: [...prev.academicYearIds, year.id]
-                                }));
-                              } else {
-                                setNewBranch((prev) => ({
-                                  ...prev,
-                                  academicYearIds: prev.academicYearIds.filter(id => id !== year.id)
-                                }));
-                              }
-                            }}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 focus:ring-2"
-                          />
-                          <span className="text-sm text-gray-900">{year.yearLabel}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Select one or more academic years/batches for this branch. The same branch code will be used for all selected batches.
-                </p>
-                {newBranch.academicYearIds.length > 0 && (
-                  <p className="mt-1 text-xs text-orange-600 font-medium">
-                    {newBranch.academicYearIds.length} batch(es) selected
-                  </p>
-                )}
-              </div>
-
               {/* Branch Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -3939,8 +3885,7 @@ const Settings = () => {
                   disabled={
                     savingBranchId === `new-${branchModalCourseId}` ||
                     !newBranch.name.trim() ||
-                    !newBranch.code.trim() ||
-                    newBranch.academicYearIds.length === 0
+                    !newBranch.code.trim()
                   }
                   className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

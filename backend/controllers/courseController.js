@@ -96,26 +96,43 @@ const buildStructure = (courseConfig, branchConfig) => {
   };
 };
 
-const serializeBranchRow = (branchRow) => ({
-  id: branchRow.id,
-  courseId: branchRow.course_id,
-  name: branchRow.name,
-  isActive: branchRow.is_active === 1 || branchRow.is_active === true,
-  totalYears: branchRow.total_years ?? null,
-  semestersPerYear: branchRow.semesters_per_year ?? null,
-  yearSemesterConfig: branchRow.year_semester_config
-    ? (typeof branchRow.year_semester_config === 'string'
-      ? JSON.parse(branchRow.year_semester_config)
-      : branchRow.year_semester_config)
-    : null,
-  academicYearId: branchRow.academic_year_id ?? null,
-  academicYearLabel: branchRow.academic_year_label ?? null,
-  metadata: branchRow.metadata ? JSON.parse(branchRow.metadata) : null
-});
+const serializeBranchRow = (branchRow, academicYears = null) => {
+  // If academicYears array is provided (from junction table), use it
+  // Otherwise, fall back to single academicYearId (backward compatibility for old data)
+  const academicYearIds = academicYears 
+    ? academicYears.map(ay => ay.id).filter(Boolean)
+    : (branchRow.academic_year_id ? [branchRow.academic_year_id] : []);
+  
+  const academicYearLabels = academicYears
+    ? academicYears.map(ay => ay.year_label).filter(Boolean)
+    : (branchRow.academic_year_label ? [branchRow.academic_year_label] : []);
+
+  return {
+    id: branchRow.id,
+    courseId: branchRow.course_id,
+    name: branchRow.name,
+    code: branchRow.code || null,
+    isActive: branchRow.is_active === 1 || branchRow.is_active === true,
+    totalYears: branchRow.total_years ?? null,
+    semestersPerYear: branchRow.semesters_per_year ?? null,
+    yearSemesterConfig: branchRow.year_semester_config
+      ? (typeof branchRow.year_semester_config === 'string'
+        ? JSON.parse(branchRow.year_semester_config)
+        : branchRow.year_semester_config)
+      : null,
+    // Backward compatibility: single academicYearId (first one if multiple)
+    academicYearId: academicYearIds.length > 0 ? academicYearIds[0] : null,
+    academicYearLabel: academicYearLabels.length > 0 ? academicYearLabels[0] : null,
+    // New: array of academic years (from junction table)
+    academicYearIds: academicYearIds,
+    academicYearLabels: academicYearLabels,
+    metadata: branchRow.metadata ? JSON.parse(branchRow.metadata) : null
+  };
+};
 
 const formatCourse = (courseRow, branchRows = []) => {
   const branches = branchRows.map((branch) => ({
-    ...serializeBranchRow(branch),
+    ...serializeBranchRow(branch, branch._academicYears),
     structure: buildStructure(courseRow, branch)
   }));
 
@@ -157,14 +174,13 @@ const fetchCoursesWithBranches = async ({ includeInactive = false, collegeId = n
     ? `WHERE ${whereConditions.join(' AND ')}`
     : '';
 
+  // Fetch branches using junction table
   const branchQuery = includeInactive
-    ? `SELECT cb.*, ay.year_label as academic_year_label 
+    ? `SELECT DISTINCT cb.*
        FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
        WHERE cb.course_id IN (?) ORDER BY cb.name ASC`
-    : `SELECT cb.*, ay.year_label as academic_year_label 
+    : `SELECT DISTINCT cb.*
        FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
        WHERE cb.is_active = 1 AND cb.course_id IN (?) ORDER BY cb.name ASC`;
 
   const [courses] = await masterPool.query(
@@ -178,6 +194,36 @@ const fetchCoursesWithBranches = async ({ includeInactive = false, collegeId = n
 
   const courseIds = courses.map((course) => course.id);
   const [branches] = await masterPool.query(branchQuery, [courseIds]);
+
+  // Fetch academic years for all branches from junction table
+  if (branches && branches.length > 0) {
+    const branchIds = branches.map(b => b.id);
+    const [academicYearsData] = await masterPool.query(`
+      SELECT bay.branch_id, ay.id, ay.year_label, ay.is_active
+      FROM branch_academic_years bay
+      JOIN academic_years ay ON bay.academic_year_id = ay.id
+      WHERE bay.branch_id IN (?)
+      ORDER BY ay.year_label ASC
+    `, [branchIds]);
+
+    // Group academic years by branch_id
+    const academicYearsByBranch = {};
+    academicYearsData.forEach(row => {
+      if (!academicYearsByBranch[row.branch_id]) {
+        academicYearsByBranch[row.branch_id] = [];
+      }
+      academicYearsByBranch[row.branch_id].push({
+        id: row.id,
+        year_label: row.year_label,
+        is_active: row.is_active
+      });
+    });
+
+    // Attach academic years to branches
+    branches.forEach(branch => {
+      branch._academicYears = academicYearsByBranch[branch.id] || [];
+    });
+  }
 
   return courses.map((course) =>
     formatCourse(
@@ -975,126 +1021,133 @@ exports.createBranch = async (req, res) => {
       });
     }
 
-    // Validate that at least one academic year is provided
-    if (!sanitized.academicYearIds || sanitized.academicYearIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'At least one academic year (batch) must be selected'
-      });
-    }
+    // Academic years are optional - branch can be created without batches and batches can be added later
+    // If provided, we'll associate them with the branch
+    const academicYearIds = sanitized.academicYearIds || [];
 
     const branchMetadata =
       sanitized.metadata && typeof sanitized.metadata === 'object'
         ? JSON.stringify(sanitized.metadata)
         : sanitized.metadata;
 
-    // Create branch for each selected academic year
-    const createdBranches = [];
     const connection = await masterPool.getConnection();
 
     try {
       await connection.beginTransaction();
 
-      for (const academicYearId of sanitized.academicYearIds) {
-        // Check if branch with same code already exists for this course and academic year
-        // Also check for branches with NULL academic_year_id that might conflict
-        const [existing] = await connection.query(
-          `SELECT id FROM course_branches 
-           WHERE course_id = ? AND code = ? AND (academic_year_id = ? OR academic_year_id IS NULL)`,
-          [courseId, sanitized.code, academicYearId]
+      // Check if branch with same code already exists for this course
+      const [existing] = await connection.query(
+        `SELECT id FROM course_branches 
+         WHERE course_id = ? AND code = ?`,
+        [courseId, sanitized.code]
+      );
+
+      let branchId;
+      let isNewBranch = false;
+
+      if (existing.length > 0) {
+        // Branch already exists - use existing branch
+        branchId = existing[0].id;
+        
+        // Update branch details if needed
+        await connection.query(
+          `UPDATE course_branches 
+           SET name = ?, total_years = ?, semesters_per_year = ?, is_active = ?, metadata = ?
+           WHERE id = ?`,
+          [
+            sanitized.name?.trim(),
+            sanitized.totalYears,
+            sanitized.semestersPerYear,
+            sanitized.isActive,
+            branchMetadata || null,
+            branchId
+          ]
         );
-
-        if (existing.length > 0) {
-          // If there's a branch with NULL academic_year_id, update it instead of creating new
-          const [nullYearBranch] = await connection.query(
-            `SELECT id FROM course_branches 
-             WHERE course_id = ? AND code = ? AND academic_year_id IS NULL
-             LIMIT 1`,
-            [courseId, sanitized.code]
-          );
-
-          if (nullYearBranch.length > 0) {
-            // Update the NULL branch to have the academic year
-            await connection.query(
-              `UPDATE course_branches 
-               SET academic_year_id = ?, name = ?, total_years = ?, semesters_per_year = ?, is_active = ?
-               WHERE id = ?`,
-              [
-                academicYearId,
-                sanitized.name?.trim(),
-                sanitized.totalYears,
-                sanitized.semestersPerYear,
-                sanitized.isActive,
-                nullYearBranch[0].id
-              ]
-            );
-
-            // Fetch the updated branch
-            const [updatedBranchRows] = await connection.query(
-              `SELECT cb.*, ay.year_label as academic_year_label 
-               FROM course_branches cb 
-               LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
-               WHERE cb.id = ? LIMIT 1`,
-              [nullYearBranch[0].id]
-            );
-
-            if (updatedBranchRows.length > 0) {
-              createdBranches.push(serializeBranchRow(updatedBranchRows[0]));
-            }
-            continue; // Skip creating new branch, we updated the existing one
-          }
-
-          // Branch already exists for this specific academic year, skip
-          continue;
-        }
-
+      } else {
+        // Create new branch (ONE branch for all academic years)
         const [result] = await connection.query(
           `INSERT INTO course_branches
-            (course_id, name, code, total_years, semesters_per_year, academic_year_id, metadata, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            (course_id, name, code, total_years, semesters_per_year, metadata, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             courseId,
             sanitized.name?.trim(),
             sanitized.code,
             sanitized.totalYears,
             sanitized.semestersPerYear,
-            academicYearId,
             branchMetadata || null,
             sanitized.isActive
           ]
         );
+        branchId = result.insertId;
+        isNewBranch = true;
+      }
 
-        const branchId = result.insertId;
-
-        const [branchRows] = await connection.query(
-          `SELECT cb.*, ay.year_label as academic_year_label 
-           FROM course_branches cb 
-           LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
-           WHERE cb.id = ? LIMIT 1`,
+      // Associate academic years with the branch (if any provided)
+      if (academicYearIds.length > 0) {
+        // Get existing academic year associations for this branch
+        const [existingYears] = await connection.query(
+          `SELECT academic_year_id FROM branch_academic_years WHERE branch_id = ?`,
           [branchId]
         );
+        const existingYearIds = existingYears.map(row => row.academic_year_id);
 
-        if (branchRows.length > 0) {
-          createdBranches.push(serializeBranchRow(branchRows[0]));
+        // Insert new academic year associations (only for years not already associated)
+        const newYearIds = academicYearIds.filter(yearId => !existingYearIds.includes(yearId));
+        
+        if (newYearIds.length > 0) {
+          const values = newYearIds.map(yearId => [branchId, yearId]);
+          await connection.query(
+            `INSERT INTO branch_academic_years (branch_id, academic_year_id) VALUES ?`,
+            [values]
+          );
         }
       }
+
+      // Fetch the branch with all academic years
+      const [branchRows] = await connection.query(
+        `SELECT cb.* FROM course_branches cb WHERE cb.id = ? LIMIT 1`,
+        [branchId]
+      );
+
+      // Fetch academic years from junction table
+      const [academicYearsData] = await connection.query(`
+        SELECT ay.id, ay.year_label, ay.is_active
+        FROM branch_academic_years bay
+        JOIN academic_years ay ON bay.academic_year_id = ay.id
+        WHERE bay.branch_id = ?
+        ORDER BY ay.year_label ASC
+      `, [branchId]);
+
+      const academicYears = academicYearsData.map(row => ({
+        id: row.id,
+        year_label: row.year_label,
+        is_active: row.is_active
+      }));
 
       await connection.commit();
       connection.release();
 
-      if (createdBranches.length === 0) {
-        return res.status(400).json({
+      if (branchRows.length > 0) {
+        const branchData = serializeBranchRow(branchRows[0], academicYears);
+        res.status(isNewBranch ? 201 : 200).json({
+          success: true,
+          message: isNewBranch 
+            ? (academicYears.length > 0 
+                ? `Branch created successfully for ${academicYears.length} batch(es)`
+                : `Branch created successfully. You can add batches later.`)
+            : (academicYears.length > 0
+                ? `Branch updated successfully. Now associated with ${academicYears.length} batch(es)`
+                : `Branch updated successfully. No batches associated yet.`),
+          data: branchData,
+          count: academicYears.length
+        });
+      } else {
+        res.status(500).json({
           success: false,
-          message: 'Branch with the same code already exists for all selected academic years'
+          message: 'Failed to retrieve created branch'
         });
       }
-
-      res.status(201).json({
-        success: true,
-        message: `Branch created successfully for ${createdBranches.length} batch(es)`,
-        data: createdBranches.length === 1 ? createdBranches[0] : createdBranches,
-        count: createdBranches.length
-      });
     } catch (error) {
       await connection.rollback();
       connection.release();
@@ -1139,15 +1192,43 @@ exports.getBranches = async (req, res) => {
       ? 'WHERE cb.course_id = ?'
       : 'WHERE cb.course_id = ? AND cb.is_active = 1';
 
+    // Fetch branches
     const [rows] = await masterPool.query(
-      `SELECT cb.*, ay.year_label as academic_year_label 
-       FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
-       ${whereClause} ORDER BY cb.name ASC`,
+      `SELECT cb.* FROM course_branches cb ${whereClause} ORDER BY cb.name ASC`,
       [courseId]
     );
 
-    let branches = rows.map(serializeBranchRow);
+    // Fetch academic years for all branches from junction table
+    let branches = [];
+    if (rows && rows.length > 0) {
+      const branchIds = rows.map(b => b.id);
+      const [academicYearsData] = await masterPool.query(`
+        SELECT bay.branch_id, ay.id, ay.year_label, ay.is_active
+        FROM branch_academic_years bay
+        JOIN academic_years ay ON bay.academic_year_id = ay.id
+        WHERE bay.branch_id IN (?)
+        ORDER BY ay.year_label ASC
+      `, [branchIds]);
+
+      // Group academic years by branch_id
+      const academicYearsByBranch = {};
+      academicYearsData.forEach(row => {
+        if (!academicYearsByBranch[row.branch_id]) {
+          academicYearsByBranch[row.branch_id] = [];
+        }
+        academicYearsByBranch[row.branch_id].push({
+          id: row.id,
+          year_label: row.year_label,
+          is_active: row.is_active
+        });
+      });
+
+      // Serialize branches with their academic years
+      branches = rows.map(branch => {
+        const academicYears = academicYearsByBranch[branch.id] || [];
+        return serializeBranchRow(branch, academicYears);
+      });
+    }
 
     // Apply user scope filtering for branches
     if (req.userScope && !req.userScope.unrestricted && !req.userScope.allBranches) {
@@ -1265,56 +1346,105 @@ exports.updateBranch = async (req, res) => {
       values.push(sanitized.isActive);
     }
 
-    if (req.body.academicYearId !== undefined || req.body.academic_year_id !== undefined) {
-      fields.push('academic_year_id = ?');
-      values.push(sanitized.academicYearId || null);
+    // Handle academicYearIds update via junction table (not academic_year_id column)
+    let academicYearIdsToUpdate = null;
+    if (req.body.academicYearIds !== undefined || req.body.academic_year_ids !== undefined) {
+      academicYearIdsToUpdate = sanitized.academicYearIds || [];
+      if (!Array.isArray(academicYearIdsToUpdate)) {
+        academicYearIdsToUpdate = [academicYearIdsToUpdate].filter(Boolean);
+      }
     }
 
-    if (fields.length === 0) {
+    if (fields.length === 0 && !academicYearIdsToUpdate) {
       return res.status(400).json({
         success: false,
         message: 'No branch fields provided for update'
       });
     }
 
-    values.push(courseId, branchId);
+    const connection = await masterPool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
 
-    // Update branch in course_branches table
-    await masterPool.query(
-      `UPDATE course_branches
-       SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
-       WHERE course_id = ? AND id = ?`,
-      values
-    );
+      // Update branch in course_branches table (if there are fields to update)
+      if (fields.length > 0) {
+        values.push(courseId, branchId);
+        await connection.query(
+          `UPDATE course_branches
+           SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+           WHERE course_id = ? AND id = ?`,
+          values
+        );
+      }
 
-    // If branch name was changed, cascade update to students table
-    let studentsUpdated = 0;
-    if (newBranchName && newBranchName !== oldBranchName) {
-      const [updateResult] = await masterPool.query(
-        `UPDATE students SET branch = ?, updated_at = CURRENT_TIMESTAMP 
-         WHERE branch = ? AND course = ?`,
-        [newBranchName, oldBranchName, course.name]
+      // Update academic year associations via junction table
+      if (academicYearIdsToUpdate !== null) {
+        // Remove all existing associations
+        await connection.query(
+          `DELETE FROM branch_academic_years WHERE branch_id = ?`,
+          [branchId]
+        );
+
+        // Insert new associations
+        if (academicYearIdsToUpdate.length > 0) {
+          const values = academicYearIdsToUpdate.map(yearId => [branchId, yearId]);
+          await connection.query(
+            `INSERT INTO branch_academic_years (branch_id, academic_year_id) VALUES ?`,
+            [values]
+          );
+        }
+      }
+
+      // If branch name was changed, cascade update to students table
+      let studentsUpdated = 0;
+      if (newBranchName && newBranchName !== oldBranchName) {
+        const [updateResult] = await connection.query(
+          `UPDATE students SET branch = ?, updated_at = CURRENT_TIMESTAMP 
+           WHERE branch = ? AND course = ?`,
+          [newBranchName, oldBranchName, course.name]
+        );
+        studentsUpdated = updateResult.affectedRows || 0;
+        console.log(`Branch rename cascade: Updated ${studentsUpdated} students from "${oldBranchName}" to "${newBranchName}"`);
+      }
+
+      // Fetch the updated branch with academic years
+      const [branchRows] = await connection.query(
+        `SELECT cb.* FROM course_branches cb WHERE cb.course_id = ? AND cb.id = ? LIMIT 1`,
+        [courseId, branchId]
       );
-      studentsUpdated = updateResult.affectedRows || 0;
-      console.log(`Branch rename cascade: Updated ${studentsUpdated} students from "${oldBranchName}" to "${newBranchName}"`);
+
+      // Fetch academic years from junction table
+      const [academicYearsData] = await connection.query(`
+        SELECT ay.id, ay.year_label, ay.is_active
+        FROM branch_academic_years bay
+        JOIN academic_years ay ON bay.academic_year_id = ay.id
+        WHERE bay.branch_id = ?
+        ORDER BY ay.year_label ASC
+      `, [branchId]);
+
+      const academicYears = academicYearsData.map(row => ({
+        id: row.id,
+        year_label: row.year_label,
+        is_active: row.is_active
+      }));
+
+      await connection.commit();
+      connection.release();
+
+      res.json({
+        success: true,
+        message: studentsUpdated > 0
+          ? `Branch updated successfully. ${studentsUpdated} student record(s) updated.`
+          : 'Branch updated successfully',
+        data: serializeBranchRow(branchRows[0], academicYears),
+        studentsUpdated
+      });
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
     }
-
-    const [branchRows] = await masterPool.query(
-      `SELECT cb.*, ay.year_label as academic_year_label 
-       FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id 
-       WHERE cb.course_id = ? AND cb.id = ? LIMIT 1`,
-      [courseId, branchId]
-    );
-
-    res.json({
-      success: true,
-      message: studentsUpdated > 0
-        ? `Branch updated successfully. ${studentsUpdated} student record(s) updated.`
-        : 'Branch updated successfully',
-      data: serializeBranchRow(branchRows[0]),
-      studentsUpdated
-    });
   } catch (error) {
     console.error('updateBranch error:', error);
     res.status(500).json({
@@ -1349,11 +1479,10 @@ exports.deleteBranch = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // Get branch details including code and academic year
+    // Get branch details including code
     const [branchRow] = await connection.query(
-      `SELECT cb.id, cb.name, cb.code, cb.academic_year_id, ay.year_label as academic_year 
+      `SELECT cb.id, cb.name, cb.code
        FROM course_branches cb 
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id
        WHERE cb.course_id = ? AND cb.id = ? 
        LIMIT 1`,
       [courseId, branchId]
@@ -1368,7 +1497,18 @@ exports.deleteBranch = async (req, res) => {
       });
     }
 
-    const { name: branchName, code: branchCode, academic_year: academicYear } = branchRow[0];
+    const { name: branchName, code: branchCode } = branchRow[0];
+    
+    // Get academic years for this branch from junction table
+    const [academicYearsData] = await connection.query(`
+      SELECT ay.id, ay.year_label
+      FROM branch_academic_years bay
+      JOIN academic_years ay ON bay.academic_year_id = ay.id
+      WHERE bay.branch_id = ?
+      ORDER BY ay.year_label ASC
+    `, [branchId]);
+    
+    const academicYears = academicYearsData.map(row => row.year_label);
 
     // Get course name
     const [courseRow] = await connection.query(
@@ -1393,11 +1533,9 @@ exports.deleteBranch = async (req, res) => {
         deleteStudentParams.push(branchName);
       }
 
-      // If scope is single and we have an academic year, restrict deletion to that batch
-      if (scope === 'single' && academicYear) {
-        deleteStudentQuery += ' AND batch = ?';
-        deleteStudentParams.push(academicYear);
-      }
+      // If scope is single and we have academic years, restrict deletion to those batches
+      // Note: Since we now have multiple academic years per branch, 'single' scope doesn't make as much sense
+      // But we'll keep it for backward compatibility - it will delete students for all batches of this branch
       // If scope is 'all', we don't filter by batch, so it deletes for all batches
 
       const [studentResult] = await connection.query(deleteStudentQuery, deleteStudentParams);
@@ -1594,10 +1732,9 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
   try {
     // Get branch and course names
     const [branchRow] = await masterPool.query(
-      `SELECT cb.name as branch_name, cb.academic_year_id, ay.year_label as academic_year, c.name as course_name
+      `SELECT cb.name as branch_name, c.name as course_name
        FROM course_branches cb
        JOIN courses c ON cb.course_id = c.id
-       LEFT JOIN academic_years ay ON cb.academic_year_id = ay.id
        WHERE cb.course_id = ? AND cb.id = ?
        LIMIT 1`,
       [courseId, branchId]
@@ -1610,7 +1747,18 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
       });
     }
 
-    const { branch_name: branchName, course_name: courseName, academic_year: academicYear } = branchRow[0];
+    const { branch_name: branchName, course_name: courseName } = branchRow[0];
+    
+    // Get academic years for this branch from junction table
+    const [academicYearsData] = await masterPool.query(`
+      SELECT ay.year_label
+      FROM branch_academic_years bay
+      JOIN academic_years ay ON bay.academic_year_id = ay.id
+      WHERE bay.branch_id = ?
+      ORDER BY ay.year_label ASC
+    `, [branchId]);
+    
+    const academicYears = academicYearsData.map(row => row.year_label);
 
     // Get all students under this branch (limit to 100 for preview)
     // Filter by batch (academic year) if available AND scope is single
@@ -1619,24 +1767,18 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
                  WHERE course = ? AND branch = ?`;
     const params = [courseName, branchName];
 
-    // Only apply batch filter if scope is single
-    if (scope === 'single' && academicYear) {
-      query += ' AND batch = ?';
-      params.push(academicYear);
-    }
+    // Only apply batch filter if scope is single and we have academic years
+    // Since branch can have multiple academic years, 'single' scope doesn't filter by batch anymore
+    // It will show all students for this branch across all batches
+    // 'all' scope shows all students regardless
 
     query += ' ORDER BY student_name ASC LIMIT 100';
 
     const [students] = await masterPool.query(query, params);
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) as total FROM students WHERE course = ? AND branch = ?';
+    const countQuery = 'SELECT COUNT(*) as total FROM students WHERE course = ? AND branch = ?';
     const countParams = [courseName, branchName];
-
-    if (scope === 'single' && academicYear) {
-      countQuery += ' AND batch = ?';
-      countParams.push(academicYear);
-    }
 
     const [countResult] = await masterPool.query(countQuery, countParams);
 
@@ -1645,7 +1787,8 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
       data: {
         branchName,
         courseName,
-        academicYear: scope === 'all' ? 'All Batches' : academicYear,
+        academicYears: academicYears.length > 0 ? academicYears : ['All Batches'],
+        academicYear: academicYears.length > 0 ? academicYears.join(', ') : 'All Batches',
         students,
         totalCount: countResult[0].total,
         hasMore: countResult[0].total > 100

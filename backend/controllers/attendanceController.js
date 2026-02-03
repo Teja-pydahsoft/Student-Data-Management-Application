@@ -218,6 +218,7 @@ exports.getFilterOptions = async (req, res) => {
     }
 
     // 3. Branches (Use Level 2 - Depend on Batch + Course)
+    // If batch is selected, filter branches by batch through junction table
     let branchRowsRes;
     if (college) {
       const [collegeRows] = await masterPool.query(
@@ -238,10 +239,39 @@ exports.getFilterOptions = async (req, res) => {
           if (course) {
             const selectedCourse = collegeCourses.find(c => c.name === course);
             if (selectedCourse) {
-              const [courseBranches] = await masterPool.query(
-                'SELECT name FROM course_branches WHERE course_id = ? AND is_active = 1 ORDER BY name ASC',
-                [selectedCourse.id]
-              );
+              // If batch is selected, filter branches by batch through junction table
+              let courseBranches;
+              if (batch) {
+                // Get academic_year_id for the selected batch
+                const [academicYearRows] = await masterPool.query(
+                  'SELECT id FROM academic_years WHERE year_label = ? AND is_active = 1 LIMIT 1',
+                  [batch]
+                );
+                
+                if (academicYearRows.length > 0) {
+                  const academicYearId = academicYearRows[0].id;
+                  // Get branches associated with this batch through junction table
+                  [courseBranches] = await masterPool.query(
+                    `SELECT DISTINCT cb.name 
+                     FROM course_branches cb
+                     INNER JOIN branch_academic_years bay ON cb.id = bay.branch_id
+                     WHERE cb.course_id = ? 
+                       AND cb.is_active = 1 
+                       AND bay.academic_year_id = ?
+                     ORDER BY cb.name ASC`,
+                    [selectedCourse.id, academicYearId]
+                  );
+                } else {
+                  courseBranches = [];
+                }
+              } else {
+                // No batch selected, get all branches for the course
+                [courseBranches] = await masterPool.query(
+                  'SELECT name FROM course_branches WHERE course_id = ? AND is_active = 1 ORDER BY name ASC',
+                  [selectedCourse.id]
+                );
+              }
+              
               const validBranchNames = courseBranches.map(b => b.name);
 
               if (validBranchNames.length > 0) {
@@ -261,11 +291,40 @@ exports.getFilterOptions = async (req, res) => {
           } else {
             // No specific course selected, check branches for ALL valid courses
             if (validCourseIds.length > 0) {
-              const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
-              const [allBranches] = await masterPool.query(
-                `SELECT name FROM course_branches WHERE course_id IN (${courseIdPlaceholders}) AND is_active = 1 ORDER BY name ASC`,
-                validCourseIds
-              );
+              let allBranches;
+              if (batch) {
+                // Get academic_year_id for the selected batch
+                const [academicYearRows] = await masterPool.query(
+                  'SELECT id FROM academic_years WHERE year_label = ? AND is_active = 1 LIMIT 1',
+                  [batch]
+                );
+                
+                if (academicYearRows.length > 0) {
+                  const academicYearId = academicYearRows[0].id;
+                  const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
+                  // Get branches associated with this batch through junction table
+                  [allBranches] = await masterPool.query(
+                    `SELECT DISTINCT cb.name 
+                     FROM course_branches cb
+                     INNER JOIN branch_academic_years bay ON cb.id = bay.branch_id
+                     WHERE cb.course_id IN (${courseIdPlaceholders}) 
+                       AND cb.is_active = 1 
+                       AND bay.academic_year_id = ?
+                     ORDER BY cb.name ASC`,
+                    [...validCourseIds, academicYearId]
+                  );
+                } else {
+                  allBranches = [];
+                }
+              } else {
+                // No batch selected, get all branches for all courses
+                const courseIdPlaceholders = validCourseIds.map(() => '?').join(',');
+                [allBranches] = await masterPool.query(
+                  `SELECT name FROM course_branches WHERE course_id IN (${courseIdPlaceholders}) AND is_active = 1 ORDER BY name ASC`,
+                  validCourseIds
+                );
+              }
+              
               const validBranchNames = allBranches.map(b => b.name);
 
               if (validBranchNames.length > 0) {
@@ -290,10 +349,48 @@ exports.getFilterOptions = async (req, res) => {
         branchRowsRes = [];
       }
     } else {
-      [branchRowsRes] = await masterPool.query(
-        `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-        level2.params
-      );
+      // No college filter - if batch is selected, still filter branches by batch
+      if (batch) {
+        // Get academic_year_id for the selected batch
+        const [academicYearRows] = await masterPool.query(
+          'SELECT id FROM academic_years WHERE year_label = ? AND is_active = 1 LIMIT 1',
+          [batch]
+        );
+        
+        if (academicYearRows.length > 0) {
+          const academicYearId = academicYearRows[0].id;
+          // Get branch names associated with this batch
+          const [branchRows] = await masterPool.query(
+            `SELECT DISTINCT cb.name 
+             FROM course_branches cb
+             INNER JOIN branch_academic_years bay ON cb.id = bay.branch_id
+             WHERE cb.is_active = 1 
+               AND bay.academic_year_id = ?
+             ORDER BY cb.name ASC`,
+            [academicYearId]
+          );
+          const validBranchNames = branchRows.map(b => b.name);
+          
+          if (validBranchNames.length > 0) {
+            const placeholders = validBranchNames.map(() => '?').join(',');
+            const branchWhereClause = `${level2.clause} AND branch IN (${placeholders})`;
+            const branchQueryParams = [...level2.params, ...validBranchNames];
+            [branchRowsRes] = await masterPool.query(
+              `SELECT DISTINCT branch FROM students ${branchWhereClause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+              branchQueryParams
+            );
+          } else {
+            branchRowsRes = [];
+          }
+        } else {
+          branchRowsRes = [];
+        }
+      } else {
+        [branchRowsRes] = await masterPool.query(
+          `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+          level2.params
+        );
+      }
     }
 
     // 4. Years and Semesters (Use Level 3 - Depend on Batch + Course + Branch)
@@ -1902,6 +1999,7 @@ exports.markAttendance = async (req, res) => {
 
     const dayEndReportResults = [];
     const dayEndProcessedUsers = new Set();
+    const superAdminEngineeringDiplomaSent = new Set(); // Track if Engineering College - Diploma report sent to super admin
 
     // Check each college/course combination
     for (const [key, collegeCourseData] of groupsByCollegeCourse) {
@@ -2082,6 +2180,86 @@ exports.markAttendance = async (req, res) => {
               emailsFailed: 0,
               errors: [error.message]
             });
+          }
+        }
+
+        // ============================================
+        // SPECIAL HANDLING: Send separate report to Super Admin for Engineering College - Diploma
+        // ============================================
+        const ENGINEERING_COLLEGE_NAME = 'Pydah College of Engineering';
+        const DIPLOMA_COURSE_NAME = 'Diploma';
+        const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
+
+        if (college === ENGINEERING_COLLEGE_NAME && course === DIPLOMA_COURSE_NAME) {
+          // Check if already sent to avoid duplicates
+          const reportKey = `${SUPER_ADMIN_EMAIL}|${ENGINEERING_COLLEGE_NAME}|${DIPLOMA_COURSE_NAME}`;
+          if (superAdminEngineeringDiplomaSent.has(reportKey)) {
+            console.log(`   ℹ️ Engineering College - Diploma report already sent to Super Admin, skipping duplicate`);
+          } else {
+            console.log(`   🎓 Sending separate Engineering College - Diploma report to Super Admin: ${SUPER_ADMIN_EMAIL}`);
+          
+            try {
+            // Get college ID for Engineering College
+            let engineeringCollegeId = null;
+            try {
+              const [collegeRows] = await masterPool.query(
+                'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
+                [ENGINEERING_COLLEGE_NAME]
+              );
+              if (collegeRows.length > 0) {
+                engineeringCollegeId = collegeRows[0].id;
+              }
+            } catch (err) {
+              console.warn(`   ⚠️ Could not fetch college ID for ${ENGINEERING_COLLEGE_NAME}:`, err.message);
+            }
+
+            const result = await sendAttendanceReportNotifications({
+              collegeId: engineeringCollegeId,
+              collegeName: ENGINEERING_COLLEGE_NAME,
+              courseId: null,
+              courseName: DIPLOMA_COURSE_NAME,
+              branchId: null,
+              branchName: 'All Branches',
+              batch: 'All Batches',
+              year: 'All Years',
+              semester: 'All Semesters',
+              attendanceDate: normalizedDate,
+              students: allStudents,
+              attendanceRecords: allAttendanceRecords,
+              allBatchesData: allBatchesData,
+              recipientUser: {
+                name: 'Sriram',
+                email: SUPER_ADMIN_EMAIL,
+                role: 'super_admin'
+              },
+              senderName: senderName
+            });
+
+            dayEndReportResults.push({
+              user: 'Sriram',
+              userEmail: SUPER_ADMIN_EMAIL,
+              role: 'Super Admin',
+              college: ENGINEERING_COLLEGE_NAME,
+              course: DIPLOMA_COURSE_NAME,
+              ...result
+            });
+
+            superAdminEngineeringDiplomaSent.add(reportKey);
+            console.log(`   📧 Engineering College - Diploma report sent successfully to Super Admin: ${SUPER_ADMIN_EMAIL}`);
+          } catch (error) {
+            console.error(`   ❌ Error sending Engineering College - Diploma report to Super Admin:`, error);
+            dayEndReportResults.push({
+              user: 'Sriram',
+              userEmail: SUPER_ADMIN_EMAIL,
+              role: 'Super Admin',
+              college: ENGINEERING_COLLEGE_NAME,
+              course: DIPLOMA_COURSE_NAME,
+              pdfGenerated: false,
+              emailsSent: 0,
+              emailsFailed: 0,
+              errors: [error.message]
+            });
+            }
           }
         }
       }

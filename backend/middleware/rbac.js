@@ -203,7 +203,7 @@ const attachUserScope = async (req, res, next) => {
     // Parse array data from JSON columns
     const collegeIds = parseArrayData(userData.college_ids);
     const courseIds = parseArrayData(userData.course_ids);
-    const branchIds = parseArrayData(userData.branch_ids);
+    let branchIds = parseArrayData(userData.branch_ids);
 
     // Fall back to single IDs if arrays are empty
     if (collegeIds.length === 0 && userData.college_id) {
@@ -215,6 +215,11 @@ const attachUserScope = async (req, res, next) => {
     if (branchIds.length === 0 && userData.branch_id) {
       branchIds.push(userData.branch_id);
     }
+    
+    // Validate branch IDs - filter out invalid ones and ensure they're numbers
+    branchIds = branchIds
+      .filter(id => id != null && !isNaN(Number(id)))
+      .map(id => Number(id));
 
     // Fetch college names for filtering
     let collegeNames = [];
@@ -239,11 +244,23 @@ const attachUserScope = async (req, res, next) => {
     // Fetch branch names for filtering
     let branchNames = [];
     if (!userData.all_branches && branchIds.length > 0) {
-      const [branches] = await masterPool.query(
-        `SELECT name FROM course_branches WHERE id IN (${branchIds.map(() => '?').join(',')})`,
-        branchIds
-      );
-      branchNames = branches.map(b => b.name);
+      // Filter out invalid branch IDs (non-numeric or null)
+      const validBranchIds = branchIds.filter(id => id != null && !isNaN(Number(id))).map(id => Number(id));
+      
+      if (validBranchIds.length > 0) {
+        const [branches] = await masterPool.query(
+          `SELECT name FROM course_branches WHERE id IN (${validBranchIds.map(() => '?').join(',')}) AND is_active = 1`,
+          validBranchIds
+        );
+        branchNames = branches.map(b => b.name);
+        
+        // If some branch IDs were invalid, log a warning
+        if (validBranchIds.length !== branchIds.length) {
+          console.warn(`[User Scope] User ${user.id} has invalid branch IDs. Valid: ${validBranchIds.length}, Total: ${branchIds.length}`);
+        }
+      } else {
+        console.warn(`[User Scope] User ${user.id} has no valid branch IDs. branchIds: ${JSON.stringify(branchIds)}`);
+      }
     }
 
     req.userScope = {
