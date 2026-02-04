@@ -2411,6 +2411,25 @@ exports.getAllStudents = async (req, res) => {
       params.push(normalizedFilterBranch);
     }
 
+    // Level filter - filter by courses with the specified level
+    let validLevelCourseNames = [];
+    if (normalizedOtherFilters.filter_level) {
+      const level = normalizedOtherFilters.filter_level;
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      validLevelCourseNames = levelCourses.map(c => c.name);
+      if (validLevelCourseNames.length > 0) {
+        const placeholders = validLevelCourseNames.map(() => '?').join(',');
+        query += ` AND course IN (${placeholders})`;
+        params.push(...validLevelCourseNames);
+      } else {
+        // No courses with this level, return empty result
+        query += ' AND 1=0';
+      }
+    }
+
     // Student database field filters
     studentFieldFilters.forEach(field => {
       const filterKey = `filter_${field}`;
@@ -2521,6 +2540,18 @@ exports.getAllStudents = async (req, res) => {
     if (normalizedFilterBranch) {
       countQuery += ' AND branch = ?';
       countParams.push(normalizedFilterBranch);
+    }
+
+    // Level filter for count query - reuse the same validLevelCourseNames
+    if (normalizedOtherFilters.filter_level) {
+      if (validLevelCourseNames.length > 0) {
+        const placeholders = validLevelCourseNames.map(() => '?').join(',');
+        countQuery += ` AND course IN (${placeholders})`;
+        countParams.push(...validLevelCourseNames);
+      } else {
+        // No courses with this level, return empty result
+        countQuery += ' AND 1=0';
+      }
     }
 
     // Student database field filters for count query

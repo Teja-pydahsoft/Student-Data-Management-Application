@@ -675,6 +675,11 @@ const Reports = () => {
       if (dayEndPreviewFilter === 'marked' && (row.markedToday || 0) === 0) return false;
       if (dayEndPreviewFilter === 'unmarked' && (row.pendingToday || 0) === 0) return false;
       if (dayEndFilters.college && row.college !== dayEndFilters.college) return false;
+      // Filter by level - check if the course matches the selected level
+      if (dayEndFilters.level) {
+        const courseInfo = coursesWithLevels.find(c => c.name === row.course);
+        if (!courseInfo || courseInfo.level !== dayEndFilters.level) return false;
+      }
       if (dayEndFilters.batch && row.batch !== dayEndFilters.batch) return false;
       if (dayEndFilters.course && row.course !== dayEndFilters.course) return false;
       if (dayEndFilters.branch && row.branch !== dayEndFilters.branch) return false;
@@ -691,7 +696,7 @@ const Reports = () => {
       rows.sort((a, b) => (a.course || '').localeCompare(b.course || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
     }
     return rows;
-  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy, dayEndFilters]);
+  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy, dayEndFilters, coursesWithLevels]);
 
   const filteredStats = useMemo(() => {
     const filteredRows = dayEndGroupedDisplay;
@@ -2891,6 +2896,7 @@ const Reports = () => {
                         <col style={{ width: '80px' }} />
                         <col style={{ width: '60px' }} />
                         <col style={{ width: '60px' }} />
+                        <col style={{ width: '60px' }} />
                         <col style={{ width: '80px' }} />
                         <col style={{ width: '80px' }} />
                         <col style={{ width: '80px' }} />
@@ -2907,11 +2913,11 @@ const Reports = () => {
                               onChange={(e) => {
                                 setDayEndFilters(prev => ({ ...prev, college: e.target.value, course: '', branch: '' }));
                               }}
-                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs truncate"
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
                             >
                               <option value="">COLLEGE</option>
                               {dayEndFilterOptions.colleges.map(opt => (
-                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                                <option key={opt} value={opt} title={opt}>{opt}</option>
                               ))}
                             </select>
                           </th>
@@ -2963,7 +2969,7 @@ const Reports = () => {
                                 .map(opt => {
                                   const courseName = typeof opt === 'string' ? opt : opt.name;
                                   return (
-                                    <option key={courseName} value={courseName} title={courseName} className="truncate">
+                                    <option key={courseName} value={courseName} title={courseName}>
                                       {courseName}
                                     </option>
                                   );
@@ -2978,11 +2984,11 @@ const Reports = () => {
                             >
                               <option value="">BRANCH</option>
                               {filteredBranches.map(opt => (
-                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                                <option key={opt} value={opt} title={opt}>{opt}</option>
                               ))}
                             </select>
                           </th>
-                          <th className="px-1 py-2 text-center align-top">
+                          <th className="px-2 py-2 text-center align-top">
                             <select
                               value={dayEndFilters.year}
                               onChange={(e) => setDayEndFilters(prev => ({ ...prev, year: e.target.value }))}
@@ -2994,7 +3000,7 @@ const Reports = () => {
                               ))}
                             </select>
                           </th>
-                          <th className="px-1 py-2 text-center align-top">
+                          <th className="px-2 py-2 text-center align-top">
                             <select
                               value={dayEndFilters.semester}
                               onChange={(e) => setDayEndFilters(prev => ({ ...prev, semester: e.target.value }))}
@@ -3030,6 +3036,7 @@ const Reports = () => {
                             <col style={{ width: '80px' }} />
                             <col style={{ width: '60px' }} />
                             <col style={{ width: '60px' }} />
+                            <col style={{ width: '60px' }} />
                             <col style={{ width: '80px' }} />
                             <col style={{ width: '80px' }} />
                             <col style={{ width: '80px' }} />
@@ -3039,59 +3046,66 @@ const Reports = () => {
                             <col style={{ width: '100px' }} />
                           </colgroup>
                           <tbody className="divide-y divide-gray-100">
-                            {dayEndGroupedDisplay.map((row, idx) => (
-                              <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white hover:bg-gray-50">
-                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.college || ''}>
-                                  {row.college || '—'}
-                                </td>
-                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.batch || ''}>
-                                  {row.batch || '—'}
-                                </td>
-                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.course || ''}>
-                                  {row.course || '—'}
-                                </td>
-                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.branch || ''}>
-                                  {row.branch || '—'}
-                                </td>
-                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
-                                  {row.year || '—'}
-                                </td>
-                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
-                                  {row.semester || '—'}
-                                </td>
-                                <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
-                                  {row.totalStudents ?? 0}
-                                </td>
-                                <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
-                                  {row.absentToday ?? 0}
-                                </td>
-                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
-                                  {row.markedToday ?? 0}
-                                </td>
-                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
-                                  {row.totalStudents > 0
-                                    ? ((row.presentToday / row.totalStudents) * 100).toFixed(1) + '%'
-                                    : '0.0%'
-                                  }
-                                </td>
-                                <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
-                                  {row.pendingToday ?? 0}
-                                </td>
-                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
-                                  <div className="flex flex-col items-end">
-                                    <span>{row.holidayToday ?? 0}</span>
-                                    {row.holidayReasons && (
-                                      <span className="text-xs text-gray-600 font-normal truncate max-w-full" title={row.holidayReasons}>
-                                        {row.holidayReasons.length > 20 ? `${row.holidayReasons.substring(0, 20)}...` : row.holidayReasons}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-2 py-2 text-right text-gray-600 text-xs">
-                                  {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'}
-                                </td>
-                              </tr>
-                            ))}
+                            {dayEndGroupedDisplay.map((row, idx) => {
+                              const courseInfo = coursesWithLevels.find(c => c.name === row.course);
+                              const level = courseInfo?.level ? courseInfo.level.toUpperCase() : '—';
+                              return (
+                                <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white hover:bg-gray-50">
+                                  <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.college || ''}>
+                                    {row.college || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-800 text-sm truncate" title={level}>
+                                    {level}
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.batch || ''}>
+                                    {row.batch || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.course || ''}>
+                                    {row.course || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.branch || ''}>
+                                    {row.branch || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-center text-gray-800 text-sm">
+                                    {row.year || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-center text-gray-800 text-sm">
+                                    {row.semester || '—'}
+                                  </td>
+                                  <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
+                                    {row.totalStudents ?? 0}
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
+                                    {row.absentToday ?? 0}
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                    {row.markedToday ?? 0}
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
+                                    {row.totalStudents > 0
+                                      ? ((row.presentToday / row.totalStudents) * 100).toFixed(1) + '%'
+                                      : '0.0%'
+                                    }
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
+                                    {row.pendingToday ?? 0}
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                    <div className="flex flex-col items-end">
+                                      <span>{row.holidayToday ?? 0}</span>
+                                      {row.holidayReasons && (
+                                        <span className="text-xs text-gray-600 font-normal truncate max-w-full" title={row.holidayReasons}>
+                                          {row.holidayReasons.length > 20 ? `${row.holidayReasons.substring(0, 20)}...` : row.holidayReasons}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2 text-right text-gray-600 text-xs">
+                                    {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
