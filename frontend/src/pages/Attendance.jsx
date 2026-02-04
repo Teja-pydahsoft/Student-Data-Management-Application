@@ -2642,6 +2642,16 @@ const Attendance = () => {
               ))}
             </select>
             <select
+              value={filters.level || ''}
+              onChange={(event) => handleFilterChange('level', event.target.value)}
+              className="min-w-[100px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
+            >
+              <option value="">All Levels</option>
+              <option value="diploma">Diploma</option>
+              <option value="ug">UG</option>
+              <option value="pg">PG</option>
+            </select>
+            <select
               value={filters.course || ''}
               onChange={(event) => handleFilterChange('course', event.target.value)}
               onFocus={() => {
@@ -2653,7 +2663,7 @@ const Attendance = () => {
               }}
               className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
             >
-              <option value="">All Courses</option>
+              <option value="">All Programs</option>
               {filterOptions.courses
                 .filter(courseOption => {
                   // Filter by level if level is selected
@@ -2668,16 +2678,6 @@ const Attendance = () => {
                     {courseOption}
                   </option>
                 ))}
-            </select>
-            <select
-              value={filters.level || ''}
-              onChange={(event) => handleFilterChange('level', event.target.value)}
-              className="min-w-[100px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
-            >
-              <option value="">All Levels</option>
-              <option value="diploma">Diploma</option>
-              <option value="ug">UG</option>
-              <option value="pg">PG</option>
             </select>
             <select
               value={filters.branch || ''}
