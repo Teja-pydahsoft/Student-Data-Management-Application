@@ -565,7 +565,7 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">
-                    Course for sample row
+                    Program for sample row
                   </label>
                   <select
                     value={selectedCourseId}
@@ -577,18 +577,18 @@ const BulkUploadModal = ({ isOpen, onClose, forms, onUploadComplete, isLoadingFo
                       {metadataLoading
                         ? 'Loading courses...'
                         : courseOptions.length > 0
-                        ? 'Select a course (optional)'
-                        : 'No active courses found'}
+                        ? 'Select a program (optional)'
+                        : 'No active programs found'}
                     </option>
                     {courseOptions.map((course) => (
                       <option key={course.id} value={course.id}>
-                    {course.name}
+                    {course.name} {course.level ? `(${course.level.toUpperCase()})` : ''}
                       </option>
                     ))}
                   </select>
                   {!metadataLoading && courseOptions.length === 0 && (
                     <p className="text-xs text-blue-700 mt-1">
-                      Configure courses in the Course Configuration page to enable quick selections.
+                      Configure programs in the Settings page to enable quick selections.
                     </p>
                   )}
                 </div>

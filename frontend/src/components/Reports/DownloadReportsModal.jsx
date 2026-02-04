@@ -172,11 +172,11 @@ const DownloadReportsModal = ({ isOpen, onClose, filters }) => {
 
       // Aggregated Table
       doc.setFontSize(10);
-      doc.text('Attendance Summary by Batch, Course, Branch, Year & Semester', 14, yPos);
+      doc.text('Attendance Summary by Batch, Program, Branch, Year & Semester', 14, yPos);
       yPos += 8;
 
       // Table headers with background
-      const headers = ['Batch', 'Course', 'Branch', 'Year', 'Sem', 'Students', 'Present', 'Absent', 'Unmarked'];
+      const headers = ['Batch', 'Program', 'Branch', 'Year', 'Sem', 'Students', 'Present', 'Absent', 'Unmarked'];
       const colWidths = [25, 35, 30, 15, 12, 18, 18, 18, 18];
       const headerStartX = 14;
       const tableWidth = colWidths.reduce((sum, width) => sum + width, 0);

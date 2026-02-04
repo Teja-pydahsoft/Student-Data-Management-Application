@@ -3403,7 +3403,7 @@ const Attendance = () => {
                           pin: { label: 'PIN', sortable: true },
                           registrationStatus: { label: 'Registration Status', sortable: true },
                           batch: { label: 'Batch', sortable: true },
-                          course: { label: 'Course', sortable: true },
+                          course: { label: 'Program', sortable: true },
                           branch: { label: 'Branch', sortable: true },
                           year: { label: 'Year', sortable: true },
                           semester: { label: 'Semester', sortable: true },
@@ -4114,7 +4114,7 @@ const Attendance = () => {
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">PIN</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Admission No</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">College</th>
-                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Course</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Program</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Branch</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Year</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Sem</th>

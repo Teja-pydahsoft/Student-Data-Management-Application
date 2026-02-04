@@ -945,10 +945,10 @@ const PublicForm = () => {
           className={commonClasses}
           required={field.required}
         >
-          <option value="">Select Course</option>
+          <option value="">Select Program</option>
           {availableCourses.map((course) => (
             <option key={course.name} value={course.name}>
-              {course.name}
+              {course.name} {course.level ? `(${course.level.toUpperCase()})` : ''}
             </option>
           ))}
         </select>

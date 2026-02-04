@@ -203,7 +203,7 @@ const TargetSelector = ({ formData, setFormData, layout = 'column', hideTitle = 
                     onChange={vals => setFormData({ ...formData, target_batch: vals })}
                 />
                 <MultiSelect
-                    label="Course"
+                    label="Program"
                     placeholder="All"
                     options={availableCourses}
                     selected={formData.target_course}
@@ -266,8 +266,8 @@ const TargetSelector = ({ formData, setFormData, layout = 'column', hideTitle = 
                 />
             </div>
             <MultiSelect
-                label="Courses"
-                placeholder="All Courses"
+                label="Programs"
+                placeholder="All Programs"
                 options={availableCourses}
                 selected={formData.target_course}
                 onChange={vals => setFormData({ ...formData, target_course: vals })}

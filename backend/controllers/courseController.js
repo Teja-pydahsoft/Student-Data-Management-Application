@@ -140,6 +140,8 @@ const formatCourse = (courseRow, branchRows = []) => {
     id: courseRow.id,
     collegeId: courseRow.college_id || null,
     name: courseRow.name,
+    code: courseRow.code || null,
+    level: courseRow.level || 'ug',
     isActive: courseRow.is_active === 1 || courseRow.is_active === true,
     totalYears: courseRow.total_years,
     semestersPerYear: courseRow.semesters_per_year,
@@ -257,6 +259,11 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     }
   }
 
+  const level = payload.level || 'ug';
+  if (!['diploma', 'ug', 'pg'].includes(level)) {
+    errors.push('Level must be one of: diploma, ug, pg');
+  }
+
   const totalYears = toInt(payload.totalYears ?? payload.total_years, 0);
   const semestersPerYear = toInt(
     payload.semestersPerYear ?? payload.semesters_per_year,
@@ -321,6 +328,7 @@ const validateCoursePayload = (payload, { isUpdate = false } = {}) => {
     sanitized: {
       name,
       code,
+      level,
       totalYears,
       semestersPerYear,
       yearSemesterConfig,
@@ -556,11 +564,12 @@ exports.createCourse = async (req, res) => {
       : null;
 
     const [courseResult] = await connection.query(
-      `INSERT INTO courses (name, code, college_id, total_years, semesters_per_year, year_semester_config, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO courses (name, code, level, college_id, total_years, semesters_per_year, year_semester_config, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         sanitized.name,
         sanitized.code,
+        sanitized.level,
         collegeId,
         sanitized.totalYears,
         sanitized.semestersPerYear,
@@ -733,6 +742,19 @@ exports.updateCourse = async (req, res) => {
       values.push(collegeId);
     }
 
+    if (req.body.level !== undefined) {
+      // Validate level if provided
+      const level = req.body.level;
+      if (!['diploma', 'ug', 'pg'].includes(level)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Level must be one of: diploma, ug, pg'
+        });
+      }
+      fields.push('level = ?');
+      values.push(level);
+    }
+
     if (req.body.metadata !== undefined) {
       fields.push('metadata = ?');
       const metadataJson =
@@ -796,11 +818,18 @@ exports.updateCourse = async (req, res) => {
     });
   } catch (error) {
     console.error('updateCourse error:', error);
+    console.error('updateCourse error details:', {
+      message: error.message,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage,
+      stack: error.stack
+    });
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
         ? 'Course with the same name already exists'
-        : 'Failed to update course'
+        : error.message || 'Failed to update course'
     });
   }
 };

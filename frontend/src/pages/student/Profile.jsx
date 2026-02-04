@@ -241,7 +241,7 @@ const Profile = () => {
 
                     <div className="space-y-1 flex-1">
                         <InfoItem label="College" value={displayData.college || getStudentData('College')} />
-                        <InfoItem label="Course" value={displayData.course || getStudentData('Course')} />
+                        <InfoItem label="Program" value={displayData.course || getStudentData('Program')} />
                         <InfoItem label="Branch" value={displayData.branch || getStudentData('Branch')} />
                         <div className="grid grid-cols-2 gap-3">
                             <InfoItem label="Year" value={displayData.current_year || getStudentData('Year')} />

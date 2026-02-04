@@ -77,7 +77,7 @@ const STUDENT_FIELD_GROUPS = [
             { key: 'admission_number', label: 'Admission Number', type: 'text' },
             { key: 'pin_number', label: 'PIN Number', type: 'text' },
             { key: 'college_name', label: 'College', type: 'select' },
-            { key: 'course_name', label: 'Course', type: 'select' },
+            { key: 'course_name', label: 'Program', type: 'select' },
             { key: 'branch_name', label: 'Branch', type: 'select' },
             { key: 'year', label: 'Year', type: 'select' },
             { key: 'semester', label: 'Semester', type: 'select' },

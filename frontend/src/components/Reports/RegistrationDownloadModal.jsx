@@ -137,15 +137,15 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                                     {(filterOptions.batches || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
-                            {/* Course */}
+                            {/* Program */}
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-gray-500 uppercase">Course</label>
+                                <label className="text-xs font-medium text-gray-500 uppercase">Program</label>
                                 <select
                                     className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                                     value={localFilters.course || ''}
                                     onChange={(e) => handleFilterChange('course', e.target.value)}
                                 >
-                                    <option value="">All Courses</option>
+                                    <option value="">All Programs</option>
                                     {(filterOptions.courses || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
@@ -212,7 +212,7 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                                     <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
                                         <tr>
                                             <th className="px-4 py-3 whitespace-nowrap">Batch</th>
-                                            <th className="px-4 py-3 whitespace-nowrap">Course</th>
+                                            <th className="px-4 py-3 whitespace-nowrap">Program</th>
                                             <th className="px-4 py-3 whitespace-nowrap">Branch</th>
                                             <th className="px-4 py-3 whitespace-nowrap text-center">Year</th>
                                             <th className="px-4 py-3 whitespace-nowrap text-center">Sem</th>

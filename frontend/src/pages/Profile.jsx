@@ -354,14 +354,14 @@ const Profile = () => {
                                 </div>
                             </div>
 
-                            {/* Course Scope */}
+                            {/* Program Scope */}
                             <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
                                 <div className="mt-1">
                                     <div className="w-2 h-2 rounded-full bg-indigo-500 ring-4 ring-white shadow-sm"></div>
                                 </div>
                                 <div className="flex-1">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">COURSE LEVEL</span>
-                                    <span className="text-gray-900 font-semibold">{studentStats?.hierarchy?.course || 'All Courses'}</span>
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">PROGRAM LEVEL</span>
+                                    <span className="text-gray-900 font-semibold">{studentStats?.hierarchy?.course || 'All Programs'}</span>
                                 </div>
                             </div>
 

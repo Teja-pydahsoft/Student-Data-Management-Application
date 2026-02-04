@@ -120,6 +120,11 @@ const NAV_ITEMS = [
         label: "Attendance Reports",
         permission: FRONTEND_MODULES.REPORTS,
       },
+      {
+        path: "/reports/day-end",
+        label: "Day End Report",
+        permission: FRONTEND_MODULES.REPORTS,
+      },
     ],
   },
   {

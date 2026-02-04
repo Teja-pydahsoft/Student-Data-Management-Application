@@ -112,8 +112,8 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
         const response = await api.get(url);
         setCourseOptions(response.data.data || []);
       } catch (error) {
-        console.error('Failed to load course configuration', error);
-        toast.error(error.response?.data?.message || 'Failed to load course configuration');
+        console.error('Failed to load program configuration', error);
+        toast.error(error.response?.data?.message || 'Failed to load program configuration');
       } finally {
         setCourseOptionsLoading(false);
       }
@@ -773,15 +773,15 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
                   )}
                 </div>
 
-                {/* Course */}
+                {/* Program */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Course <span className="text-red-500">*</span>
+                    Program <span className="text-red-500">*</span>
                   </label>
                   {courseOptionsLoading ? (
                     <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
                       <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                      Loading courses...
+                      Loading programs...
                     </div>
                   ) : availableCourses.length > 0 ? (
                     <select
@@ -790,10 +790,10 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                     >
-                      <option value="">Select Course</option>
+                      <option value="">Select Program</option>
                       {availableCourses.map((course) => (
                         <option key={course.name} value={course.name}>
-                          {course.name}
+                          {course.name} {course.level ? `(${course.level.toUpperCase()})` : ''}
                         </option>
                       ))}
                     </select>
@@ -803,7 +803,7 @@ const IndividualStudentModal = ({ isOpen, onClose, forms, isLoadingForms = false
                       name="course"
                       value={studentData.course}
                       onChange={handleChange}
-                      placeholder="Enter course"
+                      placeholder="Enter program"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                     />
                   )}

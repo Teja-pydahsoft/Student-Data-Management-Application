@@ -786,7 +786,7 @@ const Submissions = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Course & Branch
+                          Program & Branch
                         </label>
                         <p className="text-sm font-semibold text-gray-700">
                           {selectedSubmission.submission_data.course || '-'} - {selectedSubmission.submission_data.branch || '-'}

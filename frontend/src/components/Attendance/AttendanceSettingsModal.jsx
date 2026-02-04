@@ -58,7 +58,7 @@ const AttendanceSettingsModal = ({ isOpen, onClose, onSettingsChange }) => {
     const addCourse = () => {
         if (!newCourse.trim()) return;
         if (excludedCourses.includes(newCourse.trim())) {
-            toast.error('Course already excluded');
+            toast.error('Program already excluded');
             return;
         }
         setExcludedCourses([...excludedCourses, newCourse.trim()]);
@@ -111,8 +111,8 @@ const AttendanceSettingsModal = ({ isOpen, onClose, onSettingsChange }) => {
                             {/* Excluded Courses Section */}
                             <div className="space-y-4">
                                 <div>
-                                    <h3 className="text-sm font-medium text-gray-700 mb-1">Excluded Courses</h3>
-                                    <p className="text-xs text-gray-500">Students in these courses will be hidden from the attendance list.</p>
+                                    <h3 className="text-sm font-medium text-gray-700 mb-1">Excluded Programs</h3>
+                                    <p className="text-xs text-gray-500">Students in these programs will be hidden from the attendance list.</p>
                                 </div>
 
                                 <div className="flex gap-2">
@@ -120,7 +120,7 @@ const AttendanceSettingsModal = ({ isOpen, onClose, onSettingsChange }) => {
                                         type="text"
                                         value={newCourse}
                                         onChange={(e) => setNewCourse(e.target.value)}
-                                        placeholder="Enter course name (e.g. M.Tech)"
+                                        placeholder="Enter program name (e.g. M.Tech)"
                                         className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                                         onKeyDown={(e) => e.key === 'Enter' && addCourse()}
                                     />
@@ -135,7 +135,7 @@ const AttendanceSettingsModal = ({ isOpen, onClose, onSettingsChange }) => {
 
                                 <div className="flex flex-wrap gap-2 min-h-[40px] p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                                     {excludedCourses.length === 0 ? (
-                                        <span className="text-sm text-gray-400 italic">No courses excluded</span>
+                                        <span className="text-sm text-gray-400 italic">No programs excluded</span>
                                     ) : (
                                         excludedCourses.map((course) => (
                                             <span

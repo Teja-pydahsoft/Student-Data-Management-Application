@@ -869,7 +869,7 @@ const AddStudent = () => {
       { field: 'father_name', label: 'Father Name' },
       { field: 'gender', label: 'Gender' },
       { field: 'college', label: 'College' },
-      { field: 'course', label: 'Course' },
+      { field: 'course', label: 'Program' },
       { field: 'branch', label: 'Branch' },
       { field: 'current_year', label: 'Current Year' },
       { field: 'current_semester', label: 'Current Semester' },
@@ -1142,15 +1142,15 @@ const AddStudent = () => {
                 )}
               </div>
 
-              {/* 3. Course */}
+              {/* 3. Program */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Course <span className="text-red-500">*</span>
+                  Program <span className="text-red-500">*</span>
                 </label>
                 {courseOptionsLoading ? (
                   <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
                     <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
-                    Loading courses...
+                    Loading programs...
                   </div>
                 ) : availableCourses.length > 0 ? (
                   <select

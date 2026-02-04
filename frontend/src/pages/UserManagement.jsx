@@ -52,7 +52,7 @@ const ROLE_AVATAR_COLORS = {
 };
 
 const ROLE_DESCRIPTIONS = {
-  college_principal: 'Manages overall college operations and has oversight of all courses and branches',
+  college_principal: 'Manages overall college operations and has oversight of all programs and branches',
   college_ao: 'Administrative officer responsible for college-level operations and record management',
   college_attender: 'Basic access for attendance tracking and daily record management',
   branch_hod: 'Head of Department with control over specific branches and their operations',

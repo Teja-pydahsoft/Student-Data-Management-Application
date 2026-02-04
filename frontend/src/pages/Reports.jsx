@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   RefreshCw,
@@ -18,7 +18,9 @@ import {
   ArrowLeft,
   User,
   Calendar,
-  CalendarDays
+  CalendarDays,
+  Mail,
+  Loader2
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -62,7 +64,8 @@ const StatusBadge = ({ status, type = 'icon' }) => {
 const Reports = () => {
   const location = useLocation();
   const isAttendanceReports = location.pathname === '/reports/attendance';
-  const reportType = isAttendanceReports ? 'attendance' : 'registration';
+  const isDayEndReports = location.pathname === '/reports/day-end';
+  const reportType = isDayEndReports ? 'dayend' : (isAttendanceReports ? 'attendance' : 'registration');
 
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -125,6 +128,34 @@ const Reports = () => {
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [calendarAttendanceData, setCalendarAttendanceData] = useState(null);
   const [calendarLoading, setCalendarLoading] = useState(false);
+
+  // Day End Report State
+  const [dayEndReportLoading, setDayEndReportLoading] = useState(false);
+  const [dayEndReportData, setDayEndReportData] = useState(null);
+  const [dayEndGrouped, setDayEndGrouped] = useState([]);
+  const [dayEndPreviewFilter, setDayEndPreviewFilter] = useState('all'); // all | marked | unmarked
+  const [dayEndSortBy, setDayEndSortBy] = useState('none'); // none | branch | yearSem | course
+  const [dayEndFilters, setDayEndFilters] = useState({
+    college: '',
+    batch: '',
+    course: '',
+    branch: '',
+    year: '',
+    semester: ''
+  });
+  const [dayEndFilterOptions, setDayEndFilterOptions] = useState({
+    colleges: [],
+    batches: [],
+    courses: [],
+    branches: [],
+    years: [],
+    semesters: [],
+    allData: []
+  });
+  const [sendingReports, setSendingReports] = useState(false);
+  const dayEndStatsRef = useRef(null);
+  const [statsSectionHeight, setStatsSectionHeight] = useState(180);
+  const [dayEndDate, setDayEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Fetch Abstract Data
   useEffect(() => {
@@ -527,6 +558,243 @@ const Reports = () => {
     }));
   }, []);
 
+  // Day End Report Helper Functions
+  const extractHolidayReason = (groupedData) => {
+    if (!Array.isArray(groupedData) || groupedData.length === 0) {
+      return null;
+    }
+    for (const item of groupedData) {
+      if (item.holidayReasons && item.holidayReasons.trim()) {
+        return item.holidayReasons.trim();
+      }
+    }
+    return null;
+  };
+
+  const filteredBranches = useMemo(() => {
+    if (!dayEndFilterOptions.allData || dayEndFilterOptions.allData.length === 0) {
+      return dayEndFilterOptions.branches || [];
+    }
+    let filteredData = dayEndFilterOptions.allData;
+    if (dayEndFilters.college) {
+      filteredData = filteredData.filter(item => item.college === dayEndFilters.college);
+    }
+    if (dayEndFilters.course) {
+      filteredData = filteredData.filter(item => item.course === dayEndFilters.course);
+    }
+    const branches = [...new Set(filteredData.map(item => item.branch).filter(Boolean))].sort();
+    return branches;
+  }, [dayEndFilterOptions.allData, dayEndFilters.college, dayEndFilters.course]);
+
+  const filteredCourses = useMemo(() => {
+    if (!dayEndFilterOptions.allData || dayEndFilterOptions.allData.length === 0) {
+      return dayEndFilterOptions.courses || [];
+    }
+    let filteredData = dayEndFilterOptions.allData;
+    if (dayEndFilters.college) {
+      filteredData = filteredData.filter(item => item.college === dayEndFilters.college);
+    }
+    const courses = [...new Set(filteredData.map(item => item.course).filter(Boolean))].sort();
+    return courses;
+  }, [dayEndFilterOptions.allData, dayEndFilters.college]);
+
+  const dayEndGroupedDisplay = useMemo(() => {
+    let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
+    rows = rows.filter((row) => {
+      if (dayEndPreviewFilter === 'marked' && (row.markedToday || 0) === 0) return false;
+      if (dayEndPreviewFilter === 'unmarked' && (row.pendingToday || 0) === 0) return false;
+      if (dayEndFilters.college && row.college !== dayEndFilters.college) return false;
+      if (dayEndFilters.batch && row.batch !== dayEndFilters.batch) return false;
+      if (dayEndFilters.course && row.course !== dayEndFilters.course) return false;
+      if (dayEndFilters.branch && row.branch !== dayEndFilters.branch) return false;
+      if (dayEndFilters.year && String(row.year) !== String(dayEndFilters.year)) return false;
+      if (dayEndFilters.semester && String(row.semester) !== String(dayEndFilters.semester)) return false;
+      return true;
+    });
+    const compareNumber = (a, b) => (a || 0) - (b || 0);
+    if (dayEndSortBy === 'branch') {
+      rows.sort((a, b) => (a.branch || '').localeCompare(b.branch || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
+    } else if (dayEndSortBy === 'yearSem') {
+      rows.sort((a, b) => compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester) || (a.branch || '').localeCompare(b.branch || ''));
+    } else if (dayEndSortBy === 'course') {
+      rows.sort((a, b) => (a.course || '').localeCompare(b.course || '') || compareNumber(a.year, b.year) || compareNumber(a.semester, b.semester));
+    }
+    return rows;
+  }, [dayEndGrouped, dayEndPreviewFilter, dayEndSortBy, dayEndFilters]);
+
+  const filteredStats = useMemo(() => {
+    const filteredRows = dayEndGroupedDisplay;
+    const totalStudents = filteredRows.reduce((sum, row) => sum + (row.totalStudents || 0), 0);
+    const markedToday = filteredRows.reduce((sum, row) => sum + (row.markedToday || 0), 0);
+    const absentToday = filteredRows.reduce((sum, row) => sum + (row.absentToday || 0), 0);
+    const presentToday = filteredRows.reduce((sum, row) => sum + (row.presentToday || 0), 0);
+    const holidayToday = filteredRows.reduce((sum, row) => sum + (row.holidayToday || 0), 0);
+    const unmarkedToday = filteredRows.reduce((sum, row) => sum + (row.pendingToday || 0), 0);
+    const holidayReasons = [...new Set(filteredRows
+      .filter(row => row.holidayReasons)
+      .map(row => row.holidayReasons)
+      .join(', ')
+      .split(', ')
+      .filter(Boolean)
+    )].join(', ');
+    return {
+      totalStudents,
+      markedToday,
+      absentToday,
+      presentToday,
+      holidayToday,
+      unmarkedToday,
+      holidayReason: holidayReasons || null
+    };
+  }, [dayEndGroupedDisplay]);
+
+  // Day End Report Handlers
+  const handleDayEndReport = async () => {
+    setDayEndReportLoading(true);
+    try {
+      const params = {
+        date: dayEndDate,
+        student_status: 'Regular'
+      };
+      const response = await api.get('/attendance/summary', { params });
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Unable to fetch day-end report');
+      }
+      const summary = response.data?.data || {};
+      const totalStudents = summary.totalStudents || 0;
+      const dailyArray = Array.isArray(summary.daily) ? summary.daily : Object.values(summary.daily || {});
+      const safeDaily = (dailyArray || []).filter((d) => d && typeof d === 'object');
+      const presentToday = Number(safeDaily.find((d) => d.status === 'present')?.count ?? summary.daily?.present ?? 0) || 0;
+      const absentToday = Number(safeDaily.find((d) => d.status === 'absent')?.count ?? summary.daily?.absent ?? 0) || 0;
+      const holidayToday = Number(safeDaily.find((d) => d.status === 'holiday')?.count ?? summary.daily?.holiday ?? 0) || 0;
+      const markedToday = presentToday + absentToday + holidayToday;
+      const unmarkedToday = Math.max(0, totalStudents - markedToday);
+      const groupedData = summary.groupedSummary || [];
+      setDayEndGrouped(groupedData);
+      setDayEndReportData({
+        totalStudents,
+        presentToday,
+        absentToday,
+        holidayToday,
+        markedToday,
+        unmarkedToday,
+        date: dayEndDate,
+        holidayReason: extractHolidayReason(groupedData)
+      });
+      const colleges = [...new Set(groupedData.map(item => item.college).filter(Boolean))].sort();
+      const batches = [...new Set(groupedData.map(item => item.batch).filter(Boolean))].sort();
+      const courses = [...new Set(groupedData.map(item => item.course).filter(Boolean))].sort();
+      const branches = [...new Set(groupedData.map(item => item.branch).filter(Boolean))].sort();
+      const years = [...new Set(groupedData.map(item => item.year || item.currentYear).filter(Boolean))].sort();
+      const semesters = [...new Set(groupedData.map(item => item.semester || item.currentSemester).filter(Boolean))].sort();
+      setDayEndFilterOptions({
+        colleges,
+        batches,
+        courses,
+        branches,
+        years,
+        semesters,
+        allData: groupedData
+      });
+    } catch (error) {
+      console.error('Day-end report error:', error);
+      toast.error(error.response?.data?.message || 'Unable to fetch day-end report');
+    } finally {
+      setDayEndReportLoading(false);
+    }
+  };
+
+  const handleDayEndDownload = async (format = 'xlsx') => {
+    try {
+      const params = new URLSearchParams();
+      params.append('date', dayEndDate);
+      params.append('format', format);
+      params.append('student_status', 'Regular');
+      params.append('include_holiday_reason', 'true');
+      if (dayEndFilters.college) params.append('college', dayEndFilters.college);
+      if (dayEndFilters.batch) params.append('batch', dayEndFilters.batch);
+      if (dayEndFilters.course) params.append('course', dayEndFilters.course);
+      if (dayEndFilters.branch) params.append('branch', dayEndFilters.branch);
+      if (dayEndFilters.year) params.append('year', dayEndFilters.year);
+      if (dayEndFilters.semester) params.append('semester', dayEndFilters.semester);
+      const response = await api.get(`/attendance/day-end-download?${params.toString()}`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], {
+        type: format === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const fileName = `day_end_report_${dayEndDate}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.download = fileName;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${format.toUpperCase()} report`);
+    } catch (error) {
+      console.error('Download report error:', error);
+      toast.error(error.response?.data?.message || 'Unable to download report');
+    }
+  };
+
+  const handleSendDayEndReports = async () => {
+    if (!dayEndDate) {
+      toast.error('Please select a date');
+      return;
+    }
+    setSendingReports(true);
+    try {
+      const response = await api.post('/attendance/send-day-end-reports', {
+        date: dayEndDate
+      });
+      if (response.data?.success) {
+        const { totalSent, totalFailed, totalRecipients } = response.data.data || {};
+        if (totalSent > 0) {
+          toast.success(`Reports sent successfully to ${totalSent} recipient(s)`);
+        } else {
+          toast.info('No reports were sent. Please check if there are any recipients configured.');
+        }
+        if (totalFailed > 0) {
+          toast.error(`${totalFailed} report(s) failed to send`);
+        }
+      } else {
+        throw new Error(response.data?.message || 'Failed to send reports');
+      }
+    } catch (error) {
+      console.error('Send reports error:', error);
+      toast.error(error.response?.data?.message || 'Unable to send reports');
+    } finally {
+      setSendingReports(false);
+    }
+  };
+
+  // Auto-load Day End Report when on day-end page or when date changes
+  useEffect(() => {
+    if (reportType === 'dayend' && dayEndDate) {
+      // Only auto-load if we don't have data for this specific date
+      if (!dayEndReportData || dayEndReportData.date !== dayEndDate) {
+        handleDayEndReport();
+      }
+    }
+  }, [reportType, dayEndDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Measure stats section height for sticky positioning
+  useEffect(() => {
+    if (reportType === 'dayend' && dayEndReportData) {
+      const measureHeight = () => {
+        if (dayEndStatsRef.current) {
+          const height = dayEndStatsRef.current.offsetHeight;
+          setStatsSectionHeight(height);
+        }
+      };
+      measureHeight();
+      const timeoutId = setTimeout(measureHeight, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [reportType, dayEndReportData]);
+
   // Download attendance report as PDF
   const downloadAttendancePDF = async () => {
     if (!attendanceReportData) {
@@ -908,7 +1176,7 @@ const Reports = () => {
     const entries = [];
     if (filters.college) entries.push({ key: 'college', label: `College: ${filters.college}` });
     if (filters.batch) entries.push({ key: 'batch', label: `Batch: ${filters.batch}` });
-    if (filters.course) entries.push({ key: 'course', label: `Course: ${filters.course}` });
+    if (filters.course) entries.push({ key: 'course', label: `Program: ${filters.course}` });
     if (filters.branch) entries.push({ key: 'branch', label: `Branch: ${filters.branch}` });
     if (filters.year) entries.push({ key: 'year', label: `Year: ${filters.year}` });
     if (filters.semester) entries.push({ key: 'semester', label: `Semester: ${filters.semester}` });
@@ -1080,11 +1348,13 @@ const Reports = () => {
               <div className="flex items-center gap-4 flex-wrap">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 heading-font">
-                    {reportType === 'registration' ? 'Registration Reports' : 'Attendance Reports'}
+                    {reportType === 'registration' ? 'Registration Reports' : reportType === 'dayend' ? 'Day End Report' : 'Attendance Reports'}
                   </h1>
                   <p className="text-sm text-gray-600">
                     {reportType === 'registration' 
                       ? 'Track student registration status across the 5 stages.'
+                      : reportType === 'dayend'
+                      ? 'View daily attendance summary and statistics.'
                       : 'View and analyze student attendance with percentage calculations.'}
                   </p>
                 </div>
@@ -1185,6 +1455,33 @@ const Reports = () => {
                   Download
                 </button>
               </>
+            )}
+            {reportType === 'dayend' && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={dayEndDate}
+                  onChange={(e) => setDayEndDate(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={handleDayEndReport}
+                  disabled={dayEndReportLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {dayEndReportLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} />
+                      Refresh Report
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -1324,7 +1621,7 @@ const Reports = () => {
                     <tr>
                       <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Batch</th>
 
-                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Course</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Program</th>
                       <th className="px-4 py-3 bg-gray-50 max-w-[200px] whitespace-normal">Branch</th>
                       <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Year</th>
                       <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Sem</th>
@@ -1512,7 +1809,7 @@ const Reports = () => {
                     <tr>
                       <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Pin No</th>
                       <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Student Name</th>
-                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Course</th>
+                      <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Program</th>
                       <th className="px-4 py-3 whitespace-nowrap bg-gray-50">Branch</th>
                       <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Year</th>
                       <th className="px-4 py-3 whitespace-nowrap text-center bg-gray-50">Sem</th>
@@ -1689,9 +1986,9 @@ const Reports = () => {
                   </select>
                 </div>
 
-                {/* Course */}
+                {/* Program */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Course</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Program</label>
                   <select
                     value={attendanceFilters.course || ''}
                     onChange={(e) => setAttendanceFilters(prev => ({ ...prev, course: e.target.value }))}
@@ -2180,7 +2477,7 @@ const Reports = () => {
                   <p className="text-sm font-medium text-gray-900 mt-1">{selectedStudent.batch || '-'}</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Course</label>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Program</label>
                   <p className="text-sm font-medium text-gray-900 mt-1">{selectedStudent.course || '-'}</p>
                 </div>
                 <div>
@@ -2330,6 +2627,337 @@ const Reports = () => {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Day End Report Content */}
+      {reportType === 'dayend' && (
+        <div className="flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          {/* Header Section */}
+          <div className="px-5 py-4 flex items-start justify-between border-b border-gray-200 shrink-0 bg-white">
+            <div>
+              <p className="text-sm font-medium text-gray-700">{dayEndReportData?.date || dayEndDate}</p>
+              {/* Filter Toggles */}
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs font-medium text-gray-500">Show:</span>
+                <div className="inline-flex rounded-md shadow-sm" role="group">
+                  <button
+                    type="button"
+                    onClick={() => setDayEndPreviewFilter('all')}
+                    className={`px-3 py-1 text-xs font-medium rounded-l-md ${dayEndPreviewFilter === 'all'
+                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                      }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDayEndPreviewFilter('marked')}
+                    className={`px-3 py-1 text-xs font-medium ${dayEndPreviewFilter === 'marked'
+                      ? 'bg-green-100 text-green-700 border border-green-300'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border-t border-b border-gray-300'
+                      }`}
+                  >
+                    Marked
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDayEndPreviewFilter('unmarked')}
+                    className={`px-3 py-1 text-xs font-medium rounded-r-md ${dayEndPreviewFilter === 'unmarked'
+                      ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                      }`}
+                  >
+                    Unmarked
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {dayEndReportLoading ? (
+              <div className="flex items-center justify-center p-12">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                <span className="ml-3 text-gray-600">Loading day end report...</span>
+              </div>
+            ) : dayEndReportData ? (
+              <div className="p-5">
+                {/* Sticky Stats Section */}
+                <div
+                  ref={dayEndStatsRef}
+                  className="sticky top-0 bg-white z-10 pb-4 border-b border-gray-200 -mx-5 px-5"
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 mb-4">
+                    <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                      <div className="text-xs text-gray-600 font-medium">Total Students</div>
+                      <div className="text-lg font-bold text-gray-900">{filteredStats.totalStudents}</div>
+                    </div>
+                    <div className="bg-green-50 p-2 rounded-lg border border-green-200">
+                      <div className="text-xs text-green-600 font-medium">Marked Today</div>
+                      <div className="text-lg font-bold text-green-700">{filteredStats.markedToday}</div>
+                    </div>
+                    <div className="bg-red-50 p-2 rounded-lg border border-red-200">
+                      <div className="text-xs text-red-600 font-medium">Absent Today</div>
+                      <div className="text-lg font-bold text-red-700">{filteredStats.absentToday}</div>
+                    </div>
+                    <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
+                      <div className="text-xs text-blue-600 font-medium">Present Today</div>
+                      <div className="text-lg font-bold text-blue-700">{filteredStats.presentToday}</div>
+                    </div>
+                    <div className="bg-green-50 p-2 rounded-lg border border-green-200" title={filteredStats.holidayReason}>
+                      <div className="text-xs text-green-600 font-medium truncate">
+                        {filteredStats.holidayReason ? `Holiday: ${filteredStats.holidayReason.length > 20 ? filteredStats.holidayReason.substring(0, 20) + '...' : filteredStats.holidayReason}` : 'No Class Work Today'}
+                      </div>
+                      <div className="text-lg font-bold text-green-700">{filteredStats.holidayToday}</div>
+                    </div>
+                    <div className="bg-amber-50 p-2 rounded-lg border border-amber-200">
+                      <div className="text-xs text-amber-600 font-medium">Unmarked Today</div>
+                      <div className="text-lg font-bold text-amber-700">{filteredStats.unmarkedToday}</div>
+                    </div>
+                  </div>
+                  {/* Table Header with Filters */}
+                  <div className="overflow-x-auto -mx-5 px-5">
+                    <table className="w-full border-collapse table-fixed">
+                      <colgroup>
+                        <col style={{ width: '180px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '120px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '60px' }} />
+                        <col style={{ width: '60px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '80px' }} />
+                        <col style={{ width: '150px' }} />
+                        <col style={{ width: '100px' }} />
+                      </colgroup>
+                      <thead className="bg-gray-50 sticky" style={{ position: 'sticky', top: `${statsSectionHeight}px`, zIndex: 20 }}>
+                        <tr>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.college}
+                              onChange={(e) => {
+                                setDayEndFilters(prev => ({ ...prev, college: e.target.value, course: '', branch: '' }));
+                              }}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs truncate"
+                            >
+                              <option value="">COLLEGE</option>
+                              {dayEndFilterOptions.colleges.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.batch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, batch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BATCH</option>
+                              {dayEndFilterOptions.batches.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.course}
+                              onChange={(e) => {
+                                setDayEndFilters(prev => ({ ...prev, course: e.target.value, branch: '' }));
+                              }}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">PROGRAM</option>
+                              {filteredCourses.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
+                              value={dayEndFilters.branch}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, branch: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">BRANCH</option>
+                              {filteredBranches.map(opt => (
+                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-1 py-2 text-center align-top">
+                            <select
+                              value={dayEndFilters.year}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, year: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">YEAR</option>
+                              {dayEndFilterOptions.years.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-1 py-2 text-center align-top">
+                            <select
+                              value={dayEndFilters.semester}
+                              onChange={(e) => setDayEndFilters(prev => ({ ...prev, semester: e.target.value }))}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-center text-xs"
+                            >
+                              <option value="">SEM</option>
+                              {dayEndFilterOptions.semesters.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Students</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Absent</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Marked</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Percentage %</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Pending</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">No Class Work</th>
+                          <th className="px-2 py-2 text-right align-top text-xs font-semibold">Time Stamp</th>
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+                </div>
+                <>
+                  {dayEndGroupedDisplay.length > 0 ? (
+                    <div className="-mx-5">
+                      <div className="overflow-x-auto px-5">
+                        <table className="w-full divide-y divide-gray-200 border-collapse table-fixed">
+                          <colgroup>
+                            <col style={{ width: '180px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '120px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '60px' }} />
+                            <col style={{ width: '60px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '80px' }} />
+                            <col style={{ width: '150px' }} />
+                            <col style={{ width: '100px' }} />
+                          </colgroup>
+                          <tbody className="divide-y divide-gray-100">
+                            {dayEndGroupedDisplay.map((row, idx) => (
+                              <tr key={`${row.college || 'N/A'}-${idx}`} className="bg-white hover:bg-gray-50">
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.college || ''}>
+                                  {row.college || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.batch || ''}>
+                                  {row.batch || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.course || ''}>
+                                  {row.course || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-gray-800 text-sm truncate" title={row.branch || ''}>
+                                  {row.branch || '—'}
+                                </td>
+                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
+                                  {row.year || '—'}
+                                </td>
+                                <td className="px-1 py-2 text-center text-gray-800 text-sm">
+                                  {row.semester || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-right font-semibold text-gray-900 text-sm">
+                                  {row.totalStudents ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-red-700 font-semibold text-sm">
+                                  {row.absentToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                  {row.markedToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-blue-700 font-semibold text-sm">
+                                  {row.totalStudents > 0
+                                    ? ((row.presentToday / row.totalStudents) * 100).toFixed(1) + '%'
+                                    : '0.0%'
+                                  }
+                                </td>
+                                <td className="px-2 py-2 text-right text-amber-700 font-semibold text-sm">
+                                  {row.pendingToday ?? 0}
+                                </td>
+                                <td className="px-2 py-2 text-right text-green-700 font-semibold text-sm">
+                                  <div className="flex flex-col items-end">
+                                    <span>{row.holidayToday ?? 0}</span>
+                                    {row.holidayReasons && (
+                                      <span className="text-xs text-gray-600 font-normal truncate max-w-full" title={row.holidayReasons}>
+                                        {row.holidayReasons.length > 20 ? `${row.holidayReasons.substring(0, 20)}...` : row.holidayReasons}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-2 py-2 text-right text-gray-600 text-xs">
+                                  {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No records found matching the current filters
+                    </div>
+                  )}
+                </>
+                {/* Fixed Download Buttons at Bottom */}
+                <div className="sticky bottom-0 bg-white border-t border-gray-200 px-5 py-3 flex items-center justify-between mt-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDayEndDownload('pdf')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={14} />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => handleDayEndDownload('xlsx')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold"
+                    >
+                      <Download size={14} />
+                      Excel
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSendDayEndReports}
+                      disabled={sendingReports}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-xs"
+                    >
+                      {sendingReports ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Sending
+                        </>
+                      ) : (
+                        <>
+                          <Mail size={14} />
+                          Send Reports
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center p-12 text-gray-500">
+                <div className="text-center">
+                  <FileText size={48} className="mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm">Select a date and click "Refresh Report" to generate the day end report</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

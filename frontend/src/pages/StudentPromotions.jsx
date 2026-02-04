@@ -794,7 +794,7 @@ const StudentPromotions = () => {
           </div>
 
           <div className="flex flex-col">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Course</label>
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Program</label>
             <select
               value={filters.course || ''}
               onChange={(e) => handleFilterChange('course', e.target.value)}
@@ -812,7 +812,7 @@ const StudentPromotions = () => {
               disabled={!filters.batch}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
-              <option value="">All Courses</option>
+              <option value="">All Programs</option>
               {(quickFilterOptions.courses || []).map((course) => (
                 <option key={course} value={course}>
                   {course}

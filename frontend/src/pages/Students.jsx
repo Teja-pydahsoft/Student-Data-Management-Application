@@ -549,7 +549,7 @@ const Students = () => {
 
       // Academic Fields
       { key: 'admission_number', altKeys: ['Admission Number', 'Admission No', 'admission_no'] },
-      { key: 'course', altKeys: ['Course', 'Course Name'] },
+      { key: 'course', altKeys: ['Program', 'Program Name'] },
       { key: 'branch', altKeys: ['Branch', 'Branch Name'] },
       { key: 'batch', altKeys: ['Batch'] },
       { key: 'college', altKeys: ['College', 'College Name'] },
@@ -2270,7 +2270,7 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
-                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Course</label>
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Program</label>
                 <select
                   value={filters.course || ''}
                   onChange={(e) => handleFilterChange('course', e.target.value)}
@@ -2546,7 +2546,7 @@ const Students = () => {
                     )}
                     {canViewField('course') && (
                       <th className="py-2 px-1 text-[10px] font-semibold text-gray-700 text-left">
-                        <div className="font-semibold">Course</div>
+                        <div className="font-semibold">Program</div>
                       </th>
                     )}
                     {canViewField('branch') && (
@@ -2825,7 +2825,7 @@ const Students = () => {
                         )}
                         {canViewField('course') && (
                           <div>
-                            <p className="text-xs text-gray-500">Course</p>
+                            <p className="text-xs text-gray-500">Program</p>
                             <p className="text-sm font-medium text-gray-900 truncate" title={student.course || ''}>{student.course || '-'}</p>
                           </div>
                         )}
@@ -3280,7 +3280,7 @@ const Students = () => {
                     {canViewField('course') && (
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Course
+                          Program
                         </label>
                         {editMode ? (
                           <input

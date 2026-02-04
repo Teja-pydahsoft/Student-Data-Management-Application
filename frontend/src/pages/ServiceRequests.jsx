@@ -34,7 +34,7 @@ const ServiceRequests = () => {
             },
             {
                 section: 'Academic Details', fields: [
-                    { name: 'course', label: 'Course', type: 'text', placeholder: 'e.g. B.Tech' },
+                    { name: 'course', label: 'Program', type: 'text', placeholder: 'e.g. B.Tech' },
                     { name: 'branch', label: 'Branch', type: 'text', placeholder: 'e.g. CSE' },
                     { name: 'current_year', label: 'Year', type: 'number', className: 'w-1/2' },
                     { name: 'current_semester', label: 'Semester', type: 'number', className: 'w-1/2' },
@@ -79,7 +79,7 @@ const ServiceRequests = () => {
             },
             {
                 section: 'Academic Details', fields: [
-                    { name: 'course', label: 'Course', type: 'text', placeholder: 'e.g. B.Tech' },
+                    { name: 'course', label: 'Program', type: 'text', placeholder: 'e.g. B.Tech' },
                     { name: 'branch', label: 'Branch', type: 'text', placeholder: 'e.g. CSE' },
                     { name: 'current_year', label: 'Year', type: 'number', className: 'w-1/2' },
                     { name: 'current_semester', label: 'Semester', type: 'number', className: 'w-1/2' },

@@ -72,7 +72,7 @@ const DocumentRequirements = () => {
 
   const handleSave = async () => {
     if (!formData.course_type || !formData.academic_stage) {
-      toast.error('Course type and academic stage are required');
+      toast.error('Program type and academic stage are required');
       return;
     }
 
@@ -130,7 +130,7 @@ const DocumentRequirements = () => {
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Document Requirements</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Configure which documents are required for different course types and academic stages
+            Configure which documents are required for different program types and academic stages
           </p>
         </div>
         <button
@@ -164,7 +164,7 @@ const DocumentRequirements = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Course Type *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Program Type *</label>
               <select
                 value={formData.course_type}
                 onChange={(e) => setFormData({ ...formData, course_type: e.target.value })}

@@ -62,7 +62,7 @@ const StudentClubs = () => {
         const { colleges, courses, branches, years, semesters } = audience;
 
         if (colleges?.length > 0 && !colleges.includes(studentData.college)) return { eligible: false, reason: 'Restricted' };
-        if (courses?.length > 0 && !courses.includes(studentData.course)) return { eligible: false, reason: 'Course Restricted' };
+        if (courses?.length > 0 && !courses.includes(studentData.course)) return { eligible: false, reason: 'Program Restricted' };
         if (branches?.length > 0 && !branches.includes(studentData.branch)) return { eligible: false, reason: 'Branch Restricted' };
         if (years?.length > 0 && !years.some(y => y == studentData.current_year)) return { eligible: false, reason: `Year ${studentData.current_year} Ineligible` };
         if (semesters?.length > 0 && !semesters.some(s => s == studentData.current_semester)) return { eligible: false, reason: `Semester ${studentData.current_semester} Ineligible` };

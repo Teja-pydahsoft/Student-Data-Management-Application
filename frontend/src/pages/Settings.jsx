@@ -224,6 +224,7 @@ const formatIsoDate = (isoDate, formatOptions = {}) => {
 const defaultCourseForm = {
   name: '',
   code: '',
+  level: 'ug', // diploma, ug, pg
   totalYears: 4,
   semestersPerYear: 2,
   usePerYearConfig: false, // Toggle for per-year configuration
@@ -588,10 +589,10 @@ const Settings = () => {
       {
         id: 'system_course',
         key: 'course',
-        label: 'Course',
+        label: 'Program',
         type: 'select',
         required: true,
-        placeholder: 'Select Course',
+        placeholder: 'Select Program',
         options: [],
         isEnabled: true,
         isSystemField: true
@@ -977,8 +978,8 @@ const Settings = () => {
       setCourses(courseData);
       return courseData;
     } catch (error) {
-      console.error('Failed to fetch courses', error);
-      toast.error(error.response?.data?.message || 'Failed to fetch course configuration');
+      console.error('Failed to fetch programs', error);
+      toast.error(error.response?.data?.message || 'Failed to fetch program configuration');
       return [];
     } finally {
       if (!silent) {
@@ -1266,12 +1267,12 @@ const Settings = () => {
     }
 
     if (!newCourse.name.trim()) {
-      toast.error('Course name is required');
+      toast.error('Program name is required');
       return;
     }
 
     if (!newCourse.code?.trim()) {
-      toast.error('Course code is required');
+      toast.error('Program code is required');
       return;
     }
 
@@ -1315,6 +1316,7 @@ const Settings = () => {
       const payload = {
         name: newCourse.name.trim(),
         code: newCourse.code.trim(),
+        level: newCourse.level || 'ug',
         collegeId: collegeIdToUse,
         totalYears: Number(newCourse.totalYears),
         semestersPerYear: semestersPerYearValue,
@@ -1337,7 +1339,7 @@ const Settings = () => {
       }
 
       const response = await api.post('/courses', payload);
-      toast.success('Course created successfully');
+      toast.success('Program created successfully');
       const createdCourse = response.data?.data;
       resetNewCourse();
       const updatedCourses = await fetchCourses({ silent: true, collegeId: collegeIdToUse });
@@ -1347,8 +1349,8 @@ const Settings = () => {
         await loadBranches(nextSelectedId);
       }
     } catch (error) {
-      console.error('Failed to create course', error);
-      const errorMessage = error.response?.data?.message || 'Failed to create course';
+      console.error('Failed to create program', error);
+      const errorMessage = error.response?.data?.message || 'Failed to create program';
       if (errorMessage.includes('College not found')) {
         toast.error('Selected college not found. Please refresh and try again.');
       } else {
@@ -1391,14 +1393,14 @@ const Settings = () => {
       await api.put(`/courses/${course.id}`, {
         isActive: !course.isActive
       });
-      toast.success(`Course ${!course.isActive ? 'activated' : 'deactivated'}`);
+      toast.success(`Program ${!course.isActive ? 'activated' : 'deactivated'}`);
       await fetchCourses({ silent: true });
       if (selectedCourseId === course.id) {
         await loadBranches(course.id);
       }
     } catch (error) {
-      console.error('Failed to toggle course status', error);
-      toast.error(error.response?.data?.message || 'Failed to update course status');
+      console.error('Failed to toggle program status', error);
+      toast.error(error.response?.data?.message || 'Failed to update program status');
     } finally {
       setSavingCourseId(null);
     }
@@ -1419,7 +1421,7 @@ const Settings = () => {
           setSavingCourseId(course.id);
           const response = await api.delete(`/courses/${course.id}?cascade=true`);
           const deletedCount = response.data.deletedStudents || 0;
-          toast.success(`Course deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
+          toast.success(`Program deleted successfully${deletedCount > 0 ? ` along with ${deletedCount} student record(s)` : ''}`);
 
           // Clear selection if deleted course was selected
           if (selectedCourseId === course.id) {
@@ -1430,8 +1432,8 @@ const Settings = () => {
           await fetchCourses({ silent: true });
           setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false });
         } catch (error) {
-          console.error('Failed to delete course', error);
-          const errorMessage = error.response?.data?.message || 'Failed to delete course';
+          console.error('Failed to delete program', error);
+          const errorMessage = error.response?.data?.message || 'Failed to delete program';
           toast.error(errorMessage);
         } finally {
           setSavingCourseId(null);
@@ -1485,6 +1487,7 @@ const Settings = () => {
       [course.id]: {
         name: course.name,
         code: course.code || '',
+        level: course.level || 'ug',
         collegeId: course.collegeId,
         totalYears: course.totalYears,
         semestersPerYear: course.semestersPerYear
@@ -1509,12 +1512,12 @@ const Settings = () => {
     }
 
     if (!draft.name || !draft.name.trim()) {
-      toast.error('Course name is required');
+      toast.error('Program name is required');
       return;
     }
 
     if (!draft.code || !draft.code.trim()) {
-      toast.error('Course code is required');
+      toast.error('Program code is required');
       return;
     }
 
@@ -1533,6 +1536,7 @@ const Settings = () => {
       const updates = {
         name: draft.name.trim(),
         code: draft.code.trim(),
+        level: draft.level || 'ug',
         totalYears: Number(draft.totalYears),
         semestersPerYear: Number(draft.semestersPerYear)
       };
@@ -1543,13 +1547,13 @@ const Settings = () => {
       }
 
       await api.put(`/courses/${courseId}`, updates);
-      toast.success('Course updated successfully');
+      toast.success('Program updated successfully');
       await fetchCourses({ silent: true, collegeId: selectedCollegeId });
       await loadBranches(courseId);
       cancelEditCourse(courseId);
     } catch (error) {
-      console.error('Failed to update course', error);
-      const errorMessage = error.response?.data?.message || 'Failed to update course';
+      console.error('Failed to update program', error);
+      const errorMessage = error.response?.data?.message || 'Failed to update program';
       if (errorMessage.includes('College not found')) {
         toast.error('Selected college not found. Please refresh and try again.');
       } else {
@@ -1595,7 +1599,7 @@ const Settings = () => {
     // Otherwise, use the provided course
     const courseToUse = course || coursesForSelectedCollege.find(c => c.id === branchModalCourseId);
     if (!courseToUse) {
-      toast.error('Course not found');
+      toast.error('Program not found');
       return;
     }
 
@@ -1874,7 +1878,7 @@ const Settings = () => {
           <div>
             <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Settings</h1>
             <p className="text-xs sm:text-sm text-gray-600">
-              Manage colleges, courses, branches, and attendance calendar.
+              Manage colleges, programs, branches, and attendance calendar.
             </p>
           </div>
           <button
@@ -1901,8 +1905,8 @@ const Settings = () => {
                 <BookOpen size={18} />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">Colleges & Courses</h2>
-                <p className="text-xs text-gray-500">Manage colleges, courses & branches</p>
+                <h2 className="text-sm font-semibold text-gray-900">Colleges & Programs</h2>
+                <p className="text-xs text-gray-500">Manage colleges, programs & branches</p>
               </div>
             </div>
           </button>
@@ -2023,7 +2027,7 @@ const Settings = () => {
               <div className="h-3 w-px bg-gray-300" />
               <div className="flex items-center gap-1.5">
                 <BookOpen size={14} className="text-purple-600" />
-                <span className="text-xs text-gray-500">Courses:</span>
+                <span className="text-xs text-gray-500">Programs:</span>
                 <span className="font-semibold text-gray-900 text-sm">{courseOptionsSummary.courseCount}</span>
               </div>
               <div className="h-3 w-px bg-gray-300" />
@@ -2034,8 +2038,8 @@ const Settings = () => {
               </div>
             </div>
 
-            {/* Two Column Layout: Left - Colleges & Batches, Right - Courses & Branches */}
-            <div className="grid gap-3 sm:gap-4 lg:grid-cols-[280px,1fr] xl:grid-cols-[320px,1fr] min-w-0">
+            {/* Two Column Layout: Left - Colleges & Batches, Right - Programs & Branches */}
+            <div className="grid gap-3 sm:gap-4 lg:grid-cols-[360px,1fr] xl:grid-cols-[400px,1fr] 2xl:grid-cols-[420px,1fr] min-w-0">
               {/* Left Column */}
               <div className="space-y-4 min-w-0">
                 {/* Colleges Card */}
@@ -2187,25 +2191,25 @@ const Settings = () => {
                 </div>
               </div>
 
-              {/* Right Column - Courses & Branches */}
+              {/* Right Column - Programs & Branches */}
               <div className="space-y-4 min-w-0 overflow-hidden">
                 {!selectedCollege ? (
                   <div className="flex h-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8">
                     <div className="text-center">
                       <Landmark size={32} className="mx-auto mb-3 text-gray-300" />
-                      <p className="text-sm text-gray-500">Select a college to manage its courses</p>
+                      <p className="text-sm text-gray-500">Select a college to manage its programs</p>
                     </div>
                   </div>
                 ) : (
                   <>
-                    {/* Course List & Branches */}
-                    <div className="grid gap-3 lg:grid-cols-[240px,1fr] min-w-0 overflow-hidden">
-                      {/* Course List */}
-                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-2 min-w-0 overflow-hidden">
-                        <div className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Select Course</div>
-                        <div className="space-y-1.5 max-h-[400px] overflow-y-auto min-w-0">
+                    {/* Program List & Branches */}
+                    <div className="grid gap-3 lg:grid-cols-[320px,1fr] xl:grid-cols-[340px,1fr] 2xl:grid-cols-[360px,1fr] min-w-0 overflow-hidden">
+                      {/* Program List */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-2 min-w-0 overflow-hidden flex flex-col">
+                        <div className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 flex-shrink-0">Select Program</div>
+                        <div className="space-y-1.5 flex-1 overflow-y-auto min-h-0 min-w-0">
                           {coursesForSelectedCollege.length === 0 && !loading ? (
-                            <p className="py-4 text-center text-sm text-gray-400">No courses yet</p>
+                            <p className="py-4 text-center text-sm text-gray-400">No programs yet</p>
                           ) : coursesForSelectedCollege.length === 0 ? (
                             <SkeletonList count={3} />
                           ) : (
@@ -2213,18 +2217,20 @@ const Settings = () => {
                               <div
                                 key={course.id}
                                 onClick={() => handleSelectCourse(course.id)}
-                                className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all ${selectedCourseId === course.id
+                                className={`group flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer transition-all flex-shrink-0 ${selectedCourseId === course.id
                                   ? 'bg-purple-100 border border-purple-300'
                                   : 'bg-white hover:bg-purple-50 border border-gray-200'
                                   }`}
                               >
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
                                   <div className={`h-2 w-2 rounded-full flex-shrink-0 ${course.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                  <div className="min-w-0">
+                                  <div className="min-w-0 flex-1">
                                     <span className={`block text-sm truncate ${selectedCourseId === course.id ? 'font-medium text-purple-900' : 'text-gray-700'}`}>
                                       {course.name}
                                     </span>
-                                    <span className="text-xs text-gray-500">{course.totalYears}yr · {course.semestersPerYear}sem</span>
+                                    <span className="text-xs text-gray-500 truncate block">
+                                      {course.level ? course.level.toUpperCase() : 'UG'} · {course.totalYears}yr · {course.semestersPerYear}sem
+                                    </span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2256,7 +2262,7 @@ const Settings = () => {
                         </div>
                         {/* Add Course Button Below List */}
                         {selectedCollege ? (
-                          <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="mt-2 pt-2 border-t border-gray-200 flex-shrink-0">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2268,18 +2274,18 @@ const Settings = () => {
                               style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10 }}
                             >
                               <Plus size={16} />
-                              Add New Course
+                              Add New Program
                             </button>
                           </div>
                         ) : (
-                          <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-400 text-center">
-                            Select a college to add courses
+                          <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-400 text-center flex-shrink-0">
+                            Select a college to add programs
                           </div>
                         )}
                       </div>
 
                       {/* Branches Panel */}
-                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden">
+                      <div className="rounded-xl border border-gray-200 bg-white shadow-sm min-w-0 overflow-hidden flex flex-col">
                         {selectedCourse ? (
                           <>
                             <div className="border-b border-gray-100 px-3 py-2 bg-slate-50">
@@ -2321,7 +2327,7 @@ const Settings = () => {
                             </div>
 
                             {/* Branch List */}
-                            <div className="p-4 max-h-[300px] overflow-y-auto">
+                            <div className="p-4 flex-1 overflow-y-auto min-h-0">
                               {branchesLoading ? (
                                 <div className="flex items-center justify-center py-8">
                                   <LoadingAnimation width={24} height={24} showMessage={false} />
@@ -2378,7 +2384,7 @@ const Settings = () => {
                           <div className="flex h-full items-center justify-center p-8">
                             <div className="text-center">
                               <Layers size={32} className="mx-auto mb-3 text-gray-300" />
-                              <p className="text-sm text-gray-500">Select a course to view branches</p>
+                              <p className="text-sm text-gray-500">Select a program to view branches</p>
                             </div>
                           </div>
                         )}
@@ -3483,7 +3489,7 @@ const Settings = () => {
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Pencil size={18} className="text-purple-600" />
-                  Edit Course
+                  Edit Program
                 </h3>
                 <button
                   onClick={() => setEditingCourseId(null)}
@@ -3494,28 +3500,43 @@ const Settings = () => {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Course Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Program Name *</label>
                   <input
                     type="text"
                     value={courseDrafts[editingCourseId]?.name || ''}
                     onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], name: e.target.value } }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                    placeholder="Enter course name"
+                    placeholder="Enter program name"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Course Code <span className="text-red-500">*</span>
+                    Program Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={courseDrafts[editingCourseId]?.code || ''}
                     onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], code: e.target.value.toUpperCase() } }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none uppercase"
-                    placeholder="Enter course code (e.g., BTECH)"
+                    placeholder="Enter program code (e.g., BTECH)"
                     required
                     maxLength={20}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Program Level <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={courseDrafts[editingCourseId]?.level || 'ug'}
+                    onChange={(e) => setCourseDrafts(prev => ({ ...prev, [editingCourseId]: { ...prev[editingCourseId], level: e.target.value } }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                    required
+                  >
+                    <option value="diploma">Diploma</option>
+                    <option value="ug">UG (Undergraduate)</option>
+                    <option value="pg">PG (Postgraduate)</option>
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -3654,7 +3675,7 @@ const Settings = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, type: null, item: null, onConfirm: null, affectedStudents: [], totalStudentCount: 0, hasMoreStudents: false, isLoadingStudents: false })}
           onConfirm={deleteModal.onConfirm || (() => { })}
-          title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Course' : deleteModal.type === 'academicYear' ? 'Academic Year' : deleteModal.type === 'form' ? 'Form' : 'Branch'}`}
+          title={`Delete ${deleteModal.type === 'college' ? 'College' : deleteModal.type === 'course' ? 'Program' : deleteModal.type === 'academicYear' ? 'Academic Year' : deleteModal.type === 'form' ? 'Form' : 'Branch'}`}
           itemName={deleteModal.item?.name || deleteModal.item?.yearLabel || deleteModal.item?.form_name}
           itemType={deleteModal.type}
           affectedStudents={deleteModal.affectedStudents || []}
@@ -3693,7 +3714,7 @@ const Settings = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Add New College</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  Create a new college to organize courses
+                  Create a new college to organize programs
                 </p>
               </div>
               <button
@@ -3935,7 +3956,7 @@ const Settings = () => {
           >
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Add New Course</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Add New Program</h3>
                 {selectedCollege && (
                   <p className="text-sm text-gray-500 mt-0.5">
                     for <span className="font-medium text-purple-600">{selectedCollege.name}</span>
@@ -3954,10 +3975,10 @@ const Settings = () => {
             </div>
 
             <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
-              {/* Course Name */}
+              {/* Program Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Course Name <span className="text-red-500">*</span>
+                  Program Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -3969,22 +3990,42 @@ const Settings = () => {
                 />
               </div>
 
-              {/* Course Code */}
+              {/* Program Code */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Course Code <span className="text-red-500">*</span>
+                  Program Code <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={newCourse.code}
                   onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                  placeholder="Course code (e.g., BTECH, DIP)"
+                  placeholder="Program code (e.g., BTECH, DIP)"
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 uppercase"
                   required
                   maxLength={20}
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Unique code for the course (e.g., BTECH, DIP)
+                  Unique code for the program (e.g., BTECH, DIP)
+                </p>
+              </div>
+
+              {/* Program Level */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Program Level <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newCourse.level || 'ug'}
+                  onChange={(e) => setNewCourse((prev) => ({ ...prev, level: e.target.value }))}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  required
+                >
+                  <option value="diploma">Diploma</option>
+                  <option value="ug">UG (Undergraduate)</option>
+                  <option value="pg">PG (Postgraduate)</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Select the academic level of this program
                 </p>
               </div>
 
@@ -4151,7 +4192,7 @@ const Settings = () => {
                   ) : (
                     <>
                       <Plus size={16} />
-                      Create Course
+                      Create Program
                     </>
                   )}
                 </button>
