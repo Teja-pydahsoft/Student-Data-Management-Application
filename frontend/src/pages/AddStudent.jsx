@@ -241,27 +241,54 @@ const AddStudent = () => {
   }, [availableCourses, selectedCourseName]);
 
   const branchOptions = useMemo(() => {
-    if (!selectedCourse) return [];
+    // Strictly ensure we only show branches when a course is selected
+    if (!selectedCourse || !selectedCourseName) {
+      return [];
+    }
+    
+    // Get branches from the selected course only
+    // The backend already filters branches by course_id, so selectedCourse.branches
+    // should only contain branches for this specific course
     let branches = (selectedCourse.branches || []).filter(
       (branch) => branch?.isActive !== false
     );
+
+    // Always show branches for the selected course, regardless of batch matching
+    // This ensures branches are always available when a course is selected
+    // (Similar to the fix we implemented in the attendance page)
+    if (branches.length === 0) {
+      return [];
+    }
 
     // Always deduplicate branches by name to avoid showing duplicates
     const branchMap = new Map();
 
     if (studentData.batch) {
-      // If batch is selected, filter and prefer batch-specific branches
-      const matchingBranches = branches.filter(
+      // If batch is selected, prefer branches that match the batch
+      // But still show all branches for the course if no matches found
+      const batchMatchingBranches = branches.filter(
         (branch) => branch.academicYearLabel === studentData.batch || !branch.academicYearLabel
       );
 
-      matchingBranches.forEach(branch => {
+      // First, add batch-matching branches (prefer batch-specific)
+      batchMatchingBranches.forEach(branch => {
         const existing = branchMap.get(branch.name);
         // Prefer batch-specific branch over generic one
         if (!existing || branch.academicYearLabel === studentData.batch) {
           branchMap.set(branch.name, branch);
         }
       });
+
+      // If we have batch matches, use those. Otherwise, show all branches for the course
+      // This ensures branches are always available when a course is selected
+      if (branchMap.size === 0) {
+        // No batch matches, show all branches for the course
+        branches.forEach(branch => {
+          if (!branchMap.has(branch.name)) {
+            branchMap.set(branch.name, branch);
+          }
+        });
+      }
     } else {
       // If no batch selected, just deduplicate by name (show unique branch names)
       branches.forEach(branch => {
@@ -272,7 +299,7 @@ const AddStudent = () => {
     }
 
     return Array.from(branchMap.values());
-  }, [selectedCourse, studentData.batch]);
+  }, [selectedCourse, selectedCourseName, studentData.batch]);
 
   const selectedBranch = useMemo(
     () =>

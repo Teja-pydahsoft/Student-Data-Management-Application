@@ -824,9 +824,14 @@ const Attendance = () => {
 
       // Build query params based on filters for cascading
       // Exclude the field being changed to show all available options
+      // IMPORTANT: Always include course filter when course is selected, even when excludeField is 'branch'
+      // This ensures branches are always filtered by course when a course is selected
       const params = new URLSearchParams();
       if (filtersToUse.batch && excludeField !== 'batch') params.append('batch', filtersToUse.batch);
-      if (filtersToUse.course && excludeField !== 'course' && excludeField !== 'branch') params.append('course', filtersToUse.course);
+      // Always include course filter when course is selected (unless course itself is being changed)
+      if (filtersToUse.course && excludeField !== 'course') {
+        params.append('course', filtersToUse.course);
+      }
       if (filtersToUse.branch && excludeField !== 'branch') params.append('branch', filtersToUse.branch);
       // Note: year and semester are not included so they cascade properly
 
