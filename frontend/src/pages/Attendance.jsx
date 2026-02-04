@@ -535,20 +535,18 @@ const Attendance = () => {
     return attendanceStatistics.unmarked || 0;
   }, [attendanceStatistics.unmarked]);
 
-  // Filter branches based on selected course
+  // Filter branches based on selected course and batch
   const availableBranches = useMemo(() => {
-    if (!filters.course) {
-      return filterOptions.branches;
+    // When a course is selected (with or without batch), use filterOptions.branches directly
+    // The backend already filters branches by course, so we can trust filterOptions.branches
+    if (filters.course) {
+      return filterOptions.branches || [];
     }
-    const selectedCourse = coursesWithBranches.find(c => c.name === filters.course);
-    if (!selectedCourse || !selectedCourse.branches) {
-      return [];
-    }
-    // Get unique branch names from the course's branches
-    const branchNames = [...new Set(selectedCourse.branches.map(b => b.name))];
-    // Filter to only show branches that exist in filterOptions.branches (to respect user scope)
-    return branchNames.filter(name => filterOptions.branches.includes(name));
-  }, [filters.course, coursesWithBranches, filterOptions.branches]);
+    
+    // When no course is selected, use filterOptions.branches directly
+    // This shows all branches (filtered by batch if batch is selected, or all if no batch)
+    return filterOptions.branches || [];
+  }, [filters.course, filters.batch, filterOptions.branches]);
 
   // Pagination calculations
   const safePageSize = pageSize || 1;
