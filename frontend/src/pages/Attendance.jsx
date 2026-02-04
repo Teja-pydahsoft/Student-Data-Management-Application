@@ -144,6 +144,7 @@ const Attendance = () => {
   const [filters, setFilters] = useState({
     batch: '',
     course: '',
+    level: '',
     branch: '',
     currentYear: '',
     currentSemester: '',
@@ -157,6 +158,7 @@ const Attendance = () => {
     years: [],
     semesters: []
   });
+  const [coursesWithLevels, setCoursesWithLevels] = useState([]); // Store courses with level info
   const [coursesWithBranches, setCoursesWithBranches] = useState([]);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [columnOrder, setColumnOrder] = useState([
@@ -1635,6 +1637,21 @@ const Attendance = () => {
 
   const filtersLoadedRef = useRef(false);
 
+  // Fetch courses with level information
+  useEffect(() => {
+    const fetchCoursesWithLevels = async () => {
+      try {
+        const response = await api.get('/courses?includeInactive=false');
+        if (response.data?.success) {
+          setCoursesWithLevels(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses with levels:', error);
+      }
+    };
+    fetchCoursesWithLevels();
+  }, []);
+
   useEffect(() => {
     const initializeAttendance = async () => {
       // Load filter options and attendance in parallel for faster initial load
@@ -2638,11 +2655,29 @@ const Attendance = () => {
             >
               <option value="">All Courses</option>
               {filterOptions.courses
+                .filter(courseOption => {
+                  // Filter by level if level is selected
+                  if (filters.level) {
+                    const courseInfo = coursesWithLevels.find(c => c.name === courseOption);
+                    return courseInfo?.level === filters.level;
+                  }
+                  return true;
+                })
                 .map((courseOption) => (
                   <option key={courseOption} value={courseOption}>
                     {courseOption}
                   </option>
                 ))}
+            </select>
+            <select
+              value={filters.level || ''}
+              onChange={(event) => handleFilterChange('level', event.target.value)}
+              className="min-w-[100px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
+            >
+              <option value="">All Levels</option>
+              <option value="diploma">Diploma</option>
+              <option value="ug">UG</option>
+              <option value="pg">PG</option>
             </select>
             <select
               value={filters.branch || ''}

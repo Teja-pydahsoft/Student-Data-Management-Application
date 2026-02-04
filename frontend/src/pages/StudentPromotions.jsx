@@ -39,6 +39,7 @@ const StudentPromotions = () => {
   const [filters, setFilters] = useState({
     batch: '',
     course: '',
+    level: '',
     branch: '',
     year: '',
     semester: ''
@@ -51,6 +52,7 @@ const StudentPromotions = () => {
     years: [],
     semesters: []
   });
+  const [coursesWithLevels, setCoursesWithLevels] = useState([]); // Store courses with level info
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [selectedAdmissionNumbers, setSelectedAdmissionNumbers] = useState(new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +78,21 @@ const StudentPromotions = () => {
 
   useEffect(() => {
     fetchQuickFilterOptions();
+  }, []);
+
+  // Fetch courses with level information
+  useEffect(() => {
+    const fetchCoursesWithLevels = async () => {
+      try {
+        const response = await api.get('/courses?includeInactive=false');
+        if (response.data?.success) {
+          setCoursesWithLevels(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses with levels:', error);
+      }
+    };
+    fetchCoursesWithLevels();
   }, []);
 
   // Fetch filter options with cascading filters
@@ -813,11 +830,34 @@ const StudentPromotions = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
               <option value="">All Programs</option>
-              {(quickFilterOptions.courses || []).map((course) => (
-                <option key={course} value={course}>
-                  {course}
-                </option>
-              ))}
+              {(quickFilterOptions.courses || [])
+                .filter(course => {
+                  // Filter by level if level is selected
+                  if (filters.level) {
+                    const courseInfo = coursesWithLevels.find(c => c.name === course);
+                    return courseInfo?.level === filters.level;
+                  }
+                  return true;
+                })
+                .map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Level</label>
+            <select
+              value={filters.level || ''}
+              onChange={(e) => handleFilterChange('level', e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            >
+              <option value="">All Levels</option>
+              <option value="diploma">Diploma</option>
+              <option value="ug">UG</option>
+              <option value="pg">PG</option>
             </select>
           </div>
 

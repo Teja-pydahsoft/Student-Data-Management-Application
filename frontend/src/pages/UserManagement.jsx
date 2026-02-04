@@ -435,7 +435,13 @@ const UserManagement = () => {
       const responses = await Promise.all(coursePromises);
       const allCourses = responses.flatMap((response) => (response.data?.data || []));
       const uniqueCourses = allCourses.reduce((acc, course) => {
-        if (!acc.find(c => c.id === course.id)) acc.push(course);
+        if (!acc.find(c => c.id === course.id)) {
+          // Include level in the name for display
+          acc.push({
+            ...course,
+            name: course.name + (course.level ? ` (${course.level.toUpperCase()})` : '')
+          });
+        }
         return acc;
       }, []);
       setCourses(uniqueCourses);
@@ -635,7 +641,13 @@ const UserManagement = () => {
       const responses = await Promise.all(coursePromises);
       const allCourses = responses.flatMap((response) => (response.data?.data || []));
       const uniqueCourses = allCourses.reduce((acc, course) => {
-        if (!acc.find(c => c.id === course.id)) acc.push(course);
+        if (!acc.find(c => c.id === course.id)) {
+          // Include level in the name for display
+          acc.push({
+            ...course,
+            name: course.name + (course.level ? ` (${course.level.toUpperCase()})` : '')
+          });
+        }
         return acc;
       }, []);
       setEditCourses(uniqueCourses);

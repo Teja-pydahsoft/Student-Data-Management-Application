@@ -146,7 +146,7 @@ const Students = () => {
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState({});
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ student_status: 'Regular' }); // Default to show only Regular students
+  const [filters, setFilters] = useState({ student_status: 'Regular', level: '' }); // Default to show only Regular students
   const [colleges, setColleges] = useState([]);
   const [collegesLoading, setCollegesLoading] = useState(false);
   const [filtersLoading, setFiltersLoading] = useState(true); // Track overall filter loading state
@@ -158,6 +158,7 @@ const Students = () => {
     years: [],
     semesters: []
   });
+  const [coursesWithLevels, setCoursesWithLevels] = useState([]); // Store courses with level info
   const [availableFields, setAvailableFields] = useState([]);
   const [dropdownFilterOptions, setDropdownFilterOptions] = useState({
     stud_type: [],
@@ -246,6 +247,7 @@ const Students = () => {
     if (filters.batch) filterParams.batch = filters.batch;
     if (filters.college) filterParams.college = filters.college;
     if (filters.course) filterParams.course = filters.course;
+    if (filters.level) filterParams.level = filters.level;
     if (filters.branch) filterParams.branch = filters.branch;
 
     // All student database fields
@@ -780,6 +782,21 @@ const Students = () => {
     }
   };
 
+  // Fetch courses with level information
+  useEffect(() => {
+    const fetchCoursesWithLevels = async () => {
+      try {
+        const response = await api.get('/courses?includeInactive=false');
+        if (response.data?.success) {
+          setCoursesWithLevels(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses with levels:', error);
+      }
+    };
+    fetchCoursesWithLevels();
+  }, []);
+
   // Load all filters in sequence: colleges → quick filters → dropdown filters
   // This ensures filters are ready before students query runs
   const loadAllFilters = async () => {
@@ -881,6 +898,12 @@ const Students = () => {
       // Always include college if selected (unless college is being changed)
       if (currentFilters.college && excludeField !== 'college') {
         params.append('college', currentFilters.college);
+      }
+
+      // Include level if selected (unless level is being changed)
+      // Level affects batches and courses, so include it when fetching those options
+      if (currentFilters.level && excludeField !== 'level') {
+        params.append('level', currentFilters.level);
       }
 
       // Include course only if:
@@ -1150,7 +1173,13 @@ const Students = () => {
 
       // Clear dependent filters when parent filter changes
       if (field === 'college') {
-        // If college changes (or is cleared), clear course and branch to avoid invalid selections
+        // If college changes (or is cleared), clear level, course and branch to avoid invalid selections
+        delete newFilters.level;
+        delete newFilters.course;
+        delete newFilters.branch;
+      } else if (field === 'level') {
+        // If level changes (or is cleared), clear batch, course and branch to avoid invalid selections
+        delete newFilters.batch;
         delete newFilters.course;
         delete newFilters.branch;
       } else if (field === 'course') {
@@ -2257,6 +2286,19 @@ const Students = () => {
                 </select>
               </div>
               <div className="flex flex-col">
+                <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Level</label>
+                <select
+                  value={filters.level || ''}
+                  onChange={(e) => handleFilterChange('level', e.target.value)}
+                  className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="">All</option>
+                  <option value="diploma">Diploma</option>
+                  <option value="ug">UG</option>
+                  <option value="pg">PG</option>
+                </select>
+              </div>
+              <div className="flex flex-col">
                 <label className="text-[10px] font-semibold text-gray-500 mb-0.5 ml-0.5 uppercase tracking-wide">Batch</label>
                 <select
                   value={filters.batch || ''}
@@ -2290,9 +2332,20 @@ const Students = () => {
                   className="px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="">All</option>
-                  {(quickFilterOptions.courses || []).map((course) => (
-                    <option key={course} value={course}>{course}</option>
-                  ))}
+                  {(quickFilterOptions.courses || [])
+                    .filter(course => {
+                      // Filter by level if level is selected
+                      if (filters.level) {
+                        const courseInfo = coursesWithLevels.find(c => c.name === course);
+                        return courseInfo?.level === filters.level;
+                      }
+                      return true;
+                    })
+                    .map((course) => (
+                      <option key={course} value={course}>
+                        {course}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div className="flex flex-col">

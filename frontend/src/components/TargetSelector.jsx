@@ -120,7 +120,13 @@ const TargetSelector = ({ formData, setFormData, layout = 'column', hideTitle = 
 
             if (colRes.data.success) setColleges(colRes.data.data.map(c => ({ value: c.name, label: c.name, id: c.id })));
             if (batchRes.data.success) setBatches(batchRes.data.data.map(b => ({ value: b.name, label: b.name, id: b.id })));
-            if (courRes.data.success) setCourses(courRes.data.data.map(c => ({ value: c.name, label: c.name, collegeId: c.college_id, id: c.id })));
+            if (courRes.data.success) setCourses(courRes.data.data.map(c => ({ 
+              value: c.name, 
+              label: c.name + (c.level ? ` (${c.level.toUpperCase()})` : ''), 
+              collegeId: c.college_id, 
+              id: c.id,
+              level: c.level
+            })));
             if (branchRes.data.success) setBranches(branchRes.data.data.map(b => ({ value: b.name, label: b.name, courseId: b.course_id, id: b.id })));
             if (yearRes.data.success) setYears(yearRes.data.data.map(y => ({ value: y.name, label: `${y.name} Year`, batchId: y.batch_id })));
             if (semRes.data.success) setSemesters(semRes.data.data.map(s => ({ value: s.name, label: `Semester ${s.name}`, batchId: s.batch_id })));

@@ -36,6 +36,7 @@ const AddStudent = () => {
   const [courseOptions, setCourseOptions] = useState([]);
   const [courseOptionsLoading, setCourseOptionsLoading] = useState(true);
   const [selectedCourseName, setSelectedCourseName] = useState('');
+  const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedBranchName, setSelectedBranchName] = useState('');
   const [academicYears, setAcademicYears] = useState([]);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
@@ -227,8 +228,15 @@ const AddStudent = () => {
   }, [selectedCollegeId]);
 
   const availableCourses = useMemo(
-    () => courseOptions.filter((course) => course?.isActive !== false),
-    [courseOptions]
+    () => {
+      let courses = courseOptions.filter((course) => course?.isActive !== false);
+      // Filter by level if level is selected
+      if (selectedLevel) {
+        courses = courses.filter(course => course.level === selectedLevel);
+      }
+      return courses;
+    },
+    [courseOptions, selectedLevel]
   );
 
   const selectedCourse = useMemo(() => {
@@ -1142,7 +1150,29 @@ const AddStudent = () => {
                 )}
               </div>
 
-              {/* 3. Program */}
+              {/* 3. Level */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Level
+                </label>
+                <select
+                  value={selectedLevel}
+                  onChange={(e) => {
+                    setSelectedLevel(e.target.value);
+                    // Clear course selection when level changes
+                    setSelectedCourseName('');
+                    setStudentData((prev) => ({ ...prev, course: '' }));
+                  }}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
+                >
+                  <option value="">All Levels</option>
+                  <option value="diploma">Diploma</option>
+                  <option value="ug">UG</option>
+                  <option value="pg">PG</option>
+                </select>
+              </div>
+
+              {/* 4. Program */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Program <span className="text-red-500">*</span>

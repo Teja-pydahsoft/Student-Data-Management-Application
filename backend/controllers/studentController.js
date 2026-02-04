@@ -4412,7 +4412,7 @@ exports.getFilterOptions = async (req, res) => {
 exports.getQuickFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
-    const { course, branch, batch, year, semester, college, applyExclusions } = req.query;
+    const { course, branch, batch, year, semester, college, level, applyExclusions } = req.query;
 
     // Build WHERE clause based on applied filters
     const params = [];
@@ -4478,10 +4478,32 @@ exports.getQuickFilterOptions = async (req, res) => {
       params
     );
 
-    const [batchRows] = await masterPool.query(
-      `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
-      params
-    );
+    // For batches, if level is selected, filter batches that have students with courses of that level
+    let batchRows;
+    if (level) {
+      // Get courses with the specified level
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      const validCourseNames = levelCourses.map(c => c.name);
+      if (validCourseNames.length > 0) {
+        const placeholders = validCourseNames.map(() => '?').join(',');
+        const batchWhereClause = `${whereClause} AND course IN (${placeholders})`;
+        const batchParams = [...params, ...validCourseNames];
+        [batchRows] = await masterPool.query(
+          `SELECT DISTINCT batch FROM students ${batchWhereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+          batchParams
+        );
+      } else {
+        batchRows = [];
+      }
+    } else {
+      [batchRows] = await masterPool.query(
+        `SELECT DISTINCT batch FROM students ${whereClause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
+        params
+      );
+    }
 
     // For years and semesters, build separate WHERE clauses that exclude year/semester filters
     // so they cascade properly based on batch/course/branch
@@ -4500,6 +4522,22 @@ exports.getQuickFilterOptions = async (req, res) => {
     if (college) {
       yearWhereClause += ' AND college = ?';
       yearParams.push(college);
+    }
+    if (level) {
+      // Filter by level - get courses with that level
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      const validCourseNames = levelCourses.map(c => c.name);
+      if (validCourseNames.length > 0) {
+        const placeholders = validCourseNames.map(() => '?').join(',');
+        yearWhereClause += ` AND course IN (${placeholders})`;
+        yearParams.push(...validCourseNames);
+      } else {
+        // No courses with this level, return empty
+        yearWhereClause += ' AND 1=0';
+      }
     }
     if (course) {
       yearWhereClause += ' AND course = ?';
@@ -4538,10 +4576,15 @@ exports.getQuickFilterOptions = async (req, res) => {
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table (these are the valid courses for this college)
-        const [collegeCourses] = await masterPool.query(
-          'SELECT name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
-          [collegeId]
-        );
+        // Filter by level if level is provided
+        let courseQuery = 'SELECT name FROM courses WHERE college_id = ? AND is_active = 1';
+        const courseParams = [collegeId];
+        if (level) {
+          courseQuery += ' AND level = ?';
+          courseParams.push(level);
+        }
+        courseQuery += ' ORDER BY name ASC';
+        const [collegeCourses] = await masterPool.query(courseQuery, courseParams);
         const validCourseNames = collegeCourses.map(c => c.name);
 
         if (validCourseNames.length > 0) {
@@ -4565,10 +4608,31 @@ exports.getQuickFilterOptions = async (req, res) => {
       }
     } else {
       // No college filter, get all courses from students (NO exclusions)
-      [courseRows] = await masterPool.query(
-        `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
-        params
-      );
+      // But if level is selected, filter courses by level
+      if (level) {
+        // Get courses with the specified level from courses table
+        const [levelCourses] = await masterPool.query(
+          'SELECT name FROM courses WHERE level = ? AND is_active = 1 ORDER BY name ASC',
+          [level]
+        );
+        const validCourseNames = levelCourses.map(c => c.name);
+        if (validCourseNames.length > 0) {
+          const placeholders = validCourseNames.map(() => '?').join(',');
+          const courseWhereClause = `${whereClause} AND course IN (${placeholders})`;
+          const courseParams = [...params, ...validCourseNames];
+          [courseRows] = await masterPool.query(
+            `SELECT DISTINCT course FROM students ${courseWhereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+            courseParams
+          );
+        } else {
+          courseRows = [];
+        }
+      } else {
+        [courseRows] = await masterPool.query(
+          `SELECT DISTINCT course FROM students ${whereClause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
+          params
+        );
+      }
     }
 
     // For branches, if college is selected, filter branches by college and valid courses
@@ -4583,10 +4647,15 @@ exports.getQuickFilterOptions = async (req, res) => {
       if (collegeRows.length > 0) {
         const collegeId = collegeRows[0].id;
         // Get courses for this college from courses table
-        const [collegeCourses] = await masterPool.query(
-          'SELECT id, name FROM courses WHERE college_id = ? AND is_active = 1 ORDER BY name ASC',
-          [collegeId]
-        );
+        // Filter by level if level is provided
+        let branchCourseQuery = 'SELECT id, name FROM courses WHERE college_id = ? AND is_active = 1';
+        const branchCourseParams = [collegeId];
+        if (level) {
+          branchCourseQuery += ' AND level = ?';
+          branchCourseParams.push(level);
+        }
+        branchCourseQuery += ' ORDER BY name ASC';
+        const [collegeCourses] = await masterPool.query(branchCourseQuery, branchCourseParams);
         const validCourseNames = collegeCourses.map(c => c.name);
         const validCourseIds = collegeCourses.map(c => c.id);
 

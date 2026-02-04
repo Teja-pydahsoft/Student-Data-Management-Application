@@ -15,6 +15,7 @@ const CollegeTransfer = () => {
         college: '',
         batch: '',
         course: '',
+        level: '',
         branch: '',
         year: '',
         semester: ''
@@ -75,7 +76,13 @@ const CollegeTransfer = () => {
                 setRawMetadata({
                     colleges: colRes.data.success ? colRes.data.data.map(c => ({ label: c.name, value: c.name, id: c.id })) : [],
                     batches: batchRes.data.success ? batchRes.data.data.map(b => ({ label: b.name, value: b.name, id: b.id })) : [],
-                    courses: courRes.data.success ? courRes.data.data.map(c => ({ label: c.name, value: c.name, id: c.id, collegeId: c.collegeId || c.college_id })) : [],
+                    courses: courRes.data.success ? courRes.data.data.map(c => ({ 
+                        label: c.name, 
+                        value: c.name, 
+                        id: c.id, 
+                        collegeId: c.collegeId || c.college_id,
+                        level: c.level
+                    })) : [],
                     branches: branchRes.data.success ? branchRes.data.data.map(b => ({ label: b.name, value: b.name, id: b.id, courseId: b.courseId || b.course_id })) : [],
                     years: yearRes.data.success ? yearRes.data.data.map(y => ({ label: y.name, value: y.name, id: y.id, batchId: y.batch_id })) : [],
                     semesters: semRes.data.success ? semRes.data.data.map(s => ({ label: s.name, value: s.name, id: s.id, batchId: s.batch_id })) : []
@@ -103,6 +110,12 @@ const CollegeTransfer = () => {
                 courses = courses.filter(c => c.collegeId == selectedCollege.id);
             }
         }
+        // Filter by level if level is selected
+        if (filters.level) {
+            courses = courses.filter(c => c.level === filters.level);
+        }
+        // Remove level from label for display
+        courses = courses.map(c => ({ ...c, label: c.value }));
 
         // Filter Branches based on Course
         let branches = rawMetadata.branches;
@@ -155,11 +168,16 @@ const CollegeTransfer = () => {
             label: c.name, 
             value: c.name, 
             id: c.id, 
-            collegeId: c.collegeId || c.college_id 
+            collegeId: c.collegeId || c.college_id,
+            level: c.level
         }));
         
         if (selectedCollege) {
             courses = courses.filter(c => c.collegeId == selectedCollege.id);
+        }
+        // Filter by level if level is selected
+        if (targetDetails.level) {
+            courses = courses.filter(c => c.level === targetDetails.level);
         }
 
         // Get branches from coursesWithBranches (includes all branches from course_branches table)
@@ -476,6 +494,16 @@ const CollegeTransfer = () => {
                                 value={targetDetails.course} onChange={e => handleTargetChange('course', e.target.value)}>
                                 <option value="">Select Course</option>
                                 {targetOptions.courses.map(o => <option key={o.id} value={o.value}>{o.label}</option>)}
+                            </select>
+                        </div>
+                        <div className="col-span-1">
+                            <label className="text-xs font-bold text-indigo-400 uppercase tracking-wide">Target Level</label>
+                            <select className="w-full mt-1 p-2.5 bg-white border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                value={targetDetails.level} onChange={e => handleTargetChange('level', e.target.value)}>
+                                <option value="">All Levels</option>
+                                <option value="diploma">Diploma</option>
+                                <option value="ug">UG</option>
+                                <option value="pg">PG</option>
                             </select>
                         </div>
                         <div className="col-span-1">

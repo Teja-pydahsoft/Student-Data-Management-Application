@@ -4547,7 +4547,8 @@ exports.getAttendanceAbstract = async (req, res) => {
       branch,
       year,
       semester,
-      college
+      college,
+      level
     } = req.query;
 
     if (!fromDate || !toDate) {
@@ -4681,6 +4682,23 @@ exports.getAttendanceAbstract = async (req, res) => {
       if (!Number.isNaN(parsedSemester)) {
         studentQuery += ' AND s.current_semester = ?';
         studentParams.push(parsedSemester);
+      }
+    }
+
+    // Apply level filter - filter by courses with the specified level
+    if (level) {
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      const validCourseNames = levelCourses.map(c => c.name);
+      if (validCourseNames.length > 0) {
+        const placeholders = validCourseNames.map(() => '?').join(',');
+        studentQuery += ` AND s.course IN (${placeholders})`;
+        studentParams.push(...validCourseNames);
+      } else {
+        // No courses with this level, return empty result
+        studentQuery += ' AND 1=0';
       }
     }
 
@@ -4845,7 +4863,8 @@ exports.getAttendanceReportForStudents = async (req, res) => {
       branch,
       year,
       semester,
-      college
+      college,
+      level
     } = req.query;
 
     if (!fromDate || !toDate) {
@@ -4970,6 +4989,23 @@ exports.getAttendanceReportForStudents = async (req, res) => {
       if (!Number.isNaN(parsedSemester)) {
         studentQuery += ' AND s.current_semester = ?';
         studentParams.push(parsedSemester);
+      }
+    }
+
+    // Apply level filter - filter by courses with the specified level
+    if (level) {
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      const validCourseNames = levelCourses.map(c => c.name);
+      if (validCourseNames.length > 0) {
+        const placeholders = validCourseNames.map(() => '?').join(',');
+        studentQuery += ` AND s.course IN (${placeholders})`;
+        studentParams.push(...validCourseNames);
+      } else {
+        // No courses with this level, return empty result
+        studentQuery += ' AND 1=0';
       }
     }
 

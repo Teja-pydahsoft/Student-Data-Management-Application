@@ -82,6 +82,7 @@ const Reports = () => {
     college: '',
     batch: '',
     course: '',
+    level: '',
     branch: '',
     year: '',
     semester: '',
@@ -114,6 +115,7 @@ const Reports = () => {
     college: '',
     batch: '',
     course: '',
+    level: '',
     branch: '',
     year: '',
     semester: '',
@@ -139,6 +141,7 @@ const Reports = () => {
     college: '',
     batch: '',
     course: '',
+    level: '',
     branch: '',
     year: '',
     semester: ''
@@ -152,6 +155,7 @@ const Reports = () => {
     semesters: [],
     allData: []
   });
+  const [coursesWithLevels, setCoursesWithLevels] = useState([]); // Store courses with level info
   const [sendingReports, setSendingReports] = useState(false);
   const dayEndStatsRef = useRef(null);
   const [statsSectionHeight, setStatsSectionHeight] = useState(180);
@@ -167,6 +171,7 @@ const Reports = () => {
           if (filters.college) params.append('filter_college', filters.college);
           if (filters.batch) params.append('filter_batch', filters.batch);
           if (filters.course) params.append('filter_course', filters.course);
+          if (filters.level) params.append('filter_level', filters.level);
           if (filters.branch) params.append('filter_branch', filters.branch);
           if (filters.year) params.append('filter_year', filters.year);
           if (filters.semester) params.append('filter_semester', filters.semester);
@@ -207,6 +212,7 @@ const Reports = () => {
         if (activeFilters.college) params.append('filter_college', activeFilters.college);
         if (activeFilters.batch) params.append('filter_batch', activeFilters.batch);
         if (activeFilters.course) params.append('filter_course', activeFilters.course);
+        if (activeFilters.level) params.append('filter_level', activeFilters.level);
         if (activeFilters.branch) params.append('filter_branch', activeFilters.branch);
         if (activeFilters.year) params.append('filter_year', activeFilters.year);
         if (activeFilters.semester) params.append('filter_semester', activeFilters.semester);
@@ -269,12 +275,28 @@ const Reports = () => {
     fetchInitialOptions();
   }, []);
 
+  // Fetch courses with level information for all report types
+  useEffect(() => {
+    const fetchCoursesWithLevels = async () => {
+      try {
+        const response = await api.get('/courses?includeInactive=false');
+        if (response.data?.success) {
+          setCoursesWithLevels(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses with levels:', error);
+      }
+    };
+    fetchCoursesWithLevels();
+  }, []);
+
   // Update Dependents when College or Batch changes
   useEffect(() => {
     const updateCollegeBatchDependents = async () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
+        if (filters.level) params.append('level', filters.level);
         if (filters.batch) params.append('batch', filters.batch);
         params.append('applyExclusions', 'true');
 
@@ -283,6 +305,7 @@ const Reports = () => {
           const data = response.data.data || {};
           setFilterOptions(prev => ({
             ...prev,
+            batches: data.batches || [],
             courses: data.courses || [],
             // Reset downstream options if their parents aren't selected
             branches: !filters.course ? (data.branches || []) : prev.branches,
@@ -295,7 +318,7 @@ const Reports = () => {
       }
     };
     updateCollegeBatchDependents();
-  }, [filters.college, filters.batch, filters.course, filters.branch, filters.year]);
+  }, [filters.college, filters.level, filters.batch, filters.course, filters.branch, filters.year]);
 
   // Update Dependents when Course changes
   useEffect(() => {
@@ -305,6 +328,7 @@ const Reports = () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
+        if (filters.level) params.append('level', filters.level);
         if (filters.batch) params.append('batch', filters.batch);
         params.append('course', filters.course);
         params.append('applyExclusions', 'true');
@@ -334,6 +358,7 @@ const Reports = () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
+        if (filters.level) params.append('level', filters.level);
         if (filters.batch) params.append('batch', filters.batch);
         if (filters.course) params.append('course', filters.course);
         params.append('branch', filters.branch);
@@ -363,6 +388,7 @@ const Reports = () => {
       try {
         const params = new URLSearchParams();
         if (filters.college) params.append('college', filters.college);
+        if (filters.level) params.append('level', filters.level);
         if (filters.batch) params.append('batch', filters.batch);
         if (filters.course) params.append('course', filters.course);
         if (filters.branch) params.append('branch', filters.branch);
@@ -387,6 +413,34 @@ const Reports = () => {
   useEffect(() => {
     loadReport({ ...filters, page: 1 });
   }, [filters, loadReport]);
+
+  // Update Attendance Filter Options when College or Level changes
+  useEffect(() => {
+    const updateAttendanceFilterOptions = async () => {
+      try {
+        const params = new URLSearchParams();
+        if (attendanceFilters.college) params.append('college', attendanceFilters.college);
+        if (attendanceFilters.level) params.append('level', attendanceFilters.level);
+        if (attendanceFilters.batch) params.append('batch', attendanceFilters.batch);
+        params.append('applyExclusions', 'true');
+
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setFilterOptions(prev => ({
+            ...prev,
+            batches: data.batches || [],
+            courses: data.courses || [],
+            // Reset downstream options if their parents aren't selected
+            branches: !attendanceFilters.course ? (data.branches || []) : prev.branches
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to update attendance filter options:', error);
+      }
+    };
+    updateAttendanceFilterOptions();
+  }, [attendanceFilters.college, attendanceFilters.level, attendanceFilters.batch]);
 
   // Fetch attendance report data
   const fetchAttendanceReport = useCallback(async () => {
@@ -413,6 +467,7 @@ const Reports = () => {
       params.append('toDate', toDate);
       
       if (attendanceFilters.college) params.append('college', attendanceFilters.college);
+      if (attendanceFilters.level) params.append('level', attendanceFilters.level);
       if (attendanceFilters.batch) params.append('batch', attendanceFilters.batch);
       if (attendanceFilters.course) params.append('course', attendanceFilters.course);
       if (attendanceFilters.branch) params.append('branch', attendanceFilters.branch);
@@ -450,6 +505,7 @@ const Reports = () => {
       params.append('toDate', toDate);
       
       if (attendanceFilters.college) params.append('college', attendanceFilters.college);
+      if (attendanceFilters.level) params.append('level', attendanceFilters.level);
       if (attendanceFilters.batch) params.append('batch', attendanceFilters.batch);
       if (attendanceFilters.course) params.append('course', attendanceFilters.course);
       if (attendanceFilters.branch) params.append('branch', attendanceFilters.branch);
@@ -588,15 +644,30 @@ const Reports = () => {
 
   const filteredCourses = useMemo(() => {
     if (!dayEndFilterOptions.allData || dayEndFilterOptions.allData.length === 0) {
-      return dayEndFilterOptions.courses || [];
+      // If no data, return courses from filter options with level info
+      const courseNames = dayEndFilterOptions.courses || [];
+      return courseNames.map(courseName => {
+        const courseInfo = coursesWithLevels.find(c => c.name === courseName);
+        return {
+          name: courseName,
+          level: courseInfo?.level || null
+        };
+      });
     }
     let filteredData = dayEndFilterOptions.allData;
     if (dayEndFilters.college) {
       filteredData = filteredData.filter(item => item.college === dayEndFilters.college);
     }
-    const courses = [...new Set(filteredData.map(item => item.course).filter(Boolean))].sort();
-    return courses;
-  }, [dayEndFilterOptions.allData, dayEndFilters.college]);
+    const courseNames = [...new Set(filteredData.map(item => item.course).filter(Boolean))].sort();
+    // Map course names to objects with level information
+    return courseNames.map(courseName => {
+      const courseInfo = coursesWithLevels.find(c => c.name === courseName);
+      return {
+        name: courseName,
+        level: courseInfo?.level || null
+      };
+    });
+  }, [dayEndFilterOptions.allData, dayEndFilters.college, dayEndFilters.level, coursesWithLevels]);
 
   const dayEndGroupedDisplay = useMemo(() => {
     let rows = Array.isArray(dayEndGrouped) ? [...dayEndGrouped] : [];
@@ -681,6 +752,17 @@ const Reports = () => {
         date: dayEndDate,
         holidayReason: extractHolidayReason(groupedData)
       });
+      
+      // Fetch courses with level information
+      try {
+        const coursesResponse = await api.get('/courses?includeInactive=false');
+        if (coursesResponse.data?.success) {
+          setCoursesWithLevels(coursesResponse.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses with levels:', error);
+      }
+      
       const colleges = [...new Set(groupedData.map(item => item.college).filter(Boolean))].sort();
       const batches = [...new Set(groupedData.map(item => item.batch).filter(Boolean))].sort();
       const courses = [...new Set(groupedData.map(item => item.course).filter(Boolean))].sort();
@@ -1135,6 +1217,13 @@ const Reports = () => {
 
       // Clear dependent filters when parent filter changes
       if (field === 'college') {
+        delete newFilters.level;
+        delete newFilters.batch;
+        delete newFilters.course;
+        delete newFilters.branch;
+      } else if (field === 'level') {
+        // If level changes, clear batch, course and branch
+        delete newFilters.batch;
         delete newFilters.course;
         delete newFilters.branch;
         delete newFilters.year;
@@ -1508,6 +1597,18 @@ const Reports = () => {
               ))}
             </select>
 
+            {/* Level */}
+            <select
+              value={filters.level || ''}
+              onChange={(e) => handleFilterChange('level', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Levels</option>
+              <option value="diploma">Diploma</option>
+              <option value="ug">UG</option>
+              <option value="pg">PG</option>
+            </select>
+
             {/* Batch */}
             <select
               value={filters.batch}
@@ -1522,14 +1623,22 @@ const Reports = () => {
               ))}
             </select>
 
-            {/* Course */}
+            {/* Program */}
             <select
               value={filters.course || ''}
               onChange={(e) => handleFilterChange('course', e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Courses</option>
+              <option value="">All Programs</option>
               {(filterOptions.courses || [])
+                .filter(course => {
+                  // Filter by level if level is selected
+                  if (filters.level) {
+                    const courseInfo = coursesWithLevels.find(c => c.name === course);
+                    return courseInfo?.level === filters.level;
+                  }
+                  return true;
+                })
                 .map((course) => (
                   <option key={course} value={course}>
                     {course}
@@ -1927,10 +2036,10 @@ const Reports = () => {
           {/* Filters Section */}
           <section className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex-shrink-0">
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-10 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-12 gap-2">
                 {/* Date Range - Only show in range mode */}
                 {attendanceDateMode === 'range' && (
-                  <div className="col-span-2 flex gap-2">
+                  <div className="col-span-3 flex gap-2">
                     <div className="flex-1">
                       <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
                       <input
@@ -1957,7 +2066,22 @@ const Reports = () => {
                   <label className="block text-xs font-medium text-gray-700 mb-1">College</label>
                   <select
                     value={attendanceFilters.college || ''}
-                    onChange={(e) => setAttendanceFilters(prev => ({ ...prev, college: e.target.value }))}
+                    onChange={(e) => {
+                      const newCollege = e.target.value;
+                      setAttendanceFilters(prev => {
+                        const newFilters = { ...prev, college: newCollege };
+                        // Clear dependent filters when college changes
+                        if (!newCollege) {
+                          delete newFilters.college;
+                        } else {
+                          delete newFilters.level;
+                          delete newFilters.batch;
+                          delete newFilters.course;
+                          delete newFilters.branch;
+                        }
+                        return newFilters;
+                      });
+                    }}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">All Colleges</option>
@@ -1966,6 +2090,35 @@ const Reports = () => {
                         {college}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                {/* Level */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Level</label>
+                  <select
+                    value={attendanceFilters.level || ''}
+                    onChange={(e) => {
+                      const newLevel = e.target.value;
+                      setAttendanceFilters(prev => {
+                        const newFilters = { ...prev, level: newLevel };
+                        // Clear dependent filters when level changes
+                        if (!newLevel) {
+                          delete newFilters.level;
+                        } else {
+                          delete newFilters.batch;
+                          delete newFilters.course;
+                          delete newFilters.branch;
+                        }
+                        return newFilters;
+                      });
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Levels</option>
+                    <option value="diploma">Diploma</option>
+                    <option value="ug">UG</option>
+                    <option value="pg">PG</option>
                   </select>
                 </div>
 
@@ -1994,12 +2147,21 @@ const Reports = () => {
                     onChange={(e) => setAttendanceFilters(prev => ({ ...prev, course: e.target.value }))}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">All Courses</option>
-                    {(filterOptions.courses || []).map((course) => (
-                      <option key={course} value={course}>
-                        {course}
-                      </option>
-                    ))}
+                    <option value="">All Programs</option>
+                    {(filterOptions.courses || [])
+                      .filter(course => {
+                        // Filter by level if level is selected
+                        if (attendanceFilters.level) {
+                          const courseInfo = coursesWithLevels.find(c => c.name === course);
+                          return courseInfo?.level === attendanceFilters.level;
+                        }
+                        return true;
+                      })
+                      .map((course) => (
+                        <option key={course} value={course}>
+                          {course}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -2755,6 +2917,20 @@ const Reports = () => {
                           </th>
                           <th className="px-2 py-2 text-left align-top">
                             <select
+                              value={dayEndFilters.level}
+                              onChange={(e) => {
+                                setDayEndFilters(prev => ({ ...prev, level: e.target.value, course: '' }));
+                              }}
+                              className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
+                            >
+                              <option value="">LEVEL</option>
+                              <option value="diploma">DIPLOMA</option>
+                              <option value="ug">UG</option>
+                              <option value="pg">PG</option>
+                            </select>
+                          </th>
+                          <th className="px-2 py-2 text-left align-top">
+                            <select
                               value={dayEndFilters.batch}
                               onChange={(e) => setDayEndFilters(prev => ({ ...prev, batch: e.target.value }))}
                               className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
@@ -2774,9 +2950,24 @@ const Reports = () => {
                               className="bg-transparent font-bold outline-none cursor-pointer w-full text-xs"
                             >
                               <option value="">PROGRAM</option>
-                              {filteredCourses.map(opt => (
-                                <option key={opt} value={opt} title={opt} className="truncate">{opt}</option>
-                              ))}
+                              {filteredCourses
+                                .filter(opt => {
+                                  // Filter by level if level is selected
+                                  if (dayEndFilters.level) {
+                                    const courseName = typeof opt === 'string' ? opt : opt.name;
+                                    const courseInfo = coursesWithLevels.find(c => c.name === courseName);
+                                    return courseInfo?.level === dayEndFilters.level;
+                                  }
+                                  return true;
+                                })
+                                .map(opt => {
+                                  const courseName = typeof opt === 'string' ? opt : opt.name;
+                                  return (
+                                    <option key={courseName} value={courseName} title={courseName} className="truncate">
+                                      {courseName}
+                                    </option>
+                                  );
+                                })}
                             </select>
                           </th>
                           <th className="px-2 py-2 text-left align-top">
