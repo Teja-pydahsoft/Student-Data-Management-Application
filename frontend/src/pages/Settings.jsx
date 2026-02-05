@@ -2929,7 +2929,7 @@ const Settings = () => {
 
                                   return (
                                     <div
-                                      key={field.id || fieldIndex}
+                                      key={field.id != null ? field.id : `section-${sectionIndex}-field-${fieldIndex}`}
                                       className={`rounded-lg border-2 p-3 transition-all ${field.isEnabled !== false
                                         ? isSystemField
                                           ? 'border-blue-200 bg-blue-50'
@@ -3027,7 +3027,7 @@ const Settings = () => {
                                           <label className="block text-xs text-gray-500 mb-1">Options</label>
                                           <div className="flex flex-wrap gap-2">
                                             {(field.options || []).map((option, optIndex) => (
-                                              <div key={optIndex} className="flex items-center gap-1">
+                                              <div key={`field-${fieldIndex}-opt-${optIndex}`} className="flex items-center gap-1">
                                                 <input
                                                   type="text"
                                                   value={option}
@@ -3353,7 +3353,7 @@ const Settings = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-1.5">
                               {section.fields.map((field, index) => (
                                 <div
-                                  key={field.id || index}
+                                  key={field.id != null ? field.id : `preview-section-${sectionIndex}-field-${index}`}
                                   className="flex items-center gap-1.5 text-[11px]"
                                 >
                                   <span className="font-semibold text-gray-700">{field.label}</span>

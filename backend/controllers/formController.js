@@ -14,6 +14,10 @@ const parseJSON = (data) => {
   return data;
 };
 
+// audit_logs.admin_id and forms.created_by FK reference admins(id) only.
+// RBAC/staff users have ids from other tables; use null to avoid FK violation.
+const getAdminIdForDb = (req) => (req.admin && req.admin.role === 'admin' ? req.admin.id : null);
+
 // Create new form
 exports.createForm = async (req, res) => {
   let conn;
@@ -43,18 +47,19 @@ exports.createForm = async (req, res) => {
     conn = await masterPool.getConnection();
     await conn.beginTransaction();
 
+    const adminIdForDb = getAdminIdForDb(req);
     // Insert form
     await conn.query(
       `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [formId, formName, formDescription || '', JSON.stringify(formFields), qrCodeData, req.admin.id]
+      [formId, formName, formDescription || '', JSON.stringify(formFields), qrCodeData, adminIdForDb]
     );
 
     // Log action
     await conn.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['CREATE', 'FORM', formId, req.admin.id, JSON.stringify({ formName })]
+      ['CREATE', 'FORM', formId, adminIdForDb, JSON.stringify({ formName })]
     );
 
     await conn.commit();
@@ -212,10 +217,11 @@ exports.updateForm = async (req, res) => {
     );
 
     // Log action
+    const adminIdForDb = getAdminIdForDb(req);
     await conn.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ['UPDATE', 'FORM', formId, req.admin.id, JSON.stringify(req.body)]
+      ['UPDATE', 'FORM', formId, adminIdForDb, JSON.stringify(req.body)]
     );
 
     await conn.commit();
@@ -260,10 +266,11 @@ exports.deleteForm = async (req, res) => {
     }
 
     // Log action
+    const adminIdForDb = getAdminIdForDb(req);
     await conn.query(
       `INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id)
        VALUES (?, ?, ?, ?)`,
-      ['DELETE', 'FORM', formId, req.admin.id]
+      ['DELETE', 'FORM', formId, adminIdForDb]
     );
 
     await conn.commit();
