@@ -6055,6 +6055,7 @@ exports.getRegistrationReport = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_scholarship_status,
       search,
       page = 1,
       limit = 50
@@ -6151,6 +6152,16 @@ exports.getRegistrationReport = async (req, res) => {
         OR student_name LIKE ?
       )`;
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+
+    // Scholarship status filter (pending = empty, eligible = has eligible/jvd/yes, not_eligible = not eligible)
+    const scholarshipFilter = (filter_scholarship_status || '').trim().toLowerCase();
+    if (scholarshipFilter === 'pending') {
+      baseQuery += " AND (scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '')";
+    } else if (scholarshipFilter === 'eligible') {
+      baseQuery += " AND scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' AND (LOWER(scholar_status) LIKE '%eligible%' OR LOWER(scholar_status) LIKE '%jvd%' OR LOWER(scholar_status) LIKE '%yes%')";
+    } else if (scholarshipFilter === 'not_eligible') {
+      baseQuery += " AND LOWER(IFNULL(scholar_status,'')) LIKE '%not%' AND LOWER(scholar_status) LIKE '%eligible%'";
     }
 
     // Get Total Count
@@ -6329,6 +6340,7 @@ exports.getRegistrationAbstract = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_scholarship_status,
       search
     } = req.query;
 
@@ -6400,6 +6412,15 @@ exports.getRegistrationAbstract = async (req, res) => {
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
+    const scholarshipFilterAbstract = (filter_scholarship_status || req.query.filter_scholarshipStatus || '').trim().toLowerCase();
+    if (scholarshipFilterAbstract === 'pending') {
+      baseQuery += " AND (scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '')";
+    } else if (scholarshipFilterAbstract === 'eligible') {
+      baseQuery += " AND scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' AND (LOWER(scholar_status) LIKE '%eligible%' OR LOWER(scholar_status) LIKE '%jvd%' OR LOWER(scholar_status) LIKE '%yes%')";
+    } else if (scholarshipFilterAbstract === 'not_eligible') {
+      baseQuery += " AND LOWER(IFNULL(scholar_status,'')) LIKE '%not%' AND LOWER(scholar_status) LIKE '%eligible%'";
+    }
+
     // Grouping Logic:
     // If college is selected, group by Course? Or just College?
     // User asked for "with the collge wise". This usually means rows are colleges.
@@ -6461,6 +6482,7 @@ exports.exportRegistrationReport = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_scholarship_status,
       search,
       format = 'excel'
     } = req.query;
@@ -6529,6 +6551,15 @@ exports.exportRegistrationReport = async (req, res) => {
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
+    const scholarshipFilterExport = (filter_scholarship_status || req.query.filter_scholarshipStatus || '').trim().toLowerCase();
+    if (scholarshipFilterExport === 'pending') {
+      baseQuery += " AND (scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '')";
+    } else if (scholarshipFilterExport === 'eligible') {
+      baseQuery += " AND scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' AND (LOWER(scholar_status) LIKE '%eligible%' OR LOWER(scholar_status) LIKE '%jvd%' OR LOWER(scholar_status) LIKE '%yes%')";
+    } else if (scholarshipFilterExport === 'not_eligible') {
+      baseQuery += " AND LOWER(IFNULL(scholar_status,'')) LIKE '%not%' AND LOWER(scholar_status) LIKE '%eligible%'";
+    }
+
     // --- Statistics Query (For Abstract) ---
     const statsQuery = `
       SELECT 
@@ -6579,12 +6610,16 @@ exports.exportRegistrationReport = async (req, res) => {
       const verificationStatus = (isStudentVerified && isParentVerified) ? 'Completed' : 'Pending';
 
       const certStatusRaw = (student.certificates_status || '').toLowerCase();
-      const certificatesStatus = certStatusRaw.includes('verified') ? 'Verified' : 'Unverified';
+      const isCertVerified = certStatusRaw.includes('verified') || certStatusRaw === 'completed';
+      const certificatesStatus = isCertVerified ? 'Verified' : 'Unverified';
 
       const feeRaw = (student.fee_status || '').toLowerCase();
       let feeStatus = student.fee_status || 'Pending';
       if (feeRaw.includes('no_due') || feeRaw.includes('nodue') || feeRaw.includes('completed')) feeStatus = 'No Due';
       else if (feeRaw.includes('permitted')) feeStatus = 'Permitted';
+
+      // Same fee-cleared logic as main report and stats query (including partial/permitted)
+      const isFeeCleared = ['completed', 'no_due', 'nodue', 'no due', 'partially_completed', 'partial', 'permitted'].some(s => feeRaw.includes(s));
 
       let scholarshipStatus = student.scholar_status || 'Pending';
       const scholarRaw = (student.scholar_status || '').toLowerCase();
@@ -6592,11 +6627,11 @@ exports.exportRegistrationReport = async (req, res) => {
 
       const promotionStatus = (student.current_year && student.current_semester) ? 'Completed' : 'Pending';
 
-      // Overall Status Logic
+      // Overall Status Logic - must match main report and stats query (verification + certificates + fee cleared)
       const overallStatus = (
         verificationStatus === 'Completed' &&
         certificatesStatus === 'Verified' &&
-        ['No Due', 'Permitted'].includes(feeStatus)
+        isFeeCleared
       ) ? 'Completed' : 'Pending';
 
       return {

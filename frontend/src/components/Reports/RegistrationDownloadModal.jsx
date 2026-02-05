@@ -28,9 +28,12 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
         setLoading(true);
         try {
             const params = new URLSearchParams();
-            // Add all active filters
+            // Add all active filters (backend expects filter_scholarship_status for scholarship)
             Object.entries(localFilters).forEach(([key, value]) => {
-                if (value) params.append(`filter_${key}`, value);
+                if (value) {
+                    if (key === 'scholarshipStatus') params.append('filter_scholarship_status', value);
+                    else params.append(`filter_${key}`, value);
+                }
             });
             params.append('limit', 5); // Fetch only 5 for preview
             params.append('page', 1);
@@ -55,7 +58,10 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
         try {
             const params = new URLSearchParams();
             Object.entries(localFilters).forEach(([key, value]) => {
-                if (value) params.append(`filter_${key}`, value);
+                if (value) {
+                    if (key === 'scholarshipStatus') params.append('filter_scholarship_status', value);
+                    else params.append(`filter_${key}`, value);
+                }
             });
             params.append('format', format);
 
@@ -183,6 +189,20 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                                 >
                                     <option value="">All Semesters</option>
                                     {[1, 2].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            {/* Scholarship Status */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-gray-500 uppercase">Scholarship</label>
+                                <select
+                                    className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    value={localFilters.scholarshipStatus || ''}
+                                    onChange={(e) => handleFilterChange('scholarshipStatus', e.target.value)}
+                                >
+                                    <option value="">All Scholarship</option>
+                                    <option value="pending">Pending (empty)</option>
+                                    <option value="eligible">Eligible</option>
+                                    <option value="not_eligible">Not eligible</option>
                                 </select>
                             </div>
                         </div>

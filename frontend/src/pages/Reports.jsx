@@ -86,6 +86,7 @@ const Reports = () => {
     branch: '',
     year: '',
     semester: '',
+    scholarshipStatus: '',
     search: ''
   });
   const [filterOptions, setFilterOptions] = useState({
@@ -175,6 +176,7 @@ const Reports = () => {
           if (filters.branch) params.append('filter_branch', filters.branch);
           if (filters.year) params.append('filter_year', filters.year);
           if (filters.semester) params.append('filter_semester', filters.semester);
+          if (filters.scholarshipStatus) params.append('filter_scholarship_status', filters.scholarshipStatus);
           if (filters.search) params.append('search', filters.search);
 
           const response = await api.get(`/students/reports/registration/abstract?${params.toString()}`);
@@ -216,6 +218,7 @@ const Reports = () => {
         if (activeFilters.branch) params.append('filter_branch', activeFilters.branch);
         if (activeFilters.year) params.append('filter_year', activeFilters.year);
         if (activeFilters.semester) params.append('filter_semester', activeFilters.semester);
+        if (activeFilters.scholarshipStatus) params.append('filter_scholarship_status', activeFilters.scholarshipStatus);
         if (activeFilters.search) params.append('search', activeFilters.search);
         if (activeFilters.page) params.append('page', activeFilters.page);
         if (activeFilters.limit) params.append('limit', activeFilters.limit);
@@ -1261,6 +1264,7 @@ const Reports = () => {
       branch: '',
       year: '',
       semester: '',
+      scholarshipStatus: '',
       search: ''
     });
     setSearchTerm('');
@@ -1274,6 +1278,7 @@ const Reports = () => {
     if (filters.branch) entries.push({ key: 'branch', label: `Branch: ${filters.branch}` });
     if (filters.year) entries.push({ key: 'year', label: `Year: ${filters.year}` });
     if (filters.semester) entries.push({ key: 'semester', label: `Semester: ${filters.semester}` });
+    if (filters.scholarshipStatus) entries.push({ key: 'scholarshipStatus', label: `Scholarship: ${filters.scholarshipStatus === 'pending' ? 'Pending' : filters.scholarshipStatus === 'eligible' ? 'Eligible' : 'Not eligible'}` });
     return entries;
   }, [filters]);
 
@@ -1422,11 +1427,29 @@ const Reports = () => {
       </div>
       <div className="bg-pink-50 p-2 md:p-3 rounded-lg border border-pink-100">
         <div className="text-[10px] md:text-xs text-pink-600 uppercase font-semibold">Scholarship</div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
           <span className="text-sm font-bold text-green-600">{stats?.scholarship?.assigned || 0}</span>
           <span className="text-xs text-gray-400">/</span>
-          <span className="text-sm font-bold text-red-500">{stats?.scholarship?.pending || 0}</span>
+          {(stats?.scholarship?.pending || 0) > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFilters(prev => ({ ...prev, scholarshipStatus: 'pending' }));
+                setActiveTab('sheet');
+                setTimeout(() => loadReport({ ...filters, scholarshipStatus: 'pending', page: 1 }), 0);
+              }}
+              className="text-sm font-bold text-red-500 hover:text-red-700 hover:underline focus:outline-none focus:underline"
+              title="Show only students with scholarship pending (empty)"
+            >
+              {stats?.scholarship?.pending || 0}
+            </button>
+          ) : (
+            <span className="text-sm font-bold text-red-500">{stats?.scholarship?.pending || 0}</span>
+          )}
         </div>
+        {(stats?.scholarship?.pending || 0) > 0 && (
+          <div className="text-[10px] text-pink-600 mt-0.5">Click number to view pending</div>
+        )}
       </div>
     </div>
   );
@@ -1691,6 +1714,19 @@ const Reports = () => {
                   Sem {semester}
                 </option>
               ))}
+            </select>
+
+            {/* Scholarship Status - quickly find pending/eligible/not eligible */}
+            <select
+              value={filters.scholarshipStatus || ''}
+              onChange={(e) => handleFilterChange('scholarshipStatus', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title="Filter by scholarship status to find students"
+            >
+              <option value="">All Scholarship</option>
+              <option value="pending">Pending (empty)</option>
+              <option value="eligible">Eligible</option>
+              <option value="not_eligible">Not eligible</option>
             </select>
           </div>
 
