@@ -17,6 +17,7 @@ const {
 } = require('../constants/rbac');
 const { sendCredentialsEmail, sendPasswordResetEmail, sendBrevoEmail } = require('../utils/emailService');
 const { getNotificationSetting } = require('./settingsController');
+const { getPermissionsForRole, roleExistsInConfig } = require('./roleConfigController');
 
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
@@ -495,9 +496,10 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    // Check if creator can create this role (convert legacy 'admin' to 'super_admin')
+    // Check if creator can create this role (super_admin may also create custom roles from role config)
     const effectiveCreatorRole = creator.role === 'admin' ? USER_ROLES.SUPER_ADMIN : creator.role;
-    if (!canCreateRole(effectiveCreatorRole, role)) {
+    const canCreate = canCreateRole(effectiveCreatorRole, role) || (isSuperAdmin(creator) && (await roleExistsInConfig(role)));
+    if (!canCreate) {
       return res.status(403).json({
         success: false,
         message: `You do not have permission to create users with role: ${role}`
@@ -564,16 +566,15 @@ exports.createUser = async (req, res) => {
     // Hash the provided password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Parse and validate permissions
-    let userPermissions = permissions || createDefaultPermissions();
-
-    // Super admin gets all permissions
+    // Permissions: super_admin gets all; others use role config (single source of truth)
+    let userPermissions;
     if (role === USER_ROLES.SUPER_ADMIN) {
       userPermissions = createSuperAdminPermissions();
     } else {
-      // Ensure permissions structure is valid
-      const parsed = parsePermissions(userPermissions);
-      userPermissions = parsed;
+      userPermissions = await getPermissionsForRole(role);
+      if (!userPermissions) {
+        userPermissions = parsePermissions(permissions) || createDefaultPermissions();
+      }
     }
 
     // Insert user with multi-select support
@@ -1545,22 +1546,41 @@ exports.resetPassword = async (req, res) => {
 
 /**
  * GET /api/rbac/users/roles/available
- * Get available roles that current user can create
+ * Get available roles that current user can create (built-in + custom from role config for super_admin)
  */
 exports.getAvailableRoles = async (req, res) => {
   try {
     const user = req.user || req.admin;
-
-    // Convert legacy 'admin' role to 'super_admin' for hierarchy lookup
     const effectiveRole = user.role === 'admin' ? USER_ROLES.SUPER_ADMIN : user.role;
-    const availableRoles = ROLE_HIERARCHY[effectiveRole] || [];
+    let availableRoles = ROLE_HIERARCHY[effectiveRole] || [];
+
+    const allBuiltIn = new Set(availableRoles);
+
+    if (isSuperAdmin(user)) {
+      const [customRows] = await masterPool.query(
+        'SELECT role_key, label FROM rbac_role_config'
+      ).catch(() => [[]]);
+      const { TICKET_APP_ROLES } = require('./roleConfigController');
+      (customRows || []).forEach(r => {
+        if (!allBuiltIn.has(r.role_key) && !(TICKET_APP_ROLES || []).includes(r.role_key)) {
+          availableRoles.push(r.role_key);
+          allBuiltIn.add(r.role_key);
+        }
+      });
+    }
+
+    const roleLabels = { ...ROLE_LABELS };
+    if (isSuperAdmin(user)) {
+      const [rows] = await masterPool.query('SELECT role_key, label FROM rbac_role_config').catch(() => [[]]);
+      (rows || []).forEach(r => { roleLabels[r.role_key] = r.label || r.role_key; });
+    }
 
     res.json({
       success: true,
       data: availableRoles.map(role => ({
         value: role,
-        label: ROLE_LABELS[role] || role,
-        requirements: ROLE_REQUIREMENTS[role] || {}
+        label: roleLabels[role] || role,
+        requirements: ROLE_REQUIREMENTS[role] || ROLE_REQUIREMENTS[USER_ROLES.COLLEGE_AO] || {}
       }))
     });
   } catch (error) {

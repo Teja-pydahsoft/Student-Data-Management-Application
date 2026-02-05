@@ -362,6 +362,27 @@ const UserManagement = () => {
     }
   }, [canManageUsers, activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'roles' || activeTab === 'users') loadRoleConfigs();
+  }, [activeTab]);
+
+  const loadAvailableRolesForCreate = async () => {
+    try {
+      const res = await api.get('/rbac/users/roles/available');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setAvailableRolesForCreate(res.data.data);
+      }
+    } catch (_) {
+      setAvailableRolesForCreate([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'create' || activeTab === 'users') loadAvailableRolesForCreate();
+  }, [activeTab]);
+
+  const [userRoleFilter, setUserRoleFilter] = useState('');
+
   // Delete user modal states
   const [deleteUserModal, setDeleteUserModal] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
@@ -386,6 +407,24 @@ const UserManagement = () => {
   const [loadingFields, setLoadingFields] = useState(false);
   const [activeFieldCategory, setActiveFieldCategory] = useState('');
   const [fieldPermissions, setFieldPermissions] = useState({});
+
+  // Role configuration tab state
+  const [roleConfigs, setRoleConfigs] = useState([]);
+  const [loadingRoleConfigs, setLoadingRoleConfigs] = useState(false);
+  const [showRoleConfigModal, setShowRoleConfigModal] = useState(false);
+  const [roleConfigModalRole, setRoleConfigModalRole] = useState(null);
+  const [roleConfigModalPermissions, setRoleConfigModalPermissions] = useState({});
+  const [roleConfigSelectedModule, setRoleConfigSelectedModule] = useState(null);
+  const [savingRoleConfig, setSavingRoleConfig] = useState(false);
+  const [fieldPermissionsContext, setFieldPermissionsContext] = useState('user');
+  const [showAddRoleModal, setShowAddRoleModal] = useState(false);
+  const [newRoleLabel, setNewRoleLabel] = useState('');
+  const [newRoleKey, setNewRoleKey] = useState('');
+  const [newRoleDescription, setNewRoleDescription] = useState('');
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [deleteRoleModal, setDeleteRoleModal] = useState(null);
+  const [deletingRole, setDeletingRole] = useState(false);
+  const [availableRolesForCreate, setAvailableRolesForCreate] = useState([]);
 
   const hasUserManagementAccess = useMemo(() => {
     if (isFullAccessRole(user?.role)) return true;
@@ -504,33 +543,50 @@ const UserManagement = () => {
     }
   };
 
-  const loadStudentFields = async () => {
+  const loadRoleConfigs = async () => {
+    setLoadingRoleConfigs(true);
+    try {
+      const response = await api.get('/rbac/role-config');
+      if (response.data?.success) setRoleConfigs(response.data.data || []);
+    } catch (error) {
+      toast.error('Failed to load role configurations');
+    } finally {
+      setLoadingRoleConfigs(false);
+    }
+  };
+
+  const loadStudentFields = async (source = 'user') => {
     setLoadingFields(true);
     try {
-      // Load field schema
       const response = await api.get('/rbac/users/student-fields');
       if (response.data?.success) {
         const categories = response.data.data.categories || [];
-
-        // Map icon strings to components
         const categoriesWithIcons = categories.map(cat => ({
           ...cat,
           icon: ICON_MAP[cat.icon] || Shield
         }));
 
         setFieldCategories(categoriesWithIcons);
-
-        // Set first category as active
         if (categoriesWithIcons.length > 0 && !activeFieldCategory) {
           setActiveFieldCategory(categoriesWithIcons[0].id);
         }
 
-        // Load existing field permissions for this user
-        if (moduleAccessUser?.permissions?.student_management?.field_permissions) {
+        if (source === 'roleConfig') {
+          const stored = roleConfigModalPermissions?.student_management?.field_permissions;
+          if (stored && typeof stored === 'object') {
+            setFieldPermissions(stored);
+          } else {
+            const allPerms = {};
+            categoriesWithIcons.forEach(category => {
+              category.fields.forEach(field => {
+                allPerms[field.key] = { view: true, edit: false };
+              });
+            });
+            setFieldPermissions(allPerms);
+          }
+        } else if (moduleAccessUser?.permissions?.student_management?.field_permissions) {
           setFieldPermissions(moduleAccessUser.permissions.student_management.field_permissions);
         } else {
-          // If no permissions exist, default to ALL VISIBLE to match the app's default behavior
-          // This prevents "Strict Mode" kicking in and hiding everything else when a single field is saved
           const allPerms = {};
           categoriesWithIcons.forEach(category => {
             category.fields.forEach(field => {
@@ -586,13 +642,26 @@ const UserManagement = () => {
   };
 
   const saveFieldPermissions = async () => {
+    if (fieldPermissionsContext === 'roleConfig') {
+      setRoleConfigModalPermissions(prev => ({
+        ...prev,
+        student_management: {
+          ...(prev.student_management || {}),
+          field_permissions: fieldPermissions
+        }
+      }));
+      setShowFieldPermissionsModal(false);
+      setFieldPermissionsContext('user');
+      toast.success('Field permissions updated for this role. Click "Save & apply to existing users" to apply.');
+      return;
+    }
+
     if (!moduleAccessUser) {
       console.error("No user selected for module access");
       return;
     }
 
     try {
-      // Update the permissions object
       const updatedPermissions = {
         ...(moduleAccessUser.permissions || {}),
         student_management: {
@@ -601,13 +670,11 @@ const UserManagement = () => {
         }
       };
 
-      // Update the moduleAccessUser state
       setModuleAccessUser(prev => ({
         ...prev,
         permissions: updatedPermissions
       }));
 
-      // Update the users list to reflect changes immediately
       setUsers(prevUsers => prevUsers.map(u =>
         u.id === moduleAccessUser.id
           ? { ...u, permissions: updatedPermissions }
@@ -1101,9 +1168,32 @@ const UserManagement = () => {
 
   const activeUsersCount = useMemo(() => users.filter(u => u.isActive).length, [users]);
 
-  // Filter out super_admin from the list (only one super admin exists)
+  const usersExcludingSuperAdmin = useMemo(() => users.filter(u => u.role !== 'super_admin'), [users]);
+
+  const roleCounts = useMemo(() => {
+    const counts = {};
+    usersExcludingSuperAdmin.forEach(u => {
+      counts[u.role] = (counts[u.role] || 0) + 1;
+    });
+    return counts;
+  }, [usersExcludingSuperAdmin]);
+
+  const roleListForFilter = useMemo(() => {
+    const fromConfig = roleConfigs.length ? roleConfigs : FIXED_ROLES.map(r => ({ role_key: r.value, label: r.label }));
+    const fromUsers = [...new Set(usersExcludingSuperAdmin.map(u => u.role))];
+    const keys = [...new Set([...fromConfig.map(r => r.role_key ?? r.value), ...fromUsers])];
+    return keys.map(roleKey => {
+      const config = fromConfig.find(r => (r.role_key ?? r.value) === roleKey);
+      return {
+        value: roleKey,
+        label: config?.label ?? ROLE_LABELS[roleKey] ?? roleKey,
+        count: roleCounts[roleKey] ?? 0
+      };
+    }).filter(r => r.label);
+  }, [roleConfigs, usersExcludingSuperAdmin, roleCounts]);
+
   const filteredUsers = useMemo(() => {
-    let filtered = users.filter(u => u.role !== 'super_admin');
+    let filtered = usersExcludingSuperAdmin;
     if (userSearchTerm) {
       const term = userSearchTerm.toLowerCase();
       filtered = filtered.filter(u =>
@@ -1113,8 +1203,11 @@ const UserManagement = () => {
         u.role?.toLowerCase().includes(term)
       );
     }
+    if (userRoleFilter) {
+      filtered = filtered.filter(u => u.role === userRoleFilter);
+    }
     return filtered;
-  }, [users, userSearchTerm]);
+  }, [usersExcludingSuperAdmin, userSearchTerm, userRoleFilter]);
 
   // Check if user has any permissions configured
   const hasPermissions = (userData) => {
@@ -1201,6 +1294,19 @@ const UserManagement = () => {
             <span className="hidden sm:inline">All Users ({filteredUsers.length})</span>
             <span className="sm:hidden">Users ({filteredUsers.length})</span>
           </button>
+          {canManageUsers && (
+            <button
+              onClick={() => setActiveTab('roles')}
+              className={`flex items-center justify-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-semibold text-xs transition-all touch-manipulation min-h-[40px] flex-1 sm:flex-none ${activeTab === 'roles'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
+                }`}
+            >
+              <Settings size={16} />
+              <span className="hidden sm:inline">Role Configuration</span>
+              <span className="sm:hidden">Roles</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1345,24 +1451,36 @@ const UserManagement = () => {
                   </div>
                 </div>
                 <div className="p-3 space-y-2 flex-1 overflow-y-auto">
-                  {FIXED_ROLES.map(role => {
-                    const isSelected = form.role === role.value;
+                  {(availableRolesForCreate.length ? availableRolesForCreate : FIXED_ROLES.map(r => ({ value: r.value, label: r.label }))).map(role => {
+                    const roleValue = role.value ?? role.role_key;
+                    const roleLabel = role.label ?? ROLE_LABELS[roleValue];
+                    const isSelected = form.role === roleValue;
                     return (
                       <div
-                        key={role.value}
-                        onClick={() => handleFormChange('role', role.value)}
+                        key={roleValue}
+                        onClick={async () => {
+                          handleFormChange('role', roleValue);
+                          try {
+                            const res = await api.get(`/rbac/role-config/${roleValue}`);
+                            if (res.data?.success && res.data?.data?.permissions) {
+                              setForm(prev => ({ ...prev, role: roleValue, permissions: res.data.data.permissions }));
+                            }
+                          } catch (_) {
+                            setForm(prev => ({ ...prev, role: roleValue, permissions: createDefaultPermissions() }));
+                          }
+                        }}
                         className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border-2 ${isSelected
-                          ? `${ROLE_COLORS[role.value]} border-current`
+                          ? `${ROLE_COLORS[roleValue] || 'bg-slate-100 text-slate-700 border-slate-200'} border-current`
                           : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                           }`}
                       >
-                        <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[role.value]} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                        <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[roleValue] || 'from-slate-400 to-slate-600'} flex items-center justify-center shadow-sm flex-shrink-0`}>
                           <ShieldCheck size={14} className="text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-xs text-slate-800">{role.label}</h4>
+                          <h4 className="font-bold text-xs text-slate-800">{roleLabel}</h4>
                           <p className="text-[10px] text-slate-500 line-clamp-1">
-                            {ROLE_DESCRIPTIONS[role.value]}
+                            {role.description ?? ROLE_DESCRIPTIONS[roleValue] ?? ''}
                           </p>
                         </div>
                         {isSelected && (
@@ -1373,6 +1491,9 @@ const UserManagement = () => {
                       </div>
                     );
                   })}
+                  <p className="text-[10px] text-slate-500 mt-2 border-t border-slate-100 pt-2">
+                    Module access for this role is set in <button type="button" onClick={() => setActiveTab('roles')} className="text-violet-600 font-medium hover:underline">Role Configuration</button>. New users get that access automatically.
+                  </p>
                 </div>
               </div>
 
@@ -1562,6 +1683,112 @@ const UserManagement = () => {
           </form>
         )}
 
+        {/* Role Configuration */}
+        {activeTab === 'roles' && (
+          <div className="w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <Settings size={18} />
+                  Role Configuration
+                </h2>
+                <p className="text-xs text-white/90 mt-1">
+                  Set default module access per role. Edit names and add custom roles.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewRoleLabel('');
+                  setNewRoleKey('');
+                  setNewRoleDescription('');
+                  setShowAddRoleModal(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold flex items-center gap-2 flex-shrink-0"
+              >
+                <UserPlus size={16} />
+                Add new role
+              </button>
+            </div>
+            <div className="p-3 sm:p-4 lg:p-6">
+              {loadingRoleConfigs ? (
+                <div className="py-12 flex flex-col items-center gap-3 text-slate-400">
+                  <RefreshCw className="animate-spin" size={32} />
+                  <p className="text-sm font-medium">Loading role configurations...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {(roleConfigs.length ? roleConfigs : FIXED_ROLES.map(r => ({ role_key: r.value, label: r.label, description: ROLE_DESCRIPTIONS[r.value] || '', permissions: {} }))).map((config) => {
+                    const roleKey = config.role_key || config.value;
+                    const label = config.label || ROLE_LABELS[roleKey];
+                    const description = config.description || ROLE_DESCRIPTIONS[roleKey] || '';
+                    const permCount = config.permissions ? Object.values(config.permissions).reduce((acc, m) => acc + (m && typeof m === 'object' ? Object.values(m).filter(v => v === true).length : 0), 0) : 0;
+                    return (
+                      <div
+                        key={roleKey}
+                        className="rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-all overflow-hidden"
+                      >
+                        <div className={`p-3 sm:p-4 bg-gradient-to-br ${ROLE_AVATAR_COLORS[roleKey] || 'from-slate-400 to-slate-600'} bg-opacity-10`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${ROLE_AVATAR_COLORS[roleKey] || 'from-slate-400 to-slate-600'} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                                <ShieldCheck size={16} className="text-white" />
+                              </div>
+                              <div className="min-w-0">
+                                <h3 className="font-bold text-slate-800 text-sm truncate">{label}</h3>
+                                <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{description}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[10px] text-slate-500">{permCount} permission(s) configured</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const config = roleConfigs.find(c => (c.role_key || c.value) === roleKey) || {};
+                                  setRoleConfigModalRole({
+                                    role_key: roleKey,
+                                    label: config.label ?? label,
+                                    description: config.description ?? description,
+                                    is_custom: config.is_custom || false
+                                  });
+                                  const stored = config.permissions;
+                                  const base = createDefaultPermissions();
+                                  const perms = {};
+                                  Object.keys(base).forEach(mod => {
+                                    perms[mod] = { ...(base[mod] || {}), ...(stored?.[mod] || {}) };
+                                  });
+                                  setRoleConfigModalPermissions(perms);
+                                  setRoleConfigSelectedModule(Object.values(BACKEND_MODULES)[0] || null);
+                                  setShowRoleConfigModal(true);
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                              >
+                                Edit name & configure
+                              </button>
+                              {config.is_custom && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteRoleModal({ role_key: roleKey, label })}
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition-colors"
+                                  title="Delete role"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Users List */}
         {activeTab === 'users' && (
           <div className="w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
@@ -1570,7 +1797,19 @@ const UserManagement = () => {
                 <UsersIcon size={18} />
                 All Users
               </h2>
-              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <select
+                  value={userRoleFilter}
+                  onChange={(e) => setUserRoleFilter(e.target.value)}
+                  className="min-w-[140px] sm:w-44 pl-3 pr-8 py-2.5 rounded-lg sm:rounded-xl bg-white/20 text-white text-sm focus:outline-none focus:bg-white/30 border border-white/20 touch-manipulation min-h-[44px] [&>option]:text-slate-800"
+                >
+                  <option value="">All roles ({usersExcludingSuperAdmin.length})</option>
+                  {roleListForFilter.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label} ({r.count})
+                    </option>
+                  ))}
+                </select>
                 <div className="relative flex-1 sm:flex-none sm:w-56">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60" />
                   <input
@@ -1603,14 +1842,40 @@ const UserManagement = () => {
                 {/* Desktop Table View */}
                 <div className="hidden lg:block overflow-x-auto border rounded-xl border-slate-200 max-h-[calc(100vh-320px)] overflow-y-auto custom-scrollbar pb-20">
                   <table className="w-full min-w-[1000px]">
-                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
-                      <tr>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">User</th>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Scope</th>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Module Access</th>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                        <th className="px-2 py-2 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <thead className="sticky top-0 z-10 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                      <tr className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-200">
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest border-r border-slate-200/80 first:rounded-tl-xl">
+                          User
+                        </th>
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest border-r border-slate-200/80">
+                          <div className="flex flex-col gap-1.5">
+                            <span>Role</span>
+                            <select
+                              value={userRoleFilter}
+                              onChange={(e) => setUserRoleFilter(e.target.value)}
+                              className="w-full min-w-[130px] max-w-[160px] px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-medium text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 focus:outline-none focus:border-blue-400 transition-shadow"
+                            >
+                              <option value="">All roles ({usersExcludingSuperAdmin.length})</option>
+                              {roleListForFilter.map((r) => (
+                                <option key={r.value} value={r.value}>
+                                  {r.label} ({r.count})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </th>
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest border-r border-slate-200/80">
+                          Scope
+                        </th>
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest border-r border-slate-200/80">
+                          Module Access
+                        </th>
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest border-r border-slate-200/80">
+                          Status
+                        </th>
+                        <th className="px-3 py-3 text-left text-[11px] font-bold text-slate-600 uppercase tracking-widest rounded-tr-xl">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2002,6 +2267,331 @@ const UserManagement = () => {
         emptyMessage="No branches available for selected courses"
       />
 
+      {/* Add new role modal */}
+      {showAddRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <UserPlus size={20} />
+                Add new role
+              </h2>
+              <button type="button" onClick={() => setShowAddRoleModal(false)} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Role name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={newRoleLabel}
+                  onChange={(e) => {
+                    const oldSlug = newRoleLabel.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                    const newSlug = e.target.value.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                    setNewRoleLabel(e.target.value);
+                    if (!newRoleKey || newRoleKey === oldSlug) setNewRoleKey(newSlug);
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  placeholder="e.g. Department Manager"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Role key (optional)</label>
+                <input
+                  type="text"
+                  value={newRoleKey}
+                  onChange={(e) => setNewRoleKey(e.target.value.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 font-mono text-xs"
+                  placeholder="e.g. department_manager"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Used internally; auto-filled from name if empty.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Description (optional)</label>
+                <input
+                  type="text"
+                  value={newRoleDescription}
+                  onChange={(e) => setNewRoleDescription(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  placeholder="Brief description of this role"
+                />
+              </div>
+            </div>
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowAddRoleModal(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={creatingRole || !newRoleLabel.trim()}
+                onClick={async () => {
+                  const key = (newRoleKey && newRoleKey.length >= 2) ? newRoleKey : newRoleLabel.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                  if (!key || key.length < 2) {
+                    toast.error('Enter a role name or role key (at least 2 characters)');
+                    return;
+                  }
+                  setCreatingRole(true);
+                  try {
+                    const res = await api.post('/rbac/role-config', {
+                      role_key: key,
+                      label: newRoleLabel.trim(),
+                      description: newRoleDescription.trim() || undefined
+                    });
+                    if (res.data?.success) {
+                      toast.success('Role created. Configure its module access below.');
+                      setShowAddRoleModal(false);
+                      setNewRoleLabel('');
+                      setNewRoleKey('');
+                      setNewRoleDescription('');
+                      loadRoleConfigs();
+                    } else {
+                      toast.error(res.data?.message || 'Failed to create role');
+                    }
+                  } catch (err) {
+                    toast.error(err.response?.data?.message || 'Failed to create role');
+                  } finally {
+                    setCreatingRole(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {creatingRole ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Create role
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete role confirm modal */}
+      {deleteRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
+              <AlertTriangle className="text-red-600 flex-shrink-0" size={20} />
+              <h3 className="text-base font-bold text-red-800">Delete role</h3>
+            </div>
+            <div className="p-4 text-sm text-slate-600">
+              <p>Delete the role <strong>"{deleteRoleModal.label}"</strong>? This cannot be undone.</p>
+              <p className="mt-2 text-slate-500 text-xs">No users must have this role. If any do, reassign them first.</p>
+            </div>
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteRoleModal(null)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingRole}
+                onClick={async () => {
+                  setDeletingRole(true);
+                  try {
+                    const res = await api.delete(`/rbac/role-config/${deleteRoleModal.role_key}`);
+                    if (res.data?.success) {
+                      toast.success('Role deleted');
+                      setDeleteRoleModal(null);
+                      loadRoleConfigs();
+                    } else {
+                      toast.error(res.data?.message || 'Failed to delete role');
+                    }
+                  } catch (err) {
+                    toast.error(err.response?.data?.message || 'Failed to delete role');
+                  } finally {
+                    setDeletingRole(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deletingRole ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Role Configuration Modal */}
+      {showRoleConfigModal && roleConfigModalRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-lg sm:rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex-shrink-0 bg-gradient-to-r from-violet-600 to-purple-600 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Settings size={20} className="text-white flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base sm:text-lg font-bold text-white truncate">Configure role</h2>
+                  <p className="text-xs text-white/80">Edit role name, description, and module access. Changes apply to new users and (optionally) existing users.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => { setShowRoleConfigModal(false); setRoleConfigModalRole(null); setFieldPermissionsContext('user'); }} className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30">
+                <X size={20} />
+              </button>
+            </div>
+            {/* Editable role name and description */}
+            <div className="flex-shrink-0 bg-slate-50 border-b border-slate-200 px-4 sm:px-6 py-3 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Role name</label>
+                <input
+                  type="text"
+                  value={roleConfigModalRole.label || ''}
+                  onChange={(e) => setRoleConfigModalRole(prev => prev ? { ...prev, label: e.target.value } : null)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  placeholder="e.g. College Principal"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Description (optional)</label>
+                <input
+                  type="text"
+                  value={roleConfigModalRole.description ?? ''}
+                  onChange={(e) => setRoleConfigModalRole(prev => prev ? { ...prev, description: e.target.value } : null)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  placeholder="Brief description of this role"
+                />
+              </div>
+              {roleConfigModalRole.is_custom && (
+                <p className="text-[10px] text-slate-500">Role key: <code className="bg-slate-200 px-1 rounded">{roleConfigModalRole.role_key}</code> (cannot be changed)</p>
+              )}
+            </div>
+            <div className="flex-1 flex flex-col sm:flex-row min-h-[360px] max-h-[70vh] overflow-hidden">
+              <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-slate-200 bg-slate-50/80 overflow-y-auto">
+                <div className="px-3 py-2 border-b border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Modules</p>
+                </div>
+                <div className="p-2 space-y-1">
+                  {Object.keys(BACKEND_MODULES).map((key) => {
+                    const moduleKey = BACKEND_MODULES[key];
+                    const modulePerms = MODULE_PERMISSIONS[moduleKey];
+                    const moduleLabel = MODULE_LABELS[moduleKey] || moduleKey;
+                    if (!modulePerms) return null;
+                    const permsForRole = roleConfigModalPermissions[moduleKey] || {};
+                    const enabledCount = Object.values(permsForRole).filter(v => v === true).length;
+                    const totalCount = modulePerms.permissions.length;
+                    const isActive = roleConfigSelectedModule === moduleKey;
+                    return (
+                      <button
+                        key={moduleKey}
+                        type="button"
+                        onClick={() => setRoleConfigSelectedModule(moduleKey)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs text-left transition-all ${isActive ? 'bg-white text-violet-700 border border-violet-200 shadow-sm' : 'bg-transparent text-slate-700 hover:bg-white'}`}
+                      >
+                        <span className="truncate font-medium">{moduleLabel}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{enabledCount}/{totalCount}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex-1 bg-white overflow-y-auto p-4">
+                {(() => {
+                  const effectiveModuleKey = roleConfigSelectedModule || Object.values(BACKEND_MODULES)[0];
+                  const modulePerms = MODULE_PERMISSIONS[effectiveModuleKey];
+                  const moduleLabel = MODULE_LABELS[effectiveModuleKey] || effectiveModuleKey;
+                  if (!modulePerms) return <p className="text-sm text-slate-500">Select a module</p>;
+                  const permsForRole = roleConfigModalPermissions[effectiveModuleKey] || {};
+                  const toggleOne = (permKey) => {
+                    setRoleConfigModalPermissions(prev => ({
+                      ...prev,
+                      [effectiveModuleKey]: {
+                        ...(prev[effectiveModuleKey] || {}),
+                        [permKey]: !permsForRole[permKey]
+                      }
+                    }));
+                  };
+                  const toggleAll = (grant) => {
+                    const next = {};
+                    modulePerms.permissions.forEach(p => { next[p] = grant; });
+                    setRoleConfigModalPermissions(prev => ({ ...prev, [effectiveModuleKey]: next }));
+                  };
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-slate-800">{moduleLabel}</h3>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => toggleAll(true)} className="px-3 py-1.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 border border-emerald-200">Grant All</button>
+                          <button type="button" onClick={() => toggleAll(false)} className="px-3 py-1.5 text-[11px] font-semibold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200">Revoke All</button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {modulePerms.permissions.map((permKey) => {
+                          const enabled = permsForRole[permKey] === true;
+                          const label = modulePerms.labels?.[permKey] || permKey;
+                          const isStudentMgmtView = effectiveModuleKey === BACKEND_MODULES.STUDENT_MANAGEMENT && permKey === 'view';
+                          return (
+                            <div key={permKey} className={isStudentMgmtView ? 'sm:col-span-2 flex gap-2 items-center' : ''}>
+                              <button
+                                type="button"
+                                onClick={() => toggleOne(permKey)}
+                                className={`flex-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs text-left transition-all ${enabled ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                              >
+                                <span className="font-medium">{label}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{enabled ? 'Allowed' : 'Disabled'}</span>
+                              </button>
+                              {isStudentMgmtView && enabled && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFieldPermissionsContext('roleConfig');
+                                    setShowFieldPermissionsModal(true);
+                                    loadStudentFields('roleConfig');
+                                  }}
+                                  className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap"
+                                >
+                                  <Settings size={14} />
+                                  Configure Fields
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            <div className="flex-shrink-0 bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-end gap-3">
+              <button type="button" onClick={() => { setShowRoleConfigModal(false); setRoleConfigModalRole(null); setFieldPermissionsContext('user'); }} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50">Cancel</button>
+              <button
+                type="button"
+                disabled={savingRoleConfig}
+                onClick={async () => {
+                  if (!roleConfigModalRole?.role_key) return;
+                  setSavingRoleConfig(true);
+                  try {
+                    const res = await api.put(`/rbac/role-config/${roleConfigModalRole.role_key}`, {
+                      label: roleConfigModalRole.label?.trim() || roleConfigModalRole.role_key,
+                      description: roleConfigModalRole.description?.trim() ?? '',
+                      permissions: roleConfigModalPermissions,
+                      propagateToExistingUsers: true
+                    });
+                    if (res.data?.success) {
+                      toast.success(res.data?.message || 'Role configuration saved and applied to existing users.');
+                      setShowRoleConfigModal(false);
+                      setRoleConfigModalRole(null);
+                      loadRoleConfigs();
+                    } else {
+                      toast.error(res.data?.message || 'Failed to save');
+                    }
+                  } catch (err) {
+                    toast.error(err.response?.data?.message || 'Failed to save role configuration');
+                  } finally {
+                    setSavingRoleConfig(false);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingRoleConfig ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Save & apply to existing users
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Module Access Modal - Left: modules list, Right: access details */}
       {
         showModuleAccessModal && moduleAccessUser && (
@@ -2282,9 +2872,9 @@ const UserManagement = () => {
                                       <button
                                         type="button"
                                         onClick={() => {
+                                          setFieldPermissionsContext('user');
                                           setShowFieldPermissionsModal(true);
-                                          // Always load fields to ensure correct initialization logic runs (including default permissions)
-                                          loadStudentFields();
+                                          loadStudentFields('user');
                                         }}
                                         className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap"
                                       >
@@ -3015,7 +3605,7 @@ const UserManagement = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowFieldPermissionsModal(false)}
+                  onClick={() => { setShowFieldPermissionsModal(false); setFieldPermissionsContext('user'); }}
                   className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   <X size={20} className="text-slate-600" />
@@ -3157,7 +3747,7 @@ const UserManagement = () => {
                 </p>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setShowFieldPermissionsModal(false)}
+                    onClick={() => { setShowFieldPermissionsModal(false); setFieldPermissionsContext('user'); }}
                     className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                   >
                     Cancel

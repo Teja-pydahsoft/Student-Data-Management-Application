@@ -284,12 +284,73 @@ const ROLE_REQUIREMENTS = {
     supportsMultiBranch: true,
     supportsAllCourses: true,
     supportsAllBranches: true
+  },
+  // Ticket app roles (linked app) – same scope as college-level roles
+  course_principal: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  course_hod: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  branch_clerk: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  branch_counselor: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  branch_faculty: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  support_staff: {
+    requiresCollege: true,
+    requiresCourse: false,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: true,
+    supportsAllBranches: true
   }
 };
 
-// Validate role requirements
+// Validate role requirements (custom roles use college_ao requirements as default)
 const validateRoleRequirements = (role, collegeIds, courseIds, branchIds, allCourses = false, allBranches = false) => {
-  const requirements = ROLE_REQUIREMENTS[role];
+  const requirements = ROLE_REQUIREMENTS[role] || ROLE_REQUIREMENTS[USER_ROLES.COLLEGE_AO];
   if (!requirements) {
     return { valid: false, message: 'Invalid role' };
   }
