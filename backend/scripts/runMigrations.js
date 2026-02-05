@@ -87,15 +87,19 @@ async function runMigrations() {
           try {
             await masterPool.execute(statement);
           } catch (stmtError) {
-            // Check if error is "column already exists" - this is okay
+            // Check if error is "column/index already exists" or "doesn't exist" - this is okay
             if (
               stmtError.code === "ER_DUP_FIELDNAME" ||
               stmtError.code === "ER_CANT_DROP_FIELD_OR_KEY" ||
+              stmtError.code === "ER_DUP_KEYNAME" ||
+              stmtError.code === "ER_BAD_FIELD_ERROR" ||
               stmtError.message.includes("Duplicate column name") ||
-              stmtError.message.includes("already exists")
+              stmtError.message.includes("already exists") ||
+              stmtError.message.includes("doesn't exist") ||
+              stmtError.message.includes("Unknown key")
             ) {
               console.log(
-                `   ⚠️  Column/constraint already exists, continuing...`,
+                `   ⚠️  ${stmtError.message} (continuing...)`,
               );
               continue;
             }

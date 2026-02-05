@@ -96,14 +96,17 @@ CREATE TABLE IF NOT EXISTS courses (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
   code VARCHAR(50),
+  college_id INT NULL,
   total_years TINYINT NOT NULL DEFAULT 4,
   semesters_per_year TINYINT NOT NULL DEFAULT 2,
   metadata JSON,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_course_name (name),
-  UNIQUE KEY unique_course_code (code)
+  UNIQUE KEY unique_course_name_college (college_id, name),
+  UNIQUE KEY unique_course_code (code),
+  INDEX idx_college_id (college_id),
+  FOREIGN KEY (college_id) REFERENCES colleges(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS course_branches (

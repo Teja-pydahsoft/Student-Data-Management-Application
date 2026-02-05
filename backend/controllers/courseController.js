@@ -628,12 +628,12 @@ exports.createCourse = async (req, res) => {
     console.error('createCourse error:', error);
     let errorMessage = 'Failed to create course';
     if (error.code === 'ER_DUP_ENTRY') {
-      if (error.message.includes('unique_course_name')) {
-        errorMessage = 'Course with the same name already exists';
-      } else if (error.message.includes('unique_course_code')) {
-        errorMessage = 'Course with the same code already exists';
+      if (error.message.includes('unique_course_name_college') || error.message.includes('unique_course_name')) {
+        errorMessage = 'Course with the same name already exists in this college';
+      } else if (error.message.includes('unique_course_code_college') || error.message.includes('unique_course_code')) {
+        errorMessage = 'Course with the same code already exists in this college';
       } else {
-        errorMessage = 'Course with the same name or code already exists';
+        errorMessage = 'Course with the same name or code already exists in this college';
       }
     }
     res.status(500).json({
@@ -828,7 +828,11 @@ exports.updateCourse = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.code === 'ER_DUP_ENTRY'
-        ? 'Course with the same name already exists'
+        ? (error.message.includes('unique_course_name_college') || error.message.includes('unique_course_name')
+          ? 'Course with the same name already exists in this college'
+          : error.message.includes('unique_course_code_college') || error.message.includes('unique_course_code')
+          ? 'Course with the same code already exists in this college'
+          : 'Course with the same name or code already exists in this college')
         : error.message || 'Failed to update course'
     });
   }
