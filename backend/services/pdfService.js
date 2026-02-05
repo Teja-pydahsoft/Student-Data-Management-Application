@@ -969,7 +969,7 @@ const generateRegistrationReportPDF = async ({
     group.total++;
 
     // Check statuses
-    // Frontend logic for overall completed: Verification + Certs + Fees
+    // Frontend logic for overall completed: Verification + Certs + Fees + Promotion + Scholarship (all 5 steps mandatory)
     // From controller processing: 'overall_status' is mapped to 'Completed' or 'Pending'
     const isOverallCompleted = student['overall_status'] === 'Completed';
     if (isOverallCompleted) group.overall_completed++;

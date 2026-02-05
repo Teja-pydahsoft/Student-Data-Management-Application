@@ -324,9 +324,11 @@ exports.createSSOSession = async (req, res) => {
             WHEN
               (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
               (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
-              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%') AND
+              (s.current_year IS NOT NULL AND s.current_year != '' AND s.current_semester IS NOT NULL AND s.current_semester != '') AND
+              (s.scholar_status IS NOT NULL AND TRIM(IFNULL(s.scholar_status,'')) != '')
             THEN 'Completed'
-            ELSE s.registration_status
+            ELSE 'pending'
           END AS registration_status_computed,
           s.registration_status, s.student_data
          FROM students s
@@ -523,9 +525,11 @@ exports.verifyToken = async (req, res) => {
             WHEN
               (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
               (s.certificates_status LIKE '%Verified%' OR s.certificates_status = 'completed') AND
-              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%')
+              (s.fee_status LIKE '%no_due%' OR s.fee_status LIKE '%no due%' OR s.fee_status LIKE '%permitted%' OR s.fee_status LIKE '%completed%' OR s.fee_status LIKE '%nodue%') AND
+              (s.current_year IS NOT NULL AND s.current_year != '' AND s.current_semester IS NOT NULL AND s.current_semester != '') AND
+              (s.scholar_status IS NOT NULL AND TRIM(IFNULL(s.scholar_status,'')) != '')
             THEN 'Completed'
-            ELSE s.registration_status
+            ELSE 'pending'
           END AS registration_status_computed,
           s.registration_status, s.student_data
          FROM students s

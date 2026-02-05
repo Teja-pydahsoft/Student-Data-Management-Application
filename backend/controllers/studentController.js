@@ -2326,9 +2326,11 @@ exports.getAllStudents = async (req, res) => {
           WHEN
             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+            (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+            (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
           THEN 'Completed'
-          ELSE registration_status
+          ELSE 'pending'
         END AS registration_status_computed
       FROM students WHERE 1=1`;
     const params = [];
@@ -2608,6 +2610,13 @@ exports.getAllStudents = async (req, res) => {
           ? student.registration_status
           : (parsedData?.registration_status || parsedData?.['Registration Status'] || null));
 
+      // Normalize scholarship status - empty/null should show as "Pending"
+      const rawScholarStatus = student.scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
+      const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+        rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
+        ? rawScholarStatus
+        : 'Pending';
+
       return {
         ...student,
         current_year: stage.year,
@@ -2616,7 +2625,8 @@ exports.getAllStudents = async (req, res) => {
         admission_date: sanitizeCellValue(student.admission_date),
         student_data: parsedData,
         fee_status: resolvedFeeStatus,
-        registration_status: resolvedRegistrationStatus
+        registration_status: resolvedRegistrationStatus,
+        scholar_status: normalizedScholarStatus
       };
     });
 
@@ -2661,9 +2671,11 @@ exports.getStudentByAdmission = async (req, res) => {
           WHEN
             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+            (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+            (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+            (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
           THEN 'Completed'
-          ELSE registration_status
+          ELSE 'pending'
         END AS registration_status_computed
       FROM students WHERE admission_number = ? OR admission_no = ?`,
       [admissionNumber, admissionNumber]
@@ -2684,6 +2696,13 @@ exports.getStudentByAdmission = async (req, res) => {
 
     applyStageToPayload(parsedData, stage);
 
+    // Normalize scholarship status - empty/null should show as "Pending"
+    const rawScholarStatus = students[0].scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
+    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+      rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
+      ? rawScholarStatus
+      : 'Pending';
+
     const student = {
       ...students[0],
       current_year: stage.year,
@@ -2698,7 +2717,8 @@ exports.getStudentByAdmission = async (req, res) => {
       registration_status: students[0].registration_status_computed ||
         ((students[0].registration_status && String(students[0].registration_status).trim().length > 0)
           ? students[0].registration_status
-          : (parsedData?.registration_status || parsedData?.['Registration Status'] || null))
+          : (parsedData?.registration_status || parsedData?.['Registration Status'] || null)),
+      scholar_status: normalizedScholarStatus
     };
 
     // Derive fee status from student_fees for the student's current year and semester
@@ -2882,6 +2902,36 @@ exports.updateStudent = async (req, res) => {
 
     // Merge incoming data with existing data (incoming takes precedence)
     const mutableStudentData = { ...existingStudentData, ...studentData };
+
+    // Check if mobile numbers have changed and reset verification status if needed
+    const oldStudentMobile = existingStudent.student_mobile || existingStudentData.student_mobile || existingStudentData['Student Mobile number'] || existingStudentData['Student Mobile Number'] || '';
+    const newStudentMobile = studentData.student_mobile || studentData['Student Mobile number'] || studentData['Student Mobile Number'] || mutableStudentData.student_mobile || '';
+    
+    const oldParentMobile = existingStudent.parent_mobile1 || existingStudentData.parent_mobile1 || existingStudentData['Parent Mobile Number 1'] || '';
+    const newParentMobile = studentData.parent_mobile1 || studentData['Parent Mobile Number 1'] || mutableStudentData.parent_mobile1 || '';
+
+    // Normalize mobile numbers for comparison (remove spaces, dashes, etc.)
+    const normalizeMobile = (mobile) => {
+      if (!mobile) return '';
+      return String(mobile).replace(/[\s\-\(\)]/g, '');
+    };
+
+    const normalizedOldStudentMobile = normalizeMobile(oldStudentMobile);
+    const normalizedNewStudentMobile = normalizeMobile(newStudentMobile);
+    const normalizedOldParentMobile = normalizeMobile(oldParentMobile);
+    const normalizedNewParentMobile = normalizeMobile(newParentMobile);
+
+    // If student mobile number changed, reset student mobile verification
+    if (normalizedNewStudentMobile && normalizedNewStudentMobile !== normalizedOldStudentMobile) {
+      mutableStudentData.is_student_mobile_verified = false;
+      console.log(`🔄 Student mobile number changed for ${admissionNumber}. Resetting student mobile verification status.`);
+    }
+
+    // If parent mobile number changed, reset parent mobile verification
+    if (normalizedNewParentMobile && normalizedNewParentMobile !== normalizedOldParentMobile) {
+      mutableStudentData.is_parent_mobile_verified = false;
+      console.log(`🔄 Parent mobile number changed for ${admissionNumber}. Resetting parent mobile verification status.`);
+    }
 
     let resolvedStage;
     try {
@@ -5166,13 +5216,21 @@ exports.getStudentByAdmission = async (req, res) => {
       }
     }
 
+    // Normalize scholarship status - empty/null should show as "Pending"
+    const rawScholarStatus = student.scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
+    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+      rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
+      ? rawScholarStatus
+      : 'Pending';
+
     const responsePayload = {
       ...student,
       current_year: stage.year,
       current_semester: stage.semester,
       student_data: parsedData,
       fee_status: derivedFeeStatus,
-      registration_status: fallbackRegistrationStatus
+      registration_status: fallbackRegistrationStatus,
+      scholar_status: normalizedScholarStatus
     };
 
     res.json({
@@ -5483,7 +5541,7 @@ exports.updateFeeStatus = async (req, res) => {
 const checkAndAutoCompleteRegistration = async (admissionNumber) => {
   try {
     const [rows] = await masterPool.query(
-      'SELECT student_data, certificates_status, fee_status FROM students WHERE admission_number = ?',
+      'SELECT student_data, certificates_status, fee_status, scholar_status, current_year, current_semester FROM students WHERE admission_number = ?',
       [admissionNumber]
     );
 
@@ -5505,11 +5563,21 @@ const checkAndAutoCompleteRegistration = async (admissionNumber) => {
     const feeStatus = student.fee_status || '';
     const feeCompleted = ['no_due', 'no due', 'permitted', 'completed', 'nodue'].includes(feeStatus.toLowerCase());
 
-    // If ALL conditions are met, update registration_status to 'Completed'
-    if (verificationCompleted && certificatesCompleted && feeCompleted) {
+    // 4. Promotion Check
+    const promotionCompleted = (student.current_year && student.current_semester);
+
+    // 5. Scholarship Check (MANDATORY - must have a status)
+    const scholarStatus = (student.scholar_status || '').trim();
+    const scholarshipCompleted = scholarStatus && scholarStatus !== '' && scholarStatus.toLowerCase() !== 'null' && scholarStatus.toLowerCase() !== 'undefined';
+
+    const hasRegColumn = await columnExists('registration_status');
+    const allConditionsMet = verificationCompleted && certificatesCompleted && feeCompleted && promotionCompleted && scholarshipCompleted;
+
+    // If ALL conditions are met (including scholarship), update registration_status to 'Completed'
+    // Otherwise, reset to 'pending' if it was incorrectly set to 'Completed'
+    if (allConditionsMet) {
       console.log(`Auto-completing registration for ${admissionNumber}`);
 
-      const hasRegColumn = await columnExists('registration_status');
       if (hasRegColumn) {
         await masterPool.query(
           'UPDATE students SET registration_status = ? WHERE admission_number = ?',
@@ -5524,6 +5592,27 @@ const checkAndAutoCompleteRegistration = async (admissionNumber) => {
         'UPDATE students SET student_data = ? WHERE admission_number = ?',
         [JSON.stringify(studentData), admissionNumber]
       );
+    } else {
+      // Reset to 'pending' if conditions are not met (prevents showing incorrect 'Completed' status)
+      const currentRegStatus = student.registration_status || studentData.registration_status || studentData['Registration Status'] || '';
+      if (currentRegStatus && currentRegStatus.toLowerCase() === 'completed') {
+        console.log(`Resetting registration status to pending for ${admissionNumber} - not all conditions met`);
+
+        if (hasRegColumn) {
+          await masterPool.query(
+            'UPDATE students SET registration_status = ? WHERE admission_number = ?',
+            ['pending', admissionNumber]
+          );
+        }
+
+        studentData.registration_status = 'pending';
+        studentData['Registration Status'] = 'pending';
+
+        await masterPool.query(
+          'UPDATE students SET student_data = ? WHERE admission_number = ?',
+          [JSON.stringify(studentData), admissionNumber]
+        );
+      }
     }
   } catch (err) {
     console.error(`Check auto-complete error for ${admissionNumber}:`, err);
@@ -6183,7 +6272,9 @@ exports.getRegistrationReport = async (req, res) => {
         SUM(CASE WHEN 
              (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
     `;
@@ -6268,24 +6359,32 @@ exports.getRegistrationReport = async (req, res) => {
       // Stage 4: Promotion
       const promotionStatus = (student.current_year && student.current_semester) ? 'completed' : 'pending';
 
-      // Stage 5: Scholarship
+      // Stage 5: Scholarship (MANDATORY - must have a status)
       const scholarRaw = (student.scholar_status || '').toLowerCase();
       let scholarshipStatusDisplay = student.scholar_status || 'Pending';
 
       if (scholarRaw.includes('jvd') || scholarRaw.includes('yes') || scholarRaw.includes('eligible')) {
         // Keep valid status as is
-      } else if (!student.scholar_status || scholarRaw === '') {
+      } else if (!student.scholar_status || scholarRaw === '' || scholarRaw === 'null' || scholarRaw === 'undefined') {
+        // Empty scholarship is NOT acceptable - step is mandatory
         scholarshipStatusDisplay = 'Pending';
+      } else {
+        // Any other status (not eligible, etc.) is considered reviewed/completed
+        scholarshipStatusDisplay = student.scholar_status || 'Pending';
       }
 
-      // Logic for overall status - existing logic was just checking truthiness
-      const scholarshipStatus = (student.scholar_status) ? 'completed' : 'pending';
+      // Scholarship is MANDATORY - must have a status (not empty/null)
+      const scholarshipStatus = (!student.scholar_status || scholarRaw === '' || scholarRaw === 'null' || scholarRaw === 'undefined') 
+        ? 'pending'  // Empty is NOT acceptable - step is mandatory
+        : 'completed'; // Any status (including not eligible) means it's been reviewed
 
-      // Overall Registration Status
+      // Overall Registration Status (All 5 steps must be completed including Scholarship)
       const overallStatus = (
         verificationStatus === 'completed' &&
         certificatesStatus === 'completed' &&
-        feeStatus === 'completed'
+        feeStatus === 'completed' &&
+        promotionStatus === 'completed' &&
+        scholarshipStatus === 'completed'
       ) ? 'completed' : 'pending';
 
       return {
@@ -6445,7 +6544,9 @@ exports.getRegistrationAbstract = async (req, res) => {
         SUM(CASE WHEN 
              (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
       GROUP BY batch, college, course, branch, current_year, current_semester
@@ -6570,7 +6671,9 @@ exports.exportRegistrationReport = async (req, res) => {
         SUM(CASE WHEN 
              (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%')
+             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
     `;
@@ -6627,11 +6730,14 @@ exports.exportRegistrationReport = async (req, res) => {
 
       const promotionStatus = (student.current_year && student.current_semester) ? 'Completed' : 'Pending';
 
-      // Overall Status Logic - must match main report and stats query (verification + certificates + fee cleared)
+      // Overall Status Logic - must match main report and stats query (all 5 steps including scholarship)
+      const isScholarshipCompleted = student.scholar_status && student.scholar_status.trim() !== '' && student.scholar_status.toLowerCase() !== 'null' && student.scholar_status.toLowerCase() !== 'undefined';
       const overallStatus = (
         verificationStatus === 'Completed' &&
         certificatesStatus === 'Verified' &&
-        isFeeCleared
+        isFeeCleared &&
+        promotionStatus === 'Completed' &&
+        isScholarshipCompleted
       ) ? 'Completed' : 'Pending';
 
       return {

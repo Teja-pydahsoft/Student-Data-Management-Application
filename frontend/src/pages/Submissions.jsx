@@ -861,7 +861,7 @@ const Submissions = () => {
                         <div>
                           <label className="block text-xs font-medium text-gray-500 mb-1">Scholar Status</label>
                           <p className="text-sm font-semibold text-gray-800">
-                            {selectedSubmission.submission_data.scholar_status || selectedSubmission.submission_data['Scholar Status'] || '-'}
+                            {selectedSubmission.submission_data.scholar_status || selectedSubmission.submission_data['Scholar Status'] || 'Pending'}
                           </p>
                         </div>
                         <div>

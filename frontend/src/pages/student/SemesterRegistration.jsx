@@ -159,8 +159,14 @@ const SemesterRegistration = () => {
                 // Ideally, we consider it "completed" if data exists.
                 return (studentData.current_year && studentData.current_semester) ? 'completed' : 'pending';
             case 5: // Scholarship
-                // Just viewing is enough? Or specific status? For now, if status is present, it's "reviewed"
-                return (studentData.scholar_status) ? 'completed' : 'pending'; // Changed to always show status
+                // Scholarship is MANDATORY - must have a status (not empty/null)
+                const scholarStatus = (studentData.scholar_status || '').trim();
+                // Scholarship status must exist and not be empty/null/undefined
+                if (!scholarStatus || scholarStatus === '' || scholarStatus.toLowerCase() === 'null' || scholarStatus.toLowerCase() === 'undefined') {
+                    return 'pending'; // Empty scholarship is NOT acceptable - step is mandatory
+                }
+                // If status exists (eligible, jvd, yes, not eligible, etc.), it's considered reviewed/completed
+                return 'completed';
             case 6: // Confirmation
                 // Always pending until finalized
                 return 'pending';
@@ -175,12 +181,14 @@ const SemesterRegistration = () => {
         // 1. Verification done
         // 2. Certificates verified
         // 3. Fee cleared/permitted
-        return isStepCompleted(1) && isStepCompleted(2) && isStepCompleted(3);
+        // 4. Promotion completed
+        // 5. Scholarship status assigned (MANDATORY)
+        return isStepCompleted(1) && isStepCompleted(2) && isStepCompleted(3) && isStepCompleted(4) && isStepCompleted(5);
     };
 
     const handleFinalize = async () => {
         if (!canFinalize()) {
-            toast.error('Please complete all required steps (Verification, Certificates, Fees) before finalizing.');
+            toast.error('Please complete all required steps (Verification, Certificates, Fees, Promotion, Scholarship) before finalizing.');
             return;
         }
 
@@ -245,7 +253,7 @@ const SemesterRegistration = () => {
         {
             id: 5,
             title: 'Scholarship',
-            description: 'View scholarship application status.',
+            description: 'Scholarship status must be assigned (Required).',
             icon: Award,
             color: 'indigo'
         }
@@ -544,7 +552,7 @@ const SemesterRegistration = () => {
                                 <div className="text-center py-8">
                                     <Award size={48} className="text-indigo-200 mx-auto mb-4" />
                                     <h3 className="text-lg font-bold text-gray-900">Scholarship Status</h3>
-                                    <p className="text-2xl font-bold text-indigo-600 my-4 capitalize">{studentData?.scholar_status || 'Not Applied'}</p>
+                                    <p className="text-2xl font-bold text-indigo-600 my-4 capitalize">{studentData?.scholar_status || 'Pending'}</p>
                                     <p className="text-gray-500 text-sm">If you believe this is incorrect, please contact the admin office.</p>
                                 </div>
                             )}

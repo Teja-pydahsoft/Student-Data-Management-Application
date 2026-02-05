@@ -2933,7 +2933,7 @@ const Students = () => {
                             {canViewField('scholar_status') && (
                               <div>
                                 <p className="text-xs text-gray-500">Scholar Status</p>
-                                <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || ''}>{student.scholar_status || '-'}</p>
+                                <p className="text-sm font-medium text-gray-900 truncate" title={student.scholar_status || 'Pending'}>{student.scholar_status || 'Pending'}</p>
                               </div>
                             )}
                             {canViewField('registration_status') && (
@@ -4142,7 +4142,7 @@ const Students = () => {
                                 </select>
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.scholar_status || editData['Scholar Status'] || selectedStudent?.scholar_status || '-'}
+                                  {editData.scholar_status || editData['Scholar Status'] || selectedStudent?.scholar_status || 'Pending'}
                                 </p>
                               )}
                             </div>
