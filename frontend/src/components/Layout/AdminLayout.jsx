@@ -27,6 +27,7 @@ import {
   Megaphone,
   Briefcase,
   ArrowLeftRight,
+  Wrench,
 } from "lucide-react";
 import useAuthStore from "../../store/authStore";
 import {
@@ -128,14 +129,6 @@ const NAV_ITEMS = [
     ],
   },
   {
-    path: "/dashboard",
-    icon: Ticket,
-    label: "Ticket Management",
-    permission: FRONTEND_MODULES.TICKETS,
-    isExternal: true,
-    isTicketApp: true,
-  },
-  {
     path: "/services",
     icon: Briefcase,
     label: "Services",
@@ -162,6 +155,7 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedItems, setExpandedItems] = useState(new Set()); // Collapsed by default
+  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -276,6 +270,13 @@ const AdminLayout = () => {
       }
     });
   }, [location.pathname, filteredNavItems]);
+
+  // Close workspace dropdown when sidebar collapses
+  useEffect(() => {
+    if (sidebarCollapsed) {
+      setWorkspaceDropdownOpen(false);
+    }
+  }, [sidebarCollapsed]);
 
   // Redirect user if they try to access a module they don't have access to
   useEffect(() => {
@@ -395,6 +396,8 @@ const AdminLayout = () => {
                   <div key={item.path} className="space-y-1">
                     <button
                       onClick={() => {
+                        // Close workspace dropdown when opening other menus
+                        setWorkspaceDropdownOpen(false);
                         toggleSubmenu(item.path);
                         setSidebarOpen(false);
                       }}
@@ -596,7 +599,103 @@ const AdminLayout = () => {
             })}
           </nav>
 
-          {/* User Info & Logout */}
+          {/* Workspace Dropdown */}
+          <div className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? "p-2" : "p-3 sm:p-4"}`}>
+            <div className="space-y-1">
+              <button
+                onClick={() => {
+                  // Close all other expanded items when opening workspace
+                  setExpandedItems(new Set());
+                  setWorkspaceDropdownOpen(!workspaceDropdownOpen);
+                  setSidebarOpen(false);
+                }}
+                className={`
+                  w-full flex items-center justify-between rounded-lg transition-all duration-200 touch-manipulation
+                  gap-3 px-3 sm:px-4 py-2.5 sm:py-3 min-h-[44px]
+                  ${workspaceDropdownOpen
+                    ? "bg-gray-50 text-gray-900 font-medium"
+                    : "text-gray-800 hover:bg-gray-50 active:bg-gray-100 hover:text-gray-900"
+                  }
+                `}
+                aria-label={workspaceDropdownOpen ? "Collapse workspace menu" : "Expand workspace menu"}
+              >
+                <div className="flex items-center gap-2 flex-1">
+                  <FolderTree size={18} className="flex-shrink-0" />
+                  <span className="whitespace-nowrap font-medium text-xs">
+                    Workspace
+                  </span>
+                </div>
+                {workspaceDropdownOpen ? (
+                  <ChevronDown
+                    size={18}
+                    className="flex-shrink-0 transition-transform duration-200"
+                  />
+                ) : (
+                  <ChevronRight
+                    size={18}
+                    className="flex-shrink-0 transition-transform duration-200"
+                  />
+                )}
+              </button>
+              {workspaceDropdownOpen && !sidebarCollapsed && (
+                <div className="ml-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
+                  {(() => {
+                    // Check if user has access to tickets module
+                    if (!user) return null;
+                    if (isFullAccessRole(user.role)) {
+                      return (
+                        <a
+                          href={getTicketAppUrl("/dashboard")}
+                          className="flex items-center rounded-md transition-all duration-200 touch-manipulation
+                            gap-2 px-2 py-1.5 text-[11px] font-medium relative min-h-[36px]
+                            text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                          <span className="whitespace-nowrap">
+                            Maintenance Management
+                          </span>
+                        </a>
+                      );
+                    }
+                    if (user?.permissions) {
+                      if (hasModuleAccess(user.permissions, FRONTEND_MODULES.TICKETS)) {
+                        return (
+                          <a
+                            href={getTicketAppUrl("/dashboard")}
+                            className="flex items-center rounded-md transition-all duration-200 touch-manipulation
+                              gap-2 px-2 py-1.5 text-[11px] font-medium relative min-h-[36px]
+                              text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                          >
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                            <span className="whitespace-nowrap">
+                              Maintenance Management
+                            </span>
+                          </a>
+                        );
+                      }
+                    }
+                    if (allowedModules.includes(FRONTEND_MODULES.TICKETS)) {
+                      return (
+                        <a
+                          href={getTicketAppUrl("/dashboard")}
+                          className="flex items-center rounded-md transition-all duration-200 touch-manipulation
+                            gap-2 px-2 py-1.5 text-[11px] font-medium relative min-h-[36px]
+                            text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                          <span className="whitespace-nowrap">
+                            Maintenance Management
+                          </span>
+                        </a>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* User Info & Logout */}
           <div
             className={`border-t border-gray-200 transition-[padding] duration-300 ease-out ${sidebarCollapsed ? "p-2" : "p-3 sm:p-4"}`}

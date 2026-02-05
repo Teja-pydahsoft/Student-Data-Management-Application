@@ -29,7 +29,10 @@ import {
     RiTicketLine,
     RiTicketFill,
     RiBusLine,
-    RiBusFill
+    RiBusFill,
+    RiFolderLine,
+    RiFolderFill,
+    RiArrowDownSLine
 } from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -49,6 +52,7 @@ const StudentLayout = ({ children }) => {
     const [showRestrictionModal, setShowRestrictionModal] = useState(false);
     const [fetchedStatus, setFetchedStatus] = useState(null);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false); // New: For mobile "More" menu
+    const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -175,14 +179,6 @@ const StudentLayout = ({ children }) => {
         { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
         { icon: RiBusLine, activeIcon: RiBusFill, label: 'Transport', path: '/student/transport' },
         { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
-        {
-            icon: RiTicketLine,
-            activeIcon: RiTicketFill,
-            label: 'Ticket Management',
-            path: '/student/dashboard',
-            isExternal: true,
-            isTicketApp: true
-        },
     ];
 
     // Split items for Mobile Navigation
@@ -195,7 +191,7 @@ const StudentLayout = ({ children }) => {
     const findItem = (path) => navItems.find(item => item.path === path);
 
     const mobilePrimaryItems = mobilePrimaryPaths.map(path => findItem(path)).filter(Boolean);
-    const mobileSecondaryItems = navItems.filter(item => !mobilePrimaryPaths.includes(item.path) || item.label === 'Ticket Management');
+    const mobileSecondaryItems = navItems.filter(item => !mobilePrimaryPaths.includes(item.path));
 
 
     return (
@@ -300,6 +296,50 @@ const StudentLayout = ({ children }) => {
                             )
                         ))}
                     </nav>
+
+                    {/* Workspace Dropdown */}
+                    <div className="px-4 mb-2">
+                        <div className="relative">
+                            <button
+                                onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
+                                className={`
+                                    w-full flex items-center justify-between gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200
+                                    ${workspaceDropdownOpen
+                                        ? 'bg-gray-50 text-gray-900'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                                `}
+                            >
+                                <div className="flex items-center gap-3.5">
+                                    <RiFolderLine size={20} className="transition-transform duration-300" />
+                                    <span className="tracking-wide">Workspace</span>
+                                </div>
+                                {workspaceDropdownOpen ? (
+                                    <RiArrowDownSLine
+                                        size={18}
+                                        className="transition-transform duration-200"
+                                    />
+                                ) : (
+                                    <RiArrowDownSLine
+                                        size={18}
+                                        className="transition-transform duration-200 rotate-[-90deg]"
+                                    />
+                                )}
+                            </button>
+
+                            {/* Workspace Dropdown Menu */}
+                            {workspaceDropdownOpen && (
+                                <div className="mt-1.5 ml-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
+                                    <a
+                                        href={getTicketAppUrl('/dashboard')}
+                                        className="flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                                        <span className="tracking-wide whitespace-nowrap">Maintenance Management</span>
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     {/* User Info Card */}
                     <div
@@ -452,6 +492,48 @@ const StudentLayout = ({ children }) => {
                             <button onClick={() => setMoreMenuOpen(false)} className="p-2 bg-white rounded-full text-gray-600 shadow-sm border border-gray-100">
                                 <RiCloseLine size={20} />
                             </button>
+                        </div>
+
+                        {/* Workspace Section */}
+                        <div className="mb-4">
+                            <button
+                                onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
+                                className={`
+                                    w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 mb-2
+                                    ${workspaceDropdownOpen
+                                        ? 'bg-gray-50 text-gray-900'
+                                        : 'bg-white text-gray-600 border border-gray-100 shadow-sm hover:shadow-md'}
+                                `}
+                            >
+                                <div className="flex items-center gap-3.5">
+                                    <RiFolderLine size={20} />
+                                    <span className="tracking-wide font-bold">Workspace</span>
+                                </div>
+                                {workspaceDropdownOpen ? (
+                                    <RiArrowDownSLine
+                                        size={18}
+                                        className="transition-transform duration-200"
+                                    />
+                                ) : (
+                                    <RiArrowDownSLine
+                                        size={18}
+                                        className="transition-transform duration-200 rotate-[-90deg]"
+                                    />
+                                )}
+                            </button>
+
+                            {/* Workspace Dropdown Menu */}
+                            {workspaceDropdownOpen && (
+                                <div className="ml-2 mb-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
+                                    <a
+                                        href={getTicketAppUrl('/dashboard')}
+                                        className="flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
+                                        <span className="tracking-wide whitespace-nowrap">Maintenance Management</span>
+                                    </a>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-4 gap-2 mb-4">
