@@ -2344,14 +2344,8 @@ exports.getAllStudents = async (req, res) => {
       }
     }
 
-    // Exclude "Course Completed" students by default unless explicitly filtered
-    // Check if student_status filter is present (will be applied later in studentFieldFilters)
-    const hasStudentStatusFilter = normalizedOtherFilters.filter_student_status !== undefined;
-
-    if (!hasStudentStatusFilter) {
-      query += ' AND (student_status IS NULL OR student_status != ?)';
-      params.push('Course Completed');
-    }
+    // Note: All students (including Course Completed) are now included by default
+    // Student status can still be filtered using filter_student_status parameter
 
     if (search) {
       // Only search by student name, PIN number, and admission number

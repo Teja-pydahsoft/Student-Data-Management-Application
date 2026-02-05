@@ -181,21 +181,22 @@ const CollegeTransfer = () => {
         }
 
         // Get branches from coursesWithBranches (includes all branches from course_branches table)
-        // Filter branches based on Course and Batch (academic year)
+        // Show all branches for the selected course, regardless of batch
+        // (Branches should be available for transfer regardless of academic year)
         let allBranches = [];
         coursesWithBranches.forEach(course => {
             if (course.branches && Array.isArray(course.branches)) {
                 course.branches.forEach(branch => {
                     // Include branch if:
                     // 1. It belongs to a course that matches the filter
-                    // 2. It matches the selected batch's academic year OR has no academic year (applies to all batches)
+                    // 2. It belongs to the selected college (if college is selected)
+                    // 3. It is active (if isActive property exists)
+                    // Note: We don't filter by batch here - branches should be available for all batches
                     const matchesCourse = !targetDetails.course || course.name === targetDetails.course;
                     const matchesCollege = !targetDetails.college || course.collegeId == selectedCollege?.id;
-                    const matchesBatch = !targetDetails.batch || 
-                        !branch.academicYearLabel || 
-                        branch.academicYearLabel === targetDetails.batch;
+                    const isActive = branch.isActive !== false; // Include if active or if property doesn't exist
                     
-                    if (matchesCourse && matchesCollege && matchesBatch) {
+                    if (matchesCourse && matchesCollege && isActive) {
                         allBranches.push({
                             label: branch.name,
                             value: branch.name,
@@ -271,7 +272,7 @@ const CollegeTransfer = () => {
 
     const toggleSelectAll = async (checked) => {
         if (checked) {
-            // Fetch all students matching current filters to select them all (only Regular status)
+            // Fetch all students matching current filters to select them all
             try {
                 const params = new URLSearchParams();
                 if (filters.college) params.append('filter_college', filters.college);
@@ -280,7 +281,6 @@ const CollegeTransfer = () => {
                 if (filters.branch) params.append('filter_branch', filters.branch);
                 if (filters.year) params.append('filter_year', filters.year);
                 if (filters.semester) params.append('filter_semester', filters.semester);
-                params.append('filter_student_status', 'Regular'); // Only Regular students
                 params.append('limit', 'all'); // Fetch all matching students
 
                 const response = await api.get(`/students?${params.toString()}`);
@@ -326,7 +326,6 @@ const CollegeTransfer = () => {
                 if (filters.semester) params.append('filter_semester', filters.semester);
                 params.append('page', currentPage);
                 params.append('limit', pageSize);
-                params.append('filter_student_status', 'Regular');
 
                 const response = await api.get(`/students?${params.toString()}`);
                 if (response.data?.success) {
@@ -356,7 +355,6 @@ const CollegeTransfer = () => {
             if (filters.branch) params.append('filter_branch', filters.branch);
             if (filters.year) params.append('filter_year', filters.year);
             if (filters.semester) params.append('filter_semester', filters.semester);
-            params.append('filter_student_status', 'Regular');
             params.append('limit', 'all'); // Fetch all matching students
 
             const response = await api.get(`/students?${params.toString()}`);
