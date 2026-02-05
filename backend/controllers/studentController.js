@@ -6167,7 +6167,8 @@ exports.getRegistrationReport = async (req, res) => {
         SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
         SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
         SUM(CASE WHEN current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '' THEN 1 ELSE 0 END) as promotion_completed,
-        SUM(CASE WHEN scholar_status IS NOT NULL AND scholar_status != '' AND scholar_status NOT LIKE '%Pending%' AND scholar_status NOT LIKE '%Not%' THEN 1 ELSE 0 END) as scholarship_assigned,
+        SUM(CASE WHEN scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' THEN 1 ELSE 0 END) as scholarship_assigned,
+        SUM(CASE WHEN scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '' THEN 1 ELSE 0 END) as scholarship_pending,
         SUM(CASE WHEN 
              (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
@@ -6204,7 +6205,7 @@ exports.getRegistrationReport = async (req, res) => {
       },
       scholarship: {
         assigned: parseInt(statsRow.scholarship_assigned || 0),
-        pending: totalCount - parseInt(statsRow.scholarship_assigned || 0)
+        pending: parseInt(statsRow.scholarship_pending || 0)
       },
       overall: {
         completed: parseInt(statsRow.overall_completed || 0),
@@ -6418,7 +6419,8 @@ exports.getRegistrationAbstract = async (req, res) => {
         SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
         SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
         SUM(CASE WHEN current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '' THEN 1 ELSE 0 END) as promotion_completed,
-        SUM(CASE WHEN scholar_status IS NOT NULL AND scholar_status != '' AND scholar_status NOT LIKE '%Pending%' AND scholar_status NOT LIKE '%Not%' THEN 1 ELSE 0 END) as scholarship_assigned,
+        SUM(CASE WHEN scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' THEN 1 ELSE 0 END) as scholarship_assigned,
+        SUM(CASE WHEN scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '' THEN 1 ELSE 0 END) as scholarship_pending,
         SUM(CASE WHEN 
              (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
@@ -6665,7 +6667,8 @@ exports.exportRegistrationReport = async (req, res) => {
             certificates_verified: 0,
             fee_cleared: 0,
             promotion_completed: 0,
-            scholarship_assigned: 0
+            scholarship_assigned: 0,
+            scholarship_pending: 0
           };
         }
 
@@ -6683,6 +6686,7 @@ exports.exportRegistrationReport = async (req, res) => {
         if (student['Fees'] === 'No Due' || student['Fees'] === 'Permitted' || student['Fees'] === 'completed') group.fee_cleared++;
         if (student['Promotion'] === 'Completed') group.promotion_completed++;
         if (student['Scholarship'] && student['Scholarship'] !== 'Pending') group.scholarship_assigned++;
+        if (student['Scholarship'] === 'Pending') group.scholarship_pending++;
       });
 
       // Convert to rows and sort
@@ -6709,7 +6713,7 @@ exports.exportRegistrationReport = async (req, res) => {
         'Certificates': `${row.certificates_verified}/${row.total - row.certificates_verified}`,
         'Fees': `${row.fee_cleared}/${row.total - row.fee_cleared}`,
         'Promotion': `${row.promotion_completed}/${row.total - row.promotion_completed}`,
-        'Scholarship': `${row.scholarship_assigned}/${row.total - row.scholarship_assigned}`,
+        'Scholarship': `${row.scholarship_assigned}/${row.scholarship_pending}`,
       }));
 
       // Add Grand Total Row
@@ -6722,8 +6726,9 @@ exports.exportRegistrationReport = async (req, res) => {
         acc.fee_cleared += row.fee_cleared;
         acc.promotion_completed += row.promotion_completed;
         acc.scholarship_assigned += row.scholarship_assigned;
+        acc.scholarship_pending += row.scholarship_pending;
         return acc;
-      }, { total: 0, overall_completed: 0, pending: 0, verification_completed: 0, certificates_verified: 0, fee_cleared: 0, promotion_completed: 0, scholarship_assigned: 0 });
+      }, { total: 0, overall_completed: 0, pending: 0, verification_completed: 0, certificates_verified: 0, fee_cleared: 0, promotion_completed: 0, scholarship_assigned: 0, scholarship_pending: 0 });
 
       abstractSheetData.push({
         Batch: 'TOTAL',
@@ -6735,7 +6740,7 @@ exports.exportRegistrationReport = async (req, res) => {
         'Certificates': totals.certificates_verified,
         'Fees': totals.fee_cleared,
         'Promotion': totals.promotion_completed,
-        'Scholarship': totals.scholarship_assigned
+        'Scholarship': `${totals.scholarship_assigned}/${totals.scholarship_pending}`
       });
 
       const abstractWs = XLSX.utils.json_to_sheet(abstractSheetData);

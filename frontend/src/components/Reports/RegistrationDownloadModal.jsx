@@ -250,7 +250,7 @@ const RegistrationDownloadModal = ({ isOpen, onClose, initialFilters = {}, filte
                                                     <td className="px-4 py-3 text-center text-xs text-gray-500">{row.certificates_verified}/{total - row.certificates_verified}</td>
                                                     <td className="px-4 py-3 text-center text-xs text-gray-500">{row.fee_cleared}/{total - row.fee_cleared}</td>
                                                     <td className="px-4 py-3 text-center text-xs text-gray-500">{row.promotion_completed}/{total - row.promotion_completed}</td>
-                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.scholarship_assigned}/{total - row.scholarship_assigned}</td>
+                                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{row.scholarship_assigned}/{row.scholarship_pending ?? (total - row.scholarship_assigned)}</td>
                                                 </tr>
                                             )
                                         })}

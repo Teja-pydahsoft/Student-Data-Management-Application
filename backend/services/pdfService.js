@@ -960,7 +960,8 @@ const generateRegistrationReportPDF = async ({
         certificates_verified: 0,
         fee_cleared: 0,
         promotion_completed: 0,
-        scholarship_assigned: 0
+        scholarship_assigned: 0,
+        scholarship_pending: 0
       };
     }
 
@@ -980,6 +981,7 @@ const generateRegistrationReportPDF = async ({
     if (student['Fees'] === 'No Due' || student['Fees'] === 'Permitted') group.fee_cleared++;
     if (student['Promotion'] === 'Completed') group.promotion_completed++;
     if (student['Scholarship'] !== 'Pending') group.scholarship_assigned++;
+    if (student['Scholarship'] === 'Pending') group.scholarship_pending++;
   });
 
   // Convert to array and sort
@@ -1001,11 +1003,12 @@ const generateRegistrationReportPDF = async ({
     acc.fee_cleared += row.fee_cleared;
     acc.promotion_completed += row.promotion_completed;
     acc.scholarship_assigned += row.scholarship_assigned;
+    acc.scholarship_pending += row.scholarship_pending;
     return acc;
   }, {
     total: 0, overall_completed: 0, pending: 0,
     verification_completed: 0, certificates_verified: 0, fee_cleared: 0,
-    promotion_completed: 0, scholarship_assigned: 0
+    promotion_completed: 0, scholarship_assigned: 0, scholarship_pending: 0
   });
 
 
@@ -1143,7 +1146,7 @@ const generateRegistrationReportPDF = async ({
       `${row.certificates_verified}/${row.total - row.certificates_verified}`,
       `${row.fee_cleared}/${row.total - row.fee_cleared}`,
       `${row.promotion_completed}/${row.total - row.promotion_completed}`,
-      `${row.scholarship_assigned}/${row.total - row.scholarship_assigned}`,
+      `${row.scholarship_assigned}/${row.scholarship_pending}`,
     ];
 
     cells.forEach((val, i) => {
@@ -1186,7 +1189,7 @@ const generateRegistrationReportPDF = async ({
     totals.certificates_verified,
     totals.fee_cleared,
     totals.promotion_completed,
-    totals.scholarship_assigned
+    `${totals.scholarship_assigned}/${totals.scholarship_pending}`
   ];
 
   totalCells.forEach((val, i) => {

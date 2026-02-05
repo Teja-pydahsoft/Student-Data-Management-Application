@@ -1792,7 +1792,7 @@ const Reports = () => {
                           </td>
                           <td className="px-4 py-3 text-center text-gray-600">
                             <div className="text-xs">
-                              <span className="text-green-600 font-medium">{row.scholarship_assigned}</span> / <span className="text-red-400">{total - row.scholarship_assigned}</span>
+                              <span className="text-green-600 font-medium">{row.scholarship_assigned}</span> / <span className="text-red-400">{row.scholarship_pending ?? (total - row.scholarship_assigned)}</span>
                             </div>
                           </td>
                         </tr>
@@ -1823,7 +1823,9 @@ const Reports = () => {
                           {abstractData.reduce((acc, r) => acc + parseInt(r.promotion_completed || 0), 0)}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {abstractData.reduce((acc, r) => acc + parseInt(r.scholarship_assigned || 0), 0)}
+                          <span className="text-green-700">{abstractData.reduce((acc, r) => acc + parseInt(r.scholarship_assigned || 0), 0)}</span>
+                          {' / '}
+                          <span className="text-red-600">{abstractData.reduce((acc, r) => acc + parseInt(r.scholarship_pending ?? 0), 0)}</span>
                         </td>
                       </tr>
                     )}
