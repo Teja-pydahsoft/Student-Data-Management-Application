@@ -51,14 +51,17 @@ const SemesterRegistration = () => {
             if (response.data.success) {
                 const student = response.data.data;
                 const sData = student.student_data || {};
+                // Verification flags: ensure unverified students always show as pending (first stage)
+                const studentVerified = sData.is_student_mobile_verified === true;
+                const parentVerified = sData.is_parent_mobile_verified === true;
 
                 setStudentData(student);
                 setVerificationState(prev => ({
                     ...prev,
                     studentMobile: student.student_mobile || '',
                     parentMobile: student.parent_mobile1 || student.parent_mobile2 || '',
-                    studentVerified: !!sData.is_student_mobile_verified,
-                    parentVerified: !!sData.is_parent_mobile_verified
+                    studentVerified,
+                    parentVerified
                 }));
             }
         } catch (error) {
@@ -146,8 +149,8 @@ const SemesterRegistration = () => {
         if (!studentData) return 'pending';
 
         switch (id) {
-            case 1: // Verification
-                return (verificationState.studentVerified && verificationState.parentVerified) ? 'completed' : 'pending';
+            case 1: // Verification — only completed when both student and parent are verified; else pending
+                return (verificationState.studentVerified === true && verificationState.parentVerified === true) ? 'completed' : 'pending';
             case 2: // Certificates
                 return (studentData.certificates_status || '').toLowerCase().includes('verified') ? 'completed' : 'pending';
             case 3: // Fee
@@ -324,12 +327,20 @@ const SemesterRegistration = () => {
         );
     }
 
+    const currentYear = studentData?.current_year ?? '1';
+    const currentSemester = studentData?.current_semester ?? '1';
+
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20">
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-900 heading-font">Semester Registration</h1>
                 <p className="text-gray-500 mt-1">Complete the steps below to register for the upcoming semester.</p>
+                <div className="mt-3 flex items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-4 py-2 w-fit">
+                    <BookOpen size={18} className="text-gray-500 flex-shrink-0" />
+                    <span className="font-medium">Current:</span>
+                    <span>Year {currentYear}, Semester {currentSemester}</span>
+                </div>
             </div>
 
             {/* Steps Grid */}
