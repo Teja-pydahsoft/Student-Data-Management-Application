@@ -28,8 +28,15 @@ const AuthCallback = () => {
                     userType: user.role // Approximating userType from role if needed
                 });
 
+                // Students must land on student routes; /dashboard is admin-only
+                const isStudent = user?.role === 'student' || user?.admission_number;
+                const resolvedPath =
+                    isStudent && (redirectPath === '/dashboard' || redirectPath === '/')
+                        ? '/student/my-tickets'
+                        : redirectPath;
+
                 // Navigate to the target path
-                navigate(redirectPath, { replace: true });
+                navigate(resolvedPath, { replace: true });
             } catch (error) {
                 console.error("Failed to parse user data during auth callback", error);
                 // Fallback to main app login

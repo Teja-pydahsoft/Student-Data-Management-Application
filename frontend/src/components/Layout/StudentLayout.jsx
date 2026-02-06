@@ -330,7 +330,7 @@ const StudentLayout = ({ children }) => {
                             {workspaceDropdownOpen && (
                                 <div className="mt-1.5 ml-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
                                     <a
-                                        href={getTicketAppUrl('/dashboard')}
+                                        href={getTicketAppUrl('/student/my-tickets')}
                                         className="flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
                                     >
                                         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
@@ -526,7 +526,7 @@ const StudentLayout = ({ children }) => {
                             {workspaceDropdownOpen && (
                                 <div className="ml-2 mb-2 space-y-0.5 pl-6 py-2 border-l-2 border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent rounded-r-md">
                                     <a
-                                        href={getTicketAppUrl('/dashboard')}
+                                        href={getTicketAppUrl('/student/my-tickets')}
                                         className="flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700 hover:translate-x-1 hover:shadow-sm"
                                     >
                                         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-blue-500"></div>
