@@ -66,11 +66,21 @@ const Attendance = () => {
         }
     };
 
-    const fetchAttendanceHistory = async () => {
+    const fetchAttendanceHistory = async (showToast = false) => {
         try {
-            const response = await api.get('/attendance/student');
+            setLoading(true);
+            const response = await api.get('/attendance/student', {
+                params: {
+                    _t: Date.now() // Cache busting parameter
+                }
+            });
             if (response.data.success) {
                 setHistoryData(response.data.data);
+                if (showToast) {
+                    toast.success('Attendance updated');
+                }
+            } else {
+                toast.error(response.data.message || 'Failed to load attendance records');
             }
         } catch (error) {
             console.error('Error fetching attendance:', error);
@@ -268,6 +278,14 @@ const Attendance = () => {
                     <h1 className="text-xl md:text-2xl font-bold text-gray-900 heading-font">Attendance History</h1>
                     <p className="text-xs md:text-sm text-gray-500">Track your comprehensive attendance overview</p>
                 </div>
+                <button
+                    onClick={() => fetchAttendanceHistory(true)}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    Refresh
+                </button>
             </header>
 
             {/* Semester Summary Card */}

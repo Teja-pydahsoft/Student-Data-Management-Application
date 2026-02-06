@@ -74,7 +74,7 @@ const Dashboard = () => {
                     api.get(`/students/${user.admission_number}`),
                     api.get('/announcements/student'),
                     api.get('/polls/student'),
-                    api.get('/attendance/student'),
+                    api.get('/attendance/student', { params: { _t: Date.now() } }), // Cache busting
                     serviceService.getRequests(),
                     api.get('/events/student'),
                     clubService.getClubs()
@@ -112,6 +112,8 @@ const Dashboard = () => {
                 // Handle Attendance
                 if (attendanceRes.status === 'fulfilled' && attendanceRes.value.data.success) {
                     setAttendanceHistory(attendanceRes.value.data.data);
+                } else if (attendanceRes.status === 'rejected') {
+                    console.error('Failed to fetch attendance:', attendanceRes.reason);
                 }
 
                 // Handle Services
@@ -137,6 +139,28 @@ const Dashboard = () => {
         };
 
         fetchAllData();
+
+        // Refresh attendance when page becomes visible (user switches back to tab)
+        const handleVisibilityChange = () => {
+            if (!document.hidden && user?.admission_number) {
+                // Refresh attendance data when user comes back to the tab
+                api.get('/attendance/student', { params: { _t: Date.now() } })
+                    .then(response => {
+                        if (response.data.success) {
+                            setAttendanceHistory(response.data.data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error refreshing attendance:', error);
+                    });
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [user]);
 
     // Derived Attendance Stats
