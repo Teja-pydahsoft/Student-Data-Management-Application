@@ -3127,10 +3127,10 @@ const Students = () => {
             )}
 
             {/* Main Content - Two Column Layout */}
-            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-              {/* Left Sidebar - Student Photo & Key Info */}
-              <div className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col overflow-hidden">
-                <div className="space-y-5">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row">
+              {/* Left Sidebar - Student Photo & Key Info (scrollable to prevent overlap) */}
+              <div className="w-full lg:w-80 lg:min-w-[20rem] bg-white border-b lg:border-b-0 lg:border-r border-gray-200 p-4 sm:p-6 flex-shrink-0 flex flex-col min-h-0 overflow-y-auto">
+                <div className="space-y-5 flex-shrink-0">
                   {/* Student Photo */}
                   {canViewField('student_photo') && (
                     <div className="flex flex-col items-center">
@@ -3241,11 +3241,11 @@ const Students = () => {
                     </div>
                   )}
 
-                  {/* Key Identity Info */}
-                  <div className="space-y-3">
+                  {/* Key Identity Info - spaced to avoid overlapping */}
+                  <div className="space-y-4">
                     {canViewField('student_name') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Student Name
                         </label>
                         {editMode ? (
@@ -3263,8 +3263,8 @@ const Students = () => {
                       </div>
                     )}
                     {canViewField('pin_no') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Roll Number
                         </label>
                         {editingRollNumber ? (
@@ -3335,18 +3335,82 @@ const Students = () => {
                         )}
                       </div>
                     )}
+                    {/* Order: College, Batch, Program, Branch (all dropdowns in edit mode) */}
+                    {canViewField('college') && (
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                          College
+                        </label>
+                        {editMode ? (
+                          <select
+                            value={editData.college || editData.College || selectedStudent?.college || ''}
+                            onChange={(e) => updateEditField('college', e.target.value)}
+                            disabled={collegesLoading}
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="">Select College</option>
+                            {colleges.filter(c => c.isActive !== false).map((college) => (
+                              <option key={college.id} value={college.name}>{college.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-700">
+                            {editData.college || editData.College || selectedStudent?.college || '-'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {canViewField('batch') && (
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                          Batch
+                        </label>
+                        {editMode ? (
+                          <select
+                            value={editData.batch || editData.Batch || selectedStudent?.batch || ''}
+                            onChange={(e) => updateEditField('batch', e.target.value)}
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                          >
+                            <option value="">Select Batch</option>
+                            {(quickFilterOptions.batches || []).map((batch) => (
+                              <option key={batch} value={batch}>{batch}</option>
+                            ))}
+                            {(() => {
+                              const currentBatch = editData.batch || editData.Batch || selectedStudent?.batch || '';
+                              return currentBatch && !(quickFilterOptions.batches || []).includes(currentBatch) ? (
+                                <option value={currentBatch}>{currentBatch}</option>
+                              ) : null;
+                            })()}
+                          </select>
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-700">
+                            {editData.batch || editData.Batch || selectedStudent?.batch || '-'}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {canViewField('course') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Program
                         </label>
                         {editMode ? (
-                          <input
-                            type="text"
+                          <select
                             value={editData.course || selectedStudent.course || ''}
                             onChange={(e) => updateEditField('course', e.target.value)}
                             className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
+                          >
+                            <option value="">Select Program</option>
+                            {(quickFilterOptions.courses || []).map((course) => (
+                              <option key={course} value={course}>{course}</option>
+                            ))}
+                            {(() => {
+                              const currentCourse = editData.course || selectedStudent?.course || '';
+                              return currentCourse && !(quickFilterOptions.courses || []).includes(currentCourse) ? (
+                                <option value={currentCourse}>{currentCourse}</option>
+                              ) : null;
+                            })()}
+                          </select>
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
                             {editData.course || selectedStudent.course || '-'}
@@ -3355,17 +3419,27 @@ const Students = () => {
                       </div>
                     )}
                     {canViewField('branch') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Branch
                         </label>
                         {editMode ? (
-                          <input
-                            type="text"
-                            value={editData.branch || editData.Branch || ''}
+                          <select
+                            value={editData.branch || editData.Branch || selectedStudent?.branch || ''}
                             onChange={(e) => updateEditField('branch', e.target.value)}
                             className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
+                          >
+                            <option value="">Select Branch</option>
+                            {(quickFilterOptions.branches || []).map((branch) => (
+                              <option key={branch} value={branch}>{branch}</option>
+                            ))}
+                            {(() => {
+                              const currentBranch = editData.branch || editData.Branch || selectedStudent?.branch || '';
+                              return currentBranch && !(quickFilterOptions.branches || []).includes(currentBranch) ? (
+                                <option value={currentBranch}>{currentBranch}</option>
+                              ) : null;
+                            })()}
+                          </select>
                         ) : (
                           <p className="text-sm font-semibold text-gray-700">
                             {editData.branch || editData.Branch || selectedStudent?.branch || '-'}
@@ -3374,12 +3448,12 @@ const Students = () => {
                       </div>
                     )}
                     {(canViewField('current_year') || canViewField('current_semester')) && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Current Year & Semester
                         </label>
                         {editMode ? (
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-2 min-w-0">
                             {canViewField('current_year') && (
                               <select
                                 value={editData.current_year || editData['Current Academic Year'] || selectedStudent.current_year || '1'}
@@ -3442,60 +3516,18 @@ const Students = () => {
                         )}
                       </div>
                     )}
-                    {canViewField('college') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          College
-                        </label>
-                        {editMode ? (
-                          <select
-                            value={editData.college || editData.College || selectedStudent?.college || ''}
-                            onChange={(e) => updateEditField('college', e.target.value)}
-                            disabled={collegesLoading}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Select College</option>
-                            {colleges.filter(c => c.isActive !== false).map((college) => (
-                              <option key={college.id} value={college.name}>{college.name}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.college || editData.College || selectedStudent?.college || '-'}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {canViewField('batch') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                          Batch
-                        </label>
-                        {editMode ? (
-                          <input
-                            type="text"
-                            value={editData.batch || editData.Batch || ''}
-                            onChange={(e) => updateEditField('batch', e.target.value)}
-                            placeholder="Enter batch"
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
-                          />
-                        ) : (
-                          <p className="text-sm font-semibold text-gray-700">
-                            {editData.batch || editData.Batch || selectedStudent?.batch || '-'}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {canViewField('stud_type') && (
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    {/* Student Type: show whenever Batch is shown so key identity (Batch + Type) is always visible in edit and view */}
+                    {(canViewField('stud_type') || canViewField('batch')) && (
+                      <div className="min-w-0">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                           Student Type
                         </label>
                         {editMode ? (
                           <select
                             value={editData.stud_type || editData.StudType || ''}
                             onChange={(e) => updateEditField('stud_type', e.target.value)}
-                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px]"
+                            disabled={!canEditField('stud_type')}
+                            className="w-full px-3 py-2.5 sm:py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-base sm:text-sm touch-manipulation min-h-[44px] disabled:bg-gray-50 disabled:cursor-not-allowed"
                           >
                             <option value="">Select Student Type</option>
                             <option value="MANG">MANG</option>
