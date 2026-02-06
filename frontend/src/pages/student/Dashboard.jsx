@@ -31,6 +31,18 @@ const Dashboard = () => {
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showBirthday, setShowBirthday] = useState(false);
 
+    // Is today the student's birthday? (for theme and welcome styling)
+    const isBirthday = useMemo(() => {
+        const data = studentData || user;
+        if (!data) return false;
+        const dobStr = data.dob || data.student_data?.['DOB (Date of Birth - DD-MM-YYYY)'] || data.student_data?.dob;
+        if (!dobStr) return false;
+        const dob = new Date(dobStr);
+        const today = new Date();
+        if (isNaN(dob.getTime())) return false;
+        return dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth();
+    }, [studentData, user]);
+
     // Initial Data Fetch
     useEffect(() => {
         if (studentData) {
@@ -574,12 +586,12 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Welcome Header */}
-            <div className="flex flex-col gap-1">
-                <h1 className="text-xl lg:text-3xl font-bold text-gray-900 heading-font">
-                    Welcome back, {displayData?.student_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'} 👋
+            {/* Welcome Header - birthday theme when it's the student's birthday */}
+            <div className={`flex flex-col gap-1 rounded-xl p-4 -mx-1 ${isBirthday ? 'bg-gradient-to-r from-amber-100/80 to-orange-100/60 border border-amber-200/60' : ''}`}>
+                <h1 className={`text-xl lg:text-3xl font-bold heading-font ${isBirthday ? 'text-amber-900' : 'text-gray-900'}`}>
+                    {isBirthday ? '🎂 ' : ''}Welcome back, {displayData?.student_name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'}{isBirthday ? ' — Happy Birthday!' : ' 👋'}
                 </h1>
-                <p className="text-xs lg:text-base text-gray-500">
+                <p className={`text-xs lg:text-base ${isBirthday ? 'text-amber-800/90' : 'text-gray-500'}`}>
                     {displayData?.course || user?.course} | {displayData?.branch || user?.branch} | Year {displayData?.current_year || user?.current_year}
                 </p>
             </div>
