@@ -46,6 +46,11 @@ async function buildReportFilters(req) {
   }
 
   baseQuery += " AND student_status = 'Regular'";
+
+  // Only include students whose college exists in colleges table (exclude orphan/invalid college names)
+  // Use COLLATE to avoid "Illegal mix of collations" when students.college and colleges.name differ (e.g. utf8mb4_0900_ai_ci vs utf8mb4_unicode_ci)
+  baseQuery += " AND college IS NOT NULL AND college <> '' AND college COLLATE utf8mb4_unicode_ci IN (SELECT name FROM colleges WHERE is_active = 1)";
+
   if (excludedStudents.length > 0) {
     baseQuery += ` AND admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
     params.push(...excludedStudents);

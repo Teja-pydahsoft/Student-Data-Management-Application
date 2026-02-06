@@ -4547,9 +4547,9 @@ exports.getQuickFilterOptions = async (req, res) => {
       params.push(parseInt(semester, 10));
     }
 
-    // Fetch distinct values for each filter, applying cascading filters
+    // Fetch distinct values for each filter (only colleges that exist in colleges table, to exclude orphan names)
     const [collegeRows] = await masterPool.query(
-      `SELECT DISTINCT college FROM students ${whereClause} AND college IS NOT NULL AND college <> '' ORDER BY college ASC`,
+      `SELECT DISTINCT college FROM students ${whereClause} AND college IS NOT NULL AND college <> '' AND college COLLATE utf8mb4_unicode_ci IN (SELECT name FROM colleges WHERE is_active = 1) ORDER BY college ASC`,
       params
     );
 
