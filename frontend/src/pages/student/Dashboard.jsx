@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, User, CheckCircle, Smartphone, MapPin, BarChart3, Clock, Vote, FileText, ArrowRight, Calendar, X, Users, AlertCircle } from 'lucide-react';
 import { SkeletonBox, SkeletonCard } from '../../components/SkeletonLoader';
@@ -26,6 +26,7 @@ const Dashboard = () => {
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
     const [currentAnnouncement, setCurrentAnnouncement] = useState(null);
+    const hasCheckedAnnouncements = useRef(false);
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showBirthday, setShowBirthday] = useState(false);
@@ -62,6 +63,9 @@ const Dashboard = () => {
 
     // Initial Data Fetch
     useEffect(() => {
+        // Reset the check flag when user changes (new session)
+        hasCheckedAnnouncements.current = false;
+        
         const fetchAllData = async () => {
             try {
                 if (!user?.admission_number) return;
@@ -86,12 +90,17 @@ const Dashboard = () => {
                     const allAnnouncements = announcementsRes.value.data.data;
                     setAnnouncements(allAnnouncements);
 
-                    // Show latest unseen announcement popup
-                    const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
-                    const unseen = allAnnouncements.filter(a => !seenIds.includes(a.id));
-                    if (unseen.length > 0) {
-                        setCurrentAnnouncement(unseen[0]);
-                        setShowAnnouncement(true);
+                    // Show latest unseen announcement popup (only check once per session)
+                    if (!hasCheckedAnnouncements.current && !showAnnouncement) {
+                        hasCheckedAnnouncements.current = true;
+                        const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
+                        // Convert all IDs to strings for consistent comparison
+                        const seenIdsStr = seenIds.map(id => String(id));
+                        const unseen = allAnnouncements.filter(a => !seenIdsStr.includes(String(a.id)));
+                        if (unseen.length > 0) {
+                            setCurrentAnnouncement(unseen[0]);
+                            setShowAnnouncement(true);
+                        }
                     }
                 }
 
@@ -249,12 +258,18 @@ const Dashboard = () => {
     const closeAnnouncement = () => {
         if (currentAnnouncement) {
             const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
-            if (!seenIds.includes(currentAnnouncement.id)) {
+            // Convert all IDs to strings for consistent comparison
+            const seenIdsStr = seenIds.map(id => String(id));
+            const currentIdStr = String(currentAnnouncement.id);
+            
+            if (!seenIdsStr.includes(currentIdStr)) {
+                // Store the original ID format (number or string) as it was
                 seenIds.push(currentAnnouncement.id);
                 localStorage.setItem('seen_announcements', JSON.stringify(seenIds));
             }
         }
         setShowAnnouncement(false);
+        setCurrentAnnouncement(null);
     };
 
     const formatTime = (timeStr) => {
