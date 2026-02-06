@@ -18,6 +18,7 @@ import Attendance from './pages/Attendance';
 import UserManagement from './pages/UserManagement';
 import StudentFieldPermissions from './pages/StudentFieldPermissions';
 import Reports from './pages/Reports';
+import CategoryReport from './pages/CategoryReport';
 import StudentPromotions from './pages/StudentPromotions';
 import CollegeTransfer from './pages/CollegeTransfer';
 import TicketManagement from './pages/TicketManagement';
@@ -154,6 +155,7 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="reports/attendance" element={<Reports />} />
           <Route path="reports/day-end" element={<Reports />} />
+          <Route path="reports/category" element={<CategoryReport />} />
           <Route path="tickets" element={<TicketManagement />} />
           <Route path="task-management" element={<TaskManagement />} />
           <Route path="announcements" element={<Announcements />} />

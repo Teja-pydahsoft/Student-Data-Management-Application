@@ -1210,9 +1210,121 @@ const generateRegistrationReportPDF = async ({
   });
 };
 
+/**
+ * Generate Category (Caste) Report PDF - abstract format: College, Batch, Program, Branch, Year, Sem, Total, category columns.
+ */
+const generateCategoryReportPDF = async ({ data = [], categoryColumns = [], filters = {} }) => {
+  const tempDir = os.tmpdir();
+  const fileName = `category_report_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+  const filePath = path.join(tempDir, fileName);
+
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24 });
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  doc.fontSize(16).text('Category Report (Abstract)', { align: 'center' });
+  doc.moveDown(0.3);
+  doc.fontSize(9).fillColor('#666').text(`Generated on ${new Date().toLocaleString()}`, { align: 'center' });
+  doc.moveDown(0.5);
+
+  if (filters && (filters.college !== 'All' || filters.batch !== 'All' || filters.course !== 'All' || filters.branch !== 'All' || filters.year !== 'All' || filters.semester !== 'All')) {
+    doc.fontSize(9).fillColor('#333').text(`Filters: College ${filters.college || 'All'} | Batch ${filters.batch || 'All'} | Program ${filters.course || 'All'} | Branch ${filters.branch || 'All'} | Year ${filters.year || 'All'} | Sem ${filters.semester || 'All'}`);
+    doc.moveDown(0.5);
+  }
+
+  const isAbstract = Array.isArray(categoryColumns) && categoryColumns.length > 0 && data.length > 0 && data[0].category_breakdown != null;
+  const rowHeight = 16;
+  const headerBg = '#f3f4f6';
+  const startX = 24;
+
+  if (isAbstract) {
+    const fixedCols = ['College', 'Batch', 'Program', 'Branch', 'Year', 'Sem', 'Total'];
+    const allHeaders = [...fixedCols, ...categoryColumns];
+    const numCols = allHeaders.length;
+    const pageWidth = doc.page.width - 48;
+    const fixedWidth = Math.min(55, (pageWidth - 30 * Math.max(0, numCols - 7)) / 7);
+    const catColWidth = Math.max(18, (pageWidth - fixedWidth * 7) / Math.max(1, categoryColumns.length));
+    const colWidths = [...Array(7)].fill(fixedWidth).concat([...Array(categoryColumns.length)].fill(catColWidth));
+    const tableWidth = colWidths.reduce((a, b) => a + b, 0);
+
+    const drawHeader = (y) => {
+      doc.rect(startX, y, tableWidth, rowHeight).fill(headerBg);
+      doc.fillColor('#000').fontSize(7).font('Helvetica-Bold');
+      let x = startX + 3;
+      allHeaders.forEach((h, idx) => {
+        doc.text(String(h).substring(0, 12), x, y + 4, { width: colWidths[idx] - 4, align: idx >= 7 ? 'right' : 'left' });
+        x += colWidths[idx];
+      });
+      doc.font('Helvetica');
+    };
+
+    let currentY = doc.y;
+    drawHeader(currentY);
+    currentY += rowHeight;
+
+    data.forEach((row, i) => {
+      if (currentY + rowHeight > doc.page.height - 30) {
+        doc.addPage('a4', 'landscape');
+        currentY = 24;
+        drawHeader(currentY);
+        currentY += rowHeight;
+      }
+      doc.fillColor(i % 2 === 0 ? '#fff' : '#f9fafb');
+      doc.rect(startX, currentY, tableWidth, rowHeight).fillAndStroke('#fff', '#e5e7eb');
+      doc.fillColor('#000').fontSize(7);
+      let x = startX + 3;
+      const vals = [row.college, row.batch, row.course, row.branch, row.current_year, row.current_semester, row.total];
+      vals.forEach((v, idx) => {
+        doc.text(String(v ?? '-').substring(0, 10), x, currentY + 4, { width: colWidths[idx] - 4, align: idx >= 6 ? 'right' : 'left' });
+        x += colWidths[idx];
+      });
+      categoryColumns.forEach((c, idx) => {
+        const n = row.category_breakdown[c] ?? 0;
+        doc.text(String(n), x, currentY + 4, { width: colWidths[7 + idx] - 4, align: 'right' });
+        x += colWidths[7 + idx];
+      });
+      currentY += rowHeight;
+    });
+
+    const grandTotal = data.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+    doc.y = currentY + 6;
+    doc.font('Helvetica-Bold').fontSize(8).text(`Grand Total: ${grandTotal}`, startX, doc.y, { width: tableWidth, align: 'right' });
+  } else {
+    const colWidths = [280, 120];
+    const tableWidth = colWidths[0] + colWidths[1];
+    const tableTop = doc.y;
+    doc.rect(startX, tableTop, tableWidth, rowHeight).fill(headerBg);
+    doc.fillColor('#000').fontSize(10).font('Helvetica-Bold');
+    doc.text('Category', startX + 5, tableTop + 5, { width: colWidths[0] - 10 });
+    doc.text('Count', startX + colWidths[0], tableTop + 5, { width: colWidths[1] - 10, align: 'right' });
+    doc.font('Helvetica').fontSize(10);
+    let currentY = tableTop + rowHeight;
+    data.forEach((row, i) => {
+      doc.fillColor(i % 2 === 0 ? '#fff' : '#f9fafb');
+      doc.rect(startX, currentY, tableWidth, rowHeight).fillAndStroke('#fff', '#e5e7eb');
+      doc.fillColor('#000');
+      doc.text(String(row.category || '').substring(0, 50), startX + 5, currentY + 5, { width: colWidths[0] - 10 });
+      doc.text(String(row.count), startX + colWidths[0], currentY + 5, { width: colWidths[1] - 10, align: 'right' });
+      currentY += rowHeight;
+    });
+    const totalCount = data.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
+    doc.y = currentY + 10;
+    doc.font('Helvetica-Bold').text(`Total: ${totalCount}`, startX, doc.y, { width: tableWidth, align: 'right' });
+  }
+
+  doc.font('Helvetica');
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
+};
+
 module.exports = {
   generateAttendanceReportPDF,
   generateRegistrationReportPDF,
+  generateCategoryReportPDF,
   generateStudyCertificate,
   generateRefundApplication,
   generateCustodianCertificate,

@@ -194,7 +194,7 @@ const Reports = () => {
       };
       fetchAbstract();
     }
-  }, [activeTab, filters]);
+  }, [reportType, activeTab, filters]);
 
   // Debounced search
   const [searchTerm, setSearchTerm] = useState('');

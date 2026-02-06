@@ -82,21 +82,8 @@ router.get(
   studentController.getBatchAcademicStatus
 );
 
-router.get(
-  '/reports/registration/abstract',
-  authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
-  attachUserScope,
-  studentController.getRegistrationAbstract
-);
+router.use('/reports', require('./reports'));
 
-router.get(
-  '/reports/registration',
-  authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
-  attachUserScope,
-  studentController.getRegistrationReport
-);
 router.get(
   '/dashboard-stats',
   authMiddleware,
@@ -233,14 +220,6 @@ router.post(
   verifyPermission(MODULES.STUDENT_MANAGEMENT, 'edit_student'),
   attachUserScope,
   studentController.checkExpiredPermits
-);
-
-router.get(
-  '/reports/registration/export',
-  authMiddleware,
-  verifyPermission(MODULES.STUDENT_MANAGEMENT, 'view'),
-  attachUserScope,
-  studentController.exportRegistrationReport
 );
 
 // Verify Mobile (Admin Override)

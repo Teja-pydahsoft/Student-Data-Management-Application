@@ -126,6 +126,11 @@ const NAV_ITEMS = [
         label: "Day End Report",
         permission: FRONTEND_MODULES.REPORTS,
       },
+      {
+        path: "/reports/category",
+        label: "Category Report",
+        permission: FRONTEND_MODULES.REPORTS,
+      },
     ],
   },
   {
