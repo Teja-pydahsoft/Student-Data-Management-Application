@@ -113,6 +113,20 @@ mysqldump -u root -p student_database > backup_%date:~-4,4%%date:~-10,2%%date:~-
 mysql -u root -p student_database < backup.sql
 ```
 
+### Registration 5-Stage Audit Script
+Check how many students have completed all 5 registration stages and find those falsely marked as completed:
+```powershell
+# From project root
+node backend/scripts/check_registration_5_stages.js
+
+# Fix falsely completed (set them to pending)
+node backend/scripts/check_registration_5_stages.js --fix
+
+# Fix false + set Completed for those who have all 5 stages
+node backend/scripts/check_registration_5_stages.js --fix-all
+```
+The 5 stages are: Verification, Certificates, Fee, Promotion, Scholarship.
+
 ### View Database
 ```powershell
 # Login to MySQL
