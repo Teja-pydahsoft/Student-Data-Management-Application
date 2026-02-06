@@ -90,6 +90,16 @@ const REGISTRATION_STATUS_OPTIONS = [
   'Completed'
 ];
 
+// Utility function to mask mobile number (show only last 3 digits)
+const maskMobileNumber = (mobile) => {
+  if (!mobile || mobile === '-') return mobile;
+  const mobileStr = String(mobile).trim();
+  if (mobileStr.length <= 3) return mobileStr;
+  const lastThree = mobileStr.slice(-3);
+  const maskedPart = 'x'.repeat(mobileStr.length - 3);
+  return maskedPart + lastThree;
+};
+
 const Students = () => {
   const location = useLocation();
   const { user } = useAuthStore();
@@ -105,11 +115,11 @@ const Students = () => {
   const canViewStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'view');
   const canAddStudent = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'add_student');
   const canBulkUploadStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'bulk_upload');
-  // Edit permission is now granular per field, but we assume if they can view, they might be able to edit specific fields if authorized
-  // We keep 'canEditStudents' variable for backward compatibility but bind it to 'view' or 'edit_student' if it existed,
-  // but since we removed 'edit_student', we'll rely on field permissions.
-  // For UI consistency, we'll allow entering edit mode if the user can view the list.
-  const canEditStudents = canViewStudents;
+  // Check if user has edit permissions - check for both edit_details and edit_student permissions
+  const canEditDetails = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'edit_details');
+  const canEditStudentsReal = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'edit_student');
+  // User can edit if they have either edit_details or edit_student permission
+  const canEditStudents = canEditDetails || canEditStudentsReal;
   const canDeleteStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'delete_student');
   const canUpdatePin = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'update_pin');
   const canExportStudents = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'export');
@@ -117,8 +127,6 @@ const Students = () => {
   const canViewSms = user?.role === 'super_admin' || user?.role === 'admin' || hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'view_sms');
   // Check if user has access to Attendance module
   const canViewAttendance = hasModuleAccess(userPermissions, FRONTEND_MODULES.ATTENDANCE);
-  // Check if user has edit_student permission for maintenance tasks
-  const canEditStudentsReal = hasModulePermission(userPermissions, BACKEND_MODULES.STUDENT_MANAGEMENT, 'edit_student');
 
   const isCashier = user?.role === USER_ROLES.CASHIER;
 
@@ -1558,10 +1566,7 @@ const Students = () => {
   };
 
   const handleEdit = () => {
-    if (!canEditStudents) {
-      toast.error('You do not have permission to edit student details.');
-      return;
-    }
+    // No need to check permission here since button is only shown if user has edit permission
     setEditMode(true);
   };
 
@@ -3809,7 +3814,7 @@ const Students = () => {
                                 />
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.parent_mobile1 || editData['Parent Mobile Number 1'] || selectedStudent?.parent_mobile1 || '-'}
+                                  {maskMobileNumber(editData.parent_mobile1 || editData['Parent Mobile Number 1'] || selectedStudent?.parent_mobile1 || '-')}
                                 </p>
                               )}
                             </div>
@@ -3830,7 +3835,7 @@ const Students = () => {
                                 />
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.parent_mobile2 || editData['Parent Mobile Number 2'] || selectedStudent?.parent_mobile2 || '-'}
+                                  {maskMobileNumber(editData.parent_mobile2 || editData['Parent Mobile Number 2'] || selectedStudent?.parent_mobile2 || '-')}
                                 </p>
                               )}
                             </div>
@@ -3999,7 +4004,7 @@ const Students = () => {
                                 />
                               ) : (
                                 <p className="text-sm text-gray-900 font-medium">
-                                  {editData.student_mobile || editData['Student Mobile Number'] || selectedStudent?.student_mobile || '-'}
+                                  {maskMobileNumber(editData.student_mobile || editData['Student Mobile Number'] || selectedStudent?.student_mobile || '-')}
                                 </p>
                               )}
                             </div>
