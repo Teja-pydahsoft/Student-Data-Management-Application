@@ -212,18 +212,26 @@ CREATE TABLE IF NOT EXISTS clubs (
   FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL
 );
 
--- Transport Requests Table
--- Transport Requests Table
+-- Transport Requests Table (course/semester-wise academic context)
 CREATE TABLE IF NOT EXISTS transport_requests (
   id INT PRIMARY KEY AUTO_INCREMENT,
   admission_number VARCHAR(100),
   student_name VARCHAR(255),
-  route_id VARCHAR(100) NOT NULL,
+  route_id VARCHAR(100),
   route_name VARCHAR(255),
   stage_name VARCHAR(255),
   bus_id VARCHAR(100),
   fare DECIMAL(10, 2),
   status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
   request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  semester_id INT NULL,
+  semester_start_date DATE NULL,
+  semester_end_date DATE NULL,
+  academic_year_id INT NULL,
+  year_of_study TINYINT NULL,
+  semester_number TINYINT NULL,
+  INDEX idx_admission_number (admission_number),
+  INDEX idx_semester_id (semester_id),
+  INDEX idx_academic_year_id (academic_year_id)
 );

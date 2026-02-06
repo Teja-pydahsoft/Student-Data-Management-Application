@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import transportService from '../../services/transportService';
 import { toast } from 'react-hot-toast';
-import { RiBusLine, RiMapPinLine, RiTicketLine, RiHistoryLine, RiCheckDoubleLine, RiTimeLine } from 'react-icons/ri';
+import { RiBusLine, RiMapPinLine, RiTicketLine, RiHistoryLine, RiTimeLine, RiCheckboxCircleFill } from 'react-icons/ri';
 
 const Transport = () => {
     const [routes, setRoutes] = useState([]);
@@ -218,19 +218,90 @@ const Transport = () => {
                                 <p className="text-gray-500">No requests yet.</p>
                             </div>
                         ) : (
-                            requests.map((req) => (
-                                <div key={req.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:shadow-md transition-all">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h4 className="font-bold text-gray-800 line-clamp-1">{req.route_name}</h4>
-                                        {getStatusBadge(req.status)}
+                            requests.map((req) =>
+                                req.status === 'approved' ? (
+                                    /* Bus Pass Card - shown when request is approved */
+                                    <div
+                                        key={req.id}
+                                        className="relative overflow-hidden rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-br from-emerald-50 via-white to-teal-50 shadow-lg shadow-emerald-200/50"
+                                    >
+                                        {/* Decorative strip */}
+                                        <div className="h-2 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
+                                        <div className="p-4">
+                                            {/* Header: BUS PASS + Valid badge */}
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center gap-2">
+                                                    <RiBusLine className="text-emerald-600" size={24} />
+                                                    <span className="text-lg font-black uppercase tracking-widest text-emerald-800">Bus Pass</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1">
+                                                    <RiCheckboxCircleFill className="text-emerald-600" size={16} />
+                                                    <span className="text-xs font-bold uppercase text-emerald-700">Valid</span>
+                                                </div>
+                                            </div>
+                                            {/* Student & route info */}
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between border-b border-emerald-100 pb-2">
+                                                    <span className="text-gray-500">Name</span>
+                                                    <span className="font-semibold text-gray-900">{req.student_name || '–'}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-emerald-100 pb-2">
+                                                    <span className="text-gray-500">Admission No.</span>
+                                                    <span className="font-mono font-semibold text-gray-900">{req.admission_number || '–'}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-emerald-100 pb-2">
+                                                    <span className="text-gray-500">Route</span>
+                                                    <span className="font-semibold text-gray-900 line-clamp-1">{req.route_name || '–'}</span>
+                                                </div>
+                                                <div className="flex justify-between border-b border-emerald-100 pb-2">
+                                                    <span className="text-gray-500">Boarding</span>
+                                                    <span className="font-semibold text-gray-900">{req.stage_name || '–'}</span>
+                                                </div>
+                                                {(req.semester_start_date || req.semester_end_date) && (
+                                                    <div className="flex justify-between border-b border-emerald-100 pb-2">
+                                                        <span className="text-gray-500">Valid till</span>
+                                                        <span className="font-semibold text-gray-900">
+                                                            {req.semester_end_date
+                                                                ? new Date(req.semester_end_date).toLocaleDateString()
+                                                                : req.semester_start_date
+                                                                    ? new Date(req.semester_start_date).toLocaleDateString()
+                                                                    : '–'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* Footer: fare & request date */}
+                                            <div className="mt-4 flex items-center justify-between rounded-lg bg-white/80 px-3 py-2">
+                                                <span className="text-xs text-gray-500">Fare paid ₹{req.fare}</span>
+                                                <span className="text-xs text-gray-500">From {new Date(req.request_date).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <p className="text-sm text-gray-600 mb-1">Stage: <span className="font-medium">{req.stage_name}</span></p>
-                                    <div className="flex justify-between items-center mt-3">
-                                        <span className="text-xs text-gray-400">{new Date(req.request_date).toLocaleDateString()}</span>
-                                        <span className="font-bold text-blue-600">₹{req.fare}</span>
+                                ) : (
+                                    /* Regular request card for pending/rejected */
+                                    <div key={req.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:shadow-md transition-all">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h4 className="font-bold text-gray-800 line-clamp-1">{req.route_name}</h4>
+                                            {getStatusBadge(req.status)}
+                                        </div>
+                                        <p className="text-sm text-gray-600 mb-1">Stage: <span className="font-medium">{req.stage_name}</span></p>
+                                        {(req.year_of_study != null || req.semester_number != null) && (
+                                            <p className="text-xs text-gray-500 mb-1">
+                                                Year {req.year_of_study ?? '–'}, Sem {req.semester_number ?? '–'}
+                                                {req.semester_start_date && req.semester_end_date && (
+                                                    <span className="ml-1">
+                                                        ({new Date(req.semester_start_date).toLocaleDateString()} – {new Date(req.semester_end_date).toLocaleDateString()})
+                                                    </span>
+                                                )}
+                                            </p>
+                                        )}
+                                        <div className="flex justify-between items-center mt-3">
+                                            <span className="text-xs text-gray-400">{new Date(req.request_date).toLocaleDateString()}</span>
+                                            <span className="font-bold text-blue-600">₹{req.fare}</span>
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                )
+                            )
                         )}
                     </div>
                 </div>

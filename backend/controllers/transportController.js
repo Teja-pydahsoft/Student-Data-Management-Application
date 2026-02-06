@@ -42,28 +42,82 @@ exports.createTransportRequest = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Route and Stage are required' });
         }
 
-        // 1. Fetch Student details for Admission Number and Name
-        const [students] = await masterPool.execute('SELECT admission_number, student_name FROM students WHERE id = ?', [student_id]);
+        // 1. Fetch Student details: admission_number, student_name, course, current_year, current_semester
+        const [students] = await masterPool.execute(
+            'SELECT admission_number, student_name, course, current_year, current_semester FROM students WHERE id = ?',
+            [student_id]
+        );
         if (students.length === 0) {
             return res.status(404).json({ success: false, message: 'Student not found' });
         }
-        const { admission_number, student_name } = students[0];
+        const { admission_number, student_name, course, current_year, current_semester } = students[0];
 
-        // 2. Insert Request into MySQL
+        // 2. Resolve semester info (semester_id, semester_start_date, semester_end_date, academic_year_id, year_of_study, semester_number)
+        let semesterId = null;
+        let semesterStartDate = null;
+        let semesterEndDate = null;
+        let academicYearId = null;
+        const yearOfStudy = current_year != null ? Number(current_year) : null;
+        const semesterNumber = current_semester != null ? Number(current_semester) : null;
+
+        if (course && yearOfStudy != null && semesterNumber != null) {
+            const [courseRows] = await masterPool.query(
+                'SELECT id FROM courses WHERE name = ? AND is_active = 1 LIMIT 1',
+                [course]
+            );
+            if (courseRows.length > 0) {
+                const courseId = courseRows[0].id;
+                const todayKey = new Date().toISOString().slice(0, 10);
+                // Prefer semester that is currently active (today within start_date..end_date)
+                const [semesterRows] = await masterPool.query(
+                    `SELECT id, start_date, end_date, academic_year_id, year_of_study, semester_number
+                     FROM semesters
+                     WHERE course_id = ? AND year_of_study = ? AND semester_number = ?
+                       AND start_date <= ? AND end_date >= ?
+                     ORDER BY start_date DESC LIMIT 1`,
+                    [courseId, yearOfStudy, semesterNumber, todayKey, todayKey]
+                );
+                let row = semesterRows[0];
+                if (!row) {
+                    const [recentRows] = await masterPool.query(
+                        `SELECT id, start_date, end_date, academic_year_id, year_of_study, semester_number
+                         FROM semesters
+                         WHERE course_id = ? AND year_of_study = ? AND semester_number = ?
+                         ORDER BY start_date DESC LIMIT 1`,
+                        [courseId, yearOfStudy, semesterNumber]
+                    );
+                    row = recentRows[0];
+                }
+                if (row) {
+                    semesterId = row.id;
+                    semesterStartDate = row.start_date;
+                    semesterEndDate = row.end_date;
+                    academicYearId = row.academic_year_id;
+                }
+            }
+        }
+
+        // 3. Insert request with all required fields including semester/academic year
         const query = `
             INSERT INTO transport_requests 
-            (admission_number, student_name, route_id, route_name, stage_name, bus_id, fare, status, request_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+            (admission_number, student_name, route_id, route_name, stage_name, bus_id, fare, status, request_date,
+             semester_id, semester_start_date, semester_end_date, academic_year_id, year_of_study, semester_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), ?, ?, ?, ?, ?, ?)
         `;
-        
         await masterPool.execute(query, [
             admission_number,
             student_name,
             route_id,
-            route_name,
+            route_name || null,
             stage_name,
             bus_id || null,
-            fare || 0.00
+            fare != null ? Number(fare) : 0.00,
+            semesterId,
+            semesterStartDate,
+            semesterEndDate,
+            academicYearId,
+            yearOfStudy,
+            semesterNumber
         ]);
 
         res.status(201).json({ success: true, message: 'Transport request submitted successfully' });
