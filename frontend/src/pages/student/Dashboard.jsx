@@ -22,6 +22,9 @@ const Dashboard = () => {
 
     const [events, setEvents] = useState([]);
     const [clubs, setClubs] = useState([]);
+    const [hourlySummary, setHourlySummary] = useState(null);
+    const [academicContent, setAcademicContent] = useState({ tests: 0, notes: 0 });
+    const [internalMarksCount, setInternalMarksCount] = useState(0);
 
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -82,14 +85,17 @@ const Dashboard = () => {
             try {
                 if (!user?.admission_number) return;
 
-                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes, clubsRes] = await Promise.allSettled([
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes, clubsRes, hourlyRes, contentRes, marksRes] = await Promise.allSettled([
                     api.get(`/students/${user.admission_number}`),
                     api.get('/announcements/student'),
                     api.get('/polls/student'),
-                    api.get('/attendance/student', { params: { _t: Date.now() } }), // Cache busting
+                    api.get('/attendance/student', { params: { _t: Date.now() } }),
                     serviceService.getRequests(),
                     api.get('/events/student'),
-                    clubService.getClubs()
+                    clubService.getClubs(),
+                    api.get('/hourly-attendance/student-summary'),
+                    api.get('/academic-content'),
+                    api.get('/internal-marks/student/me')
                 ]);
 
                 // Handle Profile
@@ -140,7 +146,21 @@ const Dashboard = () => {
 
                 // Handle Clubs
                 if (clubsRes.status === 'fulfilled' && clubsRes.value.success) {
-                    setClubs(clubsRes.value.data);
+                    setClubs(clubsRes.value.data || []);
+                }
+                if (hourlyRes.status === 'fulfilled' && hourlyRes.value.data?.success && hourlyRes.value.data?.data) {
+                    setHourlySummary(hourlyRes.value.data.data);
+                }
+                if (contentRes.status === 'fulfilled' && contentRes.value.data?.success && Array.isArray(contentRes.value.data?.data)) {
+                    const list = contentRes.value.data.data;
+                    const now = new Date().toISOString().slice(0, 10);
+                    setAcademicContent({
+                        tests: list.filter((c) => c.type === 'test' && (!c.due_date || c.due_date >= now)).length,
+                        notes: list.filter((c) => c.type === 'note').length,
+                    });
+                }
+                if (marksRes.status === 'fulfilled' && marksRes.value.data?.success && Array.isArray(marksRes.value.data?.data)) {
+                    setInternalMarksCount(marksRes.value.data.data.length);
                 }
 
             } catch (error) {
@@ -744,6 +764,32 @@ const Dashboard = () => {
                     </div>
                 </div>
             )}
+
+            {/* Academic Dashboard (v2.0) – attendance %, internal marks, tests, notes */}
+            <div className="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-100 mb-6">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <BookOpen size={16} /> Academic
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="p-3 rounded-lg bg-slate-50">
+                        <p className="text-2xl font-bold text-indigo-600">{hourlySummary?.percentage ?? attendanceStats?.percentage ?? '–'}%</p>
+                        <p className="text-xs text-gray-500">Attendance</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-50">
+                        <p className="text-2xl font-bold text-slate-700">{internalMarksCount > 0 ? internalMarksCount : '–'}</p>
+                        <p className="text-xs text-gray-500">Internal Marks</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-50">
+                        <p className="text-2xl font-bold text-slate-700">{academicContent.tests > 0 ? academicContent.tests : '–'}</p>
+                        <p className="text-xs text-gray-500">Upcoming Tests</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-50">
+                        <p className="text-2xl font-bold text-slate-700">{academicContent.notes > 0 ? academicContent.notes : '–'}</p>
+                        <p className="text-xs text-gray-500">Shared Notes</p>
+                    </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Hourly attendance %, internal marks, tests and notes from faculty.</p>
+            </div>
 
             {/* REMOVED STANDALONE CLUB PAYMENT ALERT */}
 

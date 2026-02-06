@@ -285,7 +285,7 @@ exports.getUsers = async (req, res) => {
         phone: row.phone,
         username: row.username,
         role: row.role,
-        roleLabel: ROLE_LABELS[row.role] || row.role,
+        roleLabel: ROLE_LABELS[row.role] || row.role || '—',
         collegeId: row.college_id,
         courseId: row.course_id,
         branchId: row.branch_id,

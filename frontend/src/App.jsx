@@ -30,6 +30,8 @@ import ServiceRequests from './pages/ServiceRequests';
 import CertificateDesigner from './pages/admin/CertificateDesigner';
 import CollegeConfiguration from './pages/admin/CollegeConfiguration';
 import AddServiceWizard from './pages/admin/AddServiceWizard';
+import FacultyManagement from './pages/admin/FacultyManagement';
+import AttendanceMonitoring from './pages/admin/AttendanceMonitoring';
 import Profile from './pages/Profile';
 import Clubs from './pages/Clubs';
 
@@ -46,6 +48,15 @@ import StudentServices from './pages/student/Services';
 import StudentClubs from './pages/student/StudentClubs';
 import FeeManagement from './pages/student/FeeManagement';
 import Transport from './pages/student/Transport';
+
+// Faculty Pages (v2.0)
+import FacultyLayout from './components/Layout/FacultyLayout';
+import FacultyDashboard from './pages/faculty/Dashboard';
+import PostAttendance from './pages/faculty/PostAttendance';
+import ContentManage from './pages/faculty/ContentManage';
+import FacultyAnnouncements from './pages/faculty/Announcements';
+import FacultyStudents from './pages/faculty/Students';
+import FacultyChats from './pages/faculty/Chats';
 
 // Event Pages
 import EventCalendar from './pages/admin/EventCalendar';
@@ -68,6 +79,16 @@ const ProtectedStudentRoute = ({ children }) => {
   const { isAuthenticated, userType } = useAuthStore();
   if (!isAuthenticated) return <Navigate to="/student/login" />;
   if (userType === 'admin') return <Navigate to="/" />;
+  return children;
+};
+
+// Protected Route Component for Faculty (v2.0)
+const ProtectedFacultyRoute = ({ children }) => {
+  const { isAuthenticated, user } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  if (user?.role === 'student' || user?.admission_number) return <Navigate to="/student/dashboard" />;
+  const isFaculty = user?.role === 'faculty' || user?.role === 'branch_faculty';
+  if (!isFaculty) return <Navigate to="/" />;
   return children;
 };
 
@@ -168,6 +189,8 @@ function App() {
           <Route path="college-configuration" element={<CollegeConfiguration />} />
           <Route path="services/requests" element={<ServiceRequests />} />
           <Route path="clubs" element={<Clubs />} />
+          <Route path="faculty-management" element={<FacultyManagement />} />
+          <Route path="attendance-monitoring" element={<AttendanceMonitoring />} />
         </Route>
 
         {/* Protected Student Routes */}
@@ -193,6 +216,24 @@ function App() {
           <Route path="clubs" element={<StudentClubs />} />
           <Route path="fees" element={<FeeManagement />} />
           <Route path="transport" element={<Transport />} />
+        </Route>
+
+        {/* Protected Faculty Routes (v2.0) */}
+        <Route
+          path="/faculty"
+          element={
+            <ProtectedFacultyRoute>
+              <FacultyLayout />
+            </ProtectedFacultyRoute>
+          }
+        >
+          <Route index element={<Navigate to="/faculty/dashboard" replace />} />
+          <Route path="dashboard" element={<FacultyDashboard />} />
+          <Route path="attendance" element={<PostAttendance />} />
+          <Route path="content" element={<ContentManage />} />
+          <Route path="announcements" element={<FacultyAnnouncements />} />
+          <Route path="students" element={<FacultyStudents />} />
+          <Route path="chats" element={<FacultyChats />} />
         </Route>
 
         {/* Fallback */}

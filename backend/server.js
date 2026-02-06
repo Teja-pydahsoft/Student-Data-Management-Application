@@ -168,6 +168,13 @@ app.use("/api/clubs", require("./routes/clubRoutes"));
 app.use("/api/transport", require("./routes/transportRoutes"));
 app.use("/api/payments", paymentRoutes);
 app.use("/api/previous-colleges", require("./routes/previousCollegeRoutes"));
+app.use("/api/faculty", require("./routes/facultyRoutes"));
+app.use("/api/period-slots", require("./routes/periodSlotsRoutes"));
+app.use("/api/subjects", require("./routes/subjectsRoutes"));
+app.use("/api/hourly-attendance", require("./routes/hourlyAttendanceRoutes"));
+app.use("/api/academic-content", require("./routes/academicContentRoutes"));
+app.use("/api/internal-marks", require("./routes/internalMarksRoutes"));
+app.use("/api/chat", require("./routes/chatRoutes"));
 
 // Legacy route support for direct API access (without /api prefix)
 app.use("/auth", authRoutes);

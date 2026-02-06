@@ -11,7 +11,8 @@ const USER_ROLES = {
   COLLEGE_ATTENDER: 'college_attender',
   BRANCH_HOD: 'branch_hod',
   OFFICE_ASSISTANT: 'office_assistant',
-  CASHIER: 'cashier'
+  CASHIER: 'cashier',
+  FACULTY: 'faculty'
 };
 
 // Role Hierarchy (who can create whom)
@@ -22,27 +23,32 @@ const ROLE_HIERARCHY = {
     USER_ROLES.COLLEGE_ATTENDER,
     USER_ROLES.BRANCH_HOD,
     USER_ROLES.OFFICE_ASSISTANT,
-    USER_ROLES.CASHIER
+    USER_ROLES.CASHIER,
+    USER_ROLES.FACULTY
   ],
   [USER_ROLES.COLLEGE_PRINCIPAL]: [
     USER_ROLES.COLLEGE_AO,
     USER_ROLES.COLLEGE_ATTENDER,
     USER_ROLES.BRANCH_HOD,
     USER_ROLES.OFFICE_ASSISTANT,
-    USER_ROLES.CASHIER
+    USER_ROLES.CASHIER,
+    USER_ROLES.FACULTY
   ],
   [USER_ROLES.COLLEGE_AO]: [
     USER_ROLES.COLLEGE_ATTENDER,
     USER_ROLES.BRANCH_HOD,
     USER_ROLES.OFFICE_ASSISTANT,
-    USER_ROLES.CASHIER
+    USER_ROLES.CASHIER,
+    USER_ROLES.FACULTY
   ],
   [USER_ROLES.BRANCH_HOD]: [
-    USER_ROLES.COLLEGE_ATTENDER
+    USER_ROLES.COLLEGE_ATTENDER,
+    USER_ROLES.FACULTY
   ],
   [USER_ROLES.COLLEGE_ATTENDER]: [],
   [USER_ROLES.OFFICE_ASSISTANT]: [],
-  [USER_ROLES.CASHIER]: []
+  [USER_ROLES.CASHIER]: [],
+  [USER_ROLES.FACULTY]: []
 };
 
 // Available Modules
@@ -58,7 +64,9 @@ const MODULES = {
   REPORTS: 'reports',
   TICKET_MANAGEMENT: 'ticket_management',
   SERVICES: 'services',
-  ANNOUNCEMENTS: 'announcements'
+  ANNOUNCEMENTS: 'announcements',
+  FACULTY_MANAGEMENT: 'faculty_management',
+  FACULTY_ACADEMICS: 'faculty_academics'
 };
 
 // Granular Permissions for each module
@@ -160,6 +168,29 @@ const MODULE_PERMISSIONS = {
       edit: 'Edit Announcements',
       delete: 'Delete Announcements'
     }
+  },
+  [MODULES.FACULTY_MANAGEMENT]: {
+    permissions: ['view', 'create', 'edit', 'deactivate', 'assign_subjects'],
+    labels: {
+      view: 'View Faculty',
+      create: 'Create Faculty',
+      edit: 'Edit Faculty',
+      deactivate: 'Deactivate Faculty',
+      assign_subjects: 'Assign Subjects'
+    }
+  },
+  [MODULES.FACULTY_ACADEMICS]: {
+    permissions: ['view_attendance', 'post_attendance', 'view_content', 'upload_content', 'manage_tests', 'post_announcements', 'view_students', 'moderate_chat'],
+    labels: {
+      view_attendance: 'View Attendance',
+      post_attendance: 'Post Hourly Attendance',
+      view_content: 'View Content',
+      upload_content: 'Upload Notes/Assignments',
+      manage_tests: 'Manage Tests & Results',
+      post_announcements: 'Post Announcements',
+      view_students: 'View Students',
+      moderate_chat: 'Moderate Chat'
+    }
   }
 };
 
@@ -177,7 +208,9 @@ const MODULE_LABELS = {
   [MODULES.REPORTS]: 'Reports',
   [MODULES.TICKET_MANAGEMENT]: 'Ticket Management',
   [MODULES.SERVICES]: 'Services',
-  [MODULES.ANNOUNCEMENTS]: 'Announcements'
+  [MODULES.ANNOUNCEMENTS]: 'Announcements',
+  [MODULES.FACULTY_MANAGEMENT]: 'Faculty Management',
+  [MODULES.FACULTY_ACADEMICS]: 'Faculty Academics'
 };
 
 // All modules as array
@@ -283,6 +316,16 @@ const ROLE_REQUIREMENTS = {
     supportsMultiCourse: true,
     supportsMultiBranch: true,
     supportsAllCourses: true,
+    supportsAllBranches: true
+  },
+  [USER_ROLES.FACULTY]: {
+    requiresCollege: true,
+    requiresCourse: true,
+    requiresBranch: false,
+    supportsMultiCollege: true,
+    supportsMultiCourse: true,
+    supportsMultiBranch: true,
+    supportsAllCourses: false,
     supportsAllBranches: true
   },
   // Ticket app roles (linked app) – same scope as college-level roles
@@ -463,7 +506,8 @@ const ROLE_LABELS = {
   [USER_ROLES.COLLEGE_ATTENDER]: 'College Attender',
   [USER_ROLES.BRANCH_HOD]: 'Branch HOD',
   [USER_ROLES.OFFICE_ASSISTANT]: 'Office Assistant',
-  [USER_ROLES.CASHIER]: 'Cashier'
+  [USER_ROLES.CASHIER]: 'Cashier',
+  [USER_ROLES.FACULTY]: 'Faculty'
 };
 
 module.exports = {

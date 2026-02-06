@@ -451,10 +451,30 @@ const verifyCanManageUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Allow if user has ANY of the given (module, action) permissions.
+ * Usage: verifyPermissionAny([['faculty_academics', 'view_attendance'], ['attendance', 'view']])
+ */
+const verifyPermissionAny = (pairs) => {
+  return async (req, res, next) => {
+    const user = req.user || req.admin;
+    if (!user) return res.status(401).json({ success: false, message: 'Authentication required' });
+    if (isSuperAdmin(user)) return next();
+    for (const [module, action] of pairs) {
+      if (hasPermission(user.permissions, module, action)) return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: `Access denied. Requires one of: ${pairs.map(([m, a]) => `${m}/${a}`).join(', ')}`
+    });
+  };
+};
+
 module.exports = {
   isSuperAdmin,
   verifyRole,
   verifyPermission,
+  verifyPermissionAny,
   allowStudentOwnProfileOrPermission,
   attachUserScope,
   verifyCanCreateRole,

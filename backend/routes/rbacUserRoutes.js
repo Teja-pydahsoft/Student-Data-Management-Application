@@ -17,17 +17,17 @@ router.get('/roles/available', rbacUserController.getAvailableRoles);
 router.get('/modules', rbacUserController.getModules);
 
 // Get all users (filtered by scope)
-// Requires user_management read permission
+// Requires user_management view permission
 router.get(
   '/',
-  verifyPermission('user_management', 'read'),
+  verifyPermission('user_management', 'view'),
   rbacUserController.getUsers
 );
 
 // Get single user
 router.get(
   '/:id',
-  verifyPermission('user_management', 'read'),
+  verifyPermission('user_management', 'view'),
   rbacUserController.getUser
 );
 

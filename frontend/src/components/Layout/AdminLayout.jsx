@@ -28,6 +28,7 @@ import {
   Briefcase,
   ArrowLeftRight,
   Wrench,
+  GraduationCap,
 } from "lucide-react";
 import useAuthStore from "../../store/authStore";
 import {
@@ -92,6 +93,12 @@ const NAV_ITEMS = [
     label: "Attendance",
     permission: FRONTEND_MODULES.ATTENDANCE,
   },
+  {
+    path: "/attendance-monitoring",
+    icon: CalendarCheck,
+    label: "Hourly Attendance",
+    permission: FRONTEND_MODULES.ATTENDANCE,
+  },
 
   {
     path: "/courses",
@@ -104,6 +111,12 @@ const NAV_ITEMS = [
     icon: ShieldCheck,
     label: "User Management",
     permission: FRONTEND_MODULES.USERS,
+  },
+  {
+    path: "/faculty-management",
+    icon: GraduationCap,
+    label: "Faculty Management",
+    permission: FRONTEND_MODULES.FACULTY_MANAGEMENT,
   },
   {
     path: "/reports",

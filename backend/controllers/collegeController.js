@@ -58,6 +58,92 @@ exports.getColleges = async (req, res) => {
 };
 
 /**
+ * GET /api/colleges/:collegeId/branches
+ * All branches under this college (from all courses), for Assign HODs config
+ */
+exports.getCollegeBranches = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({ success: false, message: 'Invalid college ID' });
+    }
+    const [rows] = await masterPool.query(
+      `SELECT cb.id, cb.name, cb.course_id, cb.code,
+              c.name AS course_name
+       FROM course_branches cb
+       JOIN courses c ON c.id = cb.course_id
+       WHERE c.college_id = ? AND cb.is_active = 1
+       ORDER BY c.name, cb.name`,
+      [collegeId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('getCollegeBranches error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch branches' });
+  }
+};
+
+/**
+ * GET /api/colleges/:collegeId/branches-with-hods
+ * Branches for this college with HOD assignment status (assigned user or pending)
+ */
+exports.getBranchesWithHodStatus = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.params.collegeId, 10);
+    if (!collegeId || Number.isNaN(collegeId)) {
+      return res.status(400).json({ success: false, message: 'Invalid college ID' });
+    }
+    const [branchRows] = await masterPool.query(
+      `SELECT cb.id, cb.name, cb.course_id, cb.code,
+              c.name AS course_name
+       FROM course_branches cb
+       JOIN courses c ON c.id = cb.course_id
+       WHERE c.college_id = ? AND cb.is_active = 1
+       ORDER BY c.name, cb.name`,
+      [collegeId]
+    );
+    const [hodRows] = await masterPool.query(
+      `SELECT u.id, u.name, u.email, u.branch_id, u.branch_ids
+       FROM rbac_users u
+       WHERE LOWER(TRIM(COALESCE(u.role, ''))) = 'branch_hod'
+         AND u.is_active = 1
+         AND (
+           u.college_id = ?
+           OR (u.college_ids IS NOT NULL AND JSON_CONTAINS(u.college_ids, CAST(? AS JSON), '$'))
+         )`,
+      [collegeId, JSON.stringify([collegeId])]
+    );
+    const branchIdToHod = {};
+    for (const hod of hodRows) {
+      const bid = hod.branch_id;
+      let branchIds = [];
+      if (hod.branch_ids) {
+        try {
+          branchIds = typeof hod.branch_ids === 'string' ? JSON.parse(hod.branch_ids) : hod.branch_ids;
+          if (!Array.isArray(branchIds)) branchIds = [branchIds];
+        } catch (_) {}
+      }
+      if (bid) branchIds = [...new Set([bid, ...branchIds])];
+      for (const id of branchIds) {
+        if (!branchIdToHod[id]) branchIdToHod[id] = { id: hod.id, name: hod.name, email: hod.email || '' };
+      }
+    }
+    const data = branchRows.map((b) => ({
+      id: b.id,
+      name: b.name,
+      course_id: b.course_id,
+      course_name: b.course_name,
+      code: b.code,
+      hod: branchIdToHod[b.id] || null
+    }));
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('getBranchesWithHodStatus error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch branches with HOD status' });
+  }
+};
+
+/**
  * GET /api/colleges/:collegeId
  * Get single college by ID
  */

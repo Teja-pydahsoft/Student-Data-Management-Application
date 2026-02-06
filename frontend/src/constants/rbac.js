@@ -17,7 +17,9 @@ export const BACKEND_MODULES = {
   REPORTS: 'reports',
   TICKET_MANAGEMENT: 'ticket_management',
   ANNOUNCEMENTS: 'announcements',
-  SERVICES: 'services'
+  SERVICES: 'services',
+  FACULTY_MANAGEMENT: 'faculty_management',
+  FACULTY_ACADEMICS: 'faculty_academics'
 };
 
 // Granular Permissions for each module
@@ -116,6 +118,29 @@ export const MODULE_PERMISSIONS = {
       manage_config: 'Manage Configuration (Create/Edit Services)',
       manage_requests: 'Manage Requests (Process/Close)'
     }
+  },
+  [BACKEND_MODULES.FACULTY_MANAGEMENT]: {
+    permissions: ['view', 'create', 'edit', 'deactivate', 'assign_subjects'],
+    labels: {
+      view: 'View Faculty',
+      create: 'Create Faculty',
+      edit: 'Edit Faculty',
+      deactivate: 'Deactivate Faculty',
+      assign_subjects: 'Assign Subjects'
+    }
+  },
+  [BACKEND_MODULES.FACULTY_ACADEMICS]: {
+    permissions: ['view_attendance', 'post_attendance', 'view_content', 'upload_content', 'manage_tests', 'post_announcements', 'view_students', 'moderate_chat'],
+    labels: {
+      view_attendance: 'View Attendance',
+      post_attendance: 'Post Hourly Attendance',
+      view_content: 'View Content',
+      upload_content: 'Upload Notes/Assignments',
+      manage_tests: 'Manage Tests & Results',
+      post_announcements: 'Post Announcements',
+      view_students: 'View Students',
+      moderate_chat: 'Moderate Chat'
+    }
   }
 };
 
@@ -131,7 +156,8 @@ export const MODULE_LABELS = {
   [BACKEND_MODULES.REPORTS]: 'Reports',
   [BACKEND_MODULES.TICKET_MANAGEMENT]: 'Maintenance Management',
   [BACKEND_MODULES.ANNOUNCEMENTS]: 'Announcements',
-  [BACKEND_MODULES.SERVICES]: 'Services'
+  [BACKEND_MODULES.SERVICES]: 'Services',
+  [BACKEND_MODULES.FACULTY_MANAGEMENT]: 'Faculty Management'
 };
 
 // Frontend navigation keys
@@ -149,7 +175,8 @@ export const FRONTEND_MODULES = {
   TICKETS: 'tickets',
   TASK_MANAGEMENT: 'task_management',
   ANNOUNCEMENTS: 'announcements',
-  SERVICES: 'services'
+  SERVICES: 'services',
+  FACULTY_MANAGEMENT: 'faculty_management'
 };
 
 // Map frontend navigation keys to backend permission keys
@@ -167,7 +194,8 @@ export const FRONTEND_TO_BACKEND_MAP = {
   [FRONTEND_MODULES.TICKETS]: [BACKEND_MODULES.TICKET_MANAGEMENT],
   [FRONTEND_MODULES.TASK_MANAGEMENT]: [BACKEND_MODULES.TICKET_MANAGEMENT],
   [FRONTEND_MODULES.ANNOUNCEMENTS]: [BACKEND_MODULES.ANNOUNCEMENTS],
-  [FRONTEND_MODULES.SERVICES]: [BACKEND_MODULES.SERVICES]
+  [FRONTEND_MODULES.SERVICES]: [BACKEND_MODULES.SERVICES],
+  [FRONTEND_MODULES.FACULTY_MANAGEMENT]: [BACKEND_MODULES.FACULTY_MANAGEMENT]
 };
 
 // Map backend module keys to frontend navigation keys (reverse mapping)
@@ -182,7 +210,8 @@ export const BACKEND_TO_FRONTEND_MAP = {
   [BACKEND_MODULES.USER_MANAGEMENT]: FRONTEND_MODULES.USERS,
   [BACKEND_MODULES.REPORTS]: FRONTEND_MODULES.REPORTS,
   [BACKEND_MODULES.ANNOUNCEMENTS]: FRONTEND_MODULES.ANNOUNCEMENTS,
-  [BACKEND_MODULES.SERVICES]: FRONTEND_MODULES.SERVICES
+  [BACKEND_MODULES.SERVICES]: FRONTEND_MODULES.SERVICES,
+  [BACKEND_MODULES.FACULTY_MANAGEMENT]: FRONTEND_MODULES.FACULTY_MANAGEMENT
 };
 
 // Route map for navigation
@@ -200,7 +229,9 @@ export const MODULE_ROUTE_MAP = {
   [FRONTEND_MODULES.TICKETS]: '/tickets',
   [FRONTEND_MODULES.TASK_MANAGEMENT]: '/task-management',
   [FRONTEND_MODULES.ANNOUNCEMENTS]: '/announcements',
-  [FRONTEND_MODULES.SERVICES]: '/services'
+  [FRONTEND_MODULES.SERVICES]: '/services',
+  [FRONTEND_MODULES.FACULTY_MANAGEMENT]: '/faculty-management',
+  attendance_monitoring: '/attendance-monitoring'
 };
 
 // Get module key from path
@@ -218,6 +249,8 @@ export const getModuleKeyForPath = (path = '/') => {
   if (path.startsWith('/task-management')) return FRONTEND_MODULES.TASK_MANAGEMENT;
   if (path.startsWith('/announcements')) return FRONTEND_MODULES.ANNOUNCEMENTS;
   if (path.startsWith('/services')) return FRONTEND_MODULES.SERVICES;
+  if (path.startsWith('/faculty-management')) return FRONTEND_MODULES.FACULTY_MANAGEMENT;
+  if (path.startsWith('/attendance-monitoring')) return FRONTEND_MODULES.ATTENDANCE;
   return null;
 };
 
@@ -308,7 +341,9 @@ export const USER_ROLES = {
   BRANCH_HOD: 'branch_hod',
   OFFICE_ASSISTANT: 'office_assistant',
   CASHIER: 'cashier',
-  STAFF: 'staff' // Legacy staff role
+  STAFF: 'staff', // Legacy staff role
+  FACULTY: 'faculty',
+  BRANCH_FACULTY: 'branch_faculty'
 };
 
 // Role Labels for UI display
@@ -321,7 +356,9 @@ export const ROLE_LABELS = {
   [USER_ROLES.BRANCH_HOD]: 'Branch HOD',
   [USER_ROLES.OFFICE_ASSISTANT]: 'Office Assistant',
   [USER_ROLES.CASHIER]: 'Cashier',
-  [USER_ROLES.STAFF]: 'Staff'
+  [USER_ROLES.STAFF]: 'Staff',
+  [USER_ROLES.FACULTY]: 'Faculty',
+  [USER_ROLES.BRANCH_FACULTY]: 'Branch Faculty'
 };
 
 // Role Colors for UI
@@ -334,7 +371,9 @@ export const ROLE_COLORS = {
   [USER_ROLES.BRANCH_HOD]: 'bg-amber-50 text-amber-700 border-amber-200',
   [USER_ROLES.OFFICE_ASSISTANT]: 'bg-purple-50 text-purple-700 border-purple-200',
   [USER_ROLES.CASHIER]: 'bg-green-50 text-green-700 border-green-200',
-  [USER_ROLES.STAFF]: 'bg-slate-100 text-slate-700 border-slate-200'
+  [USER_ROLES.STAFF]: 'bg-slate-100 text-slate-700 border-slate-200',
+  [USER_ROLES.FACULTY]: 'bg-teal-50 text-teal-700 border-teal-200',
+  [USER_ROLES.BRANCH_FACULTY]: 'bg-teal-50 text-teal-700 border-teal-200'
 };
 
 // Check if role has full access (super admin or legacy admin)

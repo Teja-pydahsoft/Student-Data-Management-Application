@@ -26,6 +26,8 @@ router.post('/', collegeController.createCollege);
 
 // Specific named routes before :collegeId
 router.get('/:collegeId/courses', attachUserScope, collegeController.getCollegeCourses);
+router.get('/:collegeId/branches', attachUserScope, collegeController.getCollegeBranches);
+router.get('/:collegeId/branches-with-hods', attachUserScope, collegeController.getBranchesWithHodStatus);
 router.get('/:collegeId/affected-students', collegeController.getAffectedStudentsByCollege);
 
 // Generic :collegeId routes LAST

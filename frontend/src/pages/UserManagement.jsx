@@ -48,6 +48,7 @@ const ROLE_AVATAR_COLORS = {
   branch_hod: 'from-amber-400 to-amber-600',
   office_assistant: 'from-purple-400 to-purple-600',
   cashier: 'from-green-400 to-green-600',
+  faculty: 'from-teal-400 to-teal-600',
   super_admin: 'from-rose-400 to-rose-600'
 };
 
@@ -57,17 +58,22 @@ const ROLE_DESCRIPTIONS = {
   college_attender: 'Basic access for attendance tracking and daily record management',
   branch_hod: 'Head of Department with control over specific branches and their operations',
   office_assistant: 'Assists with office operations, document management, and administrative tasks',
-  cashier: 'Handles fee collection, payment processing, and financial transactions'
+  cashier: 'Handles fee collection, payment processing, and financial transactions',
+  faculty: 'Teaching staff with access to student records, attendance, and course-related modules'
 };
 
-// Fixed roles list
+// Helper: prefer API roleLabel so role always shows (backend is source of truth)
+const getRoleDisplay = (user) => (user?.roleLabel ?? ROLE_LABELS[user?.role] ?? user?.role ?? '—');
+
+// Fixed roles list (includes Faculty for Create/Edit)
 const FIXED_ROLES = [
   { value: 'college_principal', label: 'College Principal' },
   { value: 'college_ao', label: 'College AO' },
   { value: 'college_attender', label: 'College Attender' },
   { value: 'branch_hod', label: 'Branch HOD' },
   { value: 'office_assistant', label: 'Office Assistant' },
-  { value: 'cashier', label: 'Cashier' }
+  { value: 'cashier', label: 'Cashier' },
+  { value: 'faculty', label: 'Faculty' }
 ];
 
 const initialFormState = {
@@ -2056,7 +2062,7 @@ const UserManagement = () => {
                               <div className="text-xs text-slate-500 truncate">{userData.email}</div>
                               <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-1 rounded-lg text-xs font-semibold border ${ROLE_COLORS[userData.role] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                                 <ShieldCheck size={12} />
-                                {ROLE_LABELS[userData.role] || userData.role}
+                                {getRoleDisplay(userData)}
                               </span>
                             </div>
                           </div>
@@ -2608,7 +2614,7 @@ const UserManagement = () => {
                       Module Access - {moduleAccessUser.name}
                     </h2>
                     <p className="text-xs sm:text-sm text-white/80 truncate">
-                      {moduleAccessUser.email} • {ROLE_LABELS[moduleAccessUser.role] || moduleAccessUser.role}
+                      {moduleAccessUser.email} • {getRoleDisplay(moduleAccessUser)}
                     </p>
                   </div>
                 </div>
@@ -3548,7 +3554,7 @@ const UserManagement = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <ShieldCheck size={12} className="text-slate-400" />
-                      {ROLE_LABELS[deleteUserModal.role] || deleteUserModal.role}
+                      {getRoleDisplay(deleteUserModal)}
                     </div>
                   </div>
                 </div>

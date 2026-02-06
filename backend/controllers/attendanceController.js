@@ -13,6 +13,20 @@ const { listCustomHolidays } = require('../services/customHolidayService');
 const { getPublicHolidaysForYear } = require('../services/holidayService');
 const { getScopeConditionString } = require('../utils/scoping');
 const { generateAttendanceReportPDF } = require('../services/pdfService');
+
+/** Build scope condition for students table using college_id (use when students has no 'college' column) */
+function getScopeConditionByCollegeId(userScope) {
+  if (!userScope || userScope.unrestricted) return { scopeCondition: '', params: [] };
+  if (userScope.collegeNames && userScope.collegeNames.length > 0) {
+    const placeholders = userScope.collegeNames.map(() => '?').join(',');
+    return { scopeCondition: `s.college_id IN (SELECT id FROM colleges WHERE name IN (${placeholders}))`, params: [...userScope.collegeNames] };
+  }
+  if (userScope.collegeIds && userScope.collegeIds.length > 0) {
+    const placeholders = userScope.collegeIds.map(() => '?').join(',');
+    return { scopeCondition: `s.college_id IN (${placeholders})`, params: [...userScope.collegeIds] };
+  }
+  return { scopeCondition: '', params: [] };
+}
 const {
   processAttendanceData,
   getHolidayInfoForRange
@@ -2796,7 +2810,7 @@ const normalizeTextFilter = (value) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
+const buildStudentFilterConditions = (filters = {}, alias = 'students', options = {}) => {
   const prefix = alias ? `${alias}.` : '';
   const conditions = [];
   const params = [];
@@ -2808,7 +2822,11 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
   }
 
   if (filters.college) {
-    conditions.push(`${prefix}college = ?`);
+    if (options.collegeJoinAlias) {
+      conditions.push(`${options.collegeJoinAlias}.name = ?`);
+    } else {
+      conditions.push(`${prefix}college = ?`);
+    }
     params.push(filters.college);
   }
 
@@ -2842,8 +2860,8 @@ const buildStudentFilterConditions = (filters = {}, alias = 'students') => {
   return { conditions, params };
 };
 
-const buildWhereClause = (filters, alias) => {
-  const { conditions, params } = buildStudentFilterConditions(filters, alias);
+const buildWhereClause = (filters, alias, options = {}) => {
+  const { conditions, params } = buildStudentFilterConditions(filters, alias, options);
   const clause = conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
   return { clause, params };
 };
@@ -2888,7 +2906,7 @@ exports.getAttendanceSummary = async (req, res) => {
 
     const whereClause = conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
 
-    // Apply user scope filtering
+    // Apply user scope filtering (uses s.college so compatible with students table without college_id)
     let scopeCondition = '';
     let scopeParams = [];
     if (req.userScope) {
@@ -4271,7 +4289,7 @@ exports.downloadDayEndReport = async (req, res) => {
       exclusionParams.push(...excludedStudents);
     }
 
-    // Apply user scope filtering
+    // Apply user scope filtering (uses s.college so compatible with students table without college_id)
     let scopeCondition = '';
     let scopeParams = [];
     if (req.userScope) {
@@ -4575,8 +4593,46 @@ exports.getAttendanceAbstract = async (req, res) => {
       console.warn('Failed to fetch attendance config for abstract:', err);
     }
 
-    // Build student query with filters
-    let studentQuery = `
+    // Build student query: try college_id + JOIN first; fallback to s.college if column missing
+    const buildAbstractStudentQuery = (useCollegeId) => {
+      if (useCollegeId) {
+        let q = `
+      SELECT
+        s.id,
+        c.name AS college,
+        s.batch,
+        s.course,
+        s.branch,
+        s.current_year,
+        s.current_semester
+      FROM students s
+      LEFT JOIN colleges c ON s.college_id = c.id
+      WHERE s.student_status = 'Regular'
+    `;
+        const p = [];
+        if (excludedCourses.length > 0) {
+          q += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+          p.push(...excludedCourses);
+        }
+        if (excludedStudents.length > 0) {
+          q += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+          p.push(...excludedStudents);
+        }
+        if (req.userScope && !req.userScope.unrestricted) {
+          if (req.userScope.collegeNames && req.userScope.collegeNames.length > 0) {
+            const ph = req.userScope.collegeNames.map(() => '?').join(',');
+            q += ` AND s.college_id IN (SELECT id FROM colleges WHERE name IN (${ph}))`;
+            p.push(...req.userScope.collegeNames);
+          } else if (req.userScope.collegeIds && req.userScope.collegeIds.length > 0) {
+            const ph = req.userScope.collegeIds.map(() => '?').join(',');
+            q += ` AND s.college_id IN (${ph})`;
+            p.push(...req.userScope.collegeIds);
+          }
+        }
+        if (college) { q += ' AND c.name = ?'; p.push(college); }
+        return { query: q, params: p };
+      } else {
+        let q = `
       SELECT
         s.id,
         s.college,
@@ -4588,34 +4644,27 @@ exports.getAttendanceAbstract = async (req, res) => {
       FROM students s
       WHERE s.student_status = 'Regular'
     `;
-    const studentParams = [];
-
-    // Apply excluded courses
-    if (excludedCourses.length > 0) {
-      studentQuery += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
-      studentParams.push(...excludedCourses);
-    }
-
-    // Apply excluded students
-    if (excludedStudents.length > 0) {
-      studentQuery += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
-      studentParams.push(...excludedStudents);
-    }
-
-    // Apply user scope
-    if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
-      if (scopeCondition) {
-        studentQuery += ` AND ${scopeCondition}`;
-        studentParams.push(...scopeParams);
+        const p = [];
+        if (excludedCourses.length > 0) {
+          q += ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+          p.push(...excludedCourses);
+        }
+        if (excludedStudents.length > 0) {
+          q += ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+          p.push(...excludedStudents);
+        }
+        if (req.userScope) {
+          const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
+          if (scopeCondition) { q += ` AND ${scopeCondition}`; p.push(...scopeParams); }
+        }
+        if (college) { q += ' AND s.college = ?'; p.push(college); }
+        return { query: q, params: p };
       }
-    }
+    };
 
-    // Apply filters
-    if (college) {
-      studentQuery += ' AND s.college = ?';
-      studentParams.push(college);
-    }
+    let studentQuery = buildAbstractStudentQuery(true).query;
+    let studentParams = buildAbstractStudentQuery(true).params;
+
     if (batch) {
       studentQuery += ' AND s.batch = ?';
       studentParams.push(batch);
@@ -4660,8 +4709,42 @@ exports.getAttendanceAbstract = async (req, res) => {
       }
     }
 
-    // Get all students matching filters
-    const [studentRows] = await masterPool.query(studentQuery, studentParams);
+    // Get all students matching filters (retry with legacy s.college if college_id column missing)
+    let studentRows;
+    try {
+      [studentRows] = await masterPool.query(studentQuery, studentParams);
+    } catch (queryErr) {
+      const isColumnError = queryErr.code === 'ER_BAD_FIELD_ERROR' && (queryErr.sqlMessage || '').toLowerCase().includes('college');
+      if (isColumnError) {
+        const legacy = buildAbstractStudentQuery(false);
+        studentQuery = legacy.query;
+        studentParams = [...legacy.params];
+        if (batch) { studentQuery += ' AND s.batch = ?'; studentParams.push(batch); }
+        if (course) { studentQuery += ' AND s.course = ?'; studentParams.push(course); }
+        if (branch) { studentQuery += ' AND s.branch = ?'; studentParams.push(branch); }
+        if (year) {
+          const parsedYear = parseInt(year, 10);
+          if (!Number.isNaN(parsedYear)) { studentQuery += ' AND s.current_year = ?'; studentParams.push(parsedYear); }
+        }
+        if (semester) {
+          const parsedSemester = parseInt(semester, 10);
+          if (!Number.isNaN(parsedSemester)) { studentQuery += ' AND s.current_semester = ?'; studentParams.push(parsedSemester); }
+        }
+        if (level) {
+          const [levelCourses] = await masterPool.query('SELECT name FROM courses WHERE level = ? AND is_active = 1', [level]);
+          const validCourseNames = (levelCourses || []).map(c => c.name);
+          if (validCourseNames.length > 0) {
+            studentQuery += ` AND s.course IN (${validCourseNames.map(() => '?').join(',')})`;
+            studentParams.push(...validCourseNames);
+          } else {
+            studentQuery += ' AND 1=0';
+          }
+        }
+        [studentRows] = await masterPool.query(studentQuery, studentParams);
+      } else {
+        throw queryErr;
+      }
+    }
 
     if (studentRows.length === 0) {
       return res.json({
@@ -4869,7 +4952,7 @@ exports.getAttendanceReportForStudents = async (req, res) => {
       console.warn('Failed to fetch attendance config for report:', err);
     }
 
-    // Build student query
+    // Build student query (uses s.college so compatible with students table without college_id)
     let studentQuery = `
       SELECT
         s.id,
@@ -4902,7 +4985,7 @@ exports.getAttendanceReportForStudents = async (req, res) => {
 
     // Apply user scope
     if (req.userScope) {
-      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 'students');
+      const { scopeCondition, params: scopeParams } = getScopeConditionString(req.userScope, 's');
       if (scopeCondition) {
         studentQuery += ` AND ${scopeCondition}`;
         studentParams.push(...scopeParams);
