@@ -234,6 +234,18 @@ const Dashboard = () => {
     // Registration is considered fully complete if the registration status says so
     const isRegistrationCompleted = registrationLabel === 'Completed';
 
+    // Helper function to truncate content to 1-2 lines
+    const truncateContent = (text, maxLength = 150) => {
+        if (!text) return '';
+        // Remove extra whitespace and newlines
+        const cleanText = text.replace(/\s+/g, ' ').trim();
+        if (cleanText.length <= maxLength) return cleanText;
+        // Find the last space before maxLength to avoid cutting words
+        const truncated = cleanText.substring(0, maxLength);
+        const lastSpace = truncated.lastIndexOf(' ');
+        return lastSpace > 0 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+    };
+
     const closeAnnouncement = () => {
         if (currentAnnouncement) {
             const seenIds = JSON.parse(localStorage.getItem('seen_announcements') || '[]');
@@ -371,9 +383,9 @@ const Dashboard = () => {
             {/* Announcement Popup */}
             {showAnnouncement && currentAnnouncement && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-scale-in flex flex-col md:flex-row max-h-[85vh] min-h-[250px]">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-scale-in flex flex-col md:flex-row">
                         {currentAnnouncement.image_url && (
-                            <div className="md:w-7/12 h-64 md:h-auto relative bg-white shrink-0 flex items-center justify-center">
+                            <div className="md:w-7/12 h-48 sm:h-64 md:h-auto relative bg-white shrink-0 flex items-center justify-center">
                                 <img
                                     src={currentAnnouncement.image_url}
                                     alt="Announcement"
@@ -381,17 +393,33 @@ const Dashboard = () => {
                                 />
                             </div>
                         )}
-                        <div className="p-6 md:p-8 flex flex-col flex-1 overflow-y-auto bg-white">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4 leading-tight">{currentAnnouncement.title}</h3>
-                            <div className="text-gray-600 mb-8 text-base leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto custom-scrollbar">
-                                {currentAnnouncement.content}
+                        <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-1 bg-white">
+                            <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4 leading-tight shrink-0">{currentAnnouncement.title}</h3>
+                            <div className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base leading-relaxed" style={{ 
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {truncateContent(currentAnnouncement.content, 120)}
                             </div>
-                            <div className="mt-auto">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 shrink-0">
+                                <button
+                                    onClick={() => {
+                                        closeAnnouncement();
+                                        navigate('/student/announcements');
+                                    }}
+                                    className="flex-1 py-3 sm:py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors cursor-pointer shadow-lg shadow-blue-100 transform active:scale-[0.98] text-sm sm:text-base flex items-center justify-center gap-2"
+                                >
+                                    <FileText size={18} />
+                                    Read More
+                                </button>
                                 <button
                                     onClick={closeAnnouncement}
-                                    className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors cursor-pointer shadow-lg shadow-blue-100 transform active:scale-[0.98]"
+                                    className="flex-1 py-3 sm:py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors cursor-pointer transform active:scale-[0.98] text-sm sm:text-base"
                                 >
-                                    Close & Continue
+                                    Close
                                 </button>
                             </div>
                         </div>

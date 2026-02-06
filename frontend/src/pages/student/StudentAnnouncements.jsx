@@ -227,65 +227,71 @@ const StudentAnnouncements = () => {
                 </div>
             )}
             {/* Announcement Details Modal */}
-            {/* Announcement Details Modal */}
             {selectedAnnouncement && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedAnnouncement(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedAnnouncement(null)}>
                     <div
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] min-h-[400px] flex flex-col md:flex-row overflow-hidden animate-scale-in"
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[95vh] sm:h-[90vh] md:h-auto md:max-h-[90vh] flex flex-col md:flex-row overflow-hidden animate-scale-in"
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Image Section - Left Panel */}
                         {selectedAnnouncement.image_url && (
-                            <div className="md:w-1/2 bg-gray-100 relative shrink-0 h-64 md:h-auto">
+                            <div className="md:w-1/2 bg-gray-100 relative shrink-0 h-40 sm:h-48 md:h-auto md:max-h-none flex items-center justify-center overflow-hidden">
                                 <img
                                     src={selectedAnnouncement.image_url}
                                     alt={selectedAnnouncement.title}
-                                    className="w-full h-full object-contain absolute inset-0"
+                                    className="w-full h-full object-contain"
                                 />
                             </div>
                         )}
 
                         {/* Content Section - Right Panel */}
-                        <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+                        <div className="flex-1 flex flex-col min-w-0 bg-white relative min-h-0 overflow-hidden">
                             {/* Sticky Header */}
-                            <div className="sticky top-0 right-0 p-4 bg-white/80 backdrop-blur-md flex justify-between items-start z-10 border-b shrink-0">
-                                <h2 className="text-xl font-bold text-gray-900 pr-8 leading-tight">{selectedAnnouncement.title}</h2>
-                                <button
-                                    onClick={() => setSelectedAnnouncement(null)}
-                                    className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0"
-                                >
-                                    <X size={24} className="text-gray-500" />
-                                </button>
+                            <div className="sticky top-0 right-0 p-4 sm:p-6 bg-white border-b shrink-0 z-20 shadow-sm">
+                                <div className="flex justify-between items-start gap-3">
+                                    <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 leading-tight flex-1 pr-2">{selectedAnnouncement.title}</h2>
+                                    <button
+                                        onClick={() => setSelectedAnnouncement(null)}
+                                        className="p-2 hover:bg-gray-100 rounded-full transition-colors shrink-0 flex-shrink-0"
+                                        aria-label="Close"
+                                    >
+                                        <X size={20} className="text-gray-500 sm:w-6 sm:h-6" />
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Scrollable Body */}
-                            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-                                <div className="flex items-center gap-2 text-sm text-gray-500 font-medium mb-4">
-                                    <Calendar size={16} />
-                                    {new Date(selectedAnnouncement.created_at).toLocaleDateString(undefined, {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    })}
-                                </div>
-
-                                <div className="prose prose-blue max-w-none mb-6">
-                                    <p className="whitespace-pre-wrap text-gray-700 leading-relaxed text-base lg:text-lg">
-                                        {selectedAnnouncement.content}
-                                    </p>
-                                </div>
-
-                                {selectedAnnouncement.target_college && (
-                                    <div className="mt-8 pt-6 border-t flex flex-wrap gap-2">
-                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Targeted to:</span>
-                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_college}</span>
-                                        {selectedAnnouncement.target_course && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_course}</span>}
-                                        {selectedAnnouncement.target_branch && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_branch}</span>}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0" style={{ scrollBehavior: 'smooth' }}>
+                                <div className="p-4 sm:p-6">
+                                    <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 font-medium mb-4">
+                                        <Calendar size={14} className="sm:w-4 sm:h-4 shrink-0" />
+                                        <span className="whitespace-nowrap">
+                                            {new Date(selectedAnnouncement.created_at).toLocaleDateString(undefined, {
+                                                weekday: 'long',
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </span>
                                     </div>
-                                )}
+
+                                    <div className="prose prose-blue max-w-none mb-6">
+                                        <p className="whitespace-pre-wrap text-gray-700 leading-relaxed text-sm sm:text-base lg:text-lg break-words">
+                                            {selectedAnnouncement.content}
+                                        </p>
+                                    </div>
+
+                                    {selectedAnnouncement.target_college && (
+                                        <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t flex flex-wrap gap-2">
+                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Targeted to:</span>
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_college}</span>
+                                            {selectedAnnouncement.target_course && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_course}</span>}
+                                            {selectedAnnouncement.target_branch && <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-semibold">{selectedAnnouncement.target_branch}</span>}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
