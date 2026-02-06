@@ -285,7 +285,7 @@ app.use((err, req, res, next) => {
 // Scheduled Tasks
 const { initScheduledJobs } = require("./services/schedulerService");
 
-// Initialize 4 PM Daily Report & 9 AM Birthday Scheduler
+// Initialize 4 PM Daily Report & 12 AM IST Birthday (push + SMS) Scheduler
 initScheduledJobs();
 
 // Start server

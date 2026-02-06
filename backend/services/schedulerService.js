@@ -314,9 +314,9 @@ const initScheduledJobs = () => {
 
     console.log('✅ 4 PM Daily Attendance Report scheduled.');
 
-    // Schedule Birthday Check for 9:00 AM IST
-    cron.schedule('0 9 * * *', async () => {
-        console.log('⏰ Triggering 9 AM Birthday Check...');
+    // Schedule Birthday Check for 12:00 AM IST (midnight)
+    cron.schedule('0 0 * * *', async () => {
+        console.log('⏰ Triggering 12 AM IST Birthday Check...');
         try {
             await checkAndSendBirthdayNotifications();
         } catch (err) {
@@ -327,7 +327,7 @@ const initScheduledJobs = () => {
         timezone: "Asia/Kolkata"
     });
 
-    console.log('✅ 9 AM Birthday Check scheduled.');
+    console.log('✅ 12 AM IST Birthday Check (push + SMS) scheduled.');
 };
 
 module.exports = {

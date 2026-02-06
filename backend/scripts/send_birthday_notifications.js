@@ -6,9 +6,8 @@ const run = async () => {
         console.log('--- Manual Trigger: Birthday Notifications ---');
         const results = await checkAndSendBirthdayNotifications();
         console.log('--- Summary ---');
-        console.log(`Sent: ${results.sent}`);
-        console.log(`Failed: ${results.failed}`);
-        console.log(`No Subscription: ${results.noSubscription}`);
+        console.log('Push:', results.push || {});
+        console.log('SMS:', results.sms || {});
         console.log('----------------');
     } catch (error) {
         console.error('Script failed:', error);

@@ -8,6 +8,8 @@ const { masterPool } = require('../config/database');
 // DLT Template ID and PE ID for absent SMS
 const SMS_TEMPLATE_ID = process.env.SMS_TEMPLATE_ID || '1607100000000150000';
 const SMS_PE_ID = process.env.SMS_PE_ID || '1102395590000010000';
+// Birthday SMS: optional separate DLT template ID (falls back to SMS_TEMPLATE_ID if not set)
+const SMS_BIRTHDAY_TEMPLATE_ID = process.env.SMS_BIRTHDAY_TEMPLATE_ID || SMS_TEMPLATE_ID;
 
 // Support both SMS_* and BULKSMS_* env variable names
 const SMS_API_URL = process.env.SMS_API_URL || process.env.BULKSMS_API_URL || process.env.BULKSMS_ENGLISH_API_URL || 'http://www.bulksmsapps.com/api/apismsv2.aspx';
@@ -413,6 +415,33 @@ const resolveParentContact = (student) => {
   );
 };
 
+/** Resolve student's own mobile for SMS (e.g. birthday wishes to student). */
+const resolveStudentMobile = (student) => {
+  if (!student) return '';
+  if (student.student_mobile) return student.student_mobile;
+  let data = student.student_data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data || '{}');
+    } catch {
+      return '';
+    }
+  }
+  if (!data || typeof data !== 'object') return '';
+  return (
+    data['Student Mobile Number'] ||
+    data['Student Mobile number'] ||
+    data['Student Mobile'] ||
+    data['student_mobile'] ||
+    ''
+  );
+};
+
+// Birthday SMS template: "Dear {#var#} Happy Birthday! ..." — {#var#} = student name
+const BIRTHDAY_SMS_TEMPLATE =
+  process.env.SMS_BIRTHDAY_TEMPLATE ||
+  'Dear {#var#} Happy Birthday! May this year bring success, happiness, and good health. Keep learning and growing. Best wishes from Pydah Group.';
+
 /**
  * Build message by replacing {#var#} placeholders with actual values
  * DLT Template: "Dear Parent, {#var#} is absent today i.e., on {#var#}Principal, PYDAH."
@@ -545,10 +574,63 @@ exports.sendAbsenceNotification = async ({
   });
 };
 
+/**
+ * Send birthday SMS to student using template:
+ * "Dear {#var#} Happy Birthday! May this year bring success, happiness, and good health. Keep learning and growing. Best wishes from Pydah Group."
+ * {#var#} is replaced with student name (or first name).
+ */
+exports.sendBirthdaySms = async ({ student }) => {
+  const logPrefix = `[SMS Birthday] ${student.admission_number || 'unknown'}`;
+  const to = resolveStudentMobile(student);
+
+  if (!to) {
+    console.log(`${logPrefix} ⚠️ SKIPPED - No student mobile number found`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'missing_student_mobile'
+    };
+  }
+
+  let data = student.student_data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data || '{}');
+    } catch {
+      data = {};
+    }
+  }
+  const studentName =
+    (student.student_name && student.student_name.split(' ')[0]) ||
+    (data && (data['Student Name'] || data['student_name']));
+  const nameForMessage = (studentName && studentName.split(' ')[0]) || studentName || 'Student';
+
+  const message = buildAbsenceMessage(BIRTHDAY_SMS_TEMPLATE, [nameForMessage]);
+
+  console.log(`${logPrefix} 📱 Sending birthday SMS to ${to}`);
+  return dispatchSms({
+    to,
+    message,
+    templateId: SMS_BIRTHDAY_TEMPLATE_ID,
+    peId: SMS_PE_ID,
+    meta: {
+      category: 'Birthday',
+      template: 'birthday',
+      student: {
+        id: student.id,
+        admissionNumber: student.admission_number,
+        currentYear: student.current_year,
+        currentSemester: student.current_semester
+      }
+    }
+  });
+};
+
 // Generic SMS sending function
 exports.sendSms = dispatchSms;
 
 module.exports = {
   sendAbsenceNotification: exports.sendAbsenceNotification,
+  sendBirthdaySms: exports.sendBirthdaySms,
   sendSms: dispatchSms
 };
