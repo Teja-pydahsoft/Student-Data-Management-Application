@@ -6138,6 +6138,7 @@ exports.getRegistrationReport = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_level,
       filter_scholarship_status,
       search,
       page = 1,
@@ -6224,6 +6225,28 @@ exports.getRegistrationReport = async (req, res) => {
     if (parsedFilterSemester) {
       baseQuery += ' AND current_semester = ?';
       params.push(parsedFilterSemester);
+    }
+
+    // Filter by level if provided
+    if (filter_level) {
+      try {
+        // Get courses with the specified level
+        const [levelCourses] = await masterPool.query(
+          'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+          [filter_level]
+        );
+        const validCourseNames = levelCourses.map(c => c.name);
+        if (validCourseNames.length > 0) {
+          const placeholders = validCourseNames.map(() => '?').join(',');
+          baseQuery += ` AND course IN (${placeholders})`;
+          params.push(...validCourseNames);
+        } else {
+          // No courses with this level, return empty result
+          baseQuery += ' AND 1=0';
+        }
+      } catch (err) {
+        console.warn('Failed to filter by level:', err);
+      }
     }
 
     if (search) {
@@ -6433,6 +6456,7 @@ exports.getRegistrationAbstract = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_level,
       filter_scholarship_status,
       search
     } = req.query;
@@ -6498,6 +6522,28 @@ exports.getRegistrationAbstract = async (req, res) => {
     if (normalizedFilterBranch) { baseQuery += ' AND branch = ?'; params.push(normalizedFilterBranch); }
     if (parsedFilterYear) { baseQuery += ' AND current_year = ?'; params.push(parsedFilterYear); }
     if (parsedFilterSemester) { baseQuery += ' AND current_semester = ?'; params.push(parsedFilterSemester); }
+
+    // Filter by level if provided
+    if (filter_level) {
+      try {
+        // Get courses with the specified level
+        const [levelCourses] = await masterPool.query(
+          'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+          [filter_level]
+        );
+        const validCourseNames = levelCourses.map(c => c.name);
+        if (validCourseNames.length > 0) {
+          const placeholders = validCourseNames.map(() => '?').join(',');
+          baseQuery += ` AND course IN (${placeholders})`;
+          params.push(...validCourseNames);
+        } else {
+          // No courses with this level, return empty result
+          baseQuery += ' AND 1=0';
+        }
+      } catch (err) {
+        console.warn('Failed to filter by level:', err);
+      }
+    }
 
     if (search) {
       const searchPattern = `%${search.trim()}%`;
@@ -6577,6 +6623,7 @@ exports.exportRegistrationReport = async (req, res) => {
       filter_year,
       filter_semester,
       filter_college,
+      filter_level,
       filter_scholarship_status,
       search,
       format = 'excel'
@@ -6639,6 +6686,28 @@ exports.exportRegistrationReport = async (req, res) => {
     if (normalizedFilterBranch) { baseQuery += ' AND branch = ?'; params.push(normalizedFilterBranch); }
     if (parsedFilterYear) { baseQuery += ' AND current_year = ?'; params.push(parsedFilterYear); }
     if (parsedFilterSemester) { baseQuery += ' AND current_semester = ?'; params.push(parsedFilterSemester); }
+
+    // Filter by level if provided
+    if (filter_level) {
+      try {
+        // Get courses with the specified level
+        const [levelCourses] = await masterPool.query(
+          'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+          [filter_level]
+        );
+        const validCourseNames = levelCourses.map(c => c.name);
+        if (validCourseNames.length > 0) {
+          const placeholders = validCourseNames.map(() => '?').join(',');
+          baseQuery += ` AND course IN (${placeholders})`;
+          params.push(...validCourseNames);
+        } else {
+          // No courses with this level, return empty result
+          baseQuery += ' AND 1=0';
+        }
+      } catch (err) {
+        console.warn('Failed to filter by level:', err);
+      }
+    }
 
     if (search) {
       const searchPattern = `%${search.trim()}%`;

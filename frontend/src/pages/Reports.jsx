@@ -157,6 +157,7 @@ const Reports = () => {
     allData: []
   });
   const [coursesWithLevels, setCoursesWithLevels] = useState([]); // Store courses with level info
+  const [collegesList, setCollegesList] = useState([]); // Store colleges with IDs for matching
   const [sendingReports, setSendingReports] = useState(false);
   const dayEndStatsRef = useRef(null);
   const [statsSectionHeight, setStatsSectionHeight] = useState(180);
@@ -293,7 +294,22 @@ const Reports = () => {
     fetchCoursesWithLevels();
   }, []);
 
-  // Update Dependents when College or Batch changes
+  // Fetch colleges list to get college IDs
+  useEffect(() => {
+    const fetchColleges = async () => {
+      try {
+        const response = await api.get('/colleges?includeInactive=false');
+        if (response.data?.success) {
+          setCollegesList(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch colleges:', error);
+      }
+    };
+    fetchColleges();
+  }, []);
+
+  // Update Dependents when College, Level, or Batch changes
   useEffect(() => {
     const updateCollegeBatchDependents = async () => {
       try {
@@ -301,6 +317,8 @@ const Reports = () => {
         if (filters.college) params.append('college', filters.college);
         if (filters.level) params.append('level', filters.level);
         if (filters.batch) params.append('batch', filters.batch);
+        // Only include course if it's selected (for branch filtering)
+        if (filters.course) params.append('course', filters.course);
         params.append('applyExclusions', 'true');
 
         const response = await api.get(`/students/quick-filters?${params.toString()}`);
@@ -310,10 +328,10 @@ const Reports = () => {
             ...prev,
             batches: data.batches || [],
             courses: data.courses || [],
-            // Reset downstream options if their parents aren't selected
-            branches: !filters.course ? (data.branches || []) : prev.branches,
-            years: (!filters.course && !filters.branch) ? (data.years || []) : prev.years,
-            semesters: (!filters.course && !filters.branch && !filters.year) ? (data.semesters || []) : prev.semesters
+            // Update branches based on current filters (will be filtered by course if course is selected)
+            branches: data.branches || [],
+            years: !filters.branch ? (data.years || []) : prev.years,
+            semesters: (!filters.branch && !filters.year) ? (data.semesters || []) : prev.semesters
           }));
         }
       } catch (error) {
@@ -1298,6 +1316,40 @@ const Reports = () => {
     return [...list].sort((a, b) => a - b);
   }, [filterOptions.semesters]);
 
+  // Get available courses filtered by college and level (for Registration Reports)
+  const availableCourses = useMemo(() => {
+    if (!coursesWithLevels || coursesWithLevels.length === 0) {
+      // Fallback to filterOptions.courses if coursesWithLevels is not loaded
+      return (filterOptions.courses || []).sort();
+    }
+
+    let filteredCourses = coursesWithLevels;
+
+    // Filter by college if college is selected
+    if (filters.college) {
+      // Find college ID from college name
+      const selectedCollege = collegesList.find(c => c.name === filters.college);
+      if (selectedCollege && selectedCollege.id) {
+        // Filter courses by collegeId
+        filteredCourses = filteredCourses.filter(course => {
+          const courseCollegeId = course.collegeId || course.college_id;
+          return courseCollegeId === selectedCollege.id;
+        });
+      } else {
+        // College not found in list, return empty
+        return [];
+      }
+    }
+
+    // Filter by level if level is selected
+    if (filters.level) {
+      filteredCourses = filteredCourses.filter(course => course.level === filters.level);
+    }
+
+    // Extract course names, remove duplicates, filter out empty values, and sort
+    return [...new Set(filteredCourses.map(c => c.name).filter(Boolean))].sort();
+  }, [coursesWithLevels, collegesList, filters.college, filters.level]);
+
   const hasActiveFilters = activeFilterEntries.length > 0;
 
   // Transform stats for charts
@@ -1658,20 +1710,11 @@ const Reports = () => {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Programs</option>
-              {(filterOptions.courses || [])
-                .filter(course => {
-                  // Filter by level if level is selected
-                  if (filters.level) {
-                    const courseInfo = coursesWithLevels.find(c => c.name === course);
-                    return courseInfo?.level === filters.level;
-                  }
-                  return true;
-                })
-                .map((course) => (
-                  <option key={course} value={course}>
-                    {course}
-                  </option>
-                ))}
+              {availableCourses.map((course) => (
+                <option key={course} value={course}>
+                  {course}
+                </option>
+              ))}
             </select>
 
             {/* Branch */}
