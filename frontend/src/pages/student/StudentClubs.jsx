@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users, BookOpen, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Users, BookOpen, CheckCircle, Clock, AlertCircle, MessageSquare, Send } from 'lucide-react';
 import { SkeletonBox } from '../../components/SkeletonLoader';
 import clubService from '../../services/clubService';
+import chatService from '../../services/chatService';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -16,6 +17,12 @@ const StudentClubs = () => {
     // Eligibility
     const { user } = useAuthStore();
     const [studentData, setStudentData] = useState(null);
+
+    // Club Communication (Chat)
+    const [clubChannel, setClubChannel] = useState(null);
+    const [clubMessages, setClubMessages] = useState([]);
+    const [messagesLoading, setMessagesLoading] = useState(false);
+    const [newMessage, setNewMessage] = useState('');
 
     useEffect(() => {
         const loadSafe = async () => {
@@ -49,6 +56,50 @@ const StudentClubs = () => {
         };
         loadSafe();
     }, [user]);
+
+    // Load club chat channel when viewing club details (only for approved members without payment due)
+    useEffect(() => {
+        if (!activeClub?.id || activeClub.userStatus !== 'approved' || activeClub.payment_status === 'payment_due') {
+            setClubChannel(null);
+            setClubMessages([]);
+            return;
+        }
+        const load = async () => {
+            try {
+                const res = await chatService.listChannels();
+                if (res.success && res.data) {
+                    const chan = res.data.find((c) => c.club_id === activeClub.id || c.club_id === Number(activeClub.id));
+                    if (chan) {
+                        setClubChannel(chan);
+                        setMessagesLoading(true);
+                        const msgRes = await chatService.getMessages(chan.id);
+                        if (msgRes.success && msgRes.data) setClubMessages(msgRes.data);
+                    } else {
+                        setClubChannel(null);
+                        setClubMessages([]);
+                    }
+                }
+            } catch {
+                setClubChannel(null);
+            } finally {
+                setMessagesLoading(false);
+            }
+        };
+        load();
+    }, [activeClub?.id, activeClub?.userStatus, activeClub?.payment_status]);
+
+    const handlePostClubMessage = async (e) => {
+        e.preventDefault();
+        if (!clubChannel?.id || !newMessage?.trim()) return;
+        try {
+            await chatService.postMessage(clubChannel.id, newMessage.trim());
+            setNewMessage('');
+            const res = await chatService.getMessages(clubChannel.id);
+            if (res.success && res.data) setClubMessages(res.data);
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to send message');
+        }
+    };
 
     const isEligible = (club) => {
         if (!studentData) return { eligible: true }; // Fallback if load fails or during load
@@ -277,6 +328,62 @@ const StudentClubs = () => {
                                             </div>
                                         </div>
                                     ))
+                                )}
+
+                                {/* Club Communication (Chat) - for approved members */}
+                                {activeClub.userStatus === 'approved' && activeClub.payment_status !== 'payment_due' && (
+                                    <div className="mt-8">
+                                        <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
+                                            <MessageSquare className="text-indigo-600" /> Club Communication
+                                        </h3>
+                                        {!clubChannel ? (
+                                            <div className="bg-white border rounded-xl p-8 text-center text-gray-400">
+                                                <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
+                                                <p>No chat channel for this club yet.</p>
+                                                <p className="text-sm mt-1">Admin can create one from the Clubs page.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                                <div className="p-4 border-b border-gray-100 bg-indigo-50/50 flex items-center gap-2">
+                                                    <MessageSquare size={20} className="text-indigo-600" />
+                                                    <span className="font-bold text-gray-900">{clubChannel.name || 'Club Chat'}</span>
+                                                </div>
+                                                <div className="overflow-y-auto p-4 space-y-3" style={{ maxHeight: 320 }}>
+                                                    {messagesLoading ? (
+                                                        <div className="text-center text-gray-500 py-6">Loading messages...</div>
+                                                    ) : clubMessages.length === 0 ? (
+                                                        <div className="text-center text-gray-400 py-8">No messages yet. Say hello!</div>
+                                                    ) : (
+                                                        clubMessages
+                                                            .filter((m) => !m.is_hidden)
+                                                            .map((msg) => (
+                                                                <div key={msg.id} className="flex gap-2 p-3 rounded-lg bg-gray-50">
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-bold text-gray-900 text-sm">{msg.sender_name || 'Unknown'}</span>
+                                                                            <span className="text-xs text-gray-500">{new Date(msg.created_at).toLocaleString()}</span>
+                                                                        </div>
+                                                                        <p className="text-sm text-gray-700 mt-0.5">{msg.message}</p>
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                    )}
+                                                </div>
+                                                <form onSubmit={handlePostClubMessage} className="p-4 border-t border-gray-100 flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newMessage}
+                                                        onChange={(e) => setNewMessage(e.target.value)}
+                                                        placeholder="Type a message..."
+                                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                    />
+                                                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 flex items-center gap-1">
+                                                        <Send size={18} />
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>

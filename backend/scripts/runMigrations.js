@@ -30,6 +30,8 @@ async function runMigrations() {
 
     console.log(`📋 Found ${files.length} migration file(s)`);
 
+    const dbName = process.env.DB_NAME || "student_database";
+
     // Create migrations tracking table if it doesn't exist
     await masterPool.execute(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -39,6 +41,25 @@ async function runMigrations() {
         INDEX idx_migration_name (migration_name)
       )
     `);
+
+    // Repair: if create_chat_tables was marked executed but tables don't exist, allow re-run
+    const [chatRecord] = await masterPool.execute(
+      "SELECT id FROM schema_migrations WHERE migration_name = ? LIMIT 1",
+      ["create_chat_tables.sql"]
+    );
+    if (chatRecord.length > 0) {
+      const [tables] = await masterPool.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = 'chat_channels' LIMIT 1",
+        [dbName]
+      );
+      if (tables.length === 0) {
+        await masterPool.execute(
+          "DELETE FROM schema_migrations WHERE migration_name = ?",
+          ["create_chat_tables.sql"]
+        );
+        console.log("   Repair: create_chat_tables.sql will re-run (tables were missing)");
+      }
+    }
 
     // Process each migration file
     for (const file of files) {
@@ -60,7 +81,10 @@ async function runMigrations() {
       try {
         // Read the migration file
         const filePath = path.join(migrationsDir, file);
-        const sql = fs.readFileSync(filePath, "utf8");
+        let sql = fs.readFileSync(filePath, "utf8");
+
+        // Remove full-line comments so statements are not wrongly skipped (e.g. "-- comment\nCREATE TABLE" was filtered)
+        sql = sql.replace(/^\s*--[^\n]*$/gm, "");
 
         // Split SQL statements by semicolon (handling multi-statement files)
         const statements = sql

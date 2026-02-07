@@ -5,6 +5,22 @@
 
 const { masterPool } = require('../config/database');
 
+/** Get channel by club_id (for admin/faculty when viewing club details) */
+exports.getChannelByClub = async (req, res) => {
+  try {
+    const { clubId } = req.params;
+    const [rows] = await masterPool.query(
+      'SELECT id, channel_type, name, club_id, is_active FROM chat_channels WHERE club_id = ? AND is_active = 1 LIMIT 1',
+      [clubId]
+    );
+    if (!rows.length) return res.json({ success: true, data: null });
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    console.error('chat getChannelByClub error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch channel' });
+  }
+};
+
 /** List channels user is member of or can access */
 exports.listChannels = async (req, res) => {
   try {
@@ -17,12 +33,15 @@ exports.listChannels = async (req, res) => {
         [user.admission_number || user.admissionNumber, user.admission_number || user.admissionNo]
       );
       if (students.length) {
+        const studentId = students[0].id;
+        // Channels where student is in chat_channel_members OR club channels where student is approved club member
         const [rows] = await masterPool.query(
           `SELECT c.id, c.channel_type, c.name, c.subject_id, c.club_id, c.event_id
            FROM chat_channels c
-           JOIN chat_channel_members m ON m.channel_id = c.id AND m.student_id = ?
-           WHERE c.is_active = 1`,
-          [students[0].id]
+           LEFT JOIN chat_channel_members m ON m.channel_id = c.id AND m.student_id = ?
+           LEFT JOIN club_members cm ON cm.club_id = c.club_id AND cm.student_id = ? AND cm.status = 'approved'
+           WHERE c.is_active = 1 AND (m.id IS NOT NULL OR (c.channel_type = 'club' AND c.club_id IS NOT NULL AND cm.id IS NOT NULL))`,
+          [studentId, studentId]
         );
         channels = rows;
       }
@@ -154,7 +173,25 @@ exports.createChannel = async (req, res) => {
       `INSERT INTO chat_channels (channel_type, name, subject_id, club_id, event_id, college_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [channel_type, name, subject_id || null, club_id || null, event_id || null, college_id || null, created_by]
     );
-    res.status(201).json({ success: true, data: { id: r.insertId } });
+    const channelId = r.insertId;
+    // Auto-add approved club members to club channel
+    if (channel_type === 'club' && club_id) {
+      const [members] = await masterPool.query(
+        'SELECT student_id FROM club_members WHERE club_id = ? AND status = ?',
+        [club_id, 'approved']
+      );
+      for (const m of members) {
+        try {
+          await masterPool.query(
+            'INSERT IGNORE INTO chat_channel_members (channel_id, member_type, student_id) VALUES (?, ?, ?)',
+            [channelId, 'student', m.student_id]
+          );
+        } catch (e) {
+          // Ignore duplicate
+        }
+      }
+    }
+    res.status(201).json({ success: true, data: { id: channelId } });
   } catch (error) {
     console.error('chat createChannel error:', error);
     res.status(500).json({ success: false, message: 'Failed to create channel' });

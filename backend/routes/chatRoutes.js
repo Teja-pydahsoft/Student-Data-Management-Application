@@ -8,6 +8,7 @@ router.use(authMiddleware);
 router.use(attachUserScope);
 
 router.get('/channels', chatController.listChannels);
+router.get('/channels/by-club/:clubId', chatController.getChannelByClub);
 router.post('/channels', verifyPermission('faculty_academics', 'moderate_chat'), chatController.createChannel);
 router.get('/channels/:id/messages', chatController.getMessages);
 router.post('/channels/:id/messages', chatController.postMessage);

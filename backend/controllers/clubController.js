@@ -229,6 +229,18 @@ const updateMembershipStatus = async (req, res) => {
                 return res.status(404).json({ success: false, message: 'Member not found' });
             }
 
+            // Add student to club's chat channel if it exists
+            const [chan] = await masterPool.query(
+                'SELECT id FROM chat_channels WHERE club_id = ? AND is_active = 1 LIMIT 1',
+                [clubId]
+            );
+            if (chan.length) {
+                await masterPool.query(
+                    'INSERT IGNORE INTO chat_channel_members (channel_id, member_type, student_id) VALUES (?, ?, ?)',
+                    [chan[0].id, 'student', studentId]
+                ).catch(() => {});
+            }
+
             // Notify Student
             const title = fee > 0 ? `Club Membership Approved - Payment Due` : `Club Membership Approved!`;
             const body = fee > 0 ? `You have been approved for ${club[0].name}. Please pay ₹${fee} to complete joining.` : `Welcome to ${club[0].name}! You can now access club activities.`;

@@ -3,11 +3,12 @@ import {
     Plus, Users, Calendar, X, Trash2, Check, XCircle,
     Edit2, Layout, UserPlus, FileText, ArrowRight,
     TrendingUp, Award, Zap, Heart, Camera, Search, Filter,
-    MoreHorizontal, Shield, Wallet, Send, Image
+    MoreHorizontal, Shield, Wallet, Send, Image, MessageSquare, Eye, EyeOff
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import clubService from '../services/clubService';
+import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
 
 const ClubCard = ({ club, onSelect, isAdmin, onToggleStatus }) => (
@@ -120,6 +121,14 @@ const Clubs = () => {
     const [filterCourse, setFilterCourse] = useState('');
     const [filterBranch, setFilterBranch] = useState('');
     const [filterYear, setFilterYear] = useState('');
+
+    // Communication (Club Chat) State
+    const [clubChannel, setClubChannel] = useState(null);
+    const [clubMessages, setClubMessages] = useState([]);
+    const [channelLoading, setChannelLoading] = useState(false);
+    const [messagesLoading, setMessagesLoading] = useState(false);
+    const [newMessage, setNewMessage] = useState('');
+    const [creatingChannel, setCreatingChannel] = useState(false);
 
     useEffect(() => {
         const type = localStorage.getItem('userType');
@@ -352,6 +361,82 @@ const Clubs = () => {
         }
     };
 
+    // Fetch club channel when Communication tab is active
+    useEffect(() => {
+        if (activeTab !== 'communication' || !selectedClub?.id) return;
+        const load = async () => {
+            setChannelLoading(true);
+            setClubChannel(null);
+            try {
+                const res = await chatService.getChannelByClub(selectedClub.id);
+                if (res.success && res.data) {
+                    setClubChannel(res.data);
+                    fetchClubMessages(res.data.id);
+                }
+            } catch (e) {
+                toast.error('Failed to load club communication');
+            } finally {
+                setChannelLoading(false);
+            }
+        };
+        load();
+    }, [activeTab, selectedClub?.id]);
+
+    const fetchClubMessages = async (channelId) => {
+        if (!channelId) return;
+        setMessagesLoading(true);
+        try {
+            const res = await chatService.getMessages(channelId);
+            if (res.success && res.data) setClubMessages(res.data);
+        } catch (e) {
+            toast.error('Failed to load messages');
+        } finally {
+            setMessagesLoading(false);
+        }
+    };
+
+    const handleCreateClubChannel = async () => {
+        if (!selectedClub?.id) return;
+        setCreatingChannel(true);
+        try {
+            const res = await chatService.createChannel({
+                channel_type: 'club',
+                name: `${selectedClub.name} – Chat`,
+                club_id: selectedClub.id,
+            });
+            if (res.success && res.data) {
+                setClubChannel({ id: res.data.id, channel_type: 'club', name: `${selectedClub.name} – Chat`, club_id: selectedClub.id });
+                toast.success('Communication channel created');
+                fetchClubMessages(res.data.id);
+            }
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Failed to create channel');
+        } finally {
+            setCreatingChannel(false);
+        }
+    };
+
+    const handlePostClubMessage = async (e) => {
+        e.preventDefault();
+        if (!clubChannel?.id || !newMessage?.trim()) return;
+        try {
+            await chatService.postMessage(clubChannel.id, newMessage.trim());
+            setNewMessage('');
+            fetchClubMessages(clubChannel.id);
+        } catch (e) {
+            toast.error('Failed to send message');
+        }
+    };
+
+    const handleModerateMessage = async (msgId, isHidden) => {
+        try {
+            await chatService.moderateMessage(msgId, isHidden);
+            fetchClubMessages(clubChannel.id);
+        } catch (e) {
+            toast.error('Failed to moderate');
+        }
+    };
+
     // --- Render Components ---
 
 
@@ -485,7 +570,7 @@ const Clubs = () => {
 
                     {/* Navigation Tabs */}
                     <div className="flex border-b border-gray-100 px-6 gap-6">
-                        {['overview', 'members', 'requests', 'activities'].map(tab => (
+                        {['overview', 'members', 'requests', 'activities', 'communication'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -494,8 +579,14 @@ const Clubs = () => {
                                     : 'border-transparent text-gray-500 hover:text-gray-700'
                                     }`}
                             >
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                {tab === 'requests' && (selectedClub.members?.filter(m => m.status === 'pending').length > 0) && (
+                                {tab === 'communication' ? (
+                                    <span className="flex items-center gap-1">
+                                        <MessageSquare size={14} /> Communication
+                                    </span>
+                                ) : (
+                                    tab.charAt(0).toUpperCase() + tab.slice(1)
+                                )}
+                                {tab === 'requests' && selectedClub?.members?.filter(m => m.status === 'pending').length > 0 && (
                                     <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
                                         {selectedClub.members.filter(m => m.status === 'pending').length}
                                     </span>
@@ -848,6 +939,87 @@ const Clubs = () => {
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'communication' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                {channelLoading ? (
+                                    <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
+                                        Loading communication...
+                                    </div>
+                                ) : !clubChannel ? (
+                                    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
+                                        <MessageSquare size={48} className="mx-auto mb-4 text-gray-300" />
+                                        <h3 className="text-lg font-bold text-gray-900 mb-2">No Communication Channel Yet</h3>
+                                        <p className="text-gray-500 max-w-md mx-auto mb-6">
+                                            Create a chat channel for club members to communicate.
+                                        </p>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={handleCreateClubChannel}
+                                                disabled={creatingChannel}
+                                                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mx-auto"
+                                            >
+                                                <MessageSquare size={18} />
+                                                {creatingChannel ? 'Creating...' : 'Create Communication Channel'}
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 400 }}>
+                                        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
+                                            <MessageSquare size={20} className="text-blue-600" />
+                                            <span className="font-bold text-gray-900">{clubChannel.name || 'Club Chat'}</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: 400 }}>
+                                            {messagesLoading ? (
+                                                <div className="text-center text-gray-500 py-8">Loading messages...</div>
+                                            ) : clubMessages.length === 0 ? (
+                                                <div className="text-center text-gray-400 py-12">No messages yet. Start the conversation!</div>
+                                            ) : (
+                                                clubMessages.map((msg) => (
+                                                    <div
+                                                        key={msg.id}
+                                                        className={`flex justify-between items-start gap-2 p-3 rounded-lg ${msg.is_hidden ? 'bg-red-50 opacity-75' : 'bg-gray-50'}`}
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                <span className="font-bold text-gray-900 text-sm">{msg.sender_name || 'Unknown'}</span>
+                                                                <span className="text-xs text-gray-500">{new Date(msg.created_at).toLocaleString()}</span>
+                                                                {msg.is_hidden && <span className="text-xs text-red-600 font-medium">(Hidden)</span>}
+                                                            </div>
+                                                            <p className={`text-sm ${msg.is_hidden ? 'text-gray-500 line-through' : 'text-gray-700'}`}>{msg.message}</p>
+                                                        </div>
+                                                        {isAdmin && (
+                                                            <button
+                                                                onClick={() => handleModerateMessage(msg.id, !msg.is_hidden)}
+                                                                className="shrink-0 p-1.5 rounded text-gray-400 hover:bg-gray-200"
+                                                                title={msg.is_hidden ? 'Restore' : 'Hide'}
+                                                            >
+                                                                {msg.is_hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        {isAdmin && (
+                                            <form onSubmit={handlePostClubMessage} className="p-4 border-t border-gray-100 flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={newMessage}
+                                                    onChange={(e) => setNewMessage(e.target.value)}
+                                                    placeholder="Type a message..."
+                                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                />
+                                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">
+                                                    <Send size={18} />
+                                                </button>
+                                            </form>
+                                        )}
                                     </div>
                                 )}
                             </div>

@@ -14,7 +14,8 @@
     "migrate-supabase-to-mysql": "node scripts/migrate_supabase_to_mysql.js",
     "add-performance-indexes": "node scripts/runPerformanceIndexes.js",
     "verify-db": "node scripts/verifyDatabase.js",
-    "run-migrations": "node -e \"const { runMigrations } = require('./scripts/runMigrations'); runMigrations().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });\""
+    "run-migrations": "node -e \"const { runMigrations } = require('./scripts/runMigrations'); runMigrations().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });\"",
+    "run-migrations-fresh": "node scripts/run_all_migrations_fresh.js"
   },
   "keywords": [
     "student",
