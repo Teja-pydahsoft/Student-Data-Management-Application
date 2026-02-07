@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   student_id INT NOT NULL,
   admission_number VARCHAR(100),
   attendance_date DATE NOT NULL,
+  year TINYINT UNSIGNED NULL COMMENT 'Academic year of study when attendance was marked',
+  semester TINYINT UNSIGNED NULL COMMENT 'Semester when attendance was marked',
   status ENUM('present','absent') NOT NULL,
   marked_by INT NULL,
   remarks TEXT,
@@ -86,6 +88,7 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   INDEX idx_attendance_date (attendance_date),
   INDEX idx_status (status),
   INDEX idx_sms_sent (sms_sent),
+  INDEX idx_year_semester (year, semester),
   CONSTRAINT fk_attendance_student
     FOREIGN KEY (student_id) REFERENCES students(id)
     ON DELETE CASCADE

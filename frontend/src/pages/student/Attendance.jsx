@@ -298,6 +298,11 @@ const Attendance = () => {
                                 <p className="text-xl font-bold text-gray-900">
                                     {historyData.semester?.startDate} → {historyData.semester?.endDate}
                                 </p>
+                                {historyData.semester?.semesterSource === 'fallback' && (
+                                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">
+                                        Set semester start &amp; end in <strong>Settings → Academic Calendar</strong> for accurate semester attendance.
+                                    </p>
+                                )}
                                 <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
                                         <Calendar size={14} /> {stats.totalWorkingDays} working days (Excl. Holidays)

@@ -184,7 +184,7 @@ const attachUserScope = async (req, res, next) => {
     // Fetch full user data from database to get scope
     const [rows] = await masterPool.query(
       `SELECT 
-        college_id, course_id, branch_id,
+        college_id, course_id, branch_id, role,
         college_ids, course_ids, branch_ids,
         all_courses, all_branches
       FROM rbac_users WHERE id = ?`,
@@ -241,6 +241,26 @@ const attachUserScope = async (req, res, next) => {
       courseNames = courses.map(c => c.name);
     }
 
+    // For branch_hod: fetch year assignments so we filter data by their assigned years
+    let hodYears = [];
+    const role = (userData.role || user.role || '').toString().toLowerCase();
+    if (role === 'branch_hod' && branchIds.length > 0) {
+      try {
+        const [yhRows] = await masterPool.query(
+          'SELECT years FROM branch_hod_year_assignments WHERE rbac_user_id = ?',
+          [user.id]
+        );
+        for (const r of yhRows || []) {
+          let yrs = r.years;
+          if (typeof yrs === 'string') {
+            try { yrs = JSON.parse(yrs); } catch (_) {}
+          }
+          if (Array.isArray(yrs)) hodYears = [...new Set([...hodYears, ...yrs])];
+        }
+        hodYears = hodYears.sort((a, b) => a - b);
+      } catch (_) {}
+    }
+
     // Fetch branch names for filtering
     let branchNames = [];
     if (!userData.all_branches && branchIds.length > 0) {
@@ -272,7 +292,8 @@ const attachUserScope = async (req, res, next) => {
       branchNames,
       allCourses: !!userData.all_courses,
       allBranches: !!userData.all_branches,
-      unrestricted: false
+      unrestricted: false,
+      hodYears: hodYears.length > 0 ? hodYears : null
     };
 
     next();

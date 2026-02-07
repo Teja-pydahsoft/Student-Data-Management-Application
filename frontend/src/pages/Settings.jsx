@@ -1185,12 +1185,9 @@ const Settings = () => {
   }, [colleges, selectedCollegeId]);
 
   useEffect(() => {
-    // Fetch courses when college selection changes
-    if (selectedCollegeId) {
-      fetchCourses({ collegeId: selectedCollegeId });
-    } else {
-      fetchCourses();
-    }
+    // Fetch ALL courses so Academic Calendar has programs for any college.
+    // Colleges section filters client-side via coursesForSelectedCollege.
+    fetchCourses();
   }, [selectedCollegeId]);
 
   useEffect(() => {

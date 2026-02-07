@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import api from '../../config/api';
-import { Users, Building2, UserCog, GraduationCap, X, UserPlus, ExternalLink, BookOpen, Plus, Trash2 } from 'lucide-react';
+import { Users, Building2, UserCog, GraduationCap, X, UserPlus, ExternalLink, BookOpen, Plus, Trash2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const FacultyManagement = () => {
@@ -14,15 +14,24 @@ const FacultyManagement = () => {
   const [employees, setEmployees] = useState({ principals: [], hods: [], faculty: [], all: [] });
   const [colleges, setColleges] = useState([]);
   const [selectedCollegeId, setSelectedCollegeId] = useState('');
+  const [selectedProgramId, setSelectedProgramId] = useState('');
   const [branchesWithHods, setBranchesWithHods] = useState([]);
+  const [selectedBranchForSubjects, setSelectedBranchForSubjects] = useState(null);
+  const [sidePanelSubjectsData, setSidePanelSubjectsData] = useState(null);
+  const [loadingSidePanelSubjects, setLoadingSidePanelSubjects] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [employeeDetail, setEmployeeDetail] = useState(null);
   const [assignHodBranch, setAssignHodBranch] = useState(null);
+  const [editingHod, setEditingHod] = useState(null); // { branch, hod } when editing years
+  const [availableYearsForBranch, setAvailableYearsForBranch] = useState([]);
+  const [loadingAvailableYears, setLoadingAvailableYears] = useState(false);
   const [rbacUsers, setRbacUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [assigningHod, setAssigningHod] = useState(false);
+  const [unassigningHod, setUnassigningHod] = useState(false);
   const [selectedHodUserId, setSelectedHodUserId] = useState('');
+  const [selectedHodYears, setSelectedHodYears] = useState([1, 2, 3, 4]);
   const [assignHodMode, setAssignHodMode] = useState('select'); // 'select' | 'create'
   const [newHodName, setNewHodName] = useState('');
   const [newHodEmail, setNewHodEmail] = useState('');
@@ -38,6 +47,12 @@ const FacultyManagement = () => {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectCode, setNewSubjectCode] = useState('');
   const [creatingSubject, setCreatingSubject] = useState(false);
+  const [selectedYearForStaff, setSelectedYearForStaff] = useState('');
+  const [selectedBranchForStaff, setSelectedBranchForStaff] = useState(null);
+  const [staffTabData, setStaffTabData] = useState({ branches: [], yearsAvailable: [] });
+  const [loadingStaffTab, setLoadingStaffTab] = useState(false);
+  const [staffAssignSelect, setStaffAssignSelect] = useState({}); // { subjectId: rbacUserId }
+  const [assigningStaff, setAssigningStaff] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -63,11 +78,11 @@ const FacultyManagement = () => {
         toast.error(e.response?.data?.message || 'Failed to load colleges');
       }
     };
-    if (tab === 'assign-hods') fetchColleges();
+    if (tab === 'assign-hods' || tab === 'assign-staff') fetchColleges();
   }, [tab]);
 
   useEffect(() => {
-    if (!selectedCollegeId || tab !== 'assign-hods') {
+    if (!selectedCollegeId || (tab !== 'assign-hods' && tab !== 'assign-staff')) {
       setBranchesWithHods([]);
       return;
     }
@@ -87,6 +102,64 @@ const FacultyManagement = () => {
   }, [selectedCollegeId, tab]);
 
   useEffect(() => {
+    if (!selectedCollegeId || !selectedProgramId || tab !== 'assign-staff') {
+      setStaffTabData({ branches: [], yearsAvailable: [] });
+      setSelectedBranchForStaff(null);
+      return;
+    }
+    const fetch = async () => {
+      try {
+        setLoadingStaffTab(true);
+        const params = { collegeId: selectedCollegeId, courseId: selectedProgramId };
+        if (selectedYearForStaff) params.year = selectedYearForStaff;
+        const res = await api.get('/faculty/program-subjects', { params });
+        if (res.data.success && res.data.data) {
+          const years = res.data.data.yearsAvailable || [];
+          setStaffTabData((prev) => ({
+            branches: res.data.data.branches || [],
+            yearsAvailable: years.length > 0 ? years : (prev.yearsAvailable || [1, 2, 3, 4, 5, 6])
+          }));
+        }
+      } catch (e) {
+        toast.error(e.response?.data?.message || 'Failed to load subjects');
+        setStaffTabData({ branches: [], yearsAvailable: [] });
+      } finally {
+        setLoadingStaffTab(false);
+      }
+    };
+    fetch();
+  }, [selectedCollegeId, selectedProgramId, selectedYearForStaff, tab]);
+
+  useEffect(() => {
+    setSelectedProgramId('');
+  }, [selectedCollegeId]);
+
+  useEffect(() => {
+    if (!selectedBranchForSubjects || selectedBranchForSubjects.id === branchYearSemDetail?.id) {
+      setSidePanelSubjectsData(null);
+      return;
+    }
+    const fetchSubjects = async () => {
+      try {
+        setLoadingSidePanelSubjects(true);
+        const res = await api.get(`/faculty/branches/${selectedBranchForSubjects.id}/year-sem-subjects`);
+        if (res.data.success && res.data.data) {
+          setSidePanelSubjectsData({
+            yearSemList: res.data.data.yearSemList || [],
+            assignmentsByKey: res.data.data.assignmentsByKey || {}
+          });
+        }
+      } catch (e) {
+        toast.error(e.response?.data?.message || 'Failed to load subjects');
+        setSidePanelSubjectsData(null);
+      } finally {
+        setLoadingSidePanelSubjects(false);
+      }
+    };
+    fetchSubjects();
+  }, [selectedBranchForSubjects, branchYearSemDetail?.id]);
+
+  useEffect(() => {
     if (!assignHodBranch) return;
     const fetchUsers = async () => {
       try {
@@ -103,6 +176,29 @@ const FacultyManagement = () => {
     };
     fetchUsers();
   }, [assignHodBranch]);
+
+  useEffect(() => {
+    if (!assignHodBranch?.id) {
+      setAvailableYearsForBranch([]);
+      return;
+    }
+    const fetchYears = async () => {
+      try {
+        setLoadingAvailableYears(true);
+        const res = await api.get(`/faculty/branches/${assignHodBranch.id}/available-years`);
+        if (res.data.success && Array.isArray(res.data.data)) {
+          setAvailableYearsForBranch(res.data.data);
+        } else {
+          setAvailableYearsForBranch([1, 2, 3, 4, 5, 6]);
+        }
+      } catch (e) {
+        setAvailableYearsForBranch([1, 2, 3, 4, 5, 6]);
+      } finally {
+        setLoadingAvailableYears(false);
+      }
+    };
+    fetchYears();
+  }, [assignHodBranch?.id]);
 
   useEffect(() => {
     if (!branchYearSemDetail) {
@@ -140,7 +236,10 @@ const FacultyManagement = () => {
 
   const closeAssignHodModal = () => {
     setAssignHodBranch(null);
+    setEditingHod(null);
+    setAvailableYearsForBranch([]);
     setSelectedHodUserId('');
+    setSelectedHodYears([1, 2, 3, 4]);
     setAssignHodMode('select');
     setNewHodName('');
     setNewHodEmail('');
@@ -148,20 +247,53 @@ const FacultyManagement = () => {
     setNewHodPassword('');
   };
 
+  const toggleHodYear = (y) => {
+    setSelectedHodYears((prev) => {
+      const next = prev.includes(y) ? prev.filter((x) => x !== y) : [...prev, y].sort((a, b) => a - b);
+      return next.length > 0 ? next : prev;
+    });
+  };
+
+  const programs = React.useMemo(() => {
+    const seen = new Map();
+    (branchesWithHods || []).forEach((b) => {
+      if (b.course_id && b.course_name && !seen.has(b.course_id)) {
+        seen.set(b.course_id, { id: b.course_id, name: b.course_name });
+      }
+    });
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [branchesWithHods]);
+
+  const filteredBranches = React.useMemo(() => {
+    if (!selectedProgramId) return branchesWithHods;
+    return branchesWithHods.filter((b) => String(b.course_id) === String(selectedProgramId));
+  }, [branchesWithHods, selectedProgramId]);
+
   const handleAssignHodSubmit = async () => {
     if (!assignHodBranch || !selectedHodUserId) {
       toast.error('Please select a user');
       return;
     }
+    if (!selectedHodYears || selectedHodYears.length === 0) {
+      toast.error('Select at least one year');
+      return;
+    }
+    const isEdit = !!editingHod;
     try {
       setAssigningHod(true);
-      await api.post('/faculty/assign-hod', { branchId: assignHodBranch.id, userId: selectedHodUserId });
-      toast.success(`HOD assigned to ${assignHodBranch.name}`);
+      await api.post('/faculty/assign-hod', {
+        branchId: assignHodBranch.id,
+        userId: selectedHodUserId,
+        years: selectedHodYears
+      });
+      toast.success(isEdit
+        ? `Years updated for ${assignHodBranch.name}: Year${selectedHodYears.length > 1 ? 's ' : ' '}${selectedHodYears.join(', ')}`
+        : `HOD assigned to ${assignHodBranch.name} for Year${selectedHodYears.length > 1 ? 's ' : ' '}${selectedHodYears.join(', ')}`);
       closeAssignHodModal();
       const res = await api.get(`/colleges/${selectedCollegeId}/branches-with-hods`);
       if (res.data.success) setBranchesWithHods(res.data.data || []);
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Failed to assign HOD');
+      toast.error(e.response?.data?.message || (isEdit ? 'Failed to update years' : 'Failed to assign HOD'));
     } finally {
       setAssigningHod(false);
     }
@@ -270,9 +402,13 @@ const FacultyManagement = () => {
       toast.error('Password must be at least 6 characters');
       return;
     }
+    if (!selectedHodYears || selectedHodYears.length === 0) {
+      toast.error('Select at least one year');
+      return;
+    }
     try {
       setCreatingUser(true);
-      await api.post('/rbac/users', {
+      const createRes = await api.post('/rbac/users', {
         name,
         email,
         username,
@@ -282,7 +418,15 @@ const FacultyManagement = () => {
         courseIds: [assignHodBranch.course_id].filter(Boolean),
         branchIds: [assignHodBranch.id]
       });
-      toast.success(`HOD "${name}" created and assigned to ${assignHodBranch.name}. They will appear in User Management.`);
+      const newUserId = createRes.data?.data?.id;
+      if (newUserId) {
+        await api.post('/faculty/assign-hod', {
+          branchId: assignHodBranch.id,
+          userId: newUserId,
+          years: selectedHodYears
+        });
+      }
+      toast.success(`HOD "${name}" created and assigned to ${assignHodBranch.name} for Year${selectedHodYears.length > 1 ? 's ' : ' '}${selectedHodYears.join(', ')}.`);
       closeAssignHodModal();
       const res = await api.get(`/colleges/${selectedCollegeId}/branches-with-hods`);
       if (res.data.success) setBranchesWithHods(res.data.data || []);
@@ -292,6 +436,71 @@ const FacultyManagement = () => {
       setCreatingUser(false);
     }
   };
+
+  const handleUnassignHod = async (branch, hod) => {
+    try {
+      setUnassigningHod(true);
+      await api.post('/faculty/unassign-hod', { branchId: branch.id, userId: hod.id });
+      toast.success(`${hod.name} unassigned from ${branch.name}`);
+      const res = await api.get(`/colleges/${selectedCollegeId}/branches-with-hods`);
+      if (res.data.success) setBranchesWithHods(res.data.data || []);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to unassign HOD');
+    } finally {
+      setUnassigningHod(false);
+    }
+  };
+
+  const openEditHodModal = (branch, hod) => {
+    setAssignHodBranch(branch);
+    setEditingHod({ branch, hod });
+    setSelectedHodUserId(String(hod.id));
+    setSelectedHodYears(Array.isArray(hod.years) && hod.years.length > 0 ? [...hod.years] : [1]);
+  };
+
+  const refetchStaffTabData = React.useCallback(() => {
+    if (!selectedCollegeId || !selectedProgramId || !selectedYearForStaff || tab !== 'assign-staff') return;
+    api.get('/faculty/program-subjects', {
+      params: { collegeId: selectedCollegeId, courseId: selectedProgramId, year: selectedYearForStaff }
+    }).then((res) => {
+      if (res.data.success && res.data.data) {
+        setStaffTabData({
+          branches: res.data.data.branches || [],
+          yearsAvailable: res.data.data.yearsAvailable || []
+        });
+      }
+    });
+  }, [selectedCollegeId, selectedProgramId, selectedYearForStaff, tab]);
+
+  const handleAssignStaffToSubject = async (subjectId, rbacUserId) => {
+    try {
+      setAssigningStaff(true);
+      await api.post('/faculty/assign-staff-to-subject', { subjectId, rbacUserId });
+      toast.success('Staff assigned');
+      refetchStaffTabData();
+      setStaffAssignSelect((prev) => { const p = { ...prev }; delete p[subjectId]; return p; });
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to assign staff');
+    } finally {
+      setAssigningStaff(false);
+    }
+  };
+
+  const handleUnassignStaffFromSubject = async (subjectId, rbacUserId) => {
+    try {
+      await api.post('/faculty/unassign-staff-from-subject', { subjectId, rbacUserId });
+      toast.success('Staff unassigned');
+      refetchStaffTabData();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to unassign staff');
+    }
+  };
+
+  const yearsToShow = availableYearsForBranch.length > 0
+    ? (editingHod?.hod?.years?.length
+        ? [...new Set([...availableYearsForBranch, ...editingHod.hod.years])].sort((a, b) => a - b)
+        : availableYearsForBranch)
+    : [1, 2, 3, 4, 5, 6];
 
   // Filtered list for Employees tab (by sub-tab)
   const getFilteredEmployeeList = () => {
@@ -307,7 +516,8 @@ const FacultyManagement = () => {
 
   const tabs = [
     { id: 'employees', label: 'Employees', icon: UserCog },
-    { id: 'assign-hods', label: 'Assign HODs / Branches', icon: Building2 }
+    { id: 'assign-hods', label: 'Assign HODs', icon: Building2 },
+    { id: 'assign-staff', label: 'Assign Staff', icon: UserPlus }
   ];
 
   return (
@@ -452,39 +662,62 @@ const FacultyManagement = () => {
 
             {/* Assign HODs tab – branches with HOD assigned or Pending */}
             {tab === 'assign-hods' && (
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Select college</label>
-                  <select
-                    value={selectedCollegeId}
-                    onChange={(e) => setSelectedCollegeId(e.target.value)}
-                    className="w-full max-w-md px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
-                  >
-                    <option value="">— Select college —</option>
-                    {colleges.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                {!selectedCollegeId ? (
-                  <div className="p-12 text-center text-slate-500 text-sm">Select a college to see branches and HOD assignment.</div>
-                ) : loadingBranches ? (
-                  <div className="p-12 flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-slate-500 text-sm">Loading branches…</p>
+              <div className="flex gap-4 flex-col lg:flex-row">
+                <div className="flex-1 min-w-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 space-y-4">
+                    <div className="flex flex-wrap gap-4 items-end">
+                      <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Select college</label>
+                        <select
+                          value={selectedCollegeId}
+                          onChange={(e) => setSelectedCollegeId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                        >
+                          <option value="">— Select college —</option>
+                          {colleges.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Select program (course)</label>
+                        <select
+                          value={selectedProgramId}
+                          onChange={(e) => setSelectedProgramId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                        >
+                          <option value="">— All programs —</option>
+                          {programs.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="p-4 sm:p-6">
-                    {branchesWithHods.length === 0 ? (
-                      <p className="py-12 text-center text-slate-500 text-sm">No branches in this college.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {branchesWithHods.map((b) => (
-                          <div
-                            key={b.id}
-                            onDoubleClick={(e) => { if (!e.target.closest('button')) setBranchYearSemDetail(b); }}
-                            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer"
-                          >
+                  {!selectedCollegeId ? (
+                    <div className="p-12 text-center text-slate-500 text-sm">Select a college to see branches and HOD assignment.</div>
+                  ) : loadingBranches ? (
+                    <div className="p-12 flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-slate-500 text-sm">Loading branches…</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 sm:p-6">
+                      {filteredBranches.length === 0 ? (
+                        <p className="py-12 text-center text-slate-500 text-sm">
+                          {selectedProgramId ? 'No branches in this program.' : 'No branches in this college.'}
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                          {filteredBranches.map((b) => (
+                            <div
+                              key={b.id}
+                              onClick={(e) => { if (!e.target.closest('button')) setSelectedBranchForSubjects(prev => prev?.id === b.id ? null : b); }}
+                              onDoubleClick={(e) => { if (!e.target.closest('button')) { setBranchYearSemDetail(b); setSelectedBranchForSubjects(null); } }}
+                              className={`rounded-xl border bg-white p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${
+                                selectedBranchForSubjects?.id === b.id ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <h4 className="font-semibold text-slate-800">{b.name}</h4>
                               <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600">
@@ -492,18 +725,51 @@ const FacultyManagement = () => {
                               </span>
                             </div>
                             <div className="pt-2 border-t border-slate-100">
-                              {b.hod ? (
-                                <div className="text-sm">
-                                  <p className="font-medium text-slate-800">{b.hod.name}</p>
-                                  {b.hod.email && (
-                                    <p className="text-xs text-slate-500 break-all mt-0.5">{b.hod.email}</p>
-                                  )}
-                                  <p className="text-[10px] text-slate-400 mt-1">Double-click to manage subjects by sem</p>
+                              {(b.hods && b.hods.length > 0) || b.hod ? (
+                                <div className="space-y-2">
+                                  {((b.hods && b.hods.length) ? b.hods : (b.hod ? [b.hod] : [])).map((h) => (
+                                    <div key={h.id} className="flex items-start justify-between gap-1 rounded-lg bg-slate-50 p-2">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="font-medium text-slate-800 text-sm">{h.name}</p>
+                                        {h.email && <p className="text-xs text-slate-500 break-all">{h.email}</p>}
+                                        <p className="text-[10px] text-indigo-600 mt-0.5">
+                                          Year{h.years?.length > 1 ? 's' : ''} {Array.isArray(h.years) ? h.years.join(', ') : '1–6'}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); openEditHodModal(b, h); }}
+                                          className="p-1 rounded text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                                          title="Edit years"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleUnassignHod(b, h); }}
+                                          disabled={unassigningHod}
+                                          className="p-1 rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                          title="Unassign HOD"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setAssignHodBranch(b); setSelectedHodUserId(''); setSelectedHodYears([1, 2, 3, 4]); }}
+                                    className="w-full inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg border border-dashed border-slate-300 text-slate-600 text-xs font-medium hover:bg-slate-50"
+                                  >
+                                    <Plus className="w-3 h-3" /> Add another HOD
+                                  </button>
+                                  <p className="text-[10px] text-slate-400">Double-click to manage subjects by sem</p>
                                 </div>
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => { setAssignHodBranch(b); setSelectedHodUserId(''); }}
+                                  onClick={(e) => { e.stopPropagation(); setAssignHodBranch(b); setSelectedHodUserId(''); setSelectedHodYears([1, 2, 3, 4]); }}
                                   className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-800 text-sm font-semibold hover:bg-amber-200 transition-colors"
                                 >
                                   Pending – Assign HOD
@@ -516,6 +782,226 @@ const FacultyManagement = () => {
                     )}
                   </div>
                 )}
+                </div>
+                {/* Side panel – subjects for selected branch */}
+                {selectedBranchForSubjects && (
+                  <div className="w-full lg:w-96 flex-shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 bg-indigo-50/50 flex items-center justify-between">
+                      <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-indigo-600" />
+                        Subjects – {selectedBranchForSubjects.name}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBranchForSubjects(null)}
+                        className="p-1.5 rounded-lg hover:bg-slate-200/80 text-slate-500"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="p-4 max-h-[calc(100vh-16rem)] overflow-y-auto">
+                      {loadingSidePanelSubjects ? (
+                        <div className="py-8 flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                          <p className="text-slate-500 text-xs">Loading subjects…</p>
+                        </div>
+                      ) : sidePanelSubjectsData?.yearSemList?.length === 0 ? (
+                        <p className="py-6 text-center text-slate-500 text-sm">No year/sem data. Double-click the branch card to manage subjects.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {sidePanelSubjectsData?.yearSemList?.map(({ year, semester, label }) => {
+                            const key = `${year}-${semester}`;
+                            const assigned = sidePanelSubjectsData.assignmentsByKey[key] || [];
+                            return (
+                              <div key={key} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                                <h4 className="text-xs font-semibold text-slate-600 mb-2">{label}</h4>
+                                {assigned.length === 0 ? (
+                                  <p className="text-xs text-slate-400">No subjects assigned</p>
+                                ) : (
+                                  <ul className="space-y-1">
+                                    {assigned.map((a) => (
+                                      <li key={a.subjectId} className="text-sm text-slate-700">{a.subjectName}{a.subjectCode ? ` (${a.subjectCode})` : ''}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <p className="text-[10px] text-slate-400 mt-3">Double-click branch card to manage subjects</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Assign Staff tab */}
+            {tab === 'assign-staff' && (
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                  <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex-1 min-w-[180px]">
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Select college</label>
+                      <select
+                        value={selectedCollegeId}
+                        onChange={(e) => { setSelectedCollegeId(e.target.value); setSelectedYearForStaff(''); setSelectedBranchForStaff(null); }}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                      >
+                        <option value="">— Select college —</option>
+                        {colleges.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1 min-w-[180px]">
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Select program (course)</label>
+                      <select
+                        value={selectedProgramId}
+                        onChange={(e) => { setSelectedProgramId(e.target.value); setSelectedYearForStaff(''); setSelectedBranchForStaff(null); }}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                      >
+                        <option value="">— Select program —</option>
+                        {programs.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Select year</label>
+                      <select
+                        value={selectedYearForStaff}
+                        onChange={(e) => { setSelectedYearForStaff(e.target.value); setSelectedBranchForStaff(null); }}
+                        disabled={!selectedCollegeId || !selectedProgramId}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">— Select year —</option>
+                        {(staffTabData.yearsAvailable?.length > 0 ? staffTabData.yearsAvailable : [1, 2, 3, 4, 5, 6]).map((y) => (
+                          <option key={y} value={y}>Year {y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {!selectedCollegeId || !selectedProgramId ? (
+                    <div className="py-12 text-center text-slate-500 text-sm">Select college and program to see subjects.</div>
+                  ) : !selectedYearForStaff ? (
+                    <div className="py-12 text-center text-slate-500 text-sm">Select a year to see subjects and assign staff.</div>
+                  ) : loadingStaffTab ? (
+                    <div className="py-12 flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-slate-500 text-sm">Loading subjects…</p>
+                    </div>
+                  ) : !staffTabData.branches || staffTabData.branches.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 text-sm">No branches or subjects in this program for Year {selectedYearForStaff}. Create subjects first (Assign HODs → double-click branch → manage subjects).</div>
+                  ) : (
+                    <div className="flex gap-4 flex-col lg:flex-row min-h-[400px]">
+                      {/* Left – branches list */}
+                      <div className="w-full lg:w-64 flex-shrink-0 rounded-xl border border-slate-200 bg-slate-50/50 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-200 bg-slate-100/80">
+                          <h4 className="text-sm font-semibold text-slate-700">Branches</h4>
+                        </div>
+                        <div className="p-2 max-h-[calc(100vh-22rem)] overflow-y-auto">
+                          {staffTabData.branches.map((branch) => (
+                            <button
+                              key={branch.id}
+                              type="button"
+                              onClick={() => setSelectedBranchForStaff(prev => prev?.id === branch.id ? null : branch)}
+                              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                                selectedBranchForStaff?.id === branch.id
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                              }`}
+                            >
+                              {branch.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Right – subjects for selected branch */}
+                      <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                        {selectedBranchForStaff ? (
+                          <>
+                            <div className="px-4 py-3 border-b border-slate-200 bg-indigo-50/50">
+                              <h4 className="text-sm font-semibold text-slate-800">Subjects – {selectedBranchForStaff.name} (Year {selectedYearForStaff})</h4>
+                            </div>
+                            <div className="p-4 max-h-[calc(100vh-22rem)] overflow-y-auto space-y-4">
+                              {(!selectedBranchForStaff.yearSemList || selectedBranchForStaff.yearSemList.length === 0) ? (
+                                <p className="text-sm text-slate-500">No semesters for Year {selectedYearForStaff} in this branch.</p>
+                              ) : (
+                                selectedBranchForStaff.yearSemList.map(({ year, semester, label }) => {
+                                  const key = `${year}-${semester}`;
+                                  const assigned = selectedBranchForStaff.assignmentsByKey[key] || [];
+                                  return (
+                                    <div key={key} className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
+                                      <h5 className="text-sm font-semibold text-slate-700 mb-3">{label}</h5>
+                                      {assigned.length === 0 ? (
+                                        <p className="text-sm text-slate-400">No subjects in this semester</p>
+                                      ) : (
+                                        <div className="space-y-3">
+                                          {assigned.map((a) => (
+                                            <div key={a.subjectId} className="rounded-lg border border-slate-100 bg-white p-3">
+                                              <div className="flex items-center justify-between gap-2 mb-2">
+                                                <span className="text-sm font-medium text-slate-800">{a.subjectName}{a.subjectCode ? ` (${a.subjectCode})` : ''}</span>
+                                              </div>
+                                              <div className="space-y-1.5">
+                                                {(a.faculty || []).map((f) => (
+                                                  <div key={f.id} className="flex items-center justify-between gap-2 py-1.5 px-3 rounded bg-slate-50 border border-slate-100 text-sm">
+                                                    <span className="text-slate-700">{f.name}</span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleUnassignStaffFromSubject(a.subjectId, f.id)}
+                                                      className="p-1.5 rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                                    >
+                                                      <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                  </div>
+                                                ))}
+                                                <div className="flex gap-2 pt-1 items-center">
+                                                  <select
+                                                    value={staffAssignSelect[a.subjectId] || ''}
+                                                    onChange={(e) => setStaffAssignSelect(prev => ({ ...prev, [a.subjectId]: e.target.value }))}
+                                                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-800"
+                                                  >
+                                                    <option value="">— Add staff —</option>
+                                                    {[...(employees.faculty || []), ...(employees.hods || [])]
+                                                      .filter((u, i, arr) => arr.findIndex(x => x.id === u.id) === i)
+                                                      .filter(u => !(a.faculty || []).some(f => f.id === u.id))
+                                                      .map((u) => (
+                                                      <option key={u.id} value={u.id}>{u.name}</option>
+                                                    ))}
+                                                  </select>
+                                                  <button
+                                                    type="button"
+                                                    disabled={!staffAssignSelect[a.subjectId] || assigningStaff}
+                                                    onClick={() => handleAssignStaffToSubject(a.subjectId, staffAssignSelect[a.subjectId])}
+                                                    className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                                                  >
+                                                    Add
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-64 text-slate-500 text-sm">
+                            <UserPlus className="w-10 h-10 text-slate-300 mb-2" />
+                            <p>Select a branch to see subjects and assign staff</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>
@@ -692,32 +1178,78 @@ const FacultyManagement = () => {
           </div>
         )}
 
-        {/* Assign HOD dialog – select existing user or create new HOD here */}
+        {/* Assign HOD dialog – select existing user, create new HOD, or edit years */}
         {assignHodBranch && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={closeAssignHodModal}>
             <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-800">Assign HOD – {assignHodBranch.name}</h3>
+                <h3 className="text-lg font-bold text-slate-800">
+                  {editingHod ? `Edit years – ${editingHod.hod.name}` : `Assign HOD – ${assignHodBranch.name}`}
+                </h3>
                 <button type="button" onClick={closeAssignHodModal} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setAssignHodMode('select')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors ${assignHodMode === 'select' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                >
-                  Select existing user
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignHodMode('create')}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors ${assignHodMode === 'create' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                >
-                  Create new HOD
-                </button>
-              </div>
+
+              {editingHod ? (
+                <div className="space-y-4">
+                  <p className="text-slate-600 text-sm">Branch: <strong>{assignHodBranch.name}</strong></p>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Years (based on students in this branch)</label>
+                    {loadingAvailableYears ? (
+                      <p className="text-sm text-slate-500">Loading years…</p>
+                    ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {yearsToShow.map((y) => (
+                        <button
+                          key={y}
+                          type="button"
+                          onClick={() => toggleHodYear(y)}
+                          className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${selectedHodYears.includes(y) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          Year {y}
+                        </button>
+                      ))}
+                    </div>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">Years shown are from students currently in this branch</p>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={closeAssignHodModal}
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedHodYears.length === 0 || assigningHod || loadingAvailableYears}
+                      onClick={handleAssignHodSubmit}
+                      className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {assigningHod ? 'Updating…' : 'Update years'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2 mb-4 p-1 bg-slate-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setAssignHodMode('select')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors ${assignHodMode === 'select' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                    >
+                      Select existing user
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssignHodMode('create')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-colors ${assignHodMode === 'create' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                    >
+                      Create new HOD
+                    </button>
+                  </div>
 
               {assignHodMode === 'select' ? (
                 <div className="space-y-4">
@@ -739,6 +1271,26 @@ const FacultyManagement = () => {
                       ))}
                     </select>
                   )}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Years (based on students in this branch)</label>
+                    {loadingAvailableYears ? (
+                      <p className="text-sm text-slate-500">Loading years…</p>
+                    ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {yearsToShow.map((y) => (
+                        <button
+                          key={y}
+                          type="button"
+                          onClick={() => toggleHodYear(y)}
+                          className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${selectedHodYears.includes(y) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          Year {y}
+                        </button>
+                      ))}
+                    </div>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">Years shown are from students currently in this branch</p>
+                  </div>
                   <div className="flex gap-2 pt-2">
                     <button
                       type="button"
@@ -749,7 +1301,7 @@ const FacultyManagement = () => {
                     </button>
                     <button
                       type="button"
-                      disabled={!selectedHodUserId || assigningHod}
+                      disabled={!selectedHodUserId || assigningHod || loadingAvailableYears}
                       onClick={handleAssignHodSubmit}
                       className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
                     >
@@ -800,6 +1352,26 @@ const FacultyManagement = () => {
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Years (based on students in this branch)</label>
+                    {loadingAvailableYears ? (
+                      <p className="text-sm text-slate-500">Loading years…</p>
+                    ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {yearsToShow.map((y) => (
+                        <button
+                          key={y}
+                          type="button"
+                          onClick={() => toggleHodYear(y)}
+                          className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${selectedHodYears.includes(y) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        >
+                          Year {y}
+                        </button>
+                      ))}
+                    </div>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">Years shown are from students currently in this branch</p>
+                  </div>
                   <div className="flex gap-2 pt-2">
                     <button
                       type="button"
@@ -810,7 +1382,7 @@ const FacultyManagement = () => {
                     </button>
                     <button
                       type="button"
-                      disabled={creatingUser}
+                      disabled={creatingUser || loadingAvailableYears}
                       onClick={handleCreateHodSubmit}
                       className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
                     >
@@ -818,6 +1390,8 @@ const FacultyManagement = () => {
                     </button>
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>

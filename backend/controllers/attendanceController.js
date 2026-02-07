@@ -1291,15 +1291,18 @@ exports.markAttendance = async (req, res) => {
           smsQueue.push({ student, attendanceDate: normalizedDate });
         }
       } else {
-        // Build INSERT query - include holiday_reason if status is holiday
-        // Check if we need to handle holiday_reason column
+        // Build INSERT query - include year, semester, holiday_reason if status is holiday
+        const attYear = student.current_year != null ? student.current_year : null;
+        const attSemester = student.current_semester != null ? student.current_semester : null;
         let insertQuery = `
           INSERT INTO attendance_records
-            (student_id, admission_number, attendance_date, status, marked_by`;
+            (student_id, admission_number, attendance_date, \`year\`, semester, status, marked_by`;
         let insertParams = [
           record.studentId,
           student.admission_number || null,
           normalizedDate,
+          attYear,
+          attSemester,
           record.status,
           adminId
         ];
@@ -3194,14 +3197,22 @@ exports.getStudentAttendanceHistory = async (req, res) => {
     const referenceDate = safeDate(req.query.date) || new Date();
     const todayKey = formatDateKey(referenceDate);
 
-    const [studentRows] = await masterPool.query(
-      `
-        SELECT id, student_name, pin_no, batch, course, branch, current_year, current_semester
-        FROM students
-        WHERE id = ?
-      `,
-      [studentId]
-    );
+    let studentRows;
+    try {
+      [studentRows] = await masterPool.query(
+        'SELECT id, student_name, pin_no, batch, course, branch, college, current_year, current_semester FROM students WHERE id = ?',
+        [studentId]
+      );
+    } catch (colErr) {
+      if (colErr.code === 'ER_BAD_FIELD_ERROR' && (colErr.sqlMessage || '').includes('college')) {
+        [studentRows] = await masterPool.query(
+          'SELECT id, student_name, pin_no, batch, course, branch, current_year, current_semester FROM students WHERE id = ?',
+          [studentId]
+        );
+      } else {
+        throw colErr;
+      }
+    }
 
     if (studentRows.length === 0) {
       return res.status(404).json({
@@ -3214,63 +3225,78 @@ exports.getStudentAttendanceHistory = async (req, res) => {
     let semesterStartDate = null;
     let semesterEndDate = null;
     let semesterInfo = null;
+    let semesterSource = 'fallback';
 
-    // Try to get semester dates from academic calendar
-    if (student.course && student.current_year && student.current_semester) {
+    // Resolve semester start/end from Settings → Academic Calendar (semesters table)
+    if (student.course && student.current_year != null && student.current_semester != null) {
       try {
-        // First, get the course ID from course name
-        const [courseRows] = await masterPool.query(
-          `SELECT id FROM courses WHERE name = ? AND is_active = 1 LIMIT 1`,
-          [student.course]
-        );
+        let collegeId = null;
+        if (student.college) {
+          const [collegeRows] = await masterPool.query(
+            'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
+            [student.college]
+          );
+          if (collegeRows.length > 0) collegeId = collegeRows[0].id;
+        }
+
+        // Course: prefer course for this college when available
+        let courseQuery = 'SELECT id FROM courses WHERE name = ? AND is_active = 1';
+        const courseParams = [student.course];
+        if (collegeId != null) {
+          courseQuery += ' AND (college_id = ? OR college_id IS NULL) ORDER BY college_id DESC';
+          courseParams.push(collegeId);
+        }
+        courseQuery += ' LIMIT 1';
+        const [courseRows] = await masterPool.query(courseQuery, courseParams);
 
         if (courseRows.length > 0) {
           const courseId = courseRows[0].id;
+          const semParams = [courseId, student.current_year, student.current_semester, todayKey, todayKey];
+          let semWhere = 'course_id = ? AND year_of_study = ? AND semester_number = ? AND start_date <= ? AND end_date >= ?';
+          if (collegeId != null) {
+            semWhere = '(college_id = ? OR college_id IS NULL) AND ' + semWhere;
+            semParams.unshift(collegeId);
+          }
 
-          // Get the current academic year (try to find active semester)
           const [semesterRows] = await masterPool.query(
-            `
-              SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
-              FROM semesters
-              WHERE course_id = ?
-                AND year_of_study = ?
-                AND semester_number = ?
-                AND start_date <= ?
-                AND end_date >= ?
-              ORDER BY start_date DESC
-              LIMIT 1
-            `,
-            [courseId, student.current_year, student.current_semester, todayKey, todayKey]
+            `SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
+             FROM semesters
+             WHERE ${semWhere}
+             ORDER BY college_id DESC, start_date DESC
+             LIMIT 1`,
+            semParams
           );
 
-          // If no active semester found, get the most recent one
           if (semesterRows.length === 0) {
+            const recentParams = [courseId, student.current_year, student.current_semester];
+            let recentWhere = 'course_id = ? AND year_of_study = ? AND semester_number = ?';
+            if (collegeId != null) {
+              recentWhere = '(college_id = ? OR college_id IS NULL) AND ' + recentWhere;
+              recentParams.unshift(collegeId);
+            }
             const [recentSemesterRows] = await masterPool.query(
-              `
-                SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
-                FROM semesters
-                WHERE course_id = ?
-                  AND year_of_study = ?
-                  AND semester_number = ?
-                ORDER BY start_date DESC
-                LIMIT 1
-              `,
-              [courseId, student.current_year, student.current_semester]
+              `SELECT start_date, end_date, academic_year_id, year_of_study, semester_number
+               FROM semesters
+               WHERE ${recentWhere}
+               ORDER BY college_id DESC, start_date DESC
+               LIMIT 1`,
+              recentParams
             );
-
             if (recentSemesterRows.length > 0) {
               semesterInfo = recentSemesterRows[0];
               semesterStartDate = new Date(semesterInfo.start_date);
               semesterEndDate = new Date(semesterInfo.end_date);
+              semesterSource = 'academic_calendar';
             }
           } else {
             semesterInfo = semesterRows[0];
             semesterStartDate = new Date(semesterInfo.start_date);
             semesterEndDate = new Date(semesterInfo.end_date);
+            semesterSource = 'academic_calendar';
           }
         }
       } catch (error) {
-        console.warn('Failed to fetch semester dates:', error.message || error);
+        console.warn('Failed to fetch semester dates from academic calendar:', error.message || error);
       }
     }
 
@@ -3384,11 +3410,11 @@ exports.getStudentAttendanceHistory = async (req, res) => {
         endDate: semesterEndDate > referenceDate ? todayKey : formatDateKey(semesterEndDate),
         totals: semesterSeries.totals,
         series: semesterSeries.series,
-        holidays: semesterSeries.series.filter((entry) => entry.isHoliday)
+        holidays: semesterSeries.series.filter((entry) => entry.isHoliday),
+        semesterSource: semesterSource
       };
     } else {
-      // Fallback: If no semester dates found, use the calculated range (e.g., monthStart or weekStart) to ensure Dashboard displays data
-      // We'll use monthStart as a reasonable default for "current view"
+      // Fallback: No semester dates in Academic Calendar (Settings) — use last ~30 days so Dashboard still shows data
       const fallbackStart = monthStart < weekStart ? monthStart : weekStart;
       const fallbackEnd = referenceDate;
       const fallbackEndKey = formatDateKey(fallbackEnd);
@@ -3399,7 +3425,6 @@ exports.getStudentAttendanceHistory = async (req, res) => {
         return rowDate >= fallbackStart && rowDate <= fallbackEnd;
       });
 
-      // Get holidays for fallback range
       let fallbackHolidayInfo = { dates: new Set(), details: new Map() };
       try {
         fallbackHolidayInfo = await getNonWorkingDaysForRange(fallbackStartKey, fallbackEndKey);
@@ -3420,7 +3445,8 @@ exports.getStudentAttendanceHistory = async (req, res) => {
         totals: fallbackSeries.totals,
         series: fallbackSeries.series,
         holidays: fallbackSeries.series.filter((entry) => entry.isHoliday),
-        isFallback: true
+        isFallback: true,
+        semesterSource: 'fallback'
       };
     }
 

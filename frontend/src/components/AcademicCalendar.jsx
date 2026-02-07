@@ -10,16 +10,20 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSemester, setEditingSemester] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [batchOptions, setBatchOptions] = useState([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
 
   // Filters
   const [filterCollegeId, setFilterCollegeId] = useState('');
   const [filterCourseId, setFilterCourseId] = useState('');
   const [filterSemester, setFilterSemester] = useState('');
+  const [filterBatch, setFilterBatch] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
     collegeId: '',
     courseId: '',
+    batch: '',
     academicYearId: '',
     yearOfStudy: '',
     semesterNumber: '',
@@ -46,29 +50,29 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
     return yearLabel;
   };
 
-  // Generate academic years in YYYY-YYYY format (past 5 years to future 5 years)
+  // Generate academic years in YYYY-YYYY format
+  // Session years: before (2025-2026), current (2026-2027), next (2027-2028) when current year is 2026
   const generateAcademicYearOptions = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
 
-    // Generate past 5 years to future 5 years (total 11 years)
-    for (let i = -5; i <= 5; i++) {
+    // Before, current, and next academic year only
+    for (let i = -1; i <= 1; i++) {
       const startYear = currentYear + i;
       const endYear = startYear + 1;
       const yearLabel = `${startYear}-${endYear}`;
 
-      // Check if this year already exists in the database (normalize for comparison)
       const existingYear = academicYears.find(y => {
         const normalized = normalizeYearLabel(y.yearLabel);
         return normalized === yearLabel;
       });
 
       years.push({
-        id: existingYear?.id || null, // Use existing ID if found
+        id: existingYear?.id || null,
         yearLabel: yearLabel,
         startYear: startYear,
         endYear: endYear,
-        isActive: existingYear?.isActive !== false, // Default to active if not in DB
+        isActive: existingYear?.isActive !== false,
         existsInDb: !!existingYear
       });
     }
@@ -115,6 +119,10 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
   const availableCoursesForForm = formData.collegeId
     ? courses.filter(c => c.collegeId === parseInt(formData.collegeId))
     : courses;
+
+  // Academic years = session years (before, current, next) - NOT derived from batch
+  // When current year is 2026: 2025-2026, 2026-2027, 2027-2028
+  const filteredAcademicYears = useMemo(() => availableAcademicYears, [availableAcademicYears]);
 
   // Years of study options based on selected course
   const getYearsOfStudy = () => {
@@ -167,11 +175,38 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterCollegeId, filterCourseId, filterSemester]);
 
+  // Fetch batches from students when college and program are selected (batches with students in that college+course)
+  useEffect(() => {
+    if (!formData.collegeId || !formData.courseId) {
+      setBatchOptions([]);
+      return;
+    }
+    const college = colleges.find(c => c.id === parseInt(formData.collegeId));
+    const course = courses.find(c => c.id === parseInt(formData.courseId));
+    if (!college?.name || !course?.name) {
+      setBatchOptions([]);
+      return;
+    }
+    setBatchesLoading(true);
+    api
+      .get('/students/quick-filters', {
+        params: { college: college.name, course: course.name, applyExclusions: 'true' }
+      })
+      .then((res) => {
+        const batches = res.data?.data?.batches || [];
+        setBatchOptions(Array.isArray(batches) ? batches.filter(Boolean).sort((a, b) => String(b).localeCompare(String(a))) : []);
+      })
+      .catch(() => setBatchOptions([]))
+      .finally(() => setBatchesLoading(false));
+  }, [formData.collegeId, formData.courseId, colleges, courses]);
+
+
   // Reset form
   const resetForm = () => {
     setFormData({
       collegeId: '',
       courseId: '',
+      batch: '',
       academicYearId: '',
       yearOfStudy: '',
       semesterNumber: '',
@@ -187,11 +222,32 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
     setIsModalOpen(true);
   };
 
+  // Derive batch from academic year + year of study (batch = single year when students joined)
+  // year_label can be "2024-2025" (range) or "2024" (single year = start year)
+  const getBatchLabel = (semester) => {
+    if (semester.batchLabel) return semester.batchLabel;
+    const label = (semester.academicYearLabel || semester.academic_year_label || '').trim().replace(/\s/g, '');
+    const year = parseInt(semester.yearOfStudy || semester.year_of_study, 10);
+    if (!label || !year || year < 1) return null;
+    let startYear = null;
+    const rangeMatch = label.match(/^(\d{4})-(\d{2,4})$/);
+    if (rangeMatch) {
+      startYear = parseInt(rangeMatch[1], 10);
+    } else {
+      const singleYearMatch = label.match(/^(\d{4})$/);
+      if (singleYearMatch) startYear = parseInt(singleYearMatch[1], 10);
+    }
+    if (startYear == null) return null;
+    return String(startYear - year + 1);
+  };
+
   // Open modal for editing semester
   const handleEditSemester = (semester) => {
+    const batch = getBatchLabel(semester);
     setFormData({
       collegeId: semester.collegeId || '',
       courseId: semester.courseId.toString(),
+      batch: batch || '',
       academicYearId: semester.academicYearId.toString(),
       yearOfStudy: semester.yearOfStudy.toString(),
       semesterNumber: semester.semesterNumber.toString(),
@@ -211,18 +267,22 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
       return;
     }
 
+    if (!formData.batch) {
+      toast.error('Please select a batch');
+      return;
+    }
+
     if (!formData.academicYearId) {
       toast.error('Please select an academic year');
       return;
     }
 
-    // Validate that the selected academic year exists in the database
-    const selectedYear = availableAcademicYears.find(
-      y => y.id === parseInt(formData.academicYearId) || y.yearLabel === formData.academicYearId
+    // Find selected year (session: before, current, next)
+    const selectedYear = filteredAcademicYears.find(
+      y => String(y.id) === formData.academicYearId || y.yearLabel === formData.academicYearId
     );
-
-    if (!selectedYear || !selectedYear.existsInDb) {
-      toast.error('Please select an academic year that exists in the database. Create it in Settings first.');
+    if (!selectedYear) {
+      toast.error('Please select an academic year');
       return;
     }
 
@@ -251,12 +311,17 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
       const payload = {
         collegeId: formData.collegeId || null,
         courseId: parseInt(formData.courseId),
-        academicYearId: selectedYear.id, // Use the ID from the selected year
+        batch: formData.batch || null,
         yearOfStudy: parseInt(formData.yearOfStudy),
         semesterNumber: parseInt(formData.semesterNumber),
         startDate: formData.startDate,
         endDate: formData.endDate
       };
+      if (selectedYear.id) {
+        payload.academicYearId = selectedYear.id;
+      } else {
+        payload.academicYearLabel = selectedYear.yearLabel;
+      }
 
       if (editingSemester) {
         await api.put(`/semesters/${editingSemester.id}`, payload);
@@ -300,11 +365,25 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // Distinct batch values from semesters (for filter dropdown)
+  const distinctBatches = useMemo(() => {
+    const batches = new Set();
+    semesters.forEach(s => {
+      const b = s.batchLabel ?? getBatchLabel(s);
+      if (b) batches.add(String(b));
+    });
+    return Array.from(batches).sort((a, b) => b.localeCompare(a));
+  }, [semesters]);
+
   // Filtered semesters for display
   const filteredSemesters = semesters.filter(semester => {
     if (filterCollegeId && semester.collegeId !== parseInt(filterCollegeId)) return false;
     if (filterCourseId && semester.courseId !== parseInt(filterCourseId)) return false;
     if (filterSemester && semester.semesterNumber !== parseInt(filterSemester)) return false;
+    if (filterBatch) {
+      const batch = semester.batchLabel ?? getBatchLabel(semester);
+      if (String(batch) !== filterBatch) return false;
+    }
     return true;
   });
 
@@ -378,12 +457,28 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
           </select>
         </div>
 
-        {(filterCollegeId || filterCourseId || filterSemester) && (
+        <div className="flex items-center gap-2">
+          <select
+            value={filterBatch}
+            onChange={(e) => setFilterBatch(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="">All Batches</option>
+            {distinctBatches.map(b => (
+              <option key={b} value={b}>
+                Batch {b}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(filterCollegeId || filterCourseId || filterSemester || filterBatch) && (
           <button
             onClick={() => {
               setFilterCollegeId('');
               setFilterCourseId('');
               setFilterSemester('');
+              setFilterBatch('');
             }}
             className="ml-auto rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
@@ -406,12 +501,13 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[900px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">College</th>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">Course</th>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700 whitespace-nowrap">Academic Year</th>
+                  <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">Batch</th>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">Year</th>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">Semester</th>
                   <th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-gray-700">Start Date</th>
@@ -430,6 +526,9 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                     </td>
                     <td className="px-2 py-1.5 text-xs text-gray-900 whitespace-nowrap">
                       {normalizeYearLabel(semester.academicYearLabel) || semester.academicYearLabel}
+                    </td>
+                    <td className="px-2 py-1.5 text-xs text-gray-700 font-medium whitespace-nowrap">
+                      {getBatchLabel(semester) || '-'}
                     </td>
                     <td className="px-2 py-1.5 text-xs text-gray-900">
                       Year {semester.yearOfStudy}
@@ -470,7 +569,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
 
         {!loading && filteredSemesters.length > 0 && (
           <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm text-gray-600">
-            Showing {filteredSemesters.length} of {filteredSemesters.length} entries
+            Showing {filteredSemesters.length} of {semesters.length} entries
           </div>
         )}
       </div>
@@ -525,7 +624,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                 <select
                   value={formData.collegeId}
                   onChange={(e) => {
-                    setFormData({ ...formData, collegeId: e.target.value, courseId: '' });
+                    setFormData({ ...formData, collegeId: e.target.value, courseId: '', batch: '', academicYearId: '', yearOfStudy: '', semesterNumber: '' });
                   }}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
@@ -546,7 +645,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                 <select
                   value={formData.courseId}
                   onChange={(e) => {
-                    setFormData({ ...formData, courseId: e.target.value, yearOfStudy: '', semesterNumber: '' });
+                    setFormData({ ...formData, courseId: e.target.value, batch: '', yearOfStudy: '', semesterNumber: '', academicYearId: '' });
                   }}
                   required
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -560,34 +659,34 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                 </select>
               </div>
 
-              {/* Academic Year */}
+              {/* Batch (from students in selected college + program) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Academic Year <span className="text-red-500">*</span>
+                  Batch <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.academicYearId}
-                  onChange={(e) => setFormData({ ...formData, academicYearId: e.target.value })}
+                  value={formData.batch}
+                  onChange={(e) => setFormData({ ...formData, batch: e.target.value, academicYearId: '' })}
                   required
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  disabled={!formData.collegeId || !formData.courseId || batchesLoading}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
-                  <option value="">Select academic year</option>
-                  {availableAcademicYears
-                    .filter(y => y.existsInDb && y.isActive) // Only show years that exist in DB and are active
-                    .map(year => (
-                      <option
-                        key={year.id}
-                        value={year.id}
-                      >
-                        {year.yearLabel}
-                      </option>
-                    ))}
+                  <option value="">
+                    {!formData.collegeId || !formData.courseId
+                      ? 'Select college and program first'
+                      : batchesLoading
+                        ? 'Loading batches...'
+                        : batchOptions.length === 0
+                          ? 'No students found in this college & program'
+                          : 'Select batch (students in this college & program)'}
+                  </option>
+                  {(formData.batch && !batchOptions.includes(formData.batch) ? [formData.batch, ...batchOptions] : batchOptions).map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
                 </select>
-                {availableAcademicYears.filter(y => !y.existsInDb).length > 0 && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Note: Academic years {availableAcademicYears.filter(y => !y.existsInDb).map(y => y.yearLabel).join(', ')} are available but need to be created in Settings first.
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-gray-500">Batches with students in the selected college and program</p>
               </div>
 
               {/* Year of Study */}
@@ -597,7 +696,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                 </label>
                 <select
                   value={formData.yearOfStudy}
-                  onChange={(e) => setFormData({ ...formData, yearOfStudy: e.target.value, semesterNumber: '' })}
+                  onChange={(e) => setFormData({ ...formData, yearOfStudy: e.target.value, semesterNumber: '', academicYearId: '' })}
                   required
                   disabled={!formData.courseId}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -609,6 +708,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">Program year (Year 1, 2, 3, 4)</p>
               </div>
 
               {/* Semester */}
@@ -630,6 +730,27 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Academic Year (before, current, next year) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Academic Year <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.academicYearId}
+                  onChange={(e) => setFormData({ ...formData, academicYearId: e.target.value })}
+                  required
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="">Select academic year</option>
+                  {filteredAcademicYears.map(year => (
+                    <option key={year.id ?? year.yearLabel} value={year.id != null ? String(year.id) : year.yearLabel}>
+                      {year.yearLabel}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">Session (before, current, next year: e.g., 2025-2026, 2026-2027, 2027-2028)</p>
               </div>
 
               {/* Start Date */}
@@ -675,7 +796,7 @@ const AcademicCalendar = ({ colleges, courses, academicYears }) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || !formData.batch || !formData.academicYearId || !formData.startDate || !formData.endDate}
                   className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : editingSemester ? 'Update' : 'Create'}

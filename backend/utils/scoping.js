@@ -58,6 +58,13 @@ function buildScopeConditions(userScope, tableAlias = 's') {
     }
   }
 
+  // For branch_hod: filter by assigned years only (HOD sees only their year cohorts)
+  if (userScope.hodYears && userScope.hodYears.length > 0) {
+    const ph = userScope.hodYears.map(() => '?').join(',');
+    conditions.push(`${tableAlias}.current_year IN (${ph})`);
+    params.push(...userScope.hodYears);
+  }
+
   return { conditions, params };
 }
 

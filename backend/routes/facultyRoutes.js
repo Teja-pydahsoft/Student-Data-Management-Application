@@ -29,7 +29,32 @@ router.post(
   verifyPermission('faculty_management', 'view'),
   facultyController.assignHod
 );
+router.post(
+  '/unassign-hod',
+  verifyPermission('faculty_management', 'view'),
+  facultyController.unassignHod
+);
+router.post(
+  '/assign-staff-to-subject',
+  verifyPermission('faculty_management', 'assign_subjects'),
+  facultyController.assignStaffToSubject
+);
+router.post(
+  '/unassign-staff-from-subject',
+  verifyPermission('faculty_management', 'assign_subjects'),
+  facultyController.unassignStaffFromSubject
+);
 
+router.get(
+  '/program-subjects',
+  verifyPermission('faculty_management', 'view'),
+  facultyController.getProgramYearSubjects
+);
+router.get(
+  '/branches/:branchId/available-years',
+  verifyPermission('faculty_management', 'view'),
+  facultyController.getBranchAvailableYears
+);
 router.get(
   '/branches/:branchId/year-sem-subjects',
   verifyPermission('faculty_management', 'view'),

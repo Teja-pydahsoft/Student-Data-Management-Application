@@ -8,6 +8,8 @@ exports.getSemesters = async (req, res) => {
   try {
     const { collegeId, courseId, academicYearId, semester } = req.query;
     
+    // Batch = student joined year (selected when creating). Academic year = working days/session (2026-2027).
+    // Students can join any year (lateral entry). Use stored batch directly - not derived from students lookup.
     let query = `
       SELECT 
         s.id,
@@ -15,6 +17,7 @@ exports.getSemesters = async (req, res) => {
         s.course_id,
         s.academic_year_id,
         s.year_of_study,
+        s.batch,
         s.semester_number,
         s.start_date,
         s.end_date,
@@ -55,24 +58,49 @@ exports.getSemesters = async (req, res) => {
     query += ' ORDER BY s.start_date DESC, s.course_id, s.year_of_study, s.semester_number';
     
     const [rows] = await masterPool.query(query, params);
-    
+
+    // Batch = student joined year. Use stored value (admin selects when creating). Fallback derive for old records.
+    const deriveBatchLabel = (academicYearLabel, yearOfStudy) => {
+      const label = academicYearLabel != null ? String(academicYearLabel).trim().replace(/\s/g, '') : '';
+      const year = parseInt(yearOfStudy, 10);
+      if (!label || !year || year < 1) return null;
+      let startYear = null;
+      const rangeMatch = label.match(/^(\d{4})-(\d{2,4})$/);
+      if (rangeMatch) {
+        startYear = parseInt(rangeMatch[1], 10);
+      } else {
+        const singleYearMatch = label.match(/^(\d{4})$/);
+        if (singleYearMatch) startYear = parseInt(singleYearMatch[1], 10);
+      }
+      if (startYear == null) return null;
+      return String(startYear - year + 1);
+    };
+
     res.json({
       success: true,
-      data: rows.map(row => ({
+      data: rows.map(row => {
+        const yrLabel = row.academic_year_label ?? row.academicYearLabel ?? row['academic_year_label'];
+        const yrStudy = row.year_of_study ?? row.yearOfStudy ?? row['year_of_study'];
+        // Primary: stored batch (admin selection). Fallback: derive for records before batch column existed.
+        const storedBatch = row.batch != null && String(row.batch).trim() !== '' ? String(row.batch).trim() : null;
+        const batch = storedBatch || deriveBatchLabel(yrLabel, yrStudy);
+        return {
         id: row.id,
         collegeId: row.college_id,
         collegeName: row.college_name,
         courseId: row.course_id,
         courseName: row.course_name,
         academicYearId: row.academic_year_id,
-        academicYearLabel: row.academic_year_label,
+        academicYearLabel: yrLabel,
+        batchLabel: batch,
         yearOfStudy: row.year_of_study,
         semesterNumber: row.semester_number,
         startDate: row.start_date,
         endDate: row.end_date,
         createdAt: row.created_at,
         updatedAt: row.updated_at
-      }))
+      };
+      })
     });
   } catch (error) {
     console.error('getSemesters error:', error);
@@ -160,10 +188,29 @@ exports.getSemester = async (req, res) => {
  * POST /api/semesters
  * Create a new semester
  */
+// Find or create academic year by label (returns id)
+const findOrCreateAcademicYear = async (yearLabel) => {
+  const label = String(yearLabel || '').trim();
+  if (!label) return null;
+  const [existing] = await masterPool.query('SELECT id FROM academic_years WHERE year_label = ?', [label]);
+  if (existing.length > 0) return existing[0].id;
+  const [result] = await masterPool.query(
+    `INSERT INTO academic_years (year_label, start_date, end_date, is_active) VALUES (?, NULL, NULL, 1)`,
+    [label]
+  );
+  return result.insertId;
+};
+
 exports.createSemester = async (req, res) => {
   try {
-    const { collegeId, courseId, academicYearId, yearOfStudy, semesterNumber, startDate, endDate } = req.body;
-    
+    const { collegeId, courseId, academicYearId, academicYearLabel, yearOfStudy, semesterNumber, startDate, endDate, batch } = req.body;
+
+    let resolvedAcademicYearId = academicYearId;
+
+    if (!resolvedAcademicYearId && academicYearLabel) {
+      resolvedAcademicYearId = await findOrCreateAcademicYear(academicYearLabel);
+    }
+
     // Validation
     if (!courseId) {
       return res.status(400).json({
@@ -171,8 +218,8 @@ exports.createSemester = async (req, res) => {
         message: 'Course is required'
       });
     }
-    
-    if (!academicYearId) {
+
+    if (!resolvedAcademicYearId) {
       return res.status(400).json({
         success: false,
         message: 'Academic year is required'
@@ -215,7 +262,7 @@ exports.createSemester = async (req, res) => {
          AND academic_year_id = ? 
          AND year_of_study = ? 
          AND semester_number = ?`,
-      [collegeId || null, collegeId || null, courseId, academicYearId, yearOfStudy, semesterNumber]
+      [collegeId || null, collegeId || null, courseId, resolvedAcademicYearId, yearOfStudy, semesterNumber]
     );
     
     if (existing.length > 0) {
@@ -225,12 +272,13 @@ exports.createSemester = async (req, res) => {
       });
     }
     
-    // Insert new semester
+    // Insert new semester (batch = student joined year, from form selection)
+    const batchVal = batch != null && String(batch).trim() !== '' ? String(batch).trim() : null;
     const [result] = await masterPool.query(
       `INSERT INTO semesters 
-       (college_id, course_id, academic_year_id, year_of_study, semester_number, start_date, end_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [collegeId || null, courseId, academicYearId, yearOfStudy, semesterNumber, startDate, endDate]
+       (college_id, course_id, academic_year_id, year_of_study, batch, semester_number, start_date, end_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [collegeId || null, courseId, resolvedAcademicYearId, yearOfStudy, batchVal, semesterNumber, startDate, endDate]
     );
     
     // Fetch the created semester
@@ -241,6 +289,7 @@ exports.createSemester = async (req, res) => {
         s.course_id,
         s.academic_year_id,
         s.year_of_study,
+        s.batch,
         s.semester_number,
         s.start_date,
         s.end_date,
@@ -258,6 +307,12 @@ exports.createSemester = async (req, res) => {
     );
     
     const row = rows[0];
+    const batchLabel = row.batch != null ? String(row.batch) : (() => {
+      const l = row.academic_year_label || '';
+      const y = parseInt(row.year_of_study, 10);
+      const m = l.match(/^(\d{4})/);
+      return m && y ? String(parseInt(m[1], 10) - y + 1) : null;
+    })();
     res.status(201).json({
       success: true,
       data: {
@@ -269,6 +324,7 @@ exports.createSemester = async (req, res) => {
         academicYearId: row.academic_year_id,
         academicYearLabel: row.academic_year_label,
         yearOfStudy: row.year_of_study,
+        batchLabel,
         semesterNumber: row.semester_number,
         startDate: row.start_date,
         endDate: row.end_date,
@@ -309,8 +365,13 @@ exports.updateSemester = async (req, res) => {
       });
     }
     
-    const { collegeId, courseId, academicYearId, yearOfStudy, semesterNumber, startDate, endDate } = req.body;
-    
+    const { collegeId, courseId, academicYearId, academicYearLabel, yearOfStudy, semesterNumber, startDate, endDate, batch } = req.body;
+
+    let resolvedAcademicYearId = academicYearId;
+    if (!resolvedAcademicYearId && academicYearLabel) {
+      resolvedAcademicYearId = await findOrCreateAcademicYear(academicYearLabel);
+    }
+
     // Check if semester exists
     const [existing] = await masterPool.query(
       'SELECT id FROM semesters WHERE id = ?',
@@ -338,14 +399,19 @@ exports.updateSemester = async (req, res) => {
       params.push(courseId);
     }
     
-    if (academicYearId !== undefined) {
+    if (resolvedAcademicYearId !== undefined) {
       updates.push('academic_year_id = ?');
-      params.push(academicYearId);
+      params.push(resolvedAcademicYearId);
     }
     
     if (yearOfStudy !== undefined) {
       updates.push('year_of_study = ?');
       params.push(yearOfStudy);
+    }
+
+    if (batch !== undefined) {
+      updates.push('batch = ?');
+      params.push(batch != null && String(batch).trim() !== '' ? String(batch).trim() : null);
     }
     
     if (semesterNumber !== undefined) {
@@ -396,6 +462,7 @@ exports.updateSemester = async (req, res) => {
         s.course_id,
         s.academic_year_id,
         s.year_of_study,
+        s.batch,
         s.semester_number,
         s.start_date,
         s.end_date,
@@ -413,6 +480,12 @@ exports.updateSemester = async (req, res) => {
     );
     
     const row = rows[0];
+    const batchLabel = row.batch != null ? String(row.batch) : (() => {
+      const l = row.academic_year_label || '';
+      const y = parseInt(row.year_of_study, 10);
+      const m = l.match(/^(\d{4})/);
+      return m && y ? String(parseInt(m[1], 10) - y + 1) : null;
+    })();
     res.json({
       success: true,
       data: {
@@ -424,6 +497,7 @@ exports.updateSemester = async (req, res) => {
         academicYearId: row.academic_year_id,
         academicYearLabel: row.academic_year_label,
         yearOfStudy: row.year_of_study,
+        batchLabel,
         semesterNumber: row.semester_number,
         startDate: row.start_date,
         endDate: row.end_date,

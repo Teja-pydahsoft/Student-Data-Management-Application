@@ -302,16 +302,25 @@ exports.getEmployees = async (req, res) => {
 
 /**
  * POST /api/faculty/assign-hod
- * Assign an existing user as HOD for a branch (add branch to their scope, set role to branch_hod)
+ * Assign an existing user as HOD for a branch with specific years (e.g. Year 1 only, or Years 2,3,4)
+ * Body: { branchId, userId, years: [1] | [2,3,4] | [1,2,3,4] }
  */
 exports.assignHod = async (req, res) => {
   try {
-    const { branchId, userId } = req.body;
+    const { branchId, userId, years } = req.body;
     const bid = parseInt(branchId, 10);
     const uid = parseInt(userId, 10);
     if (!bid || Number.isNaN(bid) || !uid || Number.isNaN(uid)) {
       return res.status(400).json({ success: false, message: 'branchId and userId required' });
     }
+    let yearsArr = Array.isArray(years) ? years : (years ? [years] : [1, 2, 3, 4, 5, 6]);
+    yearsArr = yearsArr.map((y) => parseInt(y, 10)).filter((y) => !Number.isNaN(y) && y >= 1 && y <= 6);
+    if (yearsArr.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one year (1-6) required' });
+    }
+    yearsArr = [...new Set(yearsArr)].sort((a, b) => a - b);
+
+    await ensureBranchHodYearAssignmentsTable();
 
     const [branchRows] = await masterPool.query(
       'SELECT id, course_id FROM course_branches WHERE id = ? AND is_active = 1',
@@ -341,6 +350,13 @@ exports.assignHod = async (req, res) => {
     branchIds = [...new Set(branchIds)];
 
     await masterPool.query(
+      `INSERT INTO branch_hod_year_assignments (branch_id, rbac_user_id, years)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE years = VALUES(years)`,
+      [bid, uid, JSON.stringify(yearsArr)]
+    );
+
+    await masterPool.query(
       `UPDATE rbac_users SET
          role = ?,
          college_id = ?,
@@ -351,10 +367,59 @@ exports.assignHod = async (req, res) => {
       ['branch_hod', collegeId || user.college_id, branch.course_id, branchIds[0], JSON.stringify(branchIds), uid]
     );
 
-    res.json({ success: true, message: 'HOD assigned', data: { userId: uid, branchId: bid } });
+    res.json({ success: true, message: 'HOD assigned', data: { userId: uid, branchId: bid, years: yearsArr } });
   } catch (error) {
     console.error('assignHod error:', error);
     res.status(500).json({ success: false, message: 'Failed to assign HOD' });
+  }
+};
+
+/**
+ * DELETE /api/faculty/unassign-hod
+ * Remove HOD assignment for a branch. Body: { branchId, userId }
+ */
+exports.unassignHod = async (req, res) => {
+  try {
+    const { branchId, userId } = req.body;
+    const bid = parseInt(branchId, 10);
+    const uid = parseInt(userId, 10);
+    if (!bid || Number.isNaN(bid) || !uid || Number.isNaN(uid)) {
+      return res.status(400).json({ success: false, message: 'branchId and userId required' });
+    }
+    try {
+      await ensureBranchHodYearAssignmentsTable();
+    } catch (_) {}
+    await masterPool.query(
+      'DELETE FROM branch_hod_year_assignments WHERE branch_id = ? AND rbac_user_id = ?',
+      [bid, uid]
+    );
+    const [userRows] = await masterPool.query(
+      'SELECT id, branch_id, branch_ids FROM rbac_users WHERE id = ?',
+      [uid]
+    );
+    if (userRows && userRows.length > 0) {
+      const [remaining] = await masterPool.query(
+        'SELECT DISTINCT branch_id FROM branch_hod_year_assignments WHERE rbac_user_id = ?',
+        [uid]
+      );
+      const remainingIds = (remaining || []).map((r) => r.branch_id);
+      const branchIdsJson = remainingIds.length > 0 ? JSON.stringify(remainingIds) : '[]';
+      const newBranchId = remainingIds[0] || null;
+      await masterPool.query(
+        'UPDATE rbac_users SET branch_id = ?, branch_ids = CAST(? AS JSON) WHERE id = ?',
+        [newBranchId, branchIdsJson, uid]
+      );
+      if (remainingIds.length === 0) {
+        await masterPool.query(
+          "UPDATE rbac_users SET role = 'faculty' WHERE id = ? AND LOWER(TRIM(COALESCE(role, ''))) = 'branch_hod'",
+          [uid]
+        );
+      }
+    }
+    res.json({ success: true, message: 'HOD unassigned', data: { userId: uid, branchId: bid } });
+  } catch (error) {
+    console.error('unassignHod error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unassign HOD' });
   }
 };
 
@@ -373,6 +438,37 @@ async function ensureSubjectsTable() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_college_course (college_id, course_id),
       INDEX idx_branch (branch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+/** Create faculty_subjects table if it does not exist */
+async function ensureFacultySubjectsTable() {
+  await masterPool.query(`
+    CREATE TABLE IF NOT EXISTS faculty_subjects (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      rbac_user_id INT NOT NULL,
+      subject_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_faculty_subject (rbac_user_id, subject_id),
+      INDEX idx_subject (subject_id),
+      INDEX idx_user (rbac_user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+/** Create branch_hod_year_assignments table if it does not exist */
+async function ensureBranchHodYearAssignmentsTable() {
+  await masterPool.query(`
+    CREATE TABLE IF NOT EXISTS branch_hod_year_assignments (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      branch_id INT NOT NULL,
+      rbac_user_id INT NOT NULL,
+      years JSON NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_branch_user (branch_id, rbac_user_id),
+      INDEX idx_branch (branch_id),
+      INDEX idx_user (rbac_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 }
@@ -443,6 +539,116 @@ async function getYearSemListFromRegularStudents(branchId) {
 }
 
 /**
+ * GET /api/faculty/program-subjects
+ * Get subjects by program (course) and year - all branches in that program with their year/sem subjects
+ * Query: collegeId, courseId, year (year optional - when omitted, returns yearsAvailable only)
+ */
+exports.getProgramYearSubjects = async (req, res) => {
+  try {
+    const collegeId = parseInt(req.query.collegeId, 10);
+    const courseId = parseInt(req.query.courseId, 10);
+    const year = req.query.year ? parseInt(req.query.year, 10) : null;
+    if (!collegeId || Number.isNaN(collegeId) || !courseId || Number.isNaN(courseId)) {
+      return res.status(400).json({ success: false, message: 'collegeId and courseId required' });
+    }
+    const [branchRows] = await masterPool.query(
+      `SELECT cb.id, cb.name, cb.course_id, c.name AS course_name
+       FROM course_branches cb
+       JOIN courses c ON c.id = cb.course_id
+       WHERE c.college_id = ? AND cb.course_id = ? AND cb.is_active = 1
+       ORDER BY cb.name`,
+      [collegeId, courseId]
+    );
+    if (!branchRows || branchRows.length === 0) {
+      return res.json({ success: true, data: { branches: [], yearsAvailable: [1, 2, 3, 4, 5, 6] } });
+    }
+    let yearsAvailable = [];
+    const branchesData = [];
+    for (const br of branchRows) {
+      const yearSemList = await getYearSemListFromRegularStudents(br.id);
+      const ys = yearSemList || [];
+      yearsAvailable = [...new Set([...yearsAvailable, ...ys.map((x) => x.year).filter(Boolean)])];
+      const yearFiltered = year ? ys.filter((x) => x.year === year) : [];
+      let assignments = [];
+      if (year) {
+        try {
+          const [rows] = await masterPool.query(
+            `SELECT bss.year_of_study AS year, bss.semester_number AS semester, bss.subject_id,
+                    s.name AS subject_name, s.code AS subject_code
+             FROM branch_semester_subjects bss
+             JOIN subjects s ON s.id = bss.subject_id
+             WHERE bss.branch_id = ? AND bss.year_of_study = ?
+             ORDER BY bss.semester_number`,
+            [br.id, year]
+          );
+          assignments = rows || [];
+        } catch (_) {}
+      }
+      const subjectIds = assignments.map((a) => a.subject_id);
+      let facultyBySubject = {};
+      if (subjectIds.length > 0) {
+        try {
+          const [facRows] = await masterPool.query(
+            `SELECT fs.subject_id, fs.rbac_user_id, u.name, u.email
+             FROM faculty_subjects fs
+             JOIN rbac_users u ON u.id = fs.rbac_user_id
+             WHERE fs.subject_id IN (?) AND u.is_active = 1`,
+            [subjectIds]
+          );
+          for (const row of facRows || []) {
+            if (!facultyBySubject[row.subject_id]) facultyBySubject[row.subject_id] = [];
+            facultyBySubject[row.subject_id].push({ id: row.rbac_user_id, name: row.name, email: row.email || '' });
+          }
+        } catch (_) {}
+      }
+      const assignmentsByKey = {};
+      assignments.forEach((a) => {
+        const key = `${a.year}-${a.semester}`;
+        if (!assignmentsByKey[key]) assignmentsByKey[key] = [];
+        assignmentsByKey[key].push({
+          subjectId: a.subject_id,
+          subjectName: a.subject_name,
+          subjectCode: a.subject_code,
+          faculty: facultyBySubject[a.subject_id] || []
+        });
+      });
+      branchesData.push({
+        id: br.id,
+        name: br.name,
+        course_name: br.course_name,
+        yearSemList: yearFiltered,
+        assignmentsByKey
+      });
+    }
+    yearsAvailable = [...new Set(yearsAvailable)].sort((a, b) => a - b);
+    if (yearsAvailable.length === 0) yearsAvailable = [1, 2, 3, 4, 5, 6];
+    res.json({ success: true, data: { branches: branchesData, yearsAvailable } });
+  } catch (error) {
+    console.error('getProgramYearSubjects error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch program subjects' });
+  }
+};
+
+/**
+ * GET /api/faculty/branches/:branchId/available-years
+ * Get distinct years from students currently in this branch (for HOD year assignment dropdown)
+ */
+exports.getBranchAvailableYears = async (req, res) => {
+  try {
+    const branchId = parseInt(req.params.branchId, 10);
+    if (!branchId || Number.isNaN(branchId)) {
+      return res.status(400).json({ success: false, message: 'Invalid branch ID' });
+    }
+    const yearSemList = await getYearSemListFromRegularStudents(branchId);
+    const years = [...new Set((yearSemList || []).map((ys) => ys.year).filter((y) => y != null))].sort((a, b) => a - b);
+    res.json({ success: true, data: years.length > 0 ? years : [1, 2, 3, 4, 5, 6] });
+  } catch (error) {
+    console.error('getBranchAvailableYears error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch available years' });
+  }
+};
+
+/**
  * GET /api/faculty/branches/:branchId/year-sem-subjects
  * Get year/sem list and subject assignments for a branch (for HOD to assign subjects per sem)
  */
@@ -495,11 +701,33 @@ exports.getBranchYearSemSubjects = async (req, res) => {
         subjectsRows = [];
       } else throw tableErr;
     }
+    const subjectIds = [...new Set(assignments.map((a) => a.subject_id))];
+    let facultyBySubject = {};
+    if (subjectIds.length > 0) {
+      try {
+        const [facRows] = await masterPool.query(
+          `SELECT fs.subject_id, fs.rbac_user_id, u.name, u.email
+           FROM faculty_subjects fs
+           JOIN rbac_users u ON u.id = fs.rbac_user_id
+           WHERE fs.subject_id IN (?) AND u.is_active = 1`,
+          [subjectIds]
+        );
+        for (const row of facRows || []) {
+          if (!facultyBySubject[row.subject_id]) facultyBySubject[row.subject_id] = [];
+          facultyBySubject[row.subject_id].push({ id: row.rbac_user_id, name: row.name, email: row.email || '' });
+        }
+      } catch (_) {}
+    }
     const assignmentsByKey = {};
     assignments.forEach((a) => {
       const key = `${a.year}-${a.semester}`;
       if (!assignmentsByKey[key]) assignmentsByKey[key] = [];
-      assignmentsByKey[key].push({ subjectId: a.subject_id, subjectName: a.subject_name, subjectCode: a.subject_code });
+      assignmentsByKey[key].push({
+        subjectId: a.subject_id,
+        subjectName: a.subject_name,
+        subjectCode: a.subject_code,
+        faculty: facultyBySubject[a.subject_id] || []
+      });
     });
     res.json({
       success: true,
@@ -557,6 +785,66 @@ exports.addBranchSemesterSubject = async (req, res) => {
   } catch (error) {
     console.error('addBranchSemesterSubject error:', error);
     res.status(500).json({ success: false, message: 'Failed to add subject' });
+  }
+};
+
+/**
+ * POST /api/faculty/assign-staff-to-subject
+ * Assign a staff (faculty) to a subject. Body: { subjectId, rbacUserId }
+ */
+exports.assignStaffToSubject = async (req, res) => {
+  try {
+    const { subjectId, rbacUserId } = req.body;
+    const sid = parseInt(subjectId, 10);
+    const uid = parseInt(rbacUserId, 10);
+    if (!sid || Number.isNaN(sid) || !uid || Number.isNaN(uid)) {
+      return res.status(400).json({ success: false, message: 'subjectId and rbacUserId required' });
+    }
+    const [subjRows] = await masterPool.query('SELECT id FROM subjects WHERE id = ? AND is_active = 1', [sid]);
+    if (!subjRows || subjRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Subject not found' });
+    }
+    const [userRows] = await masterPool.query(
+      'SELECT id FROM rbac_users WHERE id = ? AND is_active = 1',
+      [uid]
+    );
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    try {
+      await ensureFacultySubjectsTable();
+    } catch (_) {}
+    await masterPool.query(
+      'INSERT IGNORE INTO faculty_subjects (rbac_user_id, subject_id) VALUES (?, ?)',
+      [uid, sid]
+    );
+    res.json({ success: true, message: 'Staff assigned to subject' });
+  } catch (error) {
+    console.error('assignStaffToSubject error:', error);
+    res.status(500).json({ success: false, message: 'Failed to assign staff' });
+  }
+};
+
+/**
+ * DELETE /api/faculty/unassign-staff-from-subject
+ * Remove staff from a subject. Body: { subjectId, rbacUserId }
+ */
+exports.unassignStaffFromSubject = async (req, res) => {
+  try {
+    const { subjectId, rbacUserId } = req.body;
+    const sid = parseInt(subjectId, 10);
+    const uid = parseInt(rbacUserId, 10);
+    if (!sid || Number.isNaN(sid) || !uid || Number.isNaN(uid)) {
+      return res.status(400).json({ success: false, message: 'subjectId and rbacUserId required' });
+    }
+    await masterPool.query(
+      'DELETE FROM faculty_subjects WHERE subject_id = ? AND rbac_user_id = ?',
+      [sid, uid]
+    );
+    res.json({ success: true, message: 'Staff unassigned from subject' });
+  } catch (error) {
+    console.error('unassignStaffFromSubject error:', error);
+    res.status(500).json({ success: false, message: 'Failed to unassign staff' });
   }
 };
 

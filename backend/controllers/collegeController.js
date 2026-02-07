@@ -85,7 +85,7 @@ exports.getCollegeBranches = async (req, res) => {
 
 /**
  * GET /api/colleges/:collegeId/branches-with-hods
- * Branches for this college with HOD assignment status (assigned user or pending)
+ * Branches for this college with HOD assignment status (array of HODs with years, or pending)
  */
 exports.getBranchesWithHodStatus = async (req, res) => {
   try {
@@ -102,6 +102,8 @@ exports.getBranchesWithHodStatus = async (req, res) => {
        ORDER BY c.name, cb.name`,
       [collegeId]
     );
+    const collegeBranchIds = branchRows.map((b) => b.id);
+
     const [hodRows] = await masterPool.query(
       `SELECT u.id, u.name, u.email, u.branch_id, u.branch_ids
        FROM rbac_users u
@@ -113,7 +115,27 @@ exports.getBranchesWithHodStatus = async (req, res) => {
          )`,
       [collegeId, JSON.stringify([collegeId])]
     );
-    const branchIdToHod = {};
+
+    let yearAssignments = {};
+    try {
+      const [yhRows] = await masterPool.query(
+        `SELECT bhya.branch_id, bhya.rbac_user_id, bhya.years
+         FROM branch_hod_year_assignments bhya
+         WHERE bhya.branch_id IN (?)`,
+        [collegeBranchIds]
+      );
+      for (const r of yhRows || []) {
+        const key = `${r.branch_id}-${r.rbac_user_id}`;
+        let years = r.years;
+        if (typeof years === 'string') {
+          try { years = JSON.parse(years); } catch (_) { years = [1, 2, 3, 4, 5, 6]; }
+        }
+        if (!Array.isArray(years)) years = [1, 2, 3, 4, 5, 6];
+        yearAssignments[key] = years;
+      }
+    } catch (_) {}
+
+    const branchIdToHods = {};
     for (const hod of hodRows) {
       const bid = hod.branch_id;
       let branchIds = [];
@@ -124,17 +146,23 @@ exports.getBranchesWithHodStatus = async (req, res) => {
         } catch (_) {}
       }
       if (bid) branchIds = [...new Set([bid, ...branchIds])];
-      for (const id of branchIds) {
-        if (!branchIdToHod[id]) branchIdToHod[id] = { id: hod.id, name: hod.name, email: hod.email || '' };
+      for (const bid2 of branchIds) {
+        if (!collegeBranchIds.includes(bid2)) continue;
+        const key = `${bid2}-${hod.id}`;
+        const years = yearAssignments[key] || [1, 2, 3, 4, 5, 6];
+        if (!branchIdToHods[bid2]) branchIdToHods[bid2] = [];
+        branchIdToHods[bid2].push({ id: hod.id, name: hod.name, email: hod.email || '', years });
       }
     }
+
     const data = branchRows.map((b) => ({
       id: b.id,
       name: b.name,
       course_id: b.course_id,
       course_name: b.course_name,
       code: b.code,
-      hod: branchIdToHod[b.id] || null
+      hods: branchIdToHods[b.id] || [],
+      hod: (branchIdToHods[b.id] && branchIdToHods[b.id][0]) || null
     }));
     res.json({ success: true, data });
   } catch (error) {

@@ -335,46 +335,45 @@ const Profile = () => {
                         </div>
                     </div>
 
-                    {/* Access Scope (Hierarchy) */}
+                    {/* Access Scope (Hierarchy) – single unified card for all users */}
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-5 flex items-center gap-2">
                             <Building className="w-4 h-4 text-blue-600" />
                             Your Access Scope
                         </h3>
 
-                        <div className="space-y-4">
-                            {/* College Scope */}
-                            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                <div className="mt-1">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 ring-4 ring-white shadow-sm"></div>
-                                </div>
-                                <div className="flex-1">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">COLLEGE LEVEL</span>
-                                    <span className="text-gray-900 font-semibold">{studentStats?.hierarchy?.college || 'All Colleges'}</span>
-                                </div>
+                        <div className="space-y-3">
+                            {/* College → Program → Branch */}
+                            <div className="flex items-center gap-3 py-2.5 px-4 bg-gray-50 rounded-lg">
+                                <span className="text-xs font-medium text-gray-400 w-16">College</span>
+                                <span className="text-gray-900 font-medium">{studentStats?.hierarchy?.college || 'All Colleges'}</span>
+                            </div>
+                            <div className="flex items-center gap-3 py-2.5 px-4 bg-gray-50 rounded-lg">
+                                <span className="text-xs font-medium text-gray-400 w-16">Program</span>
+                                <span className="text-gray-900 font-medium">{studentStats?.hierarchy?.course || 'All Programs'}</span>
+                            </div>
+                            <div className="flex items-center gap-3 py-2.5 px-4 bg-gray-50 rounded-lg">
+                                <span className="text-xs font-medium text-gray-400 w-16">Branch</span>
+                                <span className="text-gray-900 font-medium">{studentStats?.hierarchy?.branch || 'All Branches'}</span>
                             </div>
 
-                            {/* Program Scope */}
-                            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                <div className="mt-1">
-                                    <div className="w-2 h-2 rounded-full bg-indigo-500 ring-4 ring-white shadow-sm"></div>
+                            {/* HOD: compact year/semester row – integrated, not a separate loud card */}
+                            {user?.role === 'branch_hod' && studentStats?.hodProfile?.assignments?.length > 0 && (
+                                <div className="flex items-start gap-3 py-2.5 px-4 bg-slate-50 rounded-lg border border-slate-200/80">
+                                    <span className="text-xs font-medium text-gray-400 w-16 shrink-0">Cohorts</span>
+                                    <div className="text-gray-800 text-sm space-y-1">
+                                        {studentStats.hodProfile.assignments.map((a) => (
+                                            <div key={a.branchId}>
+                                                <span className="font-medium">{a.branchName}</span>
+                                                <span className="text-gray-500 mx-1.5">·</span>
+                                                <span>Years {a.years?.join(', ')}</span>
+                                                <span className="text-gray-400 mx-1">·</span>
+                                                <span>Sem {a.semesters?.join(', ')}</span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                                <div className="flex-1">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">PROGRAM LEVEL</span>
-                                    <span className="text-gray-900 font-semibold">{studentStats?.hierarchy?.course || 'All Programs'}</span>
-                                </div>
-                            </div>
-
-                            {/* Branch Scope */}
-                            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                <div className="mt-1">
-                                    <div className="w-2 h-2 rounded-full bg-purple-500 ring-4 ring-white shadow-sm"></div>
-                                </div>
-                                <div className="flex-1">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">BRANCH LEVEL</span>
-                                    <span className="text-gray-900 font-semibold">{studentStats?.hierarchy?.branch || 'All Branches'}</span>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     </div>
 

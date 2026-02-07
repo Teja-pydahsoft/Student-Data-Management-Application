@@ -18,6 +18,7 @@ const {
 const { sendCredentialsEmail, sendPasswordResetEmail, sendBrevoEmail } = require('../utils/emailService');
 const { getNotificationSetting } = require('./settingsController');
 const { getPermissionsForRole, roleExistsInConfig } = require('./roleConfigController');
+const { getScopeConditionString } = require('../utils/scoping');
 
 // App configuration from environment
 const appName = process.env.APP_NAME || 'Pydah Student Database';
@@ -1699,6 +1700,12 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
+// Each year has only Sem 1 and Sem 2 (not cumulative 1-8). So for any years, semesters are [1, 2].
+const yearsToSemesters = (years) => {
+  if (!Array.isArray(years) || years.length === 0) return [];
+  return [1, 2];
+};
+
 // Get Student Stats for Profile
 exports.getStudentStats = async (req, res) => {
   try {
@@ -1707,62 +1714,69 @@ exports.getStudentStats = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-
-
-    // Use the scope attached by middleware (attachUserScope)
-    // This provides us with resolved NAMES (collegeNames, courseNames, branchNames)
     const scope = req.userScope;
-
-    // console.log('DEBUG SCOPE:', JSON.stringify(scope, null, 2));
-
     let collegeName = 'All Colleges';
     let courseName = 'All Courses';
     let branchName = 'All Branches';
     let scopeText = 'Global (System Level)';
-    let query = 'SELECT COUNT(*) as count FROM students WHERE 1=1';
-    const params = [];
 
-    if (scope) {
-      if (scope.unrestricted) {
-        scopeText = 'Global (System Level)';
-      } else {
-        // Apply Filters using NAMES provided by middleware
-        // The students table uses 'college', 'course', 'branch' columns (names)
+    // Use getScopeConditionString so HOD year filter is applied for accurate count
+    const { scopeCondition, params: scopeParams } = getScopeConditionString(scope || {}, 'students');
+    const whereClause = scopeCondition ? `WHERE ${scopeCondition}` : 'WHERE 1=1';
+    const [result] = await masterPool.query(
+      `SELECT COUNT(*) as count FROM students ${whereClause}`,
+      scopeParams || []
+    );
 
-        if (scope.collegeNames && scope.collegeNames.length > 0) {
-          query += ` AND college IN (${scope.collegeNames.map(() => '?').join(',')})`;
-          params.push(...scope.collegeNames);
-          collegeName = scope.collegeNames.join(', ');
-        }
-
-        if (scope.courseNames && scope.courseNames.length > 0) {
-          query += ` AND course IN (${scope.courseNames.map(() => '?').join(',')})`;
-          params.push(...scope.courseNames);
-          courseName = scope.courseNames.join(', ');
-        }
-
-        if (scope.branchNames && scope.branchNames.length > 0) {
-          query += ` AND branch IN (${scope.branchNames.map(() => '?').join(',')})`;
-          params.push(...scope.branchNames);
-          branchName = scope.branchNames.join(', ');
-        }
-
-        // Construct text
-        const parts = [];
-        if (scope.collegeNames?.length) parts.push(scope.collegeNames.length > 1 ? `Colleges: ${scope.collegeNames.length}` : scope.collegeNames[0]);
-        if (scope.courseNames?.length) parts.push(scope.courseNames.length > 1 ? `Courses: ${scope.courseNames.length}` : scope.courseNames[0]);
-        if (scope.branchNames?.length) parts.push(scope.branchNames.length > 1 ? `Branches: ${scope.branchNames.length}` : scope.branchNames[0]);
-
-        if (parts.length > 0) scopeText = parts.join(' > ');
-
-      }
-    } else {
-      // Fallback if middleware somehow didn't run (though it definitely should have)
-      // We can try to use the user object directly but better to rely on middleware
-      scopeText = 'Scope Unknown';
+    if (scope && !scope.unrestricted) {
+      collegeName = scope.collegeNames?.length ? (scope.collegeNames.length > 1 ? `${scope.collegeNames.length} colleges` : scope.collegeNames[0]) : 'All Colleges';
+      courseName = scope.courseNames?.length ? (scope.courseNames.length > 1 ? `${scope.courseNames.length} courses` : scope.courseNames[0]) : 'All Courses';
+      branchName = scope.branchNames?.length ? (scope.branchNames.length > 1 ? `${scope.branchNames.length} branches` : scope.branchNames[0]) : 'All Branches';
+      const parts = [];
+      if (scope.collegeNames?.length) parts.push(scope.collegeNames.length > 1 ? `Colleges: ${scope.collegeNames.length}` : scope.collegeNames[0]);
+      if (scope.courseNames?.length) parts.push(scope.courseNames.length > 1 ? `Courses: ${scope.courseNames.length}` : scope.courseNames[0]);
+      if (scope.branchNames?.length) parts.push(scope.branchNames.length > 1 ? `Branches: ${scope.branchNames.length}` : scope.branchNames[0]);
+      if (scope.hodYears?.length) parts.push(`Years: ${scope.hodYears.join(', ')}`);
+      if (parts.length > 0) scopeText = parts.join(' > ');
     }
 
-    const [result] = await masterPool.query(query, params);
+    // HOD profile: fetch branch + year assignments for branch_hod users
+    let hodProfile = null;
+    const role = (user.role || '').toString().toLowerCase();
+    if (role === 'branch_hod') {
+      try {
+        const [assignRows] = await masterPool.query(
+          `SELECT bhya.branch_id, bhya.years, cb.name AS branch_name
+           FROM branch_hod_year_assignments bhya
+           JOIN course_branches cb ON cb.id = bhya.branch_id
+           WHERE bhya.rbac_user_id = ?`,
+          [user.id]
+        );
+        const assignments = (assignRows || []).map((r) => {
+          let yrs = r.years;
+          if (typeof yrs === 'string') {
+            try { yrs = JSON.parse(yrs); } catch (_) { yrs = []; }
+          }
+          if (!Array.isArray(yrs)) yrs = [];
+          const semesters = yearsToSemesters(yrs);
+          return {
+            branchId: r.branch_id,
+            branchName: r.branch_name || '—',
+            years: yrs.sort((a, b) => a - b),
+            semesters
+          };
+        });
+        const allYears = [...new Set(assignments.flatMap((a) => a.years))].sort((a, b) => a - b);
+        const allSemesters = yearsToSemesters(allYears);
+        hodProfile = {
+          assignments,
+          years: allYears,
+          semesters: allSemesters
+        };
+      } catch (err) {
+        console.warn('getStudentStats: failed to fetch HOD assignments:', err.message);
+      }
+    }
 
     res.json({
       success: true,
@@ -1773,10 +1787,10 @@ exports.getStudentStats = async (req, res) => {
           college: collegeName || 'All Colleges',
           course: courseName || 'All Courses',
           branch: branchName || 'All Branches'
-        }
+        },
+        hodProfile
       }
     });
-
   } catch (error) {
     console.error('Get student stats error:', error);
     res.status(500).json({
