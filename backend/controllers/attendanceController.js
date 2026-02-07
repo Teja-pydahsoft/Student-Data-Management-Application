@@ -945,6 +945,21 @@ exports.deleteAttendanceForDate = async (req, res) => {
       branch
     } = req.query;
 
+    // Fetch excluded courses from attendance config (same as getFilterOptions)
+    let excludedCourses = [];
+    try {
+      const [settings] = await masterPool.query(
+        'SELECT value FROM settings WHERE `key` = ?',
+        ['attendance_config']
+      );
+      if (settings && settings.length > 0) {
+        const config = JSON.parse(settings[0].value);
+        if (Array.isArray(config.excludedCourses)) excludedCourses = config.excludedCourses;
+      }
+    } catch (err) {
+      // use empty array
+    }
+
     // Build the WHERE clause for filtering students
     let whereConditions = [];
     const params = [];
@@ -954,9 +969,9 @@ exports.deleteAttendanceForDate = async (req, res) => {
     params.push('Regular');
 
     // Exclude certain courses
-    if (EXCLUDED_COURSES.length > 0) {
-      whereConditions.push(`s.course NOT IN (${EXCLUDED_COURSES.map(() => '?').join(',')})`);
-      params.push(...EXCLUDED_COURSES);
+    if (excludedCourses.length > 0) {
+      whereConditions.push(`s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`);
+      params.push(...excludedCourses);
     }
 
     // Apply user scope filtering
