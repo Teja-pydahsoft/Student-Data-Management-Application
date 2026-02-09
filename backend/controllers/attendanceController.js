@@ -1225,6 +1225,7 @@ exports.markAttendance = async (req, res) => {
     let insertedCount = 0;
 
     const smsQueue = [];
+    let hasYearSemesterColumns = null; // null = unknown, true/false after first insert
 
     for (const record of normalizedRecords) {
       const student = studentMap.get(record.studentId);
@@ -1286,36 +1287,50 @@ exports.markAttendance = async (req, res) => {
           smsQueue.push({ student, attendanceDate: normalizedDate });
         }
       } else {
-        // Build INSERT query - include year, semester, holiday_reason if status is holiday
+        // Build INSERT query - include year/semester only if table has those columns
         const attYear = student.current_year != null ? student.current_year : null;
         const attSemester = student.current_semester != null ? student.current_semester : null;
-        let insertQuery = `
-          INSERT INTO attendance_records
-            (student_id, admission_number, attendance_date, \`year\`, semester, status, marked_by`;
-        let insertParams = [
-          record.studentId,
-          student.admission_number || null,
-          normalizedDate,
-          attYear,
-          attSemester,
-          record.status,
-          adminId
-        ];
+        const includeYearSemester = hasYearSemesterColumns !== false;
 
-        // Add holiday_reason if status is holiday and reason is provided
+        let insertCols = 'student_id, admission_number, attendance_date';
+        let insertVals = [record.studentId, student.admission_number || null, normalizedDate];
+        if (includeYearSemester) {
+          insertCols += ', `year`, semester';
+          insertVals.push(attYear, attSemester);
+        }
+        insertCols += ', status, marked_by';
+        insertVals.push(record.status, adminId);
+
         if (record.status === 'holiday' && record.holidayReason) {
-          insertQuery += `, holiday_reason`;
-          insertParams.push(record.holidayReason);
+          insertCols += ', holiday_reason';
+          insertVals.push(record.holidayReason);
           console.log('Backend: Inserting holiday reason for student', {
             studentId: record.studentId,
-            holidayReason: record.holidayReason,
-            insertQuery: insertQuery
+            holidayReason: record.holidayReason
           });
         }
 
-        insertQuery += `) VALUES (${insertParams.map(() => '?').join(', ')})`;
+        const insertQuery = `INSERT INTO attendance_records (${insertCols}) VALUES (${insertVals.map(() => '?').join(', ')})`;
 
-        await connection.query(insertQuery, insertParams);
+        try {
+          await connection.query(insertQuery, insertVals);
+        } catch (insertErr) {
+          // If year/semester columns don't exist, retry without them
+          if (insertErr.code === 'ER_BAD_FIELD_ERROR' && (insertErr.sqlMessage || '').includes("'year'") && includeYearSemester) {
+            hasYearSemesterColumns = false;
+            const cols = 'student_id, admission_number, attendance_date, status, marked_by';
+            const vals = [record.studentId, student.admission_number || null, normalizedDate, record.status, adminId];
+            if (record.status === 'holiday' && record.holidayReason) {
+              const cols2 = cols + ', holiday_reason';
+              vals.push(record.holidayReason);
+              await connection.query(`INSERT INTO attendance_records (${cols2}) VALUES (?,?,?,?,?,?)`, vals);
+            } else {
+              await connection.query(`INSERT INTO attendance_records (${cols}) VALUES (?,?,?,?,?)`, vals);
+            }
+          } else {
+            throw insertErr;
+          }
+        }
 
         // Debug: Verify holiday reason was actually saved
         if (record.status === 'holiday' && record.holidayReason) {
@@ -2197,9 +2212,20 @@ exports.markAttendance = async (req, res) => {
       await connection.rollback();
     }
     console.error('Failed to mark attendance:', error);
+    // Detect "holiday" enum missing - status column may not include 'holiday' yet
+    const errMsg = (error.sqlMessage || error.message || '').toLowerCase();
+    const isHolidayEnumError = errMsg.includes('status') && (
+      errMsg.includes('truncated') ||
+      errMsg.includes('invalid') ||
+      errMsg.includes('enum') ||
+      (error.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' || error.errno === 1265)
+    );
+    const userMessage = isHolidayEnumError
+      ? 'Database needs update to support "no class work" status. Please run: node backend/scripts/updateAttendanceStatusEnum.js (or restart the server to apply migrations)'
+      : 'Server error while marking attendance';
     res.status(500).json({
       success: false,
-      message: 'Server error while marking attendance'
+      message: userMessage
     });
   } finally {
     if (connection) {
