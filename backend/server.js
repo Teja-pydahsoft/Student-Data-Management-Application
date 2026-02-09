@@ -295,6 +295,22 @@ const { initScheduledJobs } = require("./services/schedulerService");
 // Initialize 4 PM Daily Report & 12 AM IST Birthday (push + SMS) Scheduler
 initScheduledJobs();
 
+// Process chat scheduled messages every minute
+setInterval(() => {
+  const chatController = require("./controllers/chatController");
+  if (typeof chatController.processScheduledMessages === "function") {
+    chatController.processScheduledMessages();
+  }
+}, 60 * 1000);
+
+// Process chat auto-delete (messages older than channel setting, default 30 days) every day
+setInterval(() => {
+  const chatController = require("./controllers/chatController");
+  if (typeof chatController.processAutoDeleteMessages === "function") {
+    chatController.processAutoDeleteMessages();
+  }
+}, 24 * 60 * 60 * 1000);
+
 // Start server
 const startServer = async () => {
   try {

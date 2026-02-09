@@ -1,15 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Plus, Users, Calendar, X, Trash2, Check, XCircle,
     Edit2, Layout, UserPlus, FileText, ArrowRight,
     TrendingUp, Award, Zap, Heart, Camera, Search, Filter,
-    MoreHorizontal, Shield, Wallet, Send, Image, MessageSquare, Eye, EyeOff
+    MoreHorizontal, Shield, Wallet, Send, Image, MessageSquare,
+    Clock, BarChart2, Settings
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import clubService from '../services/clubService';
 import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
+
+const formatChatTime = (dateStr) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    if (isToday) return 'Today';
+    if (isYesterday) return 'Yesterday';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const formatMessageTime = (dateStr) => new Date(dateStr).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
 
 const ClubCard = ({ club, onSelect, isAdmin, onToggleStatus }) => (
     <div
@@ -92,7 +105,7 @@ const Clubs = () => {
     const [userType, setUserType] = useState('');
     const [viewMode, setViewMode] = useState('list'); // 'list' | 'details'
     const [selectedClub, setSelectedClub] = useState(null);
-    const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'members' | 'activities'
+    const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'members' | 'activities' | 'communication' | 'settings'
 
     // Modal States
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -129,6 +142,24 @@ const Clubs = () => {
     const [messagesLoading, setMessagesLoading] = useState(false);
     const [newMessage, setNewMessage] = useState('');
     const [creatingChannel, setCreatingChannel] = useState(false);
+    const [editingMsgId, setEditingMsgId] = useState(null);
+    const [editDraft, setEditDraft] = useState('');
+    const [postMode, setPostMode] = useState('message'); // 'message' | 'poll' | 'schedule'
+    const [pollQuestion, setPollQuestion] = useState('');
+    const [pollOptions, setPollOptions] = useState(['Yes', 'No']);
+    const [scheduledAt, setScheduledAt] = useState('');
+    const [scheduledMessages, setScheduledMessages] = useState([]);
+    const [scheduledLoading, setScheduledLoading] = useState(false);
+    const [channelSettings, setChannelSettings] = useState(null);
+    const [savingSettings, setSavingSettings] = useState(false);
+    const [autoDeletePreset, setAutoDeletePreset] = useState('30'); // '7' | '10' | '30' | 'custom'
+    const [autoDeleteCustomDays, setAutoDeleteCustomDays] = useState(15); // 1-30 when preset is custom
+    const [attachmentFile, setAttachmentFile] = useState(null);
+    const [uploadingAttachment, setUploadingAttachment] = useState(false);
+    const [editingPollId, setEditingPollId] = useState(null);
+    const [editPollQuestion, setEditPollQuestion] = useState('');
+    const [editPollOptions, setEditPollOptions] = useState([]);
+    const messagesEndRef = useRef(null);
 
     useEffect(() => {
         const type = localStorage.getItem('userType');
@@ -361,9 +392,9 @@ const Clubs = () => {
         }
     };
 
-    // Fetch club channel when Communication tab is active
+    // Fetch club channel when Communication or Settings tab is active
     useEffect(() => {
-        if (activeTab !== 'communication' || !selectedClub?.id) return;
+        if ((activeTab !== 'communication' && activeTab !== 'settings') || !selectedClub?.id) return;
         const load = async () => {
             setChannelLoading(true);
             setClubChannel(null);
@@ -371,16 +402,30 @@ const Clubs = () => {
                 const res = await chatService.getChannelByClub(selectedClub.id);
                 if (res.success && res.data) {
                     setClubChannel(res.data);
-                    fetchClubMessages(res.data.id);
+                    if (activeTab === 'communication') fetchClubMessages(res.data.id);
                 }
             } catch (e) {
-                toast.error('Failed to load club communication');
+                if (activeTab === 'communication') toast.error('Failed to load club communication');
             } finally {
                 setChannelLoading(false);
             }
         };
         load();
     }, [activeTab, selectedClub?.id]);
+
+    useEffect(() => {
+        if ((activeTab === 'communication' || activeTab === 'settings') && clubChannel?.id) {
+            if (activeTab === 'communication') fetchScheduledMessages();
+            chatService.getChannelSettings(clubChannel.id).then((r) => {
+                if (r.success && r.data) {
+                    setChannelSettings(r.data);
+                    const days = r.data.auto_delete_after_days ?? 30;
+                    if (days === 7 || days === 10 || days === 30) setAutoDeletePreset(String(days));
+                    else { setAutoDeletePreset('custom'); setAutoDeleteCustomDays(Math.min(30, Math.max(1, Number(days) || 15))); }
+                }
+            });
+        }
+    }, [activeTab, clubChannel?.id]);
 
     const fetchClubMessages = async (channelId) => {
         if (!channelId) return;
@@ -394,6 +439,10 @@ const Clubs = () => {
             setMessagesLoading(false);
         }
     };
+    const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    useEffect(() => {
+        if (clubMessages.length && activeTab === 'communication') scrollToBottom();
+    }, [clubMessages.length, activeTab]);
 
     const handleCreateClubChannel = async () => {
         if (!selectedClub?.id) return;
@@ -416,24 +465,167 @@ const Clubs = () => {
         }
     };
 
+    const MAX_ATTACHMENT_BYTES = 20 * 1024; // 20 KB
     const handlePostClubMessage = async (e) => {
         e.preventDefault();
-        if (!clubChannel?.id || !newMessage?.trim()) return;
+        if (!clubChannel?.id) return;
+        const text = newMessage?.trim() || '';
+        if (!text && !attachmentFile) return;
+        setUploadingAttachment(!!attachmentFile);
         try {
-            await chatService.postMessage(clubChannel.id, newMessage.trim());
+            let attachmentUrl = null;
+            let attachmentType = null;
+            if (attachmentFile) {
+                if (attachmentFile.size > MAX_ATTACHMENT_BYTES) {
+                    toast.error('File must be 20 KB or less');
+                    return;
+                }
+                const up = await chatService.uploadAttachment(clubChannel.id, attachmentFile);
+                if (up.success && up.data) {
+                    attachmentUrl = up.data.url;
+                    attachmentType = up.data.attachment_type;
+                } else {
+                    toast.error('Upload failed');
+                    return;
+                }
+            }
+            await chatService.postMessage(clubChannel.id, text || ' ', 'text', attachmentUrl, attachmentType);
             setNewMessage('');
+            setAttachmentFile(null);
             fetchClubMessages(clubChannel.id);
         } catch (e) {
-            toast.error('Failed to send message');
+            toast.error(e.response?.data?.message || 'Failed to send message');
+        } finally {
+            setUploadingAttachment(false);
         }
     };
 
-    const handleModerateMessage = async (msgId, isHidden) => {
+    const handleDeleteMessage = async (msgId) => {
         try {
-            await chatService.moderateMessage(msgId, isHidden);
+            await chatService.deleteMessage(msgId);
+            toast.success('Message deleted');
             fetchClubMessages(clubChannel.id);
         } catch (e) {
-            toast.error('Failed to moderate');
+            toast.error(e.response?.data?.message || 'Failed to delete message');
+        }
+    };
+
+    const handleEditMessage = async (e) => {
+        e.preventDefault();
+        if (!editingMsgId || !editDraft?.trim()) return;
+        try {
+            await chatService.editMessage(editingMsgId, editDraft.trim());
+            toast.success('Message updated');
+            setEditingMsgId(null);
+            setEditDraft('');
+            fetchClubMessages(clubChannel.id);
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Cannot edit (only within 5 min)');
+        }
+    };
+
+    const handleVotePoll = async (msgId, optionIndex) => {
+        try {
+            await chatService.votePoll(msgId, optionIndex);
+            fetchClubMessages(clubChannel.id);
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Failed to vote');
+        }
+    };
+
+    const fetchScheduledMessages = async () => {
+        if (!clubChannel?.id) return;
+        setScheduledLoading(true);
+        try {
+            const res = await chatService.listScheduledMessages(clubChannel.id);
+            if (res.success && res.data) setScheduledMessages(res.data);
+        } catch (e) {
+            setScheduledMessages([]);
+        } finally {
+            setScheduledLoading(false);
+        }
+    };
+
+    const handleScheduleMessage = async (e) => {
+        e.preventDefault();
+        if (!clubChannel?.id || !newMessage?.trim() || !scheduledAt) {
+            toast.error('Enter message and schedule date/time');
+            return;
+        }
+        const at = new Date(scheduledAt);
+        if (isNaN(at.getTime()) || at.getTime() <= Date.now()) {
+            toast.error('Schedule time must be in the future');
+            return;
+        }
+        try {
+            await chatService.createScheduledMessage(clubChannel.id, newMessage.trim(), at.toISOString());
+            toast.success('Message scheduled');
+            setNewMessage('');
+            setScheduledAt('');
+            setPostMode('message');
+            fetchScheduledMessages();
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Failed to schedule');
+        }
+    };
+
+    const handlePostPoll = async (e) => {
+        e.preventDefault();
+        const question = (postMode === 'poll' ? pollQuestion : newMessage)?.trim();
+        const opts = postMode === 'poll' ? pollOptions.filter(Boolean) : [];
+        if (!clubChannel?.id || !question) return;
+        if (opts.length < 2) {
+            toast.error('Add at least 2 options');
+            return;
+        }
+        try {
+            await chatService.postPoll(clubChannel.id, question, opts);
+            setPollQuestion('');
+            setPollOptions(['Yes', 'No']);
+            setNewMessage('');
+            setPostMode('message');
+            fetchClubMessages(clubChannel.id);
+            toast.success('Poll created');
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Failed to create poll');
+        }
+    };
+
+    const addPollOption = () => {
+        if (pollOptions.length >= 20) return;
+        setPollOptions([...pollOptions, '']);
+    };
+    const removePollOption = (idx) => {
+        if (pollOptions.length <= 2) return;
+        setPollOptions(pollOptions.filter((_, i) => i !== idx));
+    };
+    const setPollOptionAt = (idx, value) => {
+        setPollOptions(pollOptions.map((o, i) => (i === idx ? value : o)));
+    };
+
+    const handleEditPollSubmit = async (e, msgId) => {
+        e.preventDefault();
+        try {
+            await chatService.editPoll(msgId, { message: editPollQuestion, options: editPollOptions.filter(Boolean) });
+            toast.success('Poll updated');
+            setEditingPollId(null);
+            fetchClubMessages(clubChannel.id);
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed');
+        }
+    };
+
+    const handleUpdateChannelSettings = async (patch) => {
+        if (!clubChannel?.id) return;
+        setSavingSettings(true);
+        try {
+            const res = await chatService.updateChannelSettings(clubChannel.id, { ...channelSettings, ...patch });
+            if (res.success && res.data) setChannelSettings((s) => ({ ...s, ...res.data }));
+            toast.success('Settings saved');
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Failed to save settings');
+        } finally {
+            setSavingSettings(false);
         }
     };
 
@@ -441,31 +633,37 @@ const Clubs = () => {
 
 
 
+    const tabList = [
+        { id: 'overview', label: 'Overview', icon: Layout },
+        { id: 'members', label: 'Members', icon: Users },
+        { id: 'requests', label: 'Requests', icon: UserPlus },
+        { id: 'activities', label: 'Activities', icon: Calendar },
+        { id: 'communication', label: 'Chat', icon: MessageSquare },
+        { id: 'settings', label: 'Settings', icon: Settings },
+    ];
+
     return (
-        <div className="p-6 w-full mx-auto space-y-6">
-            {/* Header */}
+        <div className={`p-4 sm:p-6 w-full max-w-[100vw] mx-auto overflow-x-hidden ${viewMode === 'list' ? 'space-y-4 sm:space-y-6' : 'flex flex-col min-h-0 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]'}`}>
+            {/* Header - mobile friendly */}
             {viewMode === 'list' && (
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Clubs & Communities</h1>
-                        <p className="text-gray-500">Manage student organizations, memberships, and activities.</p>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Clubs & Communities</h1>
+                        <p className="text-sm text-gray-500 mt-0.5">Manage organizations, memberships, and activities.</p>
                     </div>
-                    <div className="flex gap-3">
-                        {/* Add Filter/Search here if needed in future */}
-                        <button
-                            onClick={() => { resetForm(); setShowCreateModal(true); }}
-                            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all active:scale-95"
-                        >
-                            <Plus size={18} strokeWidth={2.5} /> Create New Club
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => { resetForm(); setShowCreateModal(true); }}
+                        className="w-full sm:w-auto px-4 py-3 sm:px-5 sm:py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    >
+                        <Plus size={18} strokeWidth={2.5} /> Create New Club
+                    </button>
                 </div>
             )}
 
             {viewMode === 'list' ? (
-                <div className="space-y-6">
-                    {/* Stats Row (Optional, placeholder for future) */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-4 sm:space-y-6 min-h-0">
+                    {/* Stats Row - single column on mobile */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500 font-medium">Total Clubs</p>
@@ -499,8 +697,8 @@ const Clubs = () => {
                         </div>
                     </div>
 
-                    {/* Clubs Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Clubs Grid - 1 col mobile */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         {clubs.map(club => (
                             <ClubCard
                                 key={club.id}
@@ -520,82 +718,65 @@ const Clubs = () => {
                     </div>
                 </div>
             ) : (
-                /* Club Detail View */
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[80vh] flex flex-col">
-                    {/* Detail Header */}
-                    <div className="border-b border-gray-100 p-6 flex items-start justify-between bg-gray-50/30">
-                        <div className="flex items-center gap-5">
-                            <button onClick={() => setViewMode('list')} className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-gray-900 transition-colors">
+                /* Club Detail View - fills root; root is height-constrained so only chat messages scroll */
+                <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
+                    {/* Detail Header - single row on desktop, description wraps; actions aligned with title */}
+                    <div className="border-b border-gray-100 p-4 sm:p-6 bg-gray-50/30">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+                            <button onClick={() => setViewMode('list')} className="shrink-0 self-start sm:self-center p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-gray-900 transition-colors touch-manipulation" aria-label="Back to list">
                                 <ArrowRight className="rotate-180" size={20} />
                             </button>
-                            <div className="w-16 h-16 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden shadow-sm">
-                                {selectedClub.image_url ? (
-                                    <img src={selectedClub.image_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <Users className="text-gray-300" size={32} />
+                            <div className="flex gap-3 min-w-0 flex-1 sm:min-w-0">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden shadow-sm shrink-0">
+                                    {selectedClub.image_url ? (
+                                        <img src={selectedClub.image_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <Users className="text-gray-300" size={28} />
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{selectedClub.name}</h1>
+                                    <p className="text-gray-500 text-xs sm:text-sm mt-0.5 line-clamp-2 sm:line-clamp-2 break-words">{selectedClub.description}</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-shrink-0 gap-2 flex-wrap sm:flex-nowrap">
+                                {isAdmin && (
+                                    <button onClick={() => handleToggleStatus(selectedClub.id, selectedClub.is_active)} className={`px-3 py-2 border rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors touch-manipulation whitespace-nowrap ${selectedClub.is_active ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'}`}>
+                                        <Zap size={14} className={selectedClub.is_active ? "fill-red-600" : "fill-green-600"} /> {selectedClub.is_active ? 'Deactivate' : 'Activate'}
+                                    </button>
                                 )}
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900">{selectedClub.name}</h1>
-                                <p className="text-gray-500 text-sm max-w-2xl line-clamp-1">{selectedClub.description}</p>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                            {isAdmin && (
-                                <button
-                                    onClick={() => handleToggleStatus(selectedClub.id, selectedClub.is_active)}
-                                    className={`px-4 py-2 border rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${selectedClub.is_active
-                                        ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
-                                        : 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'
-                                        }`}
-                                >
-                                    <Zap size={16} className={selectedClub.is_active ? "fill-red-600" : "fill-green-600"} />
-                                    {selectedClub.is_active ? 'Deactivate' : 'Activate'}
+                                <button onClick={() => prepareEdit(selectedClub)} className="px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-xs sm:text-sm font-bold flex items-center gap-1.5 touch-manipulation whitespace-nowrap">
+                                    <Edit2 size={14} /> Edit
                                 </button>
-                            )}
-                            <button
-                                onClick={() => prepareEdit(selectedClub)}
-                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-bold flex items-center gap-2"
-                            >
-                                <Edit2 size={16} /> Edit Club
-                            </button>
-                            <button
-                                onClick={() => handleDeleteClub(selectedClub.id)}
-                                className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm font-bold flex items-center gap-2"
-                            >
-                                <Trash2 size={16} /> Delete
-                            </button>
+                                <button onClick={() => handleDeleteClub(selectedClub.id)} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-xs sm:text-sm font-bold flex items-center gap-1.5 touch-manipulation whitespace-nowrap">
+                                    <Trash2 size={14} /> Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Navigation Tabs */}
-                    <div className="flex border-b border-gray-100 px-6 gap-6">
-                        {['overview', 'members', 'requests', 'activities', 'communication'].map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`py-4 text-sm font-bold border-b-2 transition-colors capitalized ${activeTab === tab
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
-                                {tab === 'communication' ? (
-                                    <span className="flex items-center gap-1">
-                                        <MessageSquare size={14} /> Communication
-                                    </span>
-                                ) : (
-                                    tab.charAt(0).toUpperCase() + tab.slice(1)
-                                )}
-                                {tab === 'requests' && selectedClub?.members?.filter(m => m.status === 'pending').length > 0 && (
-                                    <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
-                                        {selectedClub.members.filter(m => m.status === 'pending').length}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
+                    {/* Navigation Tabs - horizontal scroll on mobile */}
+                    <div className="border-b border-gray-100 bg-white sticky top-0 z-10 overflow-x-auto scrollbar-hide">
+                        <div className="flex gap-0 min-w-max sm:min-w-0 sm:flex-wrap px-2 sm:px-6">
+                            {tabList.map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    onClick={() => setActiveTab(id)}
+                                    className={`shrink-0 py-3 px-3 sm:py-4 sm:px-2 sm:mr-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 touch-manipulation ${activeTab === id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <Icon size={16} className="shrink-0" />
+                                    <span>{label}</span>
+                                    {id === 'requests' && selectedClub?.members?.filter(m => m.status === 'pending').length > 0 && (
+                                        <span className="ml-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full text-[10px] font-bold">
+                                            {selectedClub.members.filter(m => m.status === 'pending').length}
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="p-6 flex-1 bg-gray-50/30">
+                    <div className={`p-4 sm:p-6 flex-1 bg-gray-50/30 min-h-0 flex flex-col ${activeTab === 'communication' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                         {activeTab === 'overview' && (
                             <div className="max-w-7xl space-y-6 animate-in fade-in duration-300">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -945,7 +1126,7 @@ const Clubs = () => {
                         )}
 
                         {activeTab === 'communication' && (
-                            <div className="space-y-6 animate-in fade-in duration-300">
+                            <div className={`animate-in fade-in duration-300 ${clubChannel ? 'flex flex-col flex-1 min-h-0' : 'space-y-6'}`}>
                                 {channelLoading ? (
                                     <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
                                         Loading communication...
@@ -969,57 +1150,195 @@ const Clubs = () => {
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 400 }}>
-                                        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-                                            <MessageSquare size={20} className="text-blue-600" />
-                                            <span className="font-bold text-gray-900">{clubChannel.name || 'Club Chat'}</span>
+                                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                                        {/* WhatsApp-style header */}
+                                        <div className="py-3 px-4 bg-[#075e54] text-white flex items-center gap-2 shrink-0">
+                                            <MessageSquare size={22} className="text-white/90 shrink-0" />
+                                            <span className="font-semibold truncate">{clubChannel.name || 'Club Chat'}</span>
                                         </div>
-                                        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: 400 }}>
+                                        {/* Messages area - fills remaining height, scrolls on mobile */}
+                                        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 bg-[#efeae2] flex flex-col gap-1">
                                             {messagesLoading ? (
                                                 <div className="text-center text-gray-500 py-8">Loading messages...</div>
                                             ) : clubMessages.length === 0 ? (
-                                                <div className="text-center text-gray-400 py-12">No messages yet. Start the conversation!</div>
+                                                <div className="text-center text-gray-500 py-12">No messages yet. Start the conversation!</div>
                                             ) : (
-                                                clubMessages.map((msg) => (
-                                                    <div
-                                                        key={msg.id}
-                                                        className={`flex justify-between items-start gap-2 p-3 rounded-lg ${msg.is_hidden ? 'bg-red-50 opacity-75' : 'bg-gray-50'}`}
-                                                    >
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                <span className="font-bold text-gray-900 text-sm">{msg.sender_name || 'Unknown'}</span>
-                                                                <span className="text-xs text-gray-500">{new Date(msg.created_at).toLocaleString()}</span>
-                                                                {msg.is_hidden && <span className="text-xs text-red-600 font-medium">(Hidden)</span>}
+                                                (() => {
+                                                    const items = [];
+                                                    let lastDate = null;
+                                                    clubMessages.forEach((msg) => {
+                                                        const d = formatChatTime(msg.created_at);
+                                                        if (d !== lastDate) { items.push({ type: 'date', key: `d-${msg.id}`, label: d }); lastDate = d; }
+                                                        items.push({ type: 'msg', key: msg.id, msg });
+                                                    });
+                                                    return items.map((item) => {
+                                                        if (item.type === 'date') return <div key={item.key} className="flex justify-center my-2"><span className="text-xs text-gray-600 bg-white/80 px-3 py-1 rounded-full shadow-sm">{item.label}</span></div>;
+                                                        const msg = item.msg;
+                                                        const isOwn = msg.is_own;
+                                                        return (
+                                                            <div key={item.key} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} w-full min-w-0`}>
+                                                                <div className={`group relative max-w-[85%] min-w-0 ${isOwn ? 'order-2' : 'order-1'}`}>
+                                                                    <div className={`rounded-2xl px-3 py-2 shadow-md break-words overflow-hidden ${msg.is_deleted ? 'bg-gray-200' : isOwn ? 'bg-[#dcf8c6] rounded-br-md' : 'bg-white rounded-bl-md'}`}>
+                                                                        {!isOwn && <p className="text-xs font-semibold text-[#075e54] mb-0.5">{msg.sender_name || 'Unknown'}</p>}
+                                                                        {msg.is_deleted ? (
+                                                                            <p className="text-sm text-gray-600 italic">This message was deleted{msg.deleted_by_name ? ` by ${msg.deleted_by_name}` : ''}.</p>
+                                                                        ) : editingMsgId === msg.id ? (
+                                                                            <form onSubmit={handleEditMessage} className="flex gap-2">
+                                                                                <input type="text" value={editDraft} onChange={(e) => setEditDraft(e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded-lg text-sm min-w-[120px]" autoFocus />
+                                                                                <button type="submit" className="px-2 py-1 bg-[#075e54] text-white rounded text-sm">Save</button>
+                                                                                <button type="button" onClick={() => { setEditingMsgId(null); setEditDraft(''); }} className="px-2 py-1 border rounded text-sm">Cancel</button>
+                                                                            </form>
+                                                                        ) : msg.message_type === 'poll' ? (
+                                                                            <div className="space-y-1.5 min-w-0">
+                                                                                <p className="text-sm font-medium text-gray-900 break-words">{msg.message}</p>
+                                                                                <div className="flex flex-col gap-2 mt-1">
+                                                                                    {(msg.poll_options || ['Yes', 'No']).map((label, idx) => {
+                                                                                        const count = (msg.poll_option_counts && msg.poll_option_counts[idx]) != null ? msg.poll_option_counts[idx] : (idx === 0 ? msg.poll_yes_count : msg.poll_no_count);
+                                                                                        const voters = (msg.voters_by_option && msg.voters_by_option[idx]) || [];
+                                                                                        const totalVoters = (msg.voters_count_by_option && msg.voters_count_by_option[idx]) != null ? msg.voters_count_by_option[idx] : voters.length;
+                                                                                        const isSelected = msg.current_user_option_index === idx || (msg.current_user_vote === 'yes' && idx === 0) || (msg.current_user_vote === 'no' && idx === 1);
+                                                                                        const moreCount = totalVoters > voters.length ? totalVoters - voters.length : 0;
+                                                                                        const voterLabel = voters.length > 0 ? (voters.join(', ') + (moreCount > 0 ? ` and ${moreCount} more` : '')) : '';
+                                                                                        return (
+                                                                                            <div key={idx} className="flex flex-col gap-0.5 min-w-0">
+                                                                                                <button type="button" onClick={() => handleVotePoll(msg.id, idx)} disabled={msg.current_user_vote != null || msg.current_user_option_index != null} className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium touch-manipulation ${isSelected ? 'bg-[#075e54] text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>{label} {count != null ? `(${count})` : ''}</button>
+                                                                                                {voterLabel && <span className="text-[10px] text-gray-500 pl-1 truncate" title={voterLabel}>— {voterLabel}</span>}
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                                {(msg.current_user_vote != null || msg.current_user_option_index != null) && <span className="text-[10px] text-gray-500 block mt-0.5">You voted: {(msg.poll_options || ['Yes', 'No'])[msg.current_user_option_index ?? (msg.current_user_vote === 'yes' ? 0 : 1)]}</span>}
+                                                                                {(msg.can_edit_any || (msg.is_own && msg.message_type === 'poll')) && editingPollId !== msg.id && <button type="button" onClick={() => { setEditingPollId(msg.id); setEditPollQuestion(msg.message); setEditPollOptions(msg.poll_options || ['Yes', 'No']); }} className="text-[10px] text-[#075e54] hover:underline mt-0.5 touch-manipulation">Edit poll</button>}
+                                                                                {editingPollId === msg.id && (
+                                                                                    <form onSubmit={(e) => handleEditPollSubmit(e, msg.id)} className="mt-2 p-2 bg-white/90 rounded-lg border border-gray-200 space-y-2">
+                                                                                        <input type="text" value={editPollQuestion} onChange={(e) => setEditPollQuestion(e.target.value)} placeholder="Question" className="w-full min-w-0 px-2 py-1 text-sm border rounded" />
+                                                                                        {editPollOptions.map((o, i) => <div key={i} className="flex gap-1 min-w-0"><input type="text" value={o} onChange={(e) => setEditPollOptions(editPollOptions.map((opt, j) => j === i ? e.target.value : opt))} className="flex-1 min-w-0 px-2 py-1 text-sm border rounded" placeholder={`Option ${i + 1}`} /></div>)}
+                                                                                        <div className="flex flex-wrap gap-1"><button type="submit" className="px-2 py-1 bg-[#075e54] text-white text-sm rounded touch-manipulation">Save</button><button type="button" onClick={() => setEditingPollId(null)} className="px-2 py-1 border rounded text-sm touch-manipulation">Cancel</button></div>
+                                                                                    </form>
+                                                                                )}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <>
+                                                                                {msg.attachment_url && (msg.attachment_type === 'image' ? <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block mb-1 max-w-full"><img src={msg.attachment_url} alt="" className="max-w-[220px] max-h-36 rounded-lg object-cover w-full" /></a> : <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#075e54] hover:underline block mb-1 break-all">View attachment</a>)}
+                                                                                {(msg.message && msg.message.trim()) && <p className={`text-sm ${msg.is_hidden ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{msg.message}</p>}
+                                                                            </>
+                                                                        )}
+                                                                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                                                                            {msg.edited_at && <span className="text-[10px] text-gray-500">(edited)</span>}
+                                                                            <span className="text-[10px] text-gray-500">{formatMessageTime(msg.created_at)}</span>
+                                                                            {!msg.is_deleted && (msg.can_edit || msg.can_edit_any) && editingMsgId !== msg.id && <button type="button" onClick={() => { setEditingMsgId(msg.id); setEditDraft(msg.message); }} className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-500 hover:bg-gray-200/80" title="Edit"><Edit2 size={12} /></button>}
+                                                                            {!msg.is_deleted && (isAdmin || msg.can_edit_any) && <button type="button" onClick={() => handleDeleteMessage(msg.id)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50" title="Delete"><Trash2 size={12} /></button>}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <p className={`text-sm ${msg.is_hidden ? 'text-gray-500 line-through' : 'text-gray-700'}`}>{msg.message}</p>
-                                                        </div>
-                                                        {isAdmin && (
-                                                            <button
-                                                                onClick={() => handleModerateMessage(msg.id, !msg.is_hidden)}
-                                                                className="shrink-0 p-1.5 rounded text-gray-400 hover:bg-gray-200"
-                                                                title={msg.is_hidden ? 'Restore' : 'Hide'}
-                                                            >
-                                                                {msg.is_hidden ? <Eye size={16} /> : <EyeOff size={16} />}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                ))
+                                                        );
+                                                    });
+                                                })()
                                             )}
+                                            <div ref={messagesEndRef} className="h-0" />
                                         </div>
                                         {isAdmin && (
-                                            <form onSubmit={handlePostClubMessage} className="p-4 border-t border-gray-100 flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={newMessage}
-                                                    onChange={(e) => setNewMessage(e.target.value)}
-                                                    placeholder="Type a message..."
-                                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                                                />
-                                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">
-                                                    <Send size={18} />
-                                                </button>
-                                            </form>
+                                            <>
+                                                <div className="px-2 pt-1.5 pb-1 border-t border-gray-200 bg-white flex gap-1 flex-wrap shrink-0">
+                                                    <button type="button" onClick={() => setPostMode('message')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-xs font-medium touch-manipulation ${postMode === 'message' ? 'bg-[#075e54] text-white' : 'bg-gray-100 text-gray-600'}`}>Message</button>
+                                                    <button type="button" onClick={() => setPostMode('poll')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-xs font-medium touch-manipulation ${postMode === 'poll' ? 'bg-[#075e54] text-white' : 'bg-gray-100 text-gray-600'}`}><BarChart2 size={12} className="inline mr-0.5" /> Poll</button>
+                                                    <button type="button" onClick={() => setPostMode('schedule')} className={`shrink-0 px-2.5 py-1.5 rounded-full text-xs font-medium touch-manipulation ${postMode === 'schedule' ? 'bg-[#075e54] text-white' : 'bg-gray-100 text-gray-600'}`}><Clock size={12} className="inline mr-0.5" /> Schedule</button>
+                                                </div>
+                                                {postMode === 'poll' && (
+                                                    <div className="px-3 py-2 space-y-2 border-t border-gray-100 bg-gray-50/50">
+                                                        <input type="text" value={pollQuestion} onChange={(e) => setPollQuestion(e.target.value)} placeholder="Poll question" className="w-full px-3 py-2 border border-gray-300 rounded-2xl text-sm" />
+                                                        {pollOptions.map((opt, idx) => (
+                                                            <div key={idx} className="flex gap-1">
+                                                                <input type="text" value={opt} onChange={(e) => setPollOptionAt(idx, e.target.value)} placeholder={`Option ${idx + 1}`} className="flex-1 px-3 py-1.5 border border-gray-300 rounded-xl text-sm" />
+                                                                <button type="button" onClick={() => removePollOption(idx)} disabled={pollOptions.length <= 2} className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-40">×</button>
+                                                            </div>
+                                                        ))}
+                                                        <button type="button" onClick={addPollOption} disabled={pollOptions.length >= 20} className="text-xs text-[#075e54] font-medium">+ Add option</button>
+                                                    </div>
+                                                )}
+                                                {postMode === 'schedule' && (
+                                                    <div className="px-3 py-2 border-t border-gray-100 bg-gray-50/50">
+                                                        <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} min={new Date().toISOString().slice(0, 16)} className="w-full px-3 py-2 border border-gray-300 rounded-2xl text-sm" />
+                                                        {scheduledMessages.length > 0 && <div className="text-[10px] text-gray-500 mt-1">Scheduled: {scheduledMessages.length}</div>}
+                                                    </div>
+                                                )}
+                                                <form onSubmit={postMode === 'poll' ? handlePostPoll : postMode === 'schedule' ? handleScheduleMessage : handlePostClubMessage} className="p-2 bg-white border-t border-gray-200 flex items-end gap-2 shrink-0 min-h-0">
+                                                    {postMode !== 'poll' && (
+                                                        <>
+                                                            <label className="shrink-0 p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 cursor-pointer touch-manipulation" title="Attach (max 20 KB)">
+                                                                <Image size={20} />
+                                                                <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f && f.size <= MAX_ATTACHMENT_BYTES) setAttachmentFile(f); else if (f) toast.error('File must be 20 KB or less'); e.target.value = ''; }} />
+                                                            </label>
+                                                            <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={postMode === 'schedule' ? 'Message to schedule...' : 'Type a message'} className="flex-1 min-w-0 px-4 py-2.5 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-[#075e54]/30 focus:border-[#075e54] outline-none text-sm" />
+                                                            {attachmentFile && <span className="text-[10px] text-gray-500 truncate max-w-[80px] shrink-0">{attachmentFile.name}</span>}
+                                                        </>
+                                                    )}
+                                                    {postMode === 'poll' && <div className="flex-1 min-w-0" />}
+                                                    <button type="submit" className="shrink-0 w-10 h-10 rounded-full bg-[#075e54] text-white flex items-center justify-center hover:bg-[#064e47] disabled:opacity-50 transition-colors touch-manipulation" disabled={postMode === 'poll' && (!pollQuestion?.trim() || pollOptions.filter(Boolean).length < 2) || (postMode === 'message' && !newMessage?.trim() && !attachmentFile) || uploadingAttachment} title="Send">
+                                                        {uploadingAttachment ? <span className="text-xs">...</span> : <Send size={18} className="ml-0.5" />}
+                                                    </button>
+                                                </form>
+                                            </>
                                         )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                {channelLoading ? (
+                                    <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">Loading...</div>
+                                ) : !clubChannel ? (
+                                    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
+                                        <Settings size={48} className="mx-auto mb-4 text-gray-300" />
+                                        <h3 className="text-lg font-bold text-gray-900 mb-2">No Communication Channel</h3>
+                                        <p className="text-gray-500 max-w-md mx-auto">Create a communication channel from the Communication tab to configure settings.</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-xl">
+                                        <h3 className="text-lg font-bold text-gray-900 mb-6">Club communication settings</h3>
+                                        <div className="space-y-6">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" checked={channelSettings?.students_can_send !== false} onChange={(e) => handleUpdateChannelSettings({ students_can_send: e.target.checked })} disabled={savingSettings} className="rounded border-gray-300" />
+                                                <span className="text-sm font-medium text-gray-700">Allow students to send messages</span>
+                                            </label>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-2">Auto-disappearing messages</label>
+                                                <p className="text-xs text-gray-500 mb-2">Messages older than this will be automatically removed. Max 30 days.</p>
+                                                <select
+                                                    value={autoDeletePreset}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        setAutoDeletePreset(v);
+                                                        if (v !== 'custom') handleUpdateChannelSettings({ auto_delete_after_days: Number(v) });
+                                                    }}
+                                                    disabled={savingSettings}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white"
+                                                >
+                                                    <option value="7">7 days</option>
+                                                    <option value="10">10 days</option>
+                                                    <option value="30">Monthly (30 days)</option>
+                                                    <option value="custom">Custom</option>
+                                                </select>
+                                                {autoDeletePreset === 'custom' && (
+                                                    <div className="mt-2">
+                                                        <label className="block text-xs text-gray-600 mb-1">Number of days (1–30)</label>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={30}
+                                                            value={autoDeleteCustomDays}
+                                                            onChange={(e) => setAutoDeleteCustomDays(Math.min(30, Math.max(1, Number(e.target.value) || 1)))}
+                                                            onBlur={() => handleUpdateChannelSettings({ auto_delete_after_days: autoDeleteCustomDays })}
+                                                            disabled={savingSettings}
+                                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
