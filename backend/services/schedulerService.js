@@ -181,15 +181,93 @@ const generateReportHtml = (rows, title, attendanceDate) => {
 };
 
 /**
+ * Mark pending (unmarked) students as present for the given date.
+ * - Excluded courses and excluded students (attendance_config) are NOT touched; they remain as-is.
+ * - Only Regular + in-scope students (i.e. not in excluded courses / excluded students) who are
+ *   still pending (no attendance_record for this date) are marked present.
+ * Runs before sending 4 PM reports.
+ */
+const markPendingStudentsAsPresent = async (attendanceDate, excludedCourses, excludedStudents) => {
+    try {
+        // Excluded courses: we never touch them; students in these courses are left unchanged.
+        let excludeCourseClause = '';
+        let excludeStudentClause = '';
+        const params = [attendanceDate, attendanceDate];
+        if (excludedCourses && excludedCourses.length > 0) {
+            excludeCourseClause = ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+            params.push(...excludedCourses);
+        }
+        if (excludedStudents && excludedStudents.length > 0) {
+            excludeStudentClause = ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+            params.push(...excludedStudents);
+        }
+
+        // Only: Regular + in-scope (non-excluded) + pending (no record for this date) → mark present.
+        // marked_by NULL = system/4PM auto-mark.
+        const [result] = await masterPool.query(
+            `INSERT INTO attendance_records (student_id, admission_number, attendance_date, \`year\`, semester, status, marked_by)
+             SELECT s.id, s.admission_number, ?, s.current_year, s.current_semester, 'present', NULL
+             FROM students s
+             LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
+             WHERE s.student_status = 'Regular'
+               AND ar.id IS NULL
+             ${excludeCourseClause}
+             ${excludeStudentClause}`,
+            params
+        );
+
+        const affected = result.affectedRows || 0;
+        if (affected > 0) {
+            console.log(`✅ Marked ${affected} pending student(s) as present for ${attendanceDate} before sending reports.`);
+        }
+        return affected;
+    } catch (err) {
+        // If year/semester columns don't exist, retry without them (same exclusion rules apply)
+        if (err.code === 'ER_BAD_FIELD_ERROR' && (err.sqlMessage || '').match(/'year'|'semester'/)) {
+            let excludeCourseClause = '';
+            let excludeStudentClause = '';
+            const params = [attendanceDate, attendanceDate];
+            if (excludedCourses && excludedCourses.length > 0) {
+                excludeCourseClause = ` AND s.course NOT IN (${excludedCourses.map(() => '?').join(',')})`;
+                params.push(...excludedCourses);
+            }
+            if (excludedStudents && excludedStudents.length > 0) {
+                excludeStudentClause = ` AND s.admission_number NOT IN (${excludedStudents.map(() => '?').join(',')})`;
+                params.push(...excludedStudents);
+            }
+            // Same rule: only Regular + in-scope + pending; excluded courses/students untouched
+            const [result] = await masterPool.query(
+                `INSERT INTO attendance_records (student_id, admission_number, attendance_date, status, marked_by)
+                 SELECT s.id, s.admission_number, ?, 'present', NULL
+                 FROM students s
+                 LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.attendance_date = ?
+                 WHERE s.student_status = 'Regular'
+                   AND ar.id IS NULL
+                 ${excludeCourseClause}
+                 ${excludeStudentClause}`,
+                params
+            );
+            const affected = result.affectedRows || 0;
+            if (affected > 0) {
+                console.log(`✅ Marked ${affected} pending student(s) as present for ${attendanceDate} (no year/semester).`);
+            }
+            return affected;
+        }
+        throw err;
+    }
+};
+
+/**
  * Send Daily Attendance Reports (Super Admin + AOs)
- * Runs at 4 PM IST
+ * Runs at 4 PM IST.
+ * Before sending: marks any pending (unmarked) students as present for the day.
+ * Sends global report to all active users with role super_admin (by email).
  */
 const sendDailyAttendanceReports = async () => {
     try {
         console.log('⏳ Starting Daily Attendance Report generation...');
 
         const attendanceDate = getTodayDate();
-        const SUPER_ADMIN_EMAIL = 'sriram@pydah.edu.in';
 
         // 0. Fetch Excluded Courses/Students Config
         let excludedCourses = [];
@@ -206,6 +284,14 @@ const sendDailyAttendanceReports = async () => {
             }
         } catch (err) {
             console.warn('Failed to fetch attendance config for daily report:', err);
+        }
+
+        // 0.5. Mark pending students as present before sending reports
+        try {
+            await markPendingStudentsAsPresent(attendanceDate, excludedCourses, excludedStudents);
+        } catch (err) {
+            console.error('❌ Failed to mark pending students as present:', err);
+            // Continue to send reports with current data
         }
 
         // 1. Fetch Day End Report Data (Grouped Summary) with Exclusions
@@ -248,21 +334,34 @@ const sendDailyAttendanceReports = async () => {
 
         const [groupedRows] = await masterPool.query(query, params);
 
-        // 2. Send Super Admin Report (Global)
+        // 2. Send Super Admin Report (Global) to all users with role super_admin
         const globalHtml = generateReportHtml(groupedRows, 'Day End Attendance Report (Global)', attendanceDate);
 
-        console.log(`📧 Sending Super Admin report to ${SUPER_ADMIN_EMAIL}`);
-        const adminEmailResult = await sendBrevoEmail({
-            to: SUPER_ADMIN_EMAIL,
-            toName: 'Super Admin',
-            subject: `Day End Attendance Report (Global) - ${attendanceDate}`,
-            htmlContent: globalHtml
-        });
+        const [superAdmins] = await masterPool.query(
+            `SELECT id, name, email FROM rbac_users 
+             WHERE role = 'super_admin' AND is_active = 1 AND email IS NOT NULL AND TRIM(email) != ''`
+        );
 
-        if (adminEmailResult.success) {
-            console.log('✅ Super Admin Daily Report email sent successfully.');
-        } else {
-            console.error('❌ Failed to send Super Admin Daily Report email:', adminEmailResult.message);
+        console.log(`ℹ️ Found ${superAdmins.length} active Super Admin(s) to notify.`);
+        for (const admin of superAdmins) {
+            const toEmail = (admin.email || '').trim().toLowerCase();
+            if (!toEmail) continue;
+            try {
+                console.log(`📧 Sending Super Admin report to ${admin.name} (${toEmail})`);
+                const adminEmailResult = await sendBrevoEmail({
+                    to: toEmail,
+                    toName: admin.name || 'Super Admin',
+                    subject: `Day End Attendance Report (Global) - ${attendanceDate}`,
+                    htmlContent: globalHtml
+                });
+                if (adminEmailResult.success) {
+                    console.log(`✅ Super Admin report sent to ${admin.name} (${toEmail}).`);
+                } else {
+                    console.error(`❌ Failed to send to ${toEmail}:`, adminEmailResult.message);
+                }
+            } catch (err) {
+                console.error(`❌ Error sending Super Admin report to ${toEmail}:`, err.message);
+            }
         }
 
         // 3. Send AO Reports (College Specific)
