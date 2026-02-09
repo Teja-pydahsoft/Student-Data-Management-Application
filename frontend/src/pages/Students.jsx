@@ -26,6 +26,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import StudentAvatar from '../components/StudentAvatar';
+import DigitalStudentCard from '../components/DigitalStudentCard';
 import { Link, useLocation } from 'react-router-dom';
 import api, { getStaticFileUrlDirect } from '../config/api';
 import StudentHistoryTab from '../components/Students/StudentHistoryTab';
@@ -3542,6 +3543,23 @@ const Students = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Digital Student ID Card - same as student profile */}
+                  {canViewField('student_photo') && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Digital Student Card</p>
+                      <DigitalStudentCard
+                        student={editData}
+                        getStudentData={(key, fallback) => {
+                          if (!editData?.student_data) return fallback;
+                          const dataKeys = Object.keys(editData.student_data);
+                          const foundKey = dataKeys.find((k) => k.toLowerCase() === key.toLowerCase());
+                          const val = foundKey ? editData.student_data[foundKey] : undefined;
+                          return val !== undefined && val !== null && val !== '' ? val : fallback;
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 

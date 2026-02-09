@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import api from '../../config/api';
-import { User, Mail, Phone, MapPin, Calendar, Book, Hash, Lock, Shield, Clock } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import api, { getStaticFileUrlDirect } from '../../config/api';
+import { User, Mail, Phone, MapPin, Calendar, Book, Hash, Lock, Shield, Clock, CreditCard, Download, X } from 'lucide-react';
 import { SkeletonBox } from '../../components/SkeletonLoader';
+import DigitalStudentCard from '../../components/DigitalStudentCard';
 import useAuthStore from '../../store/authStore';
 import { toast } from 'react-hot-toast';
 
@@ -14,6 +15,10 @@ const Profile = () => {
     const [showChangePassModal, setShowChangePassModal] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [changePassLoading, setChangePassLoading] = useState(false);
+
+    // Digital Student ID Card: view modal and download
+    const [showIdCardModal, setShowIdCardModal] = useState(false);
+    const [idCardPdfLoading, setIdCardPdfLoading] = useState(false);
 
     const handleChangePassword = async (e) => {
         e.preventDefault();
@@ -57,6 +62,128 @@ const Profile = () => {
         }
     }, [user]);
 
+    // Keep these before any early return so hook count is stable every render
+    const displayData = studentData || user;
+    const getStudentData = useCallback((key, fallback = 'N/A') => {
+        if (!displayData || !displayData.student_data) return fallback;
+        const dataKeys = Object.keys(displayData.student_data);
+        const foundKey = dataKeys.find(k => k.toLowerCase() === key.toLowerCase());
+        const val = foundKey ? displayData.student_data[foundKey] : undefined;
+        return val !== undefined && val !== null && val !== '' ? val : fallback;
+    }, [displayData]);
+
+    const handleDownloadIdCardPDF = useCallback(async () => {
+        if (!displayData) return;
+        setIdCardPdfLoading(true);
+        try {
+            const { jsPDF } = await import('jspdf');
+            const doc = new jsPDF('p', 'mm', [74, 105]);
+            const cardW = 74;
+            const cardH = 105;
+            const redBarW = 12;
+            const red = [160, 30, 40];
+
+            const name = displayData.student_name || getStudentData('Student Name') || '—';
+            const admissionNumber = displayData.admission_number || getStudentData('Admission Number') || getStudentData('Roll No') || '—';
+            const college = displayData.college || getStudentData('College') || '—';
+            const program = displayData.course || getStudentData('Program') || '—';
+            const branch = displayData.branch || getStudentData('Branch') || '—';
+            const batch = displayData.batch || getStudentData('Batch') || '—';
+            const addressRaw = displayData.student_address || getStudentData('Student Address') || getStudentData('Address') || '';
+            const address = String(addressRaw).trim() || '—';
+            const phoneRaw = displayData.student_mobile || getStudentData('Student Mobile number') || getStudentData('Phone') || getStudentData('Student Mobile') || '';
+            const phone = String(phoneRaw).trim() || '—';
+            const bloodGroup = displayData.blood_group || getStudentData('Blood Group') || getStudentData('B.Group') || '—';
+            const course = [program, branch].filter(Boolean).join(' - ') || '—';
+
+            doc.setFillColor(...red);
+            doc.rect(0, 0, redBarW, cardH, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            ['P', 'Y', 'D', 'A', 'H'].forEach((letter, i) => {
+                doc.text(letter, 4, 16 + i * 7);
+            });
+
+            let x = redBarW + 3;
+            let y = 8;
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(college.length > 32 ? college.substring(0, 31) + '…' : college, (redBarW + cardW) / 2, y, { align: 'center' });
+            y += 7;
+
+            const photoBoxH = 26;
+            doc.setFillColor(...red);
+            doc.rect(x, y, cardW - redBarW - 6, photoBoxH, 'F');
+            const photo = displayData.student_photo;
+            const photoUrl = photo
+                ? (photo.startsWith('http') || photo.startsWith('data:')) ? photo : getStaticFileUrlDirect(photo)
+                : '';
+            if (photoUrl && photoUrl.startsWith('data:')) {
+                try {
+                    doc.addImage(photoUrl, 'JPEG', x + 2, y + 2, (cardW - redBarW - 6) - 4, photoBoxH - 4);
+                } catch {
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(7);
+                    doc.text('Photo', x + (cardW - redBarW - 6) / 2 - 4, y + photoBoxH / 2 + 2);
+                }
+            } else {
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(7);
+                doc.text('Photo', x + (cardW - redBarW - 6) / 2 - 4, y + photoBoxH / 2 + 2);
+            }
+            doc.setTextColor(0, 0, 0);
+            y += photoBoxH + 4;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            const lineH = 4.5;
+            const maxValLen = 24;
+            const row = (label, value) => {
+                const str = String(value);
+                const val = str.length > maxValLen ? str.substring(0, maxValLen - 1) + '…' : str;
+                doc.text(`${label} :`, x, y);
+                doc.text(val, x + 20, y, { maxWidth: cardW - redBarW - 26 });
+                y += lineH;
+            };
+            row('Roll No', admissionNumber);
+            row('Name', name);
+            row('Batch', batch);
+            row('Course', course);
+            row('Address', address);
+            row('Phone', phone);
+            row('B.Group', bloodGroup);
+
+            y += 2;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text('PYDAH GROUP', cardW - 22, y);
+            y += 4;
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(6);
+            doc.text('Education & Beyond', cardW - 24, y);
+            y += 6;
+            doc.setFont('helvetica', 'normal');
+            doc.text('Principal', cardW - 18, y);
+
+            doc.setFillColor(...red);
+            doc.rect(0, cardH - 10, cardW, 10, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6);
+            doc.text('Yanam Road, Patavala, Kakinada. Ph: 0884-2315333', cardW / 2, cardH - 4, { align: 'center' });
+
+            doc.save(`student_id_${admissionNumber || 'card'}.pdf`);
+            toast.success('Digital student ID card downloaded');
+        } catch (err) {
+            console.error('Failed to generate ID card PDF:', err);
+            toast.error('Failed to download PDF');
+        } finally {
+            setIdCardPdfLoading(false);
+        }
+    }, [displayData, getStudentData]);
+
     if (loading) {
         return (
             <div className="space-y-4 lg:space-y-6 flex flex-col p-1 w-full max-w-full overflow-x-hidden animate-pulse">
@@ -97,26 +224,11 @@ const Profile = () => {
         );
     }
 
-    // Use fetched data or fallback to auth user data (which is minimal)
-    const displayData = studentData || user;
-
-    // Helper to safely get data
+    // Helpers used only after loading (no hooks below)
     const get = (path, fallback = 'N/A') => {
         if (!displayData) return fallback;
         return displayData[path] || fallback;
     };
-
-    // Helper to get nested student_data fields safely (Case-Insensitive)
-    const getStudentData = (key, fallback = 'N/A') => {
-        if (!displayData || !displayData.student_data) return fallback;
-
-        const dataKeys = Object.keys(displayData.student_data);
-        const foundKey = dataKeys.find(k => k.toLowerCase() === key.toLowerCase());
-
-        const val = foundKey ? displayData.student_data[foundKey] : undefined;
-        return val !== undefined && val !== null && val !== '' ? val : fallback;
-    };
-
     const getCertificateStatus = () => {
         const status = displayData.certificates_status || getStudentData('Certificates Status') || 'Pending';
         return status;
@@ -180,14 +292,22 @@ const Profile = () => {
                             </div>
                         </div>
 
-                        {/* Action Button */}
-                        <div className="w-full md:w-auto mt-2 md:mt-0">
+                        {/* Digital ID Card button + Change Password */}
+                        <div className="w-full md:w-auto mt-2 md:mt-0 flex flex-wrap items-center justify-center md:justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowIdCardModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+                            >
+                                <CreditCard size={18} />
+                                Digital ID Card
+                            </button>
                             <button
                                 onClick={() => setShowChangePassModal(true)}
-                                className="w-full md:w-auto px-6 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center justify-center gap-2 group active:scale-95"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg group active:scale-95"
                             >
-                                <Lock size={16} className="text-gray-400 group-hover:text-white transition-colors" />
-                                <span>Change Password</span>
+                                <Lock size={18} className="text-gray-400 group-hover:text-white transition-colors" />
+                                Change Password
                             </button>
                         </div>
                     </div>
@@ -268,6 +388,46 @@ const Profile = () => {
                     </div>
                 </div>
             </div>
+
+            {/* View Digital Student ID Card Modal */}
+            {showIdCardModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative animate-in fade-in zoom-in duration-200 border border-gray-100">
+                        <button
+                            onClick={() => setShowIdCardModal(false)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors bg-gray-100 hover:bg-gray-200 rounded-full p-1.5 z-10"
+                            aria-label="Close"
+                        >
+                            <X size={20} />
+                        </button>
+                        <div className="flex items-center gap-2 mb-4">
+                            <CreditCard className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-lg font-bold text-gray-900">Digital Student ID Card</h3>
+                        </div>
+                        <div className="flex justify-center">
+                            <DigitalStudentCard student={displayData} getStudentData={getStudentData} />
+                        </div>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowIdCardModal(false)}
+                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50"
+                            >
+                                Close
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => { await handleDownloadIdCardPDF(); setShowIdCardModal(false); }}
+                                disabled={idCardPdfLoading}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                            >
+                                <Download size={16} />
+                                {idCardPdfLoading ? 'Downloading…' : 'Download PDF'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Change Password Modal */}
             {showChangePassModal && (
