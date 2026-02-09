@@ -38,8 +38,8 @@ const AddStudent = () => {
   const [selectedCourseName, setSelectedCourseName] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedBranchName, setSelectedBranchName] = useState('');
-  const [academicYears, setAcademicYears] = useState([]);
-  const [academicYearsLoading, setAcademicYearsLoading] = useState(true);
+  const [batches, setBatches] = useState([]);
+  const [batchesLoading, setBatchesLoading] = useState(true);
   const [admissionNumberLoading, setAdmissionNumberLoading] = useState(false);
   const [isAdmissionNumberManual, setIsAdmissionNumberManual] = useState(false);
 
@@ -104,21 +104,37 @@ const AddStudent = () => {
       }
     };
 
-    const loadAcademicYears = async () => {
+    // Load batches: same source as Students Database page (quick-filters = distinct batches from students)
+    // so Add Student shows 2023, 2024, 2026-2027 etc. matching the batch filter on Students page
+    const loadBatches = async () => {
       try {
-        setAcademicYearsLoading(true);
-        const response = await api.get('/academic-years/active');
-        setAcademicYears(response.data.data || []);
+        setBatchesLoading(true);
+        const response = await api.get('/students/quick-filters');
+        const list = response.data?.data?.batches || [];
+        if (list.length > 0) {
+          setBatches(list.map((b) => ({ value: b, label: b })));
+        } else {
+          // No students yet: fall back to active academic years so first student can be added
+          const ayResponse = await api.get('/academic-years/active');
+          const ayData = ayResponse.data.data || [];
+          setBatches(ayData.map((y) => ({ value: y.yearLabel, label: y.yearLabel })));
+        }
       } catch (error) {
-        console.error('Failed to load academic years', error);
-        // Don't show error - might not have the table yet
+        console.error('Failed to load batches', error);
+        try {
+          const ayResponse = await api.get('/academic-years/active');
+          const ayData = ayResponse.data.data || [];
+          setBatches(ayData.map((y) => ({ value: y.yearLabel, label: y.yearLabel })));
+        } catch (fallbackErr) {
+          console.error('Fallback academic years failed', fallbackErr);
+        }
       } finally {
-        setAcademicYearsLoading(false);
+        setBatchesLoading(false);
       }
     };
 
     loadColleges();
-    loadAcademicYears();
+    loadBatches();
   }, []);
 
   // Determine course type (Diploma, UG, or PG) based on course name
@@ -901,11 +917,11 @@ const AddStudent = () => {
       return;
     }
 
-    // Validate batch exists in academic years
-    if (academicYears.length > 0) {
-      const batchExists = academicYears.some(y => y.yearLabel === studentData.batch);
+    // Validate batch exists in available batches
+    if (batches.length > 0) {
+      const batchExists = batches.some(b => b.value === studentData.batch);
       if (!batchExists) {
-        toast.error('Selected batch year is not available. Please select a valid batch.');
+        toast.error('Selected batch is not available. Please select a valid batch.');
         return;
       }
     }
@@ -1116,14 +1132,14 @@ const AddStudent = () => {
               {/* 2. Batch */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  batch <span className="text-red-500">*</span>
+                  Batch <span className="text-red-500">*</span>
                 </label>
-                {academicYearsLoading ? (
+                {batchesLoading ? (
                   <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
                     <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
                     Loading batches...
                   </div>
-                ) : academicYears.length > 0 ? (
+                ) : batches.length > 0 ? (
                   <select
                     name="batch"
                     value={studentData.batch}
@@ -1132,9 +1148,9 @@ const AddStudent = () => {
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Batch</option>
-                    {academicYears.map((year) => (
-                      <option key={year.id} value={year.yearLabel}>
-                        {year.yearLabel}
+                    {batches.map((b) => (
+                      <option key={b.value} value={b.value}>
+                        {b.label}
                       </option>
                     ))}
                   </select>
@@ -1144,7 +1160,7 @@ const AddStudent = () => {
                     name="batch"
                     value={studentData.batch}
                     onChange={handleChange}
-                    placeholder="Enter batch year"
+                    placeholder="Enter batch"
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
