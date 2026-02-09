@@ -813,6 +813,7 @@ const Attendance = () => {
 
       const cacheKey = JSON.stringify({
         batch: filtersToUse.batch,
+        level: filtersToUse.level,
         course: filtersToUse.course,
         branch: filtersToUse.branch,
         excludeField: excludeField
@@ -830,6 +831,7 @@ const Attendance = () => {
       // This ensures branches are always filtered by course when a course is selected
       const params = new URLSearchParams();
       if (filtersToUse.batch && excludeField !== 'batch') params.append('batch', filtersToUse.batch);
+      if (filtersToUse.level && excludeField !== 'level') params.append('level', filtersToUse.level);
       // Always include course filter when course is selected (unless course itself is being changed)
       if (filtersToUse.course && excludeField !== 'course') {
         params.append('course', filtersToUse.course);
@@ -1670,14 +1672,14 @@ const Attendance = () => {
     initializeAttendance();
   }, []);
 
-  // Reload filter options when batch, course, or branch changes (for cascading)
+  // Reload filter options when batch, level, course, or branch changes (for cascading)
   // This ensures child filters show correct options when parent filters change
   useEffect(() => {
     if (filtersLoadedRef.current) {
       loadFilterOptions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.batch, filters.course, filters.branch]);
+  }, [filters.batch, filters.level, filters.course, filters.branch]);
 
   // Load attendance with debouncing when filters change (only after initial load)
   // This prevents excessive API calls when filters change rapidly
@@ -1736,6 +1738,10 @@ const Attendance = () => {
       // Clear dependent filters when parent filter changes
       if (field === 'course') {
         // When course changes, clear branch
+        delete newFilters.branch;
+      } else if (field === 'level') {
+        // When level changes, clear course and branch (course options change)
+        delete newFilters.course;
         delete newFilters.branch;
       } else if (field === 'batch') {
         // When batch changes, clear year and semester
@@ -2689,8 +2695,7 @@ const Attendance = () => {
                 }
                 loadFilterOptions(filtersForFetch, 'branch');
               }}
-              className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px] disabled:opacity-50"
-              disabled={filters.course && availableBranches.length === 0}
+              className="min-w-[120px] flex-1 sm:flex-none rounded-md border border-gray-300 px-1.5 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 touch-manipulation min-h-[36px]"
             >
               <option value="">All Branches</option>
               {availableBranches.map((branchOption) => (

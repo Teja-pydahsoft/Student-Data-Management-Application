@@ -107,7 +107,7 @@ const getDateOnlyString = (input) => {
 exports.getFilterOptions = async (req, res) => {
   try {
     // Get filter parameters from query string
-    const { course, branch, batch, year, semester, college } = req.query;
+    const { course, branch, batch, year, semester, college, level } = req.query;
 
     // Fetch attendance configuration from DB
     let excludedCourses = [];
@@ -193,6 +193,17 @@ exports.getFilterOptions = async (req, res) => {
       level0.params
     );
 
+    // When level is provided, restrict to courses with that level (diploma/ug/pg)
+    let levelCourseNames = null;
+    if (level) {
+      const [levelCourses] = await masterPool.query(
+        'SELECT name FROM courses WHERE level = ? AND is_active = 1',
+        [level]
+      );
+      levelCourseNames = levelCourses.map(c => c.name);
+      if (levelCourseNames.length === 0) levelCourseNames = [];
+    }
+
     // 2. Courses (Use Level 1 - Depend on Batch)
     let courseRowsRes;
     if (college) {
@@ -228,6 +239,13 @@ exports.getFilterOptions = async (req, res) => {
         `SELECT DISTINCT course FROM students ${level1.clause} AND course IS NOT NULL AND course <> '' ORDER BY course ASC`,
         level1.params
       );
+    }
+    // Apply level filter to courses when level is provided
+    if (levelCourseNames && levelCourseNames.length > 0) {
+      const levelSet = new Set(levelCourseNames);
+      courseRowsRes = courseRowsRes.filter(r => levelSet.has(r.course));
+    } else if (levelCourseNames && levelCourseNames.length === 0) {
+      courseRowsRes = [];
     }
 
     // 3. Branches (Use Level 2 - Depend on Batch + Course)
@@ -277,43 +295,20 @@ exports.getFilterOptions = async (req, res) => {
         branchRowsRes = [];
       }
     } else {
-      // No college filter - if batch is selected, still filter branches by batch
-      if (batch) {
-        // Get academic_year_id for the selected batch
-        const [academicYearRows] = await masterPool.query(
-          'SELECT id FROM academic_years WHERE year_label = ? AND is_active = 1 LIMIT 1',
-          [batch]
+      // No college filter - query branches directly from students table
+      // Do NOT require batch to exist in academic_years - students.batch is the source of truth
+      if (batch || course) {
+        // When batch and/or course is selected, use level2 to filter
+        [branchRowsRes] = await masterPool.query(
+          `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+          level2.params
         );
-        
-        if (academicYearRows.length > 0) {
-          // When batch is selected, query branches directly from students table
-          // This ensures all branches load, regardless of junction table entries
-          // The students table is the source of truth for what branches exist
-          [branchRowsRes] = await masterPool.query(
-            `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-            level2.params
-          );
-        } else {
-          branchRowsRes = [];
-        }
       } else {
-        // No batch selected - get branches directly from students table
-        // This ensures all branches load, regardless of junction table entries
-        if (course) {
-          // If course is selected, filter branches by course
-          // Query directly from students table with course filter
-          [branchRowsRes] = await masterPool.query(
-            `SELECT DISTINCT branch FROM students ${level2.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-            level2.params
-          );
-        } else {
-          // No course and no batch selected, get all branches directly from students
-          // This matches the original behavior - simple query from students table
-          [branchRowsRes] = await masterPool.query(
-            `SELECT DISTINCT branch FROM students ${level0.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
-            level0.params
-          );
-        }
+        // No batch and no course selected, get all branches from students
+        [branchRowsRes] = await masterPool.query(
+          `SELECT DISTINCT branch FROM students ${level0.clause} AND branch IS NOT NULL AND branch <> '' ORDER BY branch ASC`,
+          level0.params
+        );
       }
     }
 
