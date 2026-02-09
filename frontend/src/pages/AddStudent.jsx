@@ -40,6 +40,10 @@ const AddStudent = () => {
   const [selectedBranchName, setSelectedBranchName] = useState('');
   const [batches, setBatches] = useState([]);
   const [batchesLoading, setBatchesLoading] = useState(true);
+  const [quickFilterCourses, setQuickFilterCourses] = useState([]);
+  const [quickFilterBranches, setQuickFilterBranches] = useState([]);
+  const [quickFilterCoursesLoading, setQuickFilterCoursesLoading] = useState(false);
+  const [quickFilterBranchesLoading, setQuickFilterBranchesLoading] = useState(false);
   const [admissionNumberLoading, setAdmissionNumberLoading] = useState(false);
   const [isAdmissionNumberManual, setIsAdmissionNumberManual] = useState(false);
 
@@ -243,6 +247,70 @@ const AddStudent = () => {
     loadCourseConfig();
   }, [selectedCollegeId]);
 
+  // Same endpoint as Students Database page: quick-filters for courses and branches
+  useEffect(() => {
+    if (!studentData.college) {
+      setQuickFilterCourses([]);
+      setQuickFilterBranches([]);
+      return;
+    }
+    const fetchQuickFilterCourses = async () => {
+      try {
+        setQuickFilterCoursesLoading(true);
+        const params = new URLSearchParams();
+        params.append('college', studentData.college);
+        if (studentData.batch) params.append('batch', studentData.batch);
+        if (selectedLevel) params.append('level', selectedLevel);
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setQuickFilterCourses(data.courses || []);
+          setQuickFilterBranches([]);
+        } else {
+          setQuickFilterCourses([]);
+          setQuickFilterBranches([]);
+        }
+      } catch (error) {
+        console.error('Failed to load courses/branches from quick-filters', error);
+        setQuickFilterCourses([]);
+        setQuickFilterBranches([]);
+      } finally {
+        setQuickFilterCoursesLoading(false);
+      }
+    };
+    fetchQuickFilterCourses();
+  }, [studentData.college, studentData.batch, selectedLevel]);
+
+  useEffect(() => {
+    if (!studentData.college || !selectedCourseName) {
+      setQuickFilterBranches((prev) => (prev.length ? [] : prev));
+      return;
+    }
+    const fetchQuickFilterBranches = async () => {
+      try {
+        setQuickFilterBranchesLoading(true);
+        const params = new URLSearchParams();
+        params.append('college', studentData.college);
+        params.append('course', selectedCourseName);
+        if (studentData.batch) params.append('batch', studentData.batch);
+        if (selectedLevel) params.append('level', selectedLevel);
+        const response = await api.get(`/students/quick-filters?${params.toString()}`);
+        if (response.data?.success) {
+          const data = response.data.data || {};
+          setQuickFilterBranches(data.branches || []);
+        } else {
+          setQuickFilterBranches([]);
+        }
+      } catch (error) {
+        console.error('Failed to load branches from quick-filters', error);
+        setQuickFilterBranches([]);
+      } finally {
+        setQuickFilterBranchesLoading(false);
+      }
+    };
+    fetchQuickFilterBranches();
+  }, [studentData.college, studentData.batch, selectedLevel, selectedCourseName]);
+
   const availableCourses = useMemo(
     () => {
       let courses = courseOptions.filter((course) => course?.isActive !== false);
@@ -384,11 +452,14 @@ const AddStudent = () => {
     );
   }, [activeStructure, studentData.current_year]);
 
-  // Reset branch selection when batch changes (as branches are filtered by batch)
+  // Reset branch selection when batch/course changes (branches filtered by quick-filters or course config)
   useEffect(() => {
-    if (selectedBranchName && branchOptions.length > 0) {
-      const branchStillValid = branchOptions.some(
-        (branch) => branch.name?.toLowerCase() === selectedBranchName.toLowerCase()
+    const branchList = quickFilterBranches.length > 0
+      ? quickFilterBranches
+      : branchOptions.map((b) => b.name);
+    if (selectedBranchName && branchList.length > 0) {
+      const branchStillValid = branchList.some(
+        (name) => name?.toLowerCase() === selectedBranchName.toLowerCase()
       );
       if (!branchStillValid) {
         setSelectedBranchName('');
@@ -396,11 +467,13 @@ const AddStudent = () => {
       }
     }
 
-    // Auto-select first branch if only one option available for this batch
-    if (!selectedBranchName && branchOptions.length === 1) {
-      setSelectedBranchName(branchOptions[0].name);
+    // Auto-select first branch if only one option available
+    if (!selectedBranchName && branchList.length === 1) {
+      const name = quickFilterBranches.length > 0 ? quickFilterBranches[0] : branchOptions[0].name;
+      setSelectedBranchName(name);
+      setStudentData((prev) => ({ ...prev, branch: name }));
     }
-  }, [studentData.batch, branchOptions, selectedBranchName]);
+  }, [studentData.batch, quickFilterBranches, branchOptions, selectedBranchName]);
 
   useEffect(() => {
     if (!selectedCourse) {
@@ -1188,17 +1261,17 @@ const AddStudent = () => {
                 </select>
               </div>
 
-              {/* 4. Program */}
+              {/* 4. Program - same source as Students Database (quick-filters) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Program <span className="text-red-500">*</span>
                 </label>
-                {courseOptionsLoading ? (
+                {(courseOptionsLoading || (studentData.college && quickFilterCoursesLoading)) ? (
                   <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
                     <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
                     Loading programs...
                   </div>
-                ) : availableCourses.length > 0 ? (
+                ) : (quickFilterCourses.length > 0 || availableCourses.length > 0) ? (
                   <select
                     value={selectedCourseName}
                     onChange={handleCourseSelect}
@@ -1206,11 +1279,15 @@ const AddStudent = () => {
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Course</option>
-                    {availableCourses.map((course) => (
-                      <option key={course.name} value={course.name}>
-                        {course.name}
-                      </option>
-                    ))}
+                    {quickFilterCourses.length > 0
+                      ? quickFilterCourses.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))
+                      : availableCourses.map((course) => (
+                          <option key={course.name} value={course.name}>
+                            {course.name}
+                          </option>
+                        ))}
                   </select>
                 ) : (
                   <input
@@ -1218,18 +1295,23 @@ const AddStudent = () => {
                     name="course"
                     value={studentData.course}
                     onChange={handleChange}
-                    placeholder="Enter course"
+                    placeholder={studentData.college ? 'No programs in quick-filters for this college/batch' : 'Select college first'}
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
               </div>
 
-              {/* 4. Branch */}
+              {/* 5. Branch - same source as Students Database (quick-filters) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Branch <span className="text-red-500">*</span>
                 </label>
-                {availableCourses.length > 0 && branchOptions.length > 0 ? (
+                {selectedCourseName && quickFilterBranchesLoading ? (
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
+                    <LoadingAnimation width={16} height={16} showMessage={false} variant="inline" />
+                    Loading branches...
+                  </div>
+                ) : (quickFilterBranches.length > 0 || branchOptions.length > 0) ? (
                   <select
                     value={selectedBranchName}
                     onChange={handleBranchSelect}
@@ -1237,11 +1319,15 @@ const AddStudent = () => {
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   >
                     <option value="">Select Branch</option>
-                    {branchOptions.map((branch) => (
-                      <option key={branch.name} value={branch.name}>
-                        {branch.name}
-                      </option>
-                    ))}
+                    {quickFilterBranches.length > 0
+                      ? quickFilterBranches.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))
+                      : branchOptions.map((branch) => (
+                          <option key={branch.name} value={branch.name}>
+                            {branch.name}
+                          </option>
+                        ))}
                   </select>
                 ) : (
                   <input
@@ -1250,7 +1336,7 @@ const AddStudent = () => {
                     value={studentData.branch}
                     onChange={handleChange}
                     required
-                    placeholder={availableCourses.length > 0 ? 'No branches configured' : 'Enter branch'}
+                    placeholder={selectedCourseName ? 'No branches for this program' : 'Select program first'}
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none touch-manipulation min-h-[44px]"
                   />
                 )}
