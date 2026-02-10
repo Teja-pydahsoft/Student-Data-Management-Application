@@ -106,6 +106,7 @@ const NAV_ITEMS = [
     label: "Settings",
     permission: FRONTEND_MODULES.COURSES,
   },
+
   {
     path: "/users",
     icon: ShieldCheck,
@@ -117,6 +118,18 @@ const NAV_ITEMS = [
     icon: GraduationCap,
     label: "Faculty Management",
     permission: FRONTEND_MODULES.FACULTY_MANAGEMENT,
+    subItems: [
+      {
+        path: "/faculty-management",
+        label: "Faculty List",
+        permission: FRONTEND_MODULES.FACULTY_MANAGEMENT,
+      },
+      {
+        path: "/feedback-forms",
+        label: "Feed Back",
+        permission: FRONTEND_MODULES.FACULTY_MANAGEMENT,
+      }
+    ]
   },
   {
     path: "/reports",

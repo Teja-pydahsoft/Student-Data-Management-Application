@@ -143,6 +143,7 @@ app.use("/api/events", require("./routes/eventRoutes"));
 app.use("/api/student-history", require("./routes/studentHistoryRoutes"));
 app.use("/api/sms-templates", require("./routes/smsTemplateRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes")); // [NEW] Notification Routes
+app.use("/api/feedback-forms", require("./routes/feedbackRoutes")); // [NEW] Feedback Form Routes
 // app.use('/api/notifications', require('./routes/pushRoutes')); // Old push routes (commented/replaced or co-exists?)
 // Keeping pushRoutes if needed for push notifications, but avoiding conflict on same path if problematic.
 // The user request was "notification icon ... inside notification center", implying web notifications.
@@ -170,6 +171,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/previous-colleges", require("./routes/previousCollegeRoutes"));
 app.use("/api/faculty", require("./routes/facultyRoutes"));
 app.use("/api/period-slots", require("./routes/periodSlotsRoutes"));
+app.use("/api/timetable", require("./routes/timetableRoutes"));
 app.use("/api/subjects", require("./routes/subjectsRoutes"));
 app.use("/api/hourly-attendance", require("./routes/hourlyAttendanceRoutes"));
 app.use("/api/academic-content", require("./routes/academicContentRoutes"));

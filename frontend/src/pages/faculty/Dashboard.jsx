@@ -5,10 +5,11 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, FileText, Megaphone, Users, MessageSquare } from 'lucide-react';
+import { CalendarCheck, FileText, Megaphone, Users, MessageSquare, Clock } from 'lucide-react';
 
 const cards = [
   { path: '/faculty/attendance', icon: CalendarCheck, label: 'Post Attendance', desc: 'Mark hourly attendance for your classes' },
+  { path: '/faculty/timetable', icon: Clock, label: 'My Timetable', desc: 'View your weekly teaching schedule' },
   { path: '/faculty/content', icon: FileText, label: 'My Content', desc: 'Notes, assignments & tests' },
   { path: '/faculty/announcements', icon: Megaphone, label: 'Announcements', desc: 'Post and manage announcements' },
   { path: '/faculty/students', icon: Users, label: 'Students', desc: 'View students in your scope' },

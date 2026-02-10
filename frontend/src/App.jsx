@@ -8,6 +8,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Forms from './pages/Forms';
 import FormBuilder from './pages/FormBuilder';
+import FeedbackForms from './pages/FeedbackForms';
+import FeedbackFormBuilder from './pages/FeedbackFormBuilder';
 import Submissions from './pages/Submissions';
 import Students from './pages/Students';
 import AddStudent from './pages/AddStudent';
@@ -43,6 +45,7 @@ import SemesterRegistration from './pages/student/SemesterRegistration';
 import RaiseTicket from './pages/student/RaiseTicket';
 import MyTickets from './pages/student/MyTickets';
 import StudentAnnouncements from './pages/student/StudentAnnouncements';
+import StudentFeedback from './pages/student/StudentFeedback';
 import StudentAttendance from './pages/student/Attendance';
 import StudentServices from './pages/student/Services';
 import StudentClubs from './pages/student/StudentClubs';
@@ -57,10 +60,12 @@ import ContentManage from './pages/faculty/ContentManage';
 import FacultyAnnouncements from './pages/faculty/Announcements';
 import FacultyStudents from './pages/faculty/Students';
 import FacultyChats from './pages/faculty/Chats';
+import FacultyTimetable from './pages/faculty/FacultyTimetable';
 
 // Event Pages
 import EventCalendar from './pages/admin/EventCalendar';
 import StudentCalendar from './pages/student/StudentCalendar';
+import StudentTimetable from './pages/student/StudentTimetable';
 
 // Layout
 import AdminLayout from './components/Layout/AdminLayout';
@@ -163,6 +168,9 @@ function App() {
           <Route path="forms" element={<Forms />} />
           <Route path="forms/new" element={<FormBuilder />} />
           <Route path="forms/edit/:formId" element={<FormBuilder />} />
+          <Route path="feedback-forms" element={<FeedbackForms />} />
+          <Route path="feedback-forms/new" element={<FeedbackFormBuilder />} />
+          <Route path="feedback-forms/edit/:formId" element={<FeedbackFormBuilder />} />
           <Route path="students" element={<Students />} />
           <Route path="students/add" element={<AddStudent />} />
           <Route path="students/self-registration" element={<Submissions />} />
@@ -212,10 +220,13 @@ function App() {
           <Route path="announcements" element={<StudentAnnouncements />} />
           <Route path="events" element={<StudentCalendar />} />
           <Route path="attendance" element={<StudentAttendance />} />
+          <Route path="timetable" element={<StudentTimetable />} />
           <Route path="services" element={<StudentServices />} />
           <Route path="clubs" element={<StudentClubs />} />
           <Route path="fees" element={<FeeManagement />} />
+
           <Route path="transport" element={<Transport />} />
+          <Route path="feedback" element={<StudentFeedback />} />
         </Route>
 
         {/* Protected Faculty Routes (v2.0) */}
@@ -230,6 +241,7 @@ function App() {
           <Route index element={<Navigate to="/faculty/dashboard" replace />} />
           <Route path="dashboard" element={<FacultyDashboard />} />
           <Route path="attendance" element={<PostAttendance />} />
+          <Route path="timetable" element={<FacultyTimetable />} />
           <Route path="content" element={<ContentManage />} />
           <Route path="announcements" element={<FacultyAnnouncements />} />
           <Route path="students" element={<FacultyStudents />} />

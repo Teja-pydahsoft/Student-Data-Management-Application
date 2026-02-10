@@ -518,7 +518,7 @@ exports.getProgramYearSubjects = async (req, res) => {
         try {
           const [rows] = await masterPool.query(
             `SELECT bss.year_of_study AS year, bss.semester_number AS semester, bss.subject_id,
-                    s.name AS subject_name, s.code AS subject_code
+                    s.name AS subject_name, s.code AS subject_code, s.subject_type, s.units, s.experiments_count, s.credits
              FROM branch_semester_subjects bss
              JOIN subjects s ON s.id = bss.subject_id
              WHERE bss.branch_id = ? AND bss.year_of_study = ?
@@ -553,6 +553,10 @@ exports.getProgramYearSubjects = async (req, res) => {
           subjectId: a.subject_id,
           subjectName: a.subject_name,
           subjectCode: a.subject_code,
+          subjectType: a.subject_type,
+          units: a.units,
+          experimentsCount: a.experiments_count,
+          credits: a.credits,
           faculty: facultyBySubject[a.subject_id] || []
         });
       });
@@ -618,7 +622,7 @@ exports.getBranchYearSemSubjects = async (req, res) => {
     try {
       const [rows] = await masterPool.query(
         `SELECT bss.year_of_study AS year, bss.semester_number AS semester, bss.subject_id,
-                s.name AS subject_name, s.code AS subject_code
+                s.name AS subject_name, s.code AS subject_code, s.subject_type, s.units, s.experiments_count, s.credits
          FROM branch_semester_subjects bss
          JOIN subjects s ON s.id = bss.subject_id
          WHERE bss.branch_id = ?
@@ -666,6 +670,10 @@ exports.getBranchYearSemSubjects = async (req, res) => {
         subjectId: a.subject_id,
         subjectName: a.subject_name,
         subjectCode: a.subject_code,
+        subjectType: a.subject_type,
+        units: a.units,
+        experimentsCount: a.experiments_count,
+        credits: a.credits,
         faculty: facultyBySubject[a.subject_id] || []
       });
     });

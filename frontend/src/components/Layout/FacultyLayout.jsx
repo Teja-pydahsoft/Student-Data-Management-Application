@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   GraduationCap,
+  Clock,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -23,6 +24,7 @@ import toast from 'react-hot-toast';
 const NAV_ITEMS = [
   { path: '/faculty/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/faculty/attendance', icon: CalendarCheck, label: 'Post Attendance' },
+  { path: '/faculty/timetable', icon: Clock, label: 'My Timetable' },
   { path: '/faculty/content', icon: FileText, label: 'My Content' },
   { path: '/faculty/announcements', icon: Megaphone, label: 'Announcements' },
   { path: '/faculty/students', icon: Users, label: 'Students' },
@@ -53,9 +55,8 @@ const FacultyLayout = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          }`}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200">
           <div className="flex items-center gap-2">
@@ -79,10 +80,9 @@ const FacultyLayout = () => {
               to={item.path}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-teal-50 text-teal-700'
-                    : 'text-slate-600 hover:bg-slate-100'
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                  ? 'bg-teal-50 text-teal-700'
+                  : 'text-slate-600 hover:bg-slate-100'
                 }`
               }
             >

@@ -25,6 +25,7 @@ const Dashboard = () => {
     const [hourlySummary, setHourlySummary] = useState(null);
     const [academicContent, setAcademicContent] = useState({ tests: 0, notes: 0 });
     const [internalMarksCount, setInternalMarksCount] = useState(0);
+    const [todayTimetable, setTodayTimetable] = useState([]);
 
     // UI States
     const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -80,12 +81,12 @@ const Dashboard = () => {
     useEffect(() => {
         // Reset the check flag when user changes (new session)
         hasCheckedAnnouncements.current = false;
-        
+
         const fetchAllData = async () => {
             try {
                 if (!user?.admission_number) return;
 
-                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes, clubsRes, hourlyRes, contentRes, marksRes] = await Promise.allSettled([
+                const [profileRes, announcementsRes, pollsRes, attendanceRes, servicesRes, eventsRes, clubsRes, hourlyRes, contentRes, marksRes, timetableRes, periodSlotsRes] = await Promise.allSettled([
                     api.get(`/students/${user.admission_number}`),
                     api.get('/announcements/student'),
                     api.get('/polls/student'),
@@ -95,7 +96,9 @@ const Dashboard = () => {
                     clubService.getClubs(),
                     api.get('/hourly-attendance/student-summary'),
                     api.get('/academic-content'),
-                    api.get('/internal-marks/student/me')
+                    api.get('/internal-marks/student/me'),
+                    api.get('/timetable', { params: { branch_id: user.branch_id, year: user.current_year, semester: user.current_semester || 1 } }),
+                    api.get('/period-slots', { params: { college_id: user.college_id } })
                 ]);
 
                 // Handle Profile
@@ -161,6 +164,21 @@ const Dashboard = () => {
                 }
                 if (marksRes.status === 'fulfilled' && marksRes.value.data?.success && Array.isArray(marksRes.value.data?.data)) {
                     setInternalMarksCount(marksRes.value.data.data.length);
+                }
+
+                if (timetableRes.status === 'fulfilled' && timetableRes.value.data?.success && periodSlotsRes.status === 'fulfilled' && periodSlotsRes.value.data?.success) {
+                    const allTimetable = timetableRes.value.data.data;
+                    const allSlots = periodSlotsRes.value.data.data;
+                    const dayMap = ['SUN', 'MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT'];
+                    const currentDay = dayMap[new Date().getDay()];
+
+                    const todayEntries = allTimetable.filter(item => item.day_of_week === currentDay);
+                    // Merge entry with slot info
+                    const merged = allSlots.map(slot => {
+                        const entry = todayEntries.find(e => e.period_slot_id === slot.id);
+                        return { ...slot, entry };
+                    });
+                    setTodayTimetable(merged);
                 }
 
             } catch (error) {
@@ -317,7 +335,7 @@ const Dashboard = () => {
             // Convert all IDs to strings for consistent comparison
             const seenIdsStr = seenIds.map(id => String(id));
             const currentIdStr = String(currentAnnouncement.id);
-            
+
             if (!seenIdsStr.includes(currentIdStr)) {
                 // Store the original ID format (number or string) as it was
                 seenIds.push(currentAnnouncement.id);
@@ -466,7 +484,7 @@ const Dashboard = () => {
                         )}
                         <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-1 bg-white">
                             <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4 leading-tight shrink-0">{currentAnnouncement.title}</h3>
-                            <div className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base leading-relaxed" style={{ 
+                            <div className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base leading-relaxed" style={{
                                 display: '-webkit-box',
                                 WebkitLineClamp: 2,
                                 WebkitBoxOrient: 'vertical',
@@ -789,6 +807,66 @@ const Dashboard = () => {
                     </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">Hourly attendance %, internal marks, tests and notes from faculty.</p>
+            </div>
+
+            {/* Today's Schedule (NEW) */}
+            <div className="bg-white rounded-xl p-4 lg:p-6 shadow-sm border border-gray-100 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                        <Clock size={16} /> Today's Schedule
+                    </h3>
+                    <Link to="/student/timetable" className="text-xs text-indigo-600 hover:underline font-bold flex items-center gap-1">
+                        Full Timetable <ArrowRight size={12} />
+                    </Link>
+                </div>
+
+                {todayTimetable && todayTimetable.length > 0 ? (
+                    <div className="overflow-x-auto pb-2 -mx-1 px-1 custom-scrollbar">
+                        <div className="flex gap-4 min-w-max">
+                            {todayTimetable.map((slot, idx) => (
+                                <div
+                                    key={slot.id}
+                                    className={`w-44 p-4 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md ${slot.entry
+                                            ? slot.entry.type === 'subject' ? 'bg-indigo-50/50 border-indigo-100' :
+                                                slot.entry.type === 'lab' ? 'bg-purple-50/50 border-purple-100' :
+                                                    'bg-amber-50/50 border-amber-100'
+                                            : 'bg-slate-50 border-slate-100 opacity-60'
+                                        }`}
+                                >
+                                    <div className="mb-3">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{slot.slot_name}</p>
+                                        <p className="text-[11px] font-bold text-slate-600 mb-2">{slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}</p>
+                                        <h4 className="text-sm font-bold text-slate-800 line-clamp-2 leading-tight">
+                                            {slot.entry ? (slot.entry.type === 'subject' ? slot.entry.subject_name : slot.entry.custom_label) : 'No Class'}
+                                        </h4>
+                                    </div>
+
+                                    {slot.entry && (
+                                        <div className="flex items-center justify-between mt-auto">
+                                            <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${slot.entry.type === 'subject' ? 'bg-indigo-100 text-indigo-600' :
+                                                    slot.entry.type === 'lab' ? 'bg-purple-100 text-purple-600' :
+                                                        'bg-amber-100 text-amber-600'
+                                                }`}>
+                                                {slot.entry.type}
+                                            </span>
+                                            {slot.entry.subject_code && (
+                                                <span className="text-[9px] font-bold text-slate-400">{slot.entry.subject_code}</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm mb-3">
+                            <Calendar className="w-6 h-6 text-slate-300" />
+                        </div>
+                        <p className="text-sm font-bold text-slate-400">No classes scheduled for today</p>
+                        <p className="text-[10px] text-slate-300 uppercase tracking-widest font-black mt-1">RELAX & RECHARGE</p>
+                    </div>
+                )}
             </div>
 
             {/* REMOVED STANDALONE CLUB PAYMENT ALERT */}

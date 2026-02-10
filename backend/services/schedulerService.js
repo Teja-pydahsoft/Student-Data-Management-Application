@@ -2,6 +2,83 @@ const cron = require('node-cron');
 const { masterPool } = require('../config/database');
 const { sendBrevoEmail } = require('../utils/emailService');
 const { checkAndSendBirthdayNotifications } = require('./birthdayNotificationService');
+const { createBroadcastNotification } = require('./notificationService');
+
+// Helper to check if a form falls due today based on recurrence config
+const isFormDue = (form, today) => {
+    try {
+        const config = JSON.parse(form.recurrence_config);
+        if (!config || !config.enabled) return false;
+
+        const recurrenceType = config.frequency; // daily, weekly, monthly
+        const interval = parseInt(config.interval) || 1;
+
+        const createdAt = new Date(form.created_at);
+        const todayDate = new Date(today);
+
+        // Normalize time to midnight
+        createdAt.setHours(0, 0, 0, 0);
+        todayDate.setHours(0, 0, 0, 0);
+
+        const diffTime = Math.abs(todayDate - createdAt);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (recurrenceType === 'daily') {
+            return diffDays % interval === 0;
+        } else if (recurrenceType === 'weekly') {
+            const currentDay = todayDate.getDay(); // 0 (Sun) - 6 (Sat)
+            // Frontend days: 1 (Mon) - 7 (Sun)
+            const adjustedDay = currentDay === 0 ? 7 : currentDay;
+            if (!config.days || !config.days.includes(adjustedDay)) return false;
+
+            const diffWeeks = Math.floor(diffDays / 7);
+            return diffWeeks % interval === 0;
+        } else if (recurrenceType === 'monthly') {
+            const currentDayOfMonth = todayDate.getDate();
+            // Assuming created date's day as anchor if not specified, or 1st?
+            // Or config.days usually not used for monthly.
+            // If today matches creation day?
+            if (currentDayOfMonth !== createdAt.getDate()) return false;
+
+            const monthsDiff = (todayDate.getFullYear() - createdAt.getFullYear()) * 12 + (todayDate.getMonth() - createdAt.getMonth());
+            return monthsDiff % interval === 0;
+        }
+        return false;
+
+    } catch (e) {
+        console.error('Error checking recurrence for form:', form.form_id, e);
+        return false;
+    }
+};
+
+const checkAndResendRecurringForms = async () => {
+    console.log('⏰ Checking for recurring feedback forms...');
+    try {
+        const today = new Date();
+        const [forms] = await masterPool.query(
+            "SELECT * FROM forms WHERE is_active = 1 AND recurrence_config IS NOT NULL"
+        );
+
+        for (const form of forms) {
+            if (isFormDue(form, today)) {
+                console.log(`🚀 Form ${form.form_name} (${form.form_id}) is due for resending.`);
+                // Send notification to all Regular students
+                // Optimization: In production, batch this or use specific target groups
+                const [students] = await masterPool.query("SELECT id FROM students WHERE student_status = 'Regular'");
+                const studentIds = students.map(s => s.id);
+
+                await createBroadcastNotification(studentIds, {
+                    title: 'Feedback Form Reminder',
+                    message: `Please complete the feedback form: ${form.form_name}`,
+                    category: 'Feedback'
+                });
+                console.log(`✅ Sent notification for form ${form.form_name} to ${studentIds.length} students.`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error in checkAndResendRecurringForms:', error);
+    }
+};
 
 // Helper to get today's date in YYYY-MM-DD format (IST)
 const getTodayDate = () => {
@@ -427,6 +504,21 @@ const initScheduledJobs = () => {
     });
 
     console.log('✅ 12 AM IST Birthday Check (push + SMS) scheduled.');
+
+    // Schedule Feedback Form Resend Check for 9:00 AM IST
+    cron.schedule('0 9 * * *', async () => {
+        console.log('⏰ Triggering 9 AM IST Feedback Form Check...');
+        try {
+            await checkAndResendRecurringForms();
+        } catch (err) {
+            console.error("❌ Scheduled feedback form check failed:", err);
+        }
+    }, {
+        scheduled: true,
+        timezone: "Asia/Kolkata"
+    });
+
+    console.log('✅ 9 AM IST Feedback Form Check scheduled.');
 };
 
 module.exports = {

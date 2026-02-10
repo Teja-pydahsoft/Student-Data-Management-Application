@@ -36,8 +36,8 @@ exports.createForm = async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL
       ? process.env.FRONTEND_URL.split(',')[0].trim()
       : (process.env.NODE_ENV === 'production'
-          ? 'https://pydahsdbms.vercel.app'
-          : 'http://localhost:3000');
+        ? 'https://pydahsdbms.vercel.app'
+        : 'http://localhost:3000');
 
     const formUrl = `${frontendUrl}/form/${formId}`;
 
@@ -49,6 +49,7 @@ exports.createForm = async (req, res) => {
 
     const adminIdForDb = getAdminIdForDb(req);
     // Insert form
+    // Note: recurrence_config and form_category column must exist in DB
     await conn.query(
       `INSERT INTO forms (form_id, form_name, form_description, form_fields, qr_code_data, created_by)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -110,9 +111,9 @@ exports.getAllForms = async (req, res) => {
 
   } catch (error) {
     console.error('Get forms error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching forms' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching forms'
     });
   }
 };
@@ -131,9 +132,9 @@ exports.getFormById = async (req, res) => {
     `, [formId]);
 
     if (forms.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Form not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
       });
     }
 
@@ -149,9 +150,9 @@ exports.getFormById = async (req, res) => {
 
   } catch (error) {
     console.error('Get form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching form'
     });
   }
 };
@@ -174,9 +175,9 @@ exports.updateForm = async (req, res) => {
 
     if (forms.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Form not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
       });
     }
 
@@ -203,9 +204,9 @@ exports.updateForm = async (req, res) => {
 
     if (updates.length === 0) {
       await conn.rollback();
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No fields to update' 
+      return res.status(400).json({
+        success: false,
+        message: 'No fields to update'
       });
     }
 
@@ -234,9 +235,9 @@ exports.updateForm = async (req, res) => {
   } catch (error) {
     if (conn) await conn.rollback();
     console.error('Update form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while updating form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating form'
     });
   } finally {
     if (conn) conn.release();
@@ -259,9 +260,9 @@ exports.deleteForm = async (req, res) => {
 
     if (result.affectedRows === 0) {
       await conn.rollback();
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Form not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
       });
     }
 
@@ -283,9 +284,9 @@ exports.deleteForm = async (req, res) => {
   } catch (error) {
     if (conn) await conn.rollback();
     console.error('Delete form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while deleting form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting form'
     });
   } finally {
     if (conn) conn.release();
@@ -306,24 +307,24 @@ exports.getPublicForm = async (req, res) => {
     );
 
     if (forms.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Form not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Form not found'
       });
     }
 
     const form = forms[0];
 
     if (!form.is_active) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'This form is no longer active' 
+      return res.status(403).json({
+        success: false,
+        message: 'This form is no longer active'
       });
     }
 
     // Add cache headers for better performance (cache for 5 minutes)
     res.set('Cache-Control', 'public, max-age=300');
-    
+
     res.json({
       success: true,
       data: {
@@ -334,9 +335,9 @@ exports.getPublicForm = async (req, res) => {
 
   } catch (error) {
     console.error('Get public form error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error while fetching form' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching form'
     });
   }
 };
