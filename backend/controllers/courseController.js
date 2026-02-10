@@ -99,10 +99,10 @@ const buildStructure = (courseConfig, branchConfig) => {
 const serializeBranchRow = (branchRow, academicYears = null) => {
   // If academicYears array is provided (from junction table), use it
   // Otherwise, fall back to single academicYearId (backward compatibility for old data)
-  const academicYearIds = academicYears 
+  const academicYearIds = academicYears
     ? academicYears.map(ay => ay.id).filter(Boolean)
     : (branchRow.academic_year_id ? [branchRow.academic_year_id] : []);
-  
+
   const academicYearLabels = academicYears
     ? academicYears.map(ay => ay.year_label).filter(Boolean)
     : (branchRow.academic_year_label ? [branchRow.academic_year_label] : []);
@@ -791,8 +791,17 @@ exports.updateCourse = async (req, res) => {
     let studentsUpdated = 0;
     if (newCourseName && newCourseName !== oldCourseName) {
       const [updateResult] = await masterPool.query(
-        `UPDATE students SET course = ?, updated_at = CURRENT_TIMESTAMP WHERE course = ?`,
-        [newCourseName, oldCourseName]
+        `UPDATE students 
+         SET course = ?, 
+             student_data = JSON_SET(
+               IFNULL(student_data, '{}'), 
+               '$.course', ?,
+               '$.Course', ?,
+               '$."Course Name"', ?
+             ),
+             updated_at = CURRENT_TIMESTAMP 
+         WHERE course = ?`,
+        [newCourseName, newCourseName, newCourseName, newCourseName, oldCourseName]
       );
       studentsUpdated = updateResult.affectedRows || 0;
       console.log(`Course rename cascade: Updated ${studentsUpdated} students from "${oldCourseName}" to "${newCourseName}"`);
@@ -831,8 +840,8 @@ exports.updateCourse = async (req, res) => {
         ? (error.message.includes('unique_course_name_college') || error.message.includes('unique_course_name')
           ? 'Course with the same name already exists in this college'
           : error.message.includes('unique_course_code_college') || error.message.includes('unique_course_code')
-          ? 'Course with the same code already exists in this college'
-          : 'Course with the same name or code already exists in this college')
+            ? 'Course with the same code already exists in this college'
+            : 'Course with the same name or code already exists in this college')
         : error.message || 'Failed to update course'
     });
   }
@@ -1081,7 +1090,7 @@ exports.createBranch = async (req, res) => {
       if (existing.length > 0) {
         // Branch already exists - use existing branch
         branchId = existing[0].id;
-        
+
         // Update branch details if needed
         await connection.query(
           `UPDATE course_branches 
@@ -1127,7 +1136,7 @@ exports.createBranch = async (req, res) => {
 
         // Insert new academic year associations (only for years not already associated)
         const newYearIds = academicYearIds.filter(yearId => !existingYearIds.includes(yearId));
-        
+
         if (newYearIds.length > 0) {
           const values = newYearIds.map(yearId => [branchId, yearId]);
           await connection.query(
@@ -1165,13 +1174,13 @@ exports.createBranch = async (req, res) => {
         const branchData = serializeBranchRow(branchRows[0], academicYears);
         res.status(isNewBranch ? 201 : 200).json({
           success: true,
-          message: isNewBranch 
-            ? (academicYears.length > 0 
-                ? `Branch created successfully for ${academicYears.length} batch(es)`
-                : `Branch created successfully. You can add batches later.`)
+          message: isNewBranch
+            ? (academicYears.length > 0
+              ? `Branch created successfully for ${academicYears.length} batch(es)`
+              : `Branch created successfully. You can add batches later.`)
             : (academicYears.length > 0
-                ? `Branch updated successfully. Now associated with ${academicYears.length} batch(es)`
-                : `Branch updated successfully. No batches associated yet.`),
+              ? `Branch updated successfully. Now associated with ${academicYears.length} batch(es)`
+              : `Branch updated successfully. No batches associated yet.`),
           data: branchData,
           count: academicYears.length
         });
@@ -1396,7 +1405,7 @@ exports.updateBranch = async (req, res) => {
     }
 
     const connection = await masterPool.getConnection();
-    
+
     try {
       await connection.beginTransaction();
 
@@ -1433,9 +1442,17 @@ exports.updateBranch = async (req, res) => {
       let studentsUpdated = 0;
       if (newBranchName && newBranchName !== oldBranchName) {
         const [updateResult] = await connection.query(
-          `UPDATE students SET branch = ?, updated_at = CURRENT_TIMESTAMP 
+          `UPDATE students 
+           SET branch = ?, 
+               student_data = JSON_SET(
+                 IFNULL(student_data, '{}'), 
+                 '$.branch', ?,
+                 '$.Branch', ?,
+                 '$."Branch Name"', ?
+               ),
+               updated_at = CURRENT_TIMESTAMP 
            WHERE branch = ? AND course = ?`,
-          [newBranchName, oldBranchName, course.name]
+          [newBranchName, newBranchName, newBranchName, newBranchName, oldBranchName, course.name]
         );
         studentsUpdated = updateResult.affectedRows || 0;
         console.log(`Branch rename cascade: Updated ${studentsUpdated} students from "${oldBranchName}" to "${newBranchName}"`);
@@ -1531,7 +1548,7 @@ exports.deleteBranch = async (req, res) => {
     }
 
     const { name: branchName, code: branchCode } = branchRow[0];
-    
+
     // Get academic years for this branch from junction table
     const [academicYearsData] = await connection.query(`
       SELECT ay.id, ay.year_label
@@ -1540,7 +1557,7 @@ exports.deleteBranch = async (req, res) => {
       WHERE bay.branch_id = ?
       ORDER BY ay.year_label ASC
     `, [branchId]);
-    
+
     const academicYears = academicYearsData.map(row => row.year_label);
 
     // Get course name
@@ -1781,7 +1798,7 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
     }
 
     const { branch_name: branchName, course_name: courseName } = branchRow[0];
-    
+
     // Get academic years for this branch from junction table
     const [academicYearsData] = await masterPool.query(`
       SELECT ay.year_label
@@ -1790,7 +1807,7 @@ exports.getAffectedStudentsByBranch = async (req, res) => {
       WHERE bay.branch_id = ?
       ORDER BY ay.year_label ASC
     `, [branchId]);
-    
+
     const academicYears = academicYearsData.map(row => row.year_label);
 
     // Get all students under this branch (limit to 100 for preview)

@@ -1502,34 +1502,45 @@ const Students = () => {
       ...student.student_data,
       // Map ALL individual database columns to ensure they're available
       // These override student_data if they exist in individual columns
-      ...(student.student_name && { student_name: student.student_name }),
-      ...(student.father_name && { father_name: student.father_name }),
-      ...(student.gender && { gender: student.gender }),
-      ...(student.dob && { dob: student.dob }),
-      ...(student.student_mobile && { student_mobile: student.student_mobile }),
-      ...(student.parent_mobile1 && { parent_mobile1: student.parent_mobile1 }),
-      ...(student.parent_mobile2 && { parent_mobile2: student.parent_mobile2 }),
-      ...(student.adhar_no && { adhar_no: student.adhar_no }),
-      ...(student.caste && { caste: student.caste }),
-      ...(student.batch && { batch: student.batch }),
-      ...(student.college && { college: student.college }),
-      ...(student.course && { course: student.course }),
-      ...(student.branch && { branch: student.branch }),
-      ...(student.stud_type && { stud_type: student.stud_type }),
-      ...(student.student_status && { student_status: student.student_status }),
+      ...(student.student_name && { student_name: student.student_name, 'Student Name': student.student_name }),
+      ...(student.father_name && { father_name: student.father_name, 'Father Name': student.father_name }),
+      ...(student.gender && { gender: student.gender, 'M/F': student.gender }),
+      ...(student.dob && { dob: student.dob, 'DOB (Date of Birth - DD-MM-YYYY)': student.dob }),
+      ...(student.student_mobile && { student_mobile: student.student_mobile, 'Student Mobile Number': student.student_mobile }),
+      ...(student.parent_mobile1 && { parent_mobile1: student.parent_mobile1, 'Parent Mobile Number 1': student.parent_mobile1 }),
+      ...(student.parent_mobile2 && { parent_mobile2: student.parent_mobile2, 'Parent Mobile Number 2': student.parent_mobile2 }),
+      ...(student.adhar_no && { adhar_no: student.adhar_no, 'ADHAR No': student.adhar_no }),
+      ...(student.caste && { caste: student.caste, 'Caste': student.caste }),
+      ...(student.batch && { batch: student.batch, 'Batch': student.batch }),
+      ...(student.college && { college: student.college, 'College': student.college }),
+      // CRITICAL: Ensure course and branch are overridden across all possible JSON keys
+      ...(student.course && {
+        course: student.course,
+        'Course': student.course,
+        'Course Name': student.course,
+        'Program': student.course,
+        'Program Name': student.course
+      }),
+      ...(student.branch && {
+        branch: student.branch,
+        'Branch': student.branch,
+        'Branch Name': student.branch
+      }),
+      ...(student.stud_type && { stud_type: student.stud_type, 'StudType': student.stud_type }),
+      ...(student.student_status && { student_status: student.student_status, 'Student Status': student.student_status }),
       // Always include scholar_status so it can be updated from blank
       scholar_status: student.scholar_status || '',
       ...(student.student_address && { student_address: student.student_address }),
       ...(student.city_village && { city_village: student.city_village }),
       ...(student.mandal_name && { mandal_name: student.mandal_name }),
-      ...(student.district && { district: student.district }),
+      ...(student.district && { district: student.district, 'District': student.district }),
       ...(student.pin_no && { pin_no: student.pin_no }),
       ...(student.previous_college && { previous_college: student.previous_college }),
       // Always include certificates_status even if null, so it can be edited
       certificates_status: student.certificates_status || null,
       ...(student.student_photo && { student_photo: student.student_photo }),
-      ...(student.remarks && { remarks: student.remarks }),
-      ...(student.admission_date && { admission_date: student.admission_date })
+      ...(student.remarks && { remarks: student.remarks, 'Remarks': student.remarks }),
+      ...(student.admission_date && { admission_date: student.admission_date, 'Admission Date': student.admission_date })
     };
 
     console.log('Student data:', student);
@@ -1556,6 +1567,13 @@ const Students = () => {
     const completion = calculateProfileCompletion(stageSyncedStudent, parsedStudentData);
     setProfileCompletion(completion);
     console.log('Profile completion calculated:', completion);
+
+    // Fetch relevant courses/branches for THIS student's college to populate modal dropdowns
+    if (student.college) {
+      fetchQuickFilterOptions({ college: student.college }).catch(err => {
+        console.warn('Failed to load filter options for student modal:', err);
+      });
+    }
 
     setSelectedStudent(stageSyncedStudent);
     setEditData(stageSyncedFields);
@@ -1920,7 +1938,21 @@ const Students = () => {
   };
 
   const updateEditField = (key, value) => {
-    setEditData({ ...editData, [key]: value });
+    setEditData(prev => {
+      const newData = { ...prev, [key]: value };
+
+      // If college changes, refresh course and branch options for the modal
+      if (key === 'college') {
+        fetchQuickFilterOptions({ college: value }).catch(console.warn);
+      }
+
+      // If course/program changes, refresh branch options
+      if (key === 'course' || key === 'Program') {
+        fetchQuickFilterOptions({ college: newData.college, course: value }).catch(console.warn);
+      }
+
+      return newData;
+    });
   };
 
   // Helper function to get certificates for course type
