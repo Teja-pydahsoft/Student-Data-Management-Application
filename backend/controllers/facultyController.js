@@ -219,36 +219,44 @@ exports.getEmployees = async (req, res) => {
       [...EMPLOYEE_ROLES_LOWER, ...(scopeParams && scopeParams.length ? scopeParams : [])]
     );
 
-    const employees = await Promise.all(rows.map(async (row) => {
+    const allCollegeIds = new Set();
+    const allCourseIds = new Set();
+    const allBranchIds = new Set();
+
+    rows.forEach(r => {
+      const cIds = parseScopeData(r.college_ids);
+      const crIds = parseScopeData(r.course_ids);
+      const bIds = parseScopeData(r.branch_ids);
+      cIds.forEach(id => allCollegeIds.add(id));
+      crIds.forEach(id => allCourseIds.add(id));
+      bIds.forEach(id => allBranchIds.add(id));
+    });
+
+    const collegeMap = {};
+    const courseMap = {};
+    const branchMap = {};
+
+    if (allCollegeIds.size > 0) {
+      const [cols] = await masterPool.query(`SELECT id, name FROM colleges WHERE id IN (${Array.from(allCollegeIds).join(',')})`);
+      cols.forEach(c => collegeMap[c.id] = c.name);
+    }
+    if (allCourseIds.size > 0) {
+      const [crs] = await masterPool.query(`SELECT id, name FROM courses WHERE id IN (${Array.from(allCourseIds).join(',')})`);
+      crs.forEach(c => courseMap[c.id] = c.name);
+    }
+    if (allBranchIds.size > 0) {
+      const [brs] = await masterPool.query(`SELECT id, name FROM course_branches WHERE id IN (${Array.from(allBranchIds).join(',')})`);
+      brs.forEach(b => branchMap[b.id] = b.name);
+    }
+
+    const employees = rows.map((row) => {
       const collegeIds = parseScopeData(row.college_ids);
       const courseIds = parseScopeData(row.course_ids);
       const branchIds = parseScopeData(row.branch_ids);
 
-      let collegeNames = [];
-      let courseNames = [];
-      let branchNames = [];
-
-      if (collegeIds.length > 0) {
-        const [colleges] = await masterPool.query(
-          `SELECT id, name FROM colleges WHERE id IN (${collegeIds.map(() => '?').join(',')})`,
-          collegeIds
-        );
-        collegeNames = colleges.map(c => ({ id: c.id, name: c.name }));
-      }
-      if (courseIds.length > 0) {
-        const [courses] = await masterPool.query(
-          `SELECT id, name FROM courses WHERE id IN (${courseIds.map(() => '?').join(',')})`,
-          courseIds
-        );
-        courseNames = courses.map(c => ({ id: c.id, name: c.name }));
-      }
-      if (branchIds.length > 0) {
-        const [branches] = await masterPool.query(
-          `SELECT id, name FROM course_branches WHERE id IN (${branchIds.map(() => '?').join(',')})`,
-          branchIds
-        );
-        branchNames = branches.map(b => ({ id: b.id, name: b.name }));
-      }
+      const collegeNames = collegeIds.map(id => ({ id, name: collegeMap[id] || 'Unknown' }));
+      const courseNames = courseIds.map(id => ({ id, name: courseMap[id] || 'Unknown' }));
+      const branchNames = branchIds.map(id => ({ id, name: branchMap[id] || 'Unknown' }));
 
       return {
         id: row.id,
@@ -275,7 +283,7 @@ exports.getEmployees = async (req, res) => {
         isActive: !!row.is_active,
         createdAt: row.created_at
       };
-    }));
+    });
 
     const principals = employees.filter(e =>
       ['college_principal', 'college_ao'].includes((e.role || '').toLowerCase())
@@ -320,7 +328,8 @@ exports.assignHod = async (req, res) => {
     }
     yearsArr = [...new Set(yearsArr)].sort((a, b) => a - b);
 
-    await ensureBranchHodYearAssignmentsTable();
+    // Removed ensureBranchHodYearAssignmentsTable call
+
 
     const [branchRows] = await masterPool.query(
       'SELECT id, course_id FROM course_branches WHERE id = ? AND is_active = 1',
@@ -386,9 +395,8 @@ exports.unassignHod = async (req, res) => {
     if (!bid || Number.isNaN(bid) || !uid || Number.isNaN(uid)) {
       return res.status(400).json({ success: false, message: 'branchId and userId required' });
     }
-    try {
-      await ensureBranchHodYearAssignmentsTable();
-    } catch (_) {}
+    // Removed ensureBranchHodYearAssignmentsTable call
+
     await masterPool.query(
       'DELETE FROM branch_hod_year_assignments WHERE branch_id = ? AND rbac_user_id = ?',
       [bid, uid]
@@ -423,72 +431,8 @@ exports.unassignHod = async (req, res) => {
   }
 };
 
-/** Create subjects table if it does not exist (no FKs so it always succeeds) */
-async function ensureSubjectsTable() {
-  await masterPool.query(`
-    CREATE TABLE IF NOT EXISTS subjects (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      college_id INT NOT NULL,
-      course_id INT NOT NULL,
-      branch_id INT NULL,
-      name VARCHAR(255) NOT NULL,
-      code VARCHAR(50) NULL,
-      is_active TINYINT(1) DEFAULT 1,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_college_course (college_id, course_id),
-      INDEX idx_branch (branch_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
+// Removed ensureSubjectsTable, ensureFacultySubjectsTable, ensureBranchHodYearAssignmentsTable, ensureBranchSemesterSubjectsTable functions
 
-/** Create faculty_subjects table if it does not exist */
-async function ensureFacultySubjectsTable() {
-  await masterPool.query(`
-    CREATE TABLE IF NOT EXISTS faculty_subjects (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      rbac_user_id INT NOT NULL,
-      subject_id INT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_faculty_subject (rbac_user_id, subject_id),
-      INDEX idx_subject (subject_id),
-      INDEX idx_user (rbac_user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
-
-/** Create branch_hod_year_assignments table if it does not exist */
-async function ensureBranchHodYearAssignmentsTable() {
-  await masterPool.query(`
-    CREATE TABLE IF NOT EXISTS branch_hod_year_assignments (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      branch_id INT NOT NULL,
-      rbac_user_id INT NOT NULL,
-      years JSON NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_branch_user (branch_id, rbac_user_id),
-      INDEX idx_branch (branch_id),
-      INDEX idx_user (rbac_user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
-
-/** Create branch_semester_subjects table if it does not exist (no FKs to avoid ER_FK_CANNOT_OPEN_PARENT if subjects/course_branches missing) */
-async function ensureBranchSemesterSubjectsTable() {
-  await masterPool.query(`
-    CREATE TABLE IF NOT EXISTS branch_semester_subjects (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      branch_id INT NOT NULL,
-      year_of_study TINYINT NOT NULL,
-      semester_number TINYINT NOT NULL,
-      subject_id INT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_branch_year_sem_subject (branch_id, year_of_study, semester_number, subject_id),
-      INDEX idx_branch (branch_id),
-      INDEX idx_subject (subject_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-}
 
 /**
  * Build year/sem list from current regular students only for this branch (course + branch name match)
@@ -523,7 +467,7 @@ async function getYearSemListFromRegularStudents(branchId) {
         params.push(cn[0].name);
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   const [rows] = await masterPool.query(
     `SELECT DISTINCT current_year AS year, current_semester AS semester
      FROM students
@@ -582,7 +526,7 @@ exports.getProgramYearSubjects = async (req, res) => {
             [br.id, year]
           );
           assignments = rows || [];
-        } catch (_) {}
+        } catch (_) { }
       }
       const subjectIds = assignments.map((a) => a.subject_id);
       let facultyBySubject = {};
@@ -599,7 +543,7 @@ exports.getProgramYearSubjects = async (req, res) => {
             if (!facultyBySubject[row.subject_id]) facultyBySubject[row.subject_id] = [];
             facultyBySubject[row.subject_id].push({ id: row.rbac_user_id, name: row.name, email: row.email || '' });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       const assignmentsByKey = {};
       assignments.forEach((a) => {
@@ -683,10 +627,8 @@ exports.getBranchYearSemSubjects = async (req, res) => {
       );
       assignments = rows || [];
     } catch (tableErr) {
-      if (tableErr.code === 'ER_NO_SUCH_TABLE') {
-        await ensureBranchSemesterSubjectsTable();
-        assignments = [];
-      } else throw tableErr;
+      console.error('getBranchYearSemSubjects assignments error:', tableErr);
+      assignments = [];
     }
     let subjectsRows = [];
     try {
@@ -696,10 +638,8 @@ exports.getBranchYearSemSubjects = async (req, res) => {
       );
       subjectsRows = rows || [];
     } catch (tableErr) {
-      if (tableErr.code === 'ER_NO_SUCH_TABLE') {
-        await ensureSubjectsTable();
-        subjectsRows = [];
-      } else throw tableErr;
+      console.error('getBranchYearSemSubjects subjects error:', tableErr);
+      subjectsRows = [];
     }
     const subjectIds = [...new Set(assignments.map((a) => a.subject_id))];
     let facultyBySubject = {};
@@ -716,7 +656,7 @@ exports.getBranchYearSemSubjects = async (req, res) => {
           if (!facultyBySubject[row.subject_id]) facultyBySubject[row.subject_id] = [];
           facultyBySubject[row.subject_id].push({ id: row.rbac_user_id, name: row.name, email: row.email || '' });
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     const assignmentsByKey = {};
     assignments.forEach((a) => {
@@ -765,22 +705,11 @@ exports.addBranchSemesterSubject = async (req, res) => {
     if (!branchRows || branchRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Branch not found' });
     }
-    try {
-      await masterPool.query(
-        `INSERT IGNORE INTO branch_semester_subjects (branch_id, year_of_study, semester_number, subject_id)
+    await masterPool.query(
+      `INSERT IGNORE INTO branch_semester_subjects (branch_id, year_of_study, semester_number, subject_id)
          VALUES (?, ?, ?, ?)`,
-        [branchId, y, s, sid]
-      );
-    } catch (tableErr) {
-      if (tableErr.code === 'ER_NO_SUCH_TABLE') {
-        await ensureBranchSemesterSubjectsTable();
-        await masterPool.query(
-          `INSERT IGNORE INTO branch_semester_subjects (branch_id, year_of_study, semester_number, subject_id)
-           VALUES (?, ?, ?, ?)`,
-          [branchId, y, s, sid]
-        );
-      } else throw tableErr;
-    }
+      [branchId, y, s, sid]
+    );
     res.json({ success: true, message: 'Subject added to semester' });
   } catch (error) {
     console.error('addBranchSemesterSubject error:', error);
@@ -813,7 +742,7 @@ exports.assignStaffToSubject = async (req, res) => {
     }
     try {
       await ensureFacultySubjectsTable();
-    } catch (_) {}
+    } catch (_) { }
     await masterPool.query(
       'INSERT IGNORE INTO faculty_subjects (rbac_user_id, subject_id) VALUES (?, ?)',
       [uid, sid]
