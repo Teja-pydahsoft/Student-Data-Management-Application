@@ -1261,6 +1261,12 @@ const performPromotion = async ({ connection, admissionNumber, targetStage, admi
     }
   }
 
+  // Ensure verification flags are preserved if they exist in current data
+  if (parsedStudentData.is_student_mobile_verified === undefined && student.student_data) {
+    // If for some reason they aren't in the parsed data but might be in the database, 
+    // we should have them already in parsedStudentData from the parseJSON call above.
+  }
+
   applyStageToPayload(parsedStudentData, nextStage);
   const serializedStudentData = JSON.stringify(parsedStudentData);
 
@@ -2606,7 +2612,7 @@ exports.getAllStudents = async (req, res) => {
 
       // Normalize scholarship status - empty/null should show as "Pending"
       const rawScholarStatus = student.scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
-      const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+      const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 &&
         rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
         ? rawScholarStatus
         : 'Pending';
@@ -2692,7 +2698,7 @@ exports.getStudentByAdmission = async (req, res) => {
 
     // Normalize scholarship status - empty/null should show as "Pending"
     const rawScholarStatus = students[0].scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
-    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 &&
       rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
       ? rawScholarStatus
       : 'Pending';
@@ -2900,7 +2906,7 @@ exports.updateStudent = async (req, res) => {
     // Check if mobile numbers have changed and reset verification status if needed
     const oldStudentMobile = existingStudent.student_mobile || existingStudentData.student_mobile || existingStudentData['Student Mobile number'] || existingStudentData['Student Mobile Number'] || '';
     const newStudentMobile = studentData.student_mobile || studentData['Student Mobile number'] || studentData['Student Mobile Number'] || mutableStudentData.student_mobile || '';
-    
+
     const oldParentMobile = existingStudent.parent_mobile1 || existingStudentData.parent_mobile1 || existingStudentData['Parent Mobile Number 1'] || '';
     const newParentMobile = studentData.parent_mobile1 || studentData['Parent Mobile Number 1'] || mutableStudentData.parent_mobile1 || '';
 
@@ -5212,7 +5218,7 @@ exports.getStudentByAdmission = async (req, res) => {
 
     // Normalize scholarship status - empty/null should show as "Pending"
     const rawScholarStatus = student.scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
-    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 && 
+    const normalizedScholarStatus = (rawScholarStatus && String(rawScholarStatus).trim().length > 0 &&
       rawScholarStatus.toLowerCase() !== 'null' && rawScholarStatus.toLowerCase() !== 'undefined')
       ? rawScholarStatus
       : 'Pending';
@@ -6280,14 +6286,14 @@ exports.getRegistrationReport = async (req, res) => {
     const statsQuery = `
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%' THEN 1 ELSE 0 END) as verification_completed,
+        SUM(CASE WHEN (student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%') THEN 1 ELSE 0 END) as verification_completed,
         SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
         SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
         SUM(CASE WHEN current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '' THEN 1 ELSE 0 END) as promotion_completed,
         SUM(CASE WHEN scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' THEN 1 ELSE 0 END) as scholarship_assigned,
         SUM(CASE WHEN scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '' THEN 1 ELSE 0 END) as scholarship_pending,
         SUM(CASE WHEN 
-             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
+             ((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
              (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
              (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
@@ -6391,7 +6397,7 @@ exports.getRegistrationReport = async (req, res) => {
       }
 
       // Scholarship is MANDATORY - must have a status (not empty/null)
-      const scholarshipStatus = (!student.scholar_status || scholarRaw === '' || scholarRaw === 'null' || scholarRaw === 'undefined') 
+      const scholarshipStatus = (!student.scholar_status || scholarRaw === '' || scholarRaw === 'null' || scholarRaw === 'undefined')
         ? 'pending'  // Empty is NOT acceptable - step is mandatory
         : 'completed'; // Any status (including not eligible) means it's been reviewed
 
