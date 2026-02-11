@@ -149,7 +149,9 @@ exports.unifiedLogin = async (req, res) => {
       if (studentCred.password_hash && await bcrypt.compare(password, studentCred.password_hash)) {
         // Validation Passed! NOW fetch the heavy student profile details.
         const [studentDetails] = await masterPool.query(
-          `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+          `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, 
+            s.course, s.branch, s.college,
+            cb.id as branch_id, col.id as college_id,
             CASE
               WHEN
                 (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
@@ -160,6 +162,9 @@ exports.unifiedLogin = async (req, res) => {
             END AS registration_status_computed,
             s.registration_status, s.student_data
            FROM students s
+           LEFT JOIN colleges col ON s.college COLLATE utf8mb4_unicode_ci = col.name COLLATE utf8mb4_unicode_ci
+           LEFT JOIN courses c ON s.course COLLATE utf8mb4_unicode_ci = c.name COLLATE utf8mb4_unicode_ci AND c.college_id = col.id
+           LEFT JOIN course_branches cb ON s.branch COLLATE utf8mb4_unicode_ci = cb.name COLLATE utf8mb4_unicode_ci AND cb.course_id = c.id
            WHERE s.id = ? LIMIT 1`,
           [studentCred.student_id]
         );
@@ -167,7 +172,11 @@ exports.unifiedLogin = async (req, res) => {
         if (studentDetails && studentDetails.length > 0) {
           const s = studentDetails[0];
           const token = jwt.sign({
-            id: studentCred.student_id, admissionNumber: studentCred.admission_number, role: 'student'
+            id: studentCred.student_id,
+            admissionNumber: studentCred.admission_number,
+            role: 'student',
+            college_id: s.college_id,
+            branch_id: s.branch_id
           }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
           // Helper to resolve status
@@ -192,6 +201,8 @@ exports.unifiedLogin = async (req, res) => {
             course: s.course,
             branch: s.branch,
             college: s.college,
+            branch_id: s.branch_id,
+            college_id: s.college_id,
             student_photo: s.student_photo,
             registration_status: resolvedStatus,
             role: 'student'
@@ -319,7 +330,9 @@ exports.createSSOSession = async (req, res) => {
 
       const studentCred = credentials[0];
       const [studentDetails] = await masterPool.query(
-        `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+        `SELECT s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, 
+          s.course, s.branch, s.college,
+          cb.id as branch_id, col.id as college_id,
           CASE
             WHEN
               (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
@@ -332,6 +345,9 @@ exports.createSSOSession = async (req, res) => {
           END AS registration_status_computed,
           s.registration_status, s.student_data
          FROM students s
+         LEFT JOIN colleges col ON s.college COLLATE utf8mb4_unicode_ci = col.name COLLATE utf8mb4_unicode_ci
+         LEFT JOIN courses c ON s.course COLLATE utf8mb4_unicode_ci = c.name COLLATE utf8mb4_unicode_ci AND c.college_id = col.id
+         LEFT JOIN course_branches cb ON s.branch COLLATE utf8mb4_unicode_ci = cb.name COLLATE utf8mb4_unicode_ci AND cb.course_id = c.id
          WHERE s.id = ? LIMIT 1`,
         [studentCred.student_id]
       );
@@ -349,7 +365,7 @@ exports.createSSOSession = async (req, res) => {
         parsedData = (s.student_data && typeof s.student_data === 'string')
           ? JSON.parse(s.student_data)
           : (s.student_data || {});
-      } catch (e) {}
+      } catch (e) { }
 
       const resolvedStatus = s.registration_status_computed ||
         ((s.registration_status && String(s.registration_status).trim().length > 0)
@@ -365,13 +381,21 @@ exports.createSSOSession = async (req, res) => {
         course: s.course,
         branch: s.branch,
         college: s.college,
+        branch_id: s.branch_id,
+        college_id: s.college_id,
         student_photo: s.student_photo,
         registration_status: resolvedStatus,
         role: 'student'
       };
 
       const token = jwt.sign(
-        { id: studentCred.student_id, admissionNumber: studentCred.admission_number, role: 'student' },
+        {
+          id: studentCred.student_id,
+          admissionNumber: studentCred.admission_number,
+          role: 'student',
+          college_id: s.college_id,
+          branch_id: s.branch_id
+        },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -379,7 +403,7 @@ exports.createSSOSession = async (req, res) => {
       masterPool.query(
         `UPDATE student_credentials SET last_login = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE student_id = ?`,
         [studentCred.student_id]
-      ).catch(() => {});
+      ).catch(() => { });
 
       return res.json({
         success: true,
@@ -520,7 +544,9 @@ exports.verifyToken = async (req, res) => {
 
     if (authUser.role === 'student') {
       const [students] = await masterPool.query(
-        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, s.course, s.branch, s.college,
+        `SELECT sc.username, s.admission_number, s.student_name, s.student_mobile, s.current_year, s.current_semester, s.student_photo, 
+          s.course, s.branch, s.college,
+          cb.id as branch_id, col.id as college_id,
           CASE
             WHEN
               (s.student_data LIKE '%"is_student_mobile_verified":true%' AND s.student_data LIKE '%"is_parent_mobile_verified":true%') AND
@@ -534,6 +560,9 @@ exports.verifyToken = async (req, res) => {
           s.registration_status, s.student_data
          FROM students s
          LEFT JOIN student_credentials sc ON sc.student_id = s.id
+         LEFT JOIN colleges col ON s.college COLLATE utf8mb4_unicode_ci = col.name COLLATE utf8mb4_unicode_ci
+         LEFT JOIN courses c ON s.course COLLATE utf8mb4_unicode_ci = c.name COLLATE utf8mb4_unicode_ci AND c.college_id = col.id
+         LEFT JOIN course_branches cb ON s.branch COLLATE utf8mb4_unicode_ci = cb.name COLLATE utf8mb4_unicode_ci AND cb.course_id = c.id
          WHERE s.id = ?`,
         [authUser.id]
       );
@@ -569,6 +598,8 @@ exports.verifyToken = async (req, res) => {
         course: studentValid.course,
         branch: studentValid.branch,
         college: studentValid.college,
+        branch_id: studentValid.branch_id,
+        college_id: studentValid.college_id,
         student_photo: studentValid.student_photo,
         registration_status: resolvedStatus,
         role: 'student'

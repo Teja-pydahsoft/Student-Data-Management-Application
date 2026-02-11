@@ -2323,14 +2323,15 @@ exports.getAllStudents = async (req, res) => {
     let query = `
       SELECT 
         id, admission_number, admission_no, pin_no, student_name, student_data, 
-        fee_status, student_mobile, parent_mobile1, parent_mobile2, created_at, 
+        fee_status, registration_status, student_mobile, parent_mobile1, parent_mobile2, created_at, 
         student_status, course, branch, current_year, current_semester, batch, 
         certificates_status, student_address, city_village, mandal_name, district, 
         stud_type, scholar_status, gender, dob, father_name, adhar_no, admission_date, 
         previous_college, remarks, college, caste,
         CASE
           WHEN
-            (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
+            ((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND 
+             (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
@@ -2605,10 +2606,15 @@ exports.getAllStudents = async (req, res) => {
         ? student.fee_status
         : (parsedData?.fee_status || parsedData?.['Fee Status'] || null);
 
-      const resolvedRegistrationStatus = student.registration_status_computed ||
-        ((student.registration_status && String(student.registration_status).trim().length > 0)
-          ? student.registration_status
-          : (parsedData?.registration_status || parsedData?.['Registration Status'] || null));
+      // Prefer the DB registration_status column if it's 'Completed'
+      // Otherwise use the computed status or fallbacks
+      const dbRegistrationStatus = (student.registration_status && String(student.registration_status).trim().length > 0)
+        ? student.registration_status
+        : (parsedData?.registration_status || parsedData?.['Registration Status'] || null);
+
+      const resolvedRegistrationStatus = (dbRegistrationStatus && String(dbRegistrationStatus).toLowerCase() === 'completed')
+        ? 'Completed'
+        : (student.registration_status_computed || dbRegistrationStatus || 'pending');
 
       // Normalize scholarship status - empty/null should show as "Pending"
       const rawScholarStatus = student.scholar_status || parsedData?.scholar_status || parsedData?.['Scholar Status'] || '';
@@ -6296,11 +6302,12 @@ exports.getRegistrationReport = async (req, res) => {
         SUM(CASE WHEN scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' THEN 1 ELSE 0 END) as scholarship_assigned,
         SUM(CASE WHEN scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '' THEN 1 ELSE 0 END) as scholarship_pending,
         SUM(CASE WHEN 
-             ((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
-             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
-             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
-             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
+             (registration_status = 'Completed' OR registration_status = 'completed') OR
+             (((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
+              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+              (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+              (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+              (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != ''))
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
     `;
@@ -6346,7 +6353,7 @@ exports.getRegistrationReport = async (req, res) => {
       SELECT 
         id, pin_no, student_name, admission_number, batch, course, branch, 
         current_year, current_semester, student_data, 
-        certificates_status, fee_status, scholar_status
+        certificates_status, fee_status, scholar_status, registration_status
       ${baseQuery} 
       ORDER BY pin_no ASC, id ASC 
       LIMIT ? OFFSET ?
@@ -6405,12 +6412,14 @@ exports.getRegistrationReport = async (req, res) => {
         : 'completed'; // Any status (including not eligible) means it's been reviewed
 
       // Overall Registration Status (All 5 steps must be completed including Scholarship)
+      // Also consider the DB column if it's already marked as Completed
       const overallStatus = (
-        verificationStatus === 'completed' &&
-        certificatesStatus === 'completed' &&
-        feeStatus === 'completed' &&
-        promotionStatus === 'completed' &&
-        scholarshipStatus === 'completed'
+        (student.registration_status && student.registration_status.toLowerCase() === 'completed') ||
+        (verificationStatus === 'completed' &&
+          certificatesStatus === 'completed' &&
+          feeStatus === 'completed' &&
+          promotionStatus === 'completed' &&
+          scholarshipStatus === 'completed')
       ) ? 'completed' : 'pending';
 
       return {
@@ -6584,18 +6593,19 @@ exports.getRegistrationAbstract = async (req, res) => {
         current_year,
         current_semester,
         COUNT(*) as total,
-        SUM(CASE WHEN student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%' THEN 1 ELSE 0 END) as verification_completed,
+        SUM(CASE WHEN (student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%') THEN 1 ELSE 0 END) as verification_completed,
         SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
         SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
         SUM(CASE WHEN current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '' THEN 1 ELSE 0 END) as promotion_completed,
         SUM(CASE WHEN scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '' THEN 1 ELSE 0 END) as scholarship_assigned,
         SUM(CASE WHEN scholar_status IS NULL OR TRIM(IFNULL(scholar_status,'')) = '' THEN 1 ELSE 0 END) as scholarship_pending,
         SUM(CASE WHEN 
-             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
-             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
-             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
-             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
+             (registration_status = 'Completed' OR registration_status = 'completed') OR
+             (((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
+              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+              (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+              (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+              (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != ''))
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
       GROUP BY batch, college, course, branch, current_year, current_semester
@@ -6737,15 +6747,16 @@ exports.exportRegistrationReport = async (req, res) => {
     const statsQuery = `
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%' THEN 1 ELSE 0 END) as verification_completed,
+        SUM(CASE WHEN (student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%') THEN 1 ELSE 0 END) as verification_completed,
         SUM(CASE WHEN certificates_status LIKE '%Verified%' OR certificates_status = 'completed' THEN 1 ELSE 0 END) as certificates_verified,
         SUM(CASE WHEN fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%' THEN 1 ELSE 0 END) as fee_cleared,
         SUM(CASE WHEN 
-             (student_data LIKE '%"is_student_mobile_verified":true%' AND student_data LIKE '%"is_parent_mobile_verified":true%') AND
-             (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
-             (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
-             (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
-             (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != '')
+             (registration_status = 'Completed' OR registration_status = 'completed') OR
+             (((student_data LIKE '%"is_student_mobile_verified":true%' OR student_data LIKE '%"is_student_mobile_verified": true%') AND (student_data LIKE '%"is_parent_mobile_verified":true%' OR student_data LIKE '%"is_parent_mobile_verified": true%')) AND
+              (certificates_status LIKE '%Verified%' OR certificates_status = 'completed') AND
+              (fee_status LIKE '%no_due%' OR fee_status LIKE '%no due%' OR fee_status LIKE '%permitted%' OR fee_status LIKE '%completed%' OR fee_status LIKE '%nodue%') AND
+              (current_year IS NOT NULL AND current_year != '' AND current_semester IS NOT NULL AND current_semester != '') AND
+              (scholar_status IS NOT NULL AND TRIM(IFNULL(scholar_status,'')) != ''))
              THEN 1 ELSE 0 END) as overall_completed
       ${baseQuery}
     `;
@@ -6769,7 +6780,7 @@ exports.exportRegistrationReport = async (req, res) => {
       SELECT 
         id, pin_no, student_name, admission_number, course, branch, college, batch,
         current_year, current_semester, student_data, 
-        certificates_status, fee_status, scholar_status
+        certificates_status, fee_status, scholar_status, registration_status
       ${baseQuery} 
       ORDER BY pin_no ASC
     `;
@@ -6780,8 +6791,8 @@ exports.exportRegistrationReport = async (req, res) => {
     const processedData = students.map(student => {
       const studentData = typeof student.student_data === 'string' ? JSON.parse(student.student_data || '{}') : (student.student_data || {});
 
-      const isStudentVerified = !!studentData.is_student_mobile_verified;
-      const isParentVerified = !!studentData.is_parent_mobile_verified;
+      const isStudentVerified = studentData.is_student_mobile_verified === true;
+      const isParentVerified = studentData.is_parent_mobile_verified === true;
       const verificationStatus = (isStudentVerified && isParentVerified) ? 'Completed' : 'Pending';
 
       const certStatusRaw = (student.certificates_status || '').toLowerCase();
@@ -6803,13 +6814,15 @@ exports.exportRegistrationReport = async (req, res) => {
       const promotionStatus = (student.current_year && student.current_semester) ? 'Completed' : 'Pending';
 
       // Overall Status Logic - must match main report and stats query (all 5 steps including scholarship)
+      // Also prioritize the database column if it's already marked as Completed
       const isScholarshipCompleted = student.scholar_status && student.scholar_status.trim() !== '' && student.scholar_status.toLowerCase() !== 'null' && student.scholar_status.toLowerCase() !== 'undefined';
       const overallStatus = (
-        verificationStatus === 'Completed' &&
-        certificatesStatus === 'Verified' &&
-        isFeeCleared &&
-        promotionStatus === 'Completed' &&
-        isScholarshipCompleted
+        (student.registration_status && student.registration_status.toLowerCase() === 'completed') ||
+        (verificationStatus === 'Completed' &&
+          certificatesStatus === 'Verified' &&
+          isFeeCleared &&
+          promotionStatus === 'Completed' &&
+          isScholarshipCompleted)
       ) ? 'Completed' : 'Pending';
 
       return {

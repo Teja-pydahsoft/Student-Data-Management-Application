@@ -263,7 +263,7 @@ exports.getMyPendingFeedback = async (req, res) => {
         // Get Faculty for these subjects
         const subjectIds = subjects.map(s => s.id);
         const [faculties] = await masterPool.query(`
-            SELECT fs.subject_id, u.id as faculty_id, u.first_name, u.last_name, u.username
+            SELECT fs.subject_id, u.id as faculty_id, u.name, u.username
             FROM faculty_subjects fs
             JOIN rbac_users u ON fs.rbac_user_id = u.id
             WHERE fs.subject_id IN (?)
@@ -308,7 +308,7 @@ exports.getMyPendingFeedback = async (req, res) => {
                     experimentsCount: subj.experiments_count,
                     credits: subj.credits,
                     facultyId: fac.faculty_id,
-                    facultyName: `${fac.first_name || ''} ${fac.last_name || ''}`.trim() || fac.username,
+                    facultyName: fac.name || fac.username,
                     isSubmitted,
                     formId: feedbackForm.form_id,
                     formName: feedbackForm.form_name,
@@ -422,7 +422,7 @@ exports.getAnalytics = async (req, res) => {
                 subj.id as subjectId,
                 subj.name as subjectName,
                 subj.code as subjectCode,
-                CONCAT(u.first_name, ' ', u.last_name) as facultyName,
+                u.name as facultyName,
                 COUNT(fr.id) as responseCount,
                 fr.faculty_id as facultyId
             FROM feedback_responses fr

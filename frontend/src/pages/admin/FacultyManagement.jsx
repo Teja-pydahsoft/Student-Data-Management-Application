@@ -94,13 +94,19 @@ const FacultyManagement = () => {
     const fetchColleges = async () => {
       try {
         const res = await api.get('/colleges');
-        if (res.data.success) setColleges(res.data.data || []);
+        if (res.data.success) {
+          const list = res.data.data || [];
+          setColleges(list);
+          if (list.length === 1 && !selectedCollegeId) {
+            setSelectedCollegeId(list[0].id);
+          }
+        }
       } catch (e) {
         toast.error(e.response?.data?.message || 'Failed to load colleges');
       }
     };
     if (tab === 'assign-hods' || tab === 'assign-staff' || tab === 'assign-subjects' || tab === 'time-table') fetchColleges();
-  }, [tab]);
+  }, [tab, selectedCollegeId]);
 
   useEffect(() => {
     if (!selectedCollegeId || (tab !== 'assign-hods' && tab !== 'assign-staff' && tab !== 'assign-subjects' && tab !== 'time-table')) {
@@ -1557,8 +1563,7 @@ const FacultyManagement = () => {
                               ));
                             }
                             return selectedYearForTimetable && [1, 2].map(s => {
-                              const val = (Number(selectedYearForTimetable) - 1) * 2 + s;
-                              return <option key={val} value={val}>Sem {val}</option>;
+                              return <option key={s} value={s}>Sem {s}</option>;
                             });
                           })()}
                         </select>

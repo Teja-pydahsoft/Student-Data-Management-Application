@@ -170,9 +170,12 @@ const attachUserScope = async (req, res, next) => {
     // Students don't have RBAC scope (they are not in rbac_users table)
     if (user.role === 'student') {
       req.userScope = {
-        collegeIds: [],
-        courseIds: [],
-        branchIds: [],
+        collegeIds: user.college_id ? [Number(user.college_id)] : [],
+        courseIds: user.courseId ? [Number(user.courseId)] : [], // If present in token
+        branchIds: user.branch_id ? [Number(user.branch_id)] : [],
+        collegeNames: user.college ? [user.college] : [],
+        courseNames: user.course ? [user.course] : [],
+        branchNames: user.branch ? [user.branch] : [],
         allCourses: false,
         allBranches: false,
         unrestricted: false,
@@ -215,7 +218,7 @@ const attachUserScope = async (req, res, next) => {
     if (branchIds.length === 0 && userData.branch_id) {
       branchIds.push(userData.branch_id);
     }
-    
+
     // Validate branch IDs - filter out invalid ones and ensure they're numbers
     branchIds = branchIds
       .filter(id => id != null && !isNaN(Number(id)))
@@ -253,12 +256,12 @@ const attachUserScope = async (req, res, next) => {
         for (const r of yhRows || []) {
           let yrs = r.years;
           if (typeof yrs === 'string') {
-            try { yrs = JSON.parse(yrs); } catch (_) {}
+            try { yrs = JSON.parse(yrs); } catch (_) { }
           }
           if (Array.isArray(yrs)) hodYears = [...new Set([...hodYears, ...yrs])];
         }
         hodYears = hodYears.sort((a, b) => a - b);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Fetch branch names for filtering
@@ -266,14 +269,14 @@ const attachUserScope = async (req, res, next) => {
     if (!userData.all_branches && branchIds.length > 0) {
       // Filter out invalid branch IDs (non-numeric or null)
       const validBranchIds = branchIds.filter(id => id != null && !isNaN(Number(id))).map(id => Number(id));
-      
+
       if (validBranchIds.length > 0) {
         const [branches] = await masterPool.query(
           `SELECT name FROM course_branches WHERE id IN (${validBranchIds.map(() => '?').join(',')}) AND is_active = 1`,
           validBranchIds
         );
         branchNames = branches.map(b => b.name);
-        
+
         // If some branch IDs were invalid, log a warning
         if (validBranchIds.length !== branchIds.length) {
           console.warn(`[User Scope] User ${user.id} has invalid branch IDs. Valid: ${validBranchIds.length}, Total: ${branchIds.length}`);

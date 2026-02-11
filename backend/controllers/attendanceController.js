@@ -2108,68 +2108,68 @@ exports.markAttendance = async (req, res) => {
             console.log(`   ℹ️ Engineering College - Diploma report already sent to Super Admin, skipping duplicate`);
           } else {
             console.log(`   🎓 Sending separate Engineering College - Diploma report to Super Admin: ${SUPER_ADMIN_EMAIL}`);
-          
+
             try {
-            // Get college ID for Engineering College
-            let engineeringCollegeId = null;
-            try {
-              const [collegeRows] = await masterPool.query(
-                'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
-                [ENGINEERING_COLLEGE_NAME]
-              );
-              if (collegeRows.length > 0) {
-                engineeringCollegeId = collegeRows[0].id;
+              // Get college ID for Engineering College
+              let engineeringCollegeId = null;
+              try {
+                const [collegeRows] = await masterPool.query(
+                  'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
+                  [ENGINEERING_COLLEGE_NAME]
+                );
+                if (collegeRows.length > 0) {
+                  engineeringCollegeId = collegeRows[0].id;
+                }
+              } catch (err) {
+                console.warn(`   ⚠️ Could not fetch college ID for ${ENGINEERING_COLLEGE_NAME}:`, err.message);
               }
-            } catch (err) {
-              console.warn(`   ⚠️ Could not fetch college ID for ${ENGINEERING_COLLEGE_NAME}:`, err.message);
-            }
 
-            const result = await sendAttendanceReportNotifications({
-              collegeId: engineeringCollegeId,
-              collegeName: ENGINEERING_COLLEGE_NAME,
-              courseId: null,
-              courseName: DIPLOMA_COURSE_NAME,
-              branchId: null,
-              branchName: 'All Branches',
-              batch: 'All Batches',
-              year: 'All Years',
-              semester: 'All Semesters',
-              attendanceDate: normalizedDate,
-              students: allStudents,
-              attendanceRecords: allAttendanceRecords,
-              allBatchesData: allBatchesData,
-              recipientUser: {
-                name: 'Sriram',
-                email: SUPER_ADMIN_EMAIL,
-                role: 'super_admin'
-              },
-              senderName: senderName
-            });
+              const result = await sendAttendanceReportNotifications({
+                collegeId: engineeringCollegeId,
+                collegeName: ENGINEERING_COLLEGE_NAME,
+                courseId: null,
+                courseName: DIPLOMA_COURSE_NAME,
+                branchId: null,
+                branchName: 'All Branches',
+                batch: 'All Batches',
+                year: 'All Years',
+                semester: 'All Semesters',
+                attendanceDate: normalizedDate,
+                students: allStudents,
+                attendanceRecords: allAttendanceRecords,
+                allBatchesData: allBatchesData,
+                recipientUser: {
+                  name: 'Sriram',
+                  email: SUPER_ADMIN_EMAIL,
+                  role: 'super_admin'
+                },
+                senderName: senderName
+              });
 
-            dayEndReportResults.push({
-              user: 'Sriram',
-              userEmail: SUPER_ADMIN_EMAIL,
-              role: 'Super Admin',
-              college: ENGINEERING_COLLEGE_NAME,
-              course: DIPLOMA_COURSE_NAME,
-              ...result
-            });
+              dayEndReportResults.push({
+                user: 'Sriram',
+                userEmail: SUPER_ADMIN_EMAIL,
+                role: 'Super Admin',
+                college: ENGINEERING_COLLEGE_NAME,
+                course: DIPLOMA_COURSE_NAME,
+                ...result
+              });
 
-            superAdminEngineeringDiplomaSent.add(reportKey);
-            console.log(`   📧 Engineering College - Diploma report sent successfully to Super Admin: ${SUPER_ADMIN_EMAIL}`);
-          } catch (error) {
-            console.error(`   ❌ Error sending Engineering College - Diploma report to Super Admin:`, error);
-            dayEndReportResults.push({
-              user: 'Sriram',
-              userEmail: SUPER_ADMIN_EMAIL,
-              role: 'Super Admin',
-              college: ENGINEERING_COLLEGE_NAME,
-              course: DIPLOMA_COURSE_NAME,
-              pdfGenerated: false,
-              emailsSent: 0,
-              emailsFailed: 0,
-              errors: [error.message]
-            });
+              superAdminEngineeringDiplomaSent.add(reportKey);
+              console.log(`   📧 Engineering College - Diploma report sent successfully to Super Admin: ${SUPER_ADMIN_EMAIL}`);
+            } catch (error) {
+              console.error(`   ❌ Error sending Engineering College - Diploma report to Super Admin:`, error);
+              dayEndReportResults.push({
+                user: 'Sriram',
+                userEmail: SUPER_ADMIN_EMAIL,
+                role: 'Super Admin',
+                college: ENGINEERING_COLLEGE_NAME,
+                course: DIPLOMA_COURSE_NAME,
+                pdfGenerated: false,
+                emailsSent: 0,
+                emailsFailed: 0,
+                errors: [error.message]
+              });
             }
           }
         }
@@ -3221,7 +3221,13 @@ exports.getStudentAttendanceHistory = async (req, res) => {
     let studentRows;
     try {
       [studentRows] = await masterPool.query(
-        'SELECT id, student_name, pin_no, batch, course, branch, college, current_year, current_semester FROM students WHERE id = ?',
+        `SELECT s.id, s.student_name, s.pin_no, s.batch, s.course, s.branch, s.college, s.current_year, s.current_semester,
+                col.id as college_id, cb.id as branch_id
+         FROM students s
+          LEFT JOIN colleges col ON s.college COLLATE utf8mb4_unicode_ci = col.name COLLATE utf8mb4_unicode_ci
+          LEFT JOIN courses c ON s.course COLLATE utf8mb4_unicode_ci = c.name COLLATE utf8mb4_unicode_ci AND c.college_id = col.id
+          LEFT JOIN course_branches cb ON s.branch COLLATE utf8mb4_unicode_ci = cb.name COLLATE utf8mb4_unicode_ci AND cb.course_id = c.id
+         WHERE s.id = ?`,
         [studentId]
       );
     } catch (colErr) {
@@ -3251,27 +3257,24 @@ exports.getStudentAttendanceHistory = async (req, res) => {
     // Resolve semester start/end from Settings → Academic Calendar (semesters table)
     if (student.course && student.current_year != null && student.current_semester != null) {
       try {
-        let collegeId = null;
-        if (student.college) {
-          const [collegeRows] = await masterPool.query(
-            'SELECT id FROM colleges WHERE name = ? AND is_active = 1 LIMIT 1',
-            [student.college]
-          );
-          if (collegeRows.length > 0) collegeId = collegeRows[0].id;
-        }
+        const collegeId = student.college_id;
 
         // Course: prefer course for this college when available
-        let courseQuery = 'SELECT id FROM courses WHERE name = ? AND is_active = 1';
-        const courseParams = [student.course];
-        if (collegeId != null) {
-          courseQuery += ' AND (college_id = ? OR college_id IS NULL) ORDER BY college_id DESC';
-          courseParams.push(collegeId);
+        let courseId = null;
+        if (student.course) {
+          const [courseRows] = await masterPool.query(
+            collegeId
+              ? 'SELECT id FROM courses WHERE name = ? AND college_id = ? AND is_active = 1 LIMIT 1'
+              : 'SELECT id FROM courses WHERE name = ? AND is_active = 1 LIMIT 1',
+            collegeId ? [student.course, collegeId] : [student.course]
+          );
+          if (courseRows.length > 0) courseId = courseRows[0].id;
         }
-        courseQuery += ' LIMIT 1';
-        const [courseRows] = await masterPool.query(courseQuery, courseParams);
 
-        if (courseRows.length > 0) {
-          const courseId = courseRows[0].id;
+        // Branch
+        let branchId = student.branch_id;
+
+        if (courseId != null) {
           const semParams = [courseId, student.current_year, student.current_semester, todayKey, todayKey];
           let semWhere = 'course_id = ? AND year_of_study = ? AND semester_number = ? AND start_date <= ? AND end_date >= ?';
           if (collegeId != null) {
@@ -4615,13 +4618,13 @@ exports.getAttendanceAbstract = async (req, res) => {
 
     // Get holiday info for the date range
     const holidayInfo = await getHolidayInfoForRange(from, to);
-    
+
     // Calculate working days (total days minus holidays)
     const startDate = new Date(from);
     const endDate = new Date(to);
     let totalDays = 0;
     const holidayDates = holidayInfo.dates || new Set();
-    
+
     const currentDate = new Date(startDate);
     while (currentDate <= endDate) {
       const dateStr = [
@@ -4629,13 +4632,13 @@ exports.getAttendanceAbstract = async (req, res) => {
         String(currentDate.getMonth() + 1).padStart(2, '0'),
         String(currentDate.getDate()).padStart(2, '0')
       ].join('-');
-      
+
       if (!holidayDates.has(dateStr)) {
         totalDays++;
       }
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     const workingDays = totalDays;
 
     // Fetch attendance configuration to exclude courses
@@ -4839,7 +4842,7 @@ exports.getAttendanceAbstract = async (req, res) => {
 
     studentRows.forEach(student => {
       const key = `${student.college || 'N/A'}|${student.batch || 'N/A'}|${student.branch || 'N/A'}|${student.current_year || 'N/A'}|${student.current_semester || 'N/A'}`;
-      
+
       if (!groupedData.has(key)) {
         groupedData.set(key, {
           college: student.college || 'N/A',
@@ -4866,7 +4869,7 @@ exports.getAttendanceAbstract = async (req, res) => {
 
       // Calculate present and absent days per student
       const studentAttendanceMap = new Map();
-      
+
       groupAttendance.forEach(att => {
         if (!studentAttendanceMap.has(att.student_id)) {
           studentAttendanceMap.set(att.student_id, { present: 0, absent: 0 });
@@ -4883,7 +4886,7 @@ exports.getAttendanceAbstract = async (req, res) => {
       let totalPresentDays = 0;
       let totalAbsentDays = 0;
       let totalMarkedDays = 0;
-      
+
       studentAttendanceMap.forEach((att, studentId) => {
         totalPresentDays += att.present;
         totalAbsentDays += att.absent;
@@ -4894,7 +4897,7 @@ exports.getAttendanceAbstract = async (req, res) => {
       // For each student, calculate their attendance percentage, then average
       let totalAttendancePercentage = 0;
       let studentCountWithAttendance = 0;
-      
+
       studentAttendanceMap.forEach((att, studentId) => {
         const studentTotalDays = att.present + att.absent;
         if (studentTotalDays > 0 && workingDays > 0) {

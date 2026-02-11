@@ -12,6 +12,16 @@ const FACULTY_ROLES_LOWER = ['faculty', 'branch_faculty'];
 
 const EMPLOYEE_ROLES_LOWER = ['college_principal', 'college_ao', 'branch_hod', 'faculty', 'branch_faculty'];
 
+const resolveRelativeSemester = (sem, year) => {
+  const s = parseInt(sem, 10);
+  const y = parseInt(year, 10);
+  if (Number.isNaN(s) || Number.isNaN(y)) return sem;
+  if (s > 2) {
+    return ((s - 1) % 2) + 1;
+  }
+  return s;
+};
+
 const parseScopeData = (data) => {
   if (!data) return [];
   try {
@@ -435,11 +445,13 @@ exports.unassignHod = async (req, res) => {
 
 
 /**
- * Build year/sem list from current regular students only for this branch (course + branch name match)
+ * Build year/sem list from hierarchy config, or fallback to current regular students.
+ * (User requested hierarchy-based loading)
  */
 async function getYearSemListFromRegularStudents(branchId) {
   const [branchRows] = await masterPool.query(
-    `SELECT cb.id, cb.name AS branch_name, c.name AS course_name, c.college_id
+    `SELECT cb.id, cb.name AS branch_name, cb.total_years AS branch_years, cb.semesters_per_year AS branch_sems, cb.year_semester_config AS branch_ys_config,
+            c.name AS course_name, c.college_id, c.total_years AS course_years, c.semesters_per_year AS course_sems, c.year_semester_config AS course_ys_config
      FROM course_branches cb
      JOIN courses c ON c.id = cb.course_id
      WHERE cb.id = ? AND cb.is_active = 1`,
@@ -447,6 +459,42 @@ async function getYearSemListFromRegularStudents(branchId) {
   );
   if (!branchRows || branchRows.length === 0) return [];
   const branch = branchRows[0];
+
+  // 1. Try to use hierarchy config
+  const totalYears = branch.branch_years || branch.course_years;
+  const semsPerYear = branch.branch_sems || branch.course_sems || 2;
+  const ysConfig = branch.branch_ys_config || branch.course_ys_config;
+
+  if (totalYears && totalYears > 0) {
+    const list = [];
+    let configArr = [];
+    if (ysConfig) {
+      try { configArr = (typeof ysConfig === 'string') ? JSON.parse(ysConfig) : ysConfig; } catch (_) { }
+    }
+
+    let aggregateSem = 1;
+    for (let y = 1; y <= totalYears; y++) {
+      let semestersThisYear = semsPerYear;
+      if (Array.isArray(configArr)) {
+        const yearCfg = configArr.find(c => c.year === y || c.year_number === y);
+        if (yearCfg && (yearCfg.semesters || yearCfg.semester_count)) {
+          semestersThisYear = yearCfg.semesters || yearCfg.semester_count;
+        }
+      }
+
+      for (let s = 1; s <= semestersThisYear; s++) {
+        list.push({
+          year: y,
+          semester: s,
+          label: `Year ${y} Sem ${s} (S${aggregateSem})`
+        });
+        aggregateSem++;
+      }
+    }
+    return list;
+  }
+
+  // 2. Fallback to current students
   const courseName = branch.course_name;
   const branchName = branch.branch_name;
   let studentWhere = "student_status = 'Regular' AND course = ? AND branch = ?";
@@ -547,7 +595,8 @@ exports.getProgramYearSubjects = async (req, res) => {
       }
       const assignmentsByKey = {};
       assignments.forEach((a) => {
-        const key = `${a.year}-${a.semester}`;
+        const relSem = resolveRelativeSemester(a.semester, a.year);
+        const key = `${a.year}-${relSem}`;
         if (!assignmentsByKey[key]) assignmentsByKey[key] = [];
         assignmentsByKey[key].push({
           subjectId: a.subject_id,
@@ -664,7 +713,8 @@ exports.getBranchYearSemSubjects = async (req, res) => {
     }
     const assignmentsByKey = {};
     assignments.forEach((a) => {
-      const key = `${a.year}-${a.semester}`;
+      const relSem = resolveRelativeSemester(a.semester, a.year);
+      const key = `${a.year}-${relSem}`;
       if (!assignmentsByKey[key]) assignmentsByKey[key] = [];
       assignmentsByKey[key].push({
         subjectId: a.subject_id,

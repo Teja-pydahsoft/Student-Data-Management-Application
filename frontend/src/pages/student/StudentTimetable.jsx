@@ -12,22 +12,30 @@ const StudentTimetable = () => {
 
     const days = ['MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT'];
 
+    // Get current day index for default active tab (0 = Sun, 1 = Mon...)
+    const today = new Date().getDay();
+    const defaultDay = today >= 1 && today <= 6 ? days[today - 1] : 'MON';
+    const [activeDay, setActiveDay] = useState(defaultDay);
+
     useEffect(() => {
         const fetchData = async () => {
+            if (!user?.college_id || !user?.branch_id) {
+                setLoading(false);
+                return;
+            }
+
             try {
                 setLoading(true);
-                // Step 1: Get period slots for the student's college
                 const slotsRes = await api.get('/period-slots', { params: { college_id: user.college_id } });
                 if (slotsRes.data.success) {
                     setPeriodSlots(slotsRes.data.data);
                 }
 
-                // Step 2: Get timetable data for the student's branch, year, and semester
                 const timetableRes = await api.get('/timetable', {
                     params: {
                         branch_id: user.branch_id,
                         year: user.current_year,
-                        semester: user.current_semester || 1 // Fallback to 1 if not defined
+                        semester: user.current_semester || 1
                     }
                 });
                 if (timetableRes.data.success) {
@@ -41,18 +49,44 @@ const StudentTimetable = () => {
             }
         };
 
-        if (user?.college_id && user?.branch_id) {
-            fetchData();
-        }
+        fetchData();
     }, [user]);
+
+    const formatTimeTo12h = (timeStr) => {
+        if (!timeStr) return '';
+        const [hours, minutes] = timeStr.split(':');
+        let h = parseInt(hours, 10);
+        const m = minutes;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12; // the hour '0' should be '12'
+        return `${h}:${m} ${ampm}`;
+    };
 
     const getEntryForSlot = (day, slotId) => {
         return timetableData.find(item => item.day_of_week === day && item.period_slot_id === slotId);
     };
 
-    const currentDay = useMemo(() => {
+    /**
+     * For mobile: determine if a slot is "covered" by a merged entry starting earlier
+     */
+    const getMobileEntryForSlot = (day, slotIndex) => {
+        // First check if an entry starts at this exact slot
+        const exactEntry = getEntryForSlot(day, periodSlots[slotIndex]?.id);
+        if (exactEntry) return { ...exactEntry, isStart: true };
+
+        // Check if any previous entry on this day covers this slot
+        for (let i = 0; i < slotIndex; i++) {
+            const prevEntry = getEntryForSlot(day, periodSlots[i]?.id);
+            if (prevEntry && prevEntry.span > (slotIndex - i)) {
+                return { ...prevEntry, isCovered: true };
+            }
+        }
+        return null;
+    };
+
+    const currentDayName = useMemo(() => {
         const d = new Date().getDay();
-        // getDay() returns 0 for Sunday, 1 for Monday...
         const dayMap = ['SUN', 'MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT'];
         return dayMap[d];
     }, []);
@@ -66,149 +100,272 @@ const StudentTimetable = () => {
         );
     }
 
+    const TimetableCard = ({ entry, span, isMobile = false }) => {
+        if (!entry) {
+            return (
+                <div className={`h-full w-full rounded-2xl border border-dashed border-slate-100 flex items-center justify-center transition-colors group-hover:border-slate-200 ${isMobile ? 'py-6 px-4' : ''}`}>
+                    <span className="text-[10px] font-bold text-slate-200 uppercase tracking-widest">Free Slot</span>
+                </div>
+            );
+        }
+
+        // Special state for mobile "covered" slots
+        if (isMobile && entry.isCovered) {
+            return (
+                <div className="h-full w-full rounded-2xl border border-dashed bg-slate-50/50 border-slate-200 p-3 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-1 opacity-40">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Continuing</span>
+                        <p className="text-[9px] font-bold text-slate-500 text-center line-clamp-1 italic">{entry.type === 'subject' ? entry.subject_name : entry.custom_label}</p>
+                    </div>
+                </div>
+            );
+        }
+
+        const isLab = entry.type === 'lab';
+        const isBreak = entry.type === 'break' || entry.type === 'Lunch';
+
+        let bgColor = 'bg-white';
+        let borderColor = 'border-slate-200';
+        let tagColor = 'bg-indigo-100 text-indigo-700';
+
+        if (isLab) {
+            bgColor = 'bg-purple-50/50';
+            borderColor = 'border-purple-100';
+            tagColor = 'bg-purple-100 text-purple-700';
+        } else if (isBreak) {
+            bgColor = 'bg-amber-50/50';
+            borderColor = 'border-amber-100';
+            tagColor = 'bg-amber-100 text-amber-500';
+        } else if (entry.type === 'Other' || entry.type === 'other') {
+            bgColor = 'bg-teal-50/50';
+            borderColor = 'border-teal-100';
+            tagColor = 'bg-teal-100 text-teal-700';
+        }
+
+        return (
+            <div className={`h-full w-full rounded-2xl p-3 flex flex-col border shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-all hover:shadow-md hover:scale-[1.01] cursor-default ${bgColor} ${borderColor}`}>
+                <div className="flex-1">
+                    <div className="flex items-start justify-between mb-1.5">
+                        <span className={`text-[9px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-md ${tagColor}`}>
+                            {entry.type}
+                        </span>
+                        {span > 1 && !isMobile && (
+                            <span className="text-[9px] font-bold text-slate-400 bg-white border border-slate-50 px-1.5 py-0.5 rounded shadow-sm">
+                                {span} periods
+                            </span>
+                        )}
+                    </div>
+                    <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2">
+                        {entry.type === 'subject' ? entry.subject_name : entry.custom_label}
+                    </h4>
+                </div>
+                {(entry.subject_code || (isMobile && span > 1)) && (
+                    <div className="mt-2 pt-2 border-t border-slate-100/50 flex items-center justify-between">
+                        {entry.subject_code && (
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                <Info className="w-3 h-3" />
+                                {entry.subject_code}
+                            </div>
+                        )}
+                        {isMobile && span > 1 && entry.isStart && (
+                            <span className="text-[9px] font-black text-indigo-500/60 uppercase tracking-widest">
+                                Spans {span} slots
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-            {/* Header section with summary */}
-            <div className="bg-white rounded-[2rem] border border-slate-200 p-8 mb-8 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            {/* Header Section */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 p-6 md:p-8 mb-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-50/40 rounded-full -mr-40 -mt-40 blur-3xl pointer-events-none" />
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Class Timetable</h1>
-                        <p className="text-slate-500 flex items-center gap-2">
-                            <BookOpen className="w-4 h-4" />
-                            {user.branch} — Year {user.current_year}, Semester {user.current_semester || 1}
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="w-10 h-1 bg-indigo-600 rounded-full" />
+                            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Weekly Schedule</span>
+                        </div>
+                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 mb-1 tracking-tight">Academic Timetable</h1>
+                        <p className="text-slate-500 text-sm md:text-base flex items-center gap-2 font-semibold">
+                            <BookOpen className="w-4 h-4 text-slate-400" />
+                            {user.branch} <span className="text-slate-300 mx-1">/</span> Year {user.current_year} Sem {user.current_semester || 1}
                         </p>
                     </div>
-                    <div className="flex items-center gap-4 bg-indigo-50 px-6 py-4 rounded-2xl border border-indigo-100/50">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                            <Calendar className="w-6 h-6" />
+
+                    <div className="flex items-center gap-4 bg-slate-50/60 backdrop-blur-md px-5 py-3.5 rounded-3xl border border-slate-100 shadow-sm">
+                        <div className="w-11 h-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                            <Calendar className="w-5 h-5" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-1">Current Day</p>
-                            <p className="text-lg font-bold text-indigo-900 leading-none">
-                                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">Date</p>
+                            <p className="text-sm font-bold text-slate-900 leading-none">
+                                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Timetable Grid Container */}
-            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
-                <div className="overflow-x-auto custom-scrollbar">
-                    <div className="min-w-[1000px]">
-                        {/* Grid Header */}
-                        <div className="flex border-b border-slate-100 bg-slate-50/50">
-                            <div className="w-24 flex-shrink-0 p-6 flex items-center justify-center border-r border-slate-100">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">DAY</span>
+            {/* Mobile View */}
+            <div className="md:hidden space-y-4">
+                <div className="sticky top-0 z-20 bg-[#f8fafc]/80 backdrop-blur-xl -mx-4 px-4 py-3 border-b border-slate-100/50">
+                    <div className="flex overflow-x-auto no-scrollbar gap-2">
+                        {days.map((day) => (
+                            <button
+                                key={day}
+                                onClick={() => setActiveDay(day)}
+                                className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[10px] font-black tracking-widest transition-all duration-300 ${activeDay === day
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 scale-[1.02]'
+                                    : 'bg-white text-slate-400 border border-slate-200/50'
+                                    }`}
+                            >
+                                {day}
+                                {day === currentDayName && <div className="h-1 w-3 bg-current mx-auto mt-0.5 rounded-full opacity-50" />}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-4 pt-2">
+                    {periodSlots.map((slot, index) => {
+                        const entry = getMobileEntryForSlot(activeDay, index);
+                        return (
+                            <div key={slot.id} className="flex gap-4 group">
+                                <div className="w-20 pt-2 flex-shrink-0 text-right">
+                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">{slot.slot_name}</p>
+                                    <p className="text-[10px] font-black text-slate-600 bg-slate-100/50 py-1 px-2 rounded-lg inline-block whitespace-nowrap">
+                                        {formatTimeTo12h(slot.start_time)}
+                                    </p>
+                                </div>
+                                <div className="flex-1 min-h-[90px]">
+                                    <TimetableCard entry={entry} isMobile />
+                                </div>
                             </div>
-                            <div className="flex-1 flex">
-                                {periodSlots.map((slot) => (
-                                    <div key={slot.id} className="flex-1 min-w-[120px] p-6 text-center border-r border-slate-100 last:border-r-0">
-                                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">{slot.slot_name}</p>
-                                        <p className="text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5">
-                                            <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                                            {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
-                                        </p>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Desktop View (Tabular Grid) */}
+            <div className="hidden md:block bg-white rounded-[3rem] border border-slate-200 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.06)] overflow-hidden">
+                {periodSlots.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-32 text-center">
+                        <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                            <Calendar className="w-12 h-12 text-slate-200" />
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">No Timetable Configured</h3>
+                        <p className="text-slate-400 max-w-xs mx-auto text-sm font-semibold">
+                            Please contact your department for the weekly schedule.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto no-scrollbar">
+                        <div className="min-w-[1250px]">
+                            {/* Header row */}
+                            <div className="flex border-b border-slate-100 bg-slate-50/40">
+                                <div className="w-24 flex-shrink-0 p-6 flex items-center justify-center border-r border-slate-100 bg-slate-50/20">
+                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">SLOTS</span>
+                                </div>
+                                <div className="flex-1 flex">
+                                    {periodSlots.map((slot) => (
+                                        <div key={slot.id} className="flex-1 min-w-[130px] h-[85px] py-5 px-4 text-center border-r border-slate-100 last:border-r-0 flex flex-col justify-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1.5">{slot.slot_name}</p>
+                                            <p className="text-[10px] font-black text-slate-900 flex items-center justify-center gap-1.5 opacity-80">
+                                                <Clock className="w-3 h-3 text-indigo-500 opacity-60" />
+                                                {formatTimeTo12h(slot.start_time).replace(' AM', '').replace(' PM', '')} - {formatTimeTo12h(slot.end_time)}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Body Rows */}
+                            <div className="divide-y divide-slate-100">
+                                {days.map((day) => (
+                                    <div key={day} className={`flex transition-all duration-300 ${day === currentDayName ? 'bg-indigo-50/10' : 'hover:bg-slate-50/20'}`}>
+                                        <div className={`w-24 flex-shrink-0 flex flex-col items-center justify-center border-r border-slate-100 font-black text-[13px] tracking-tight ${day === currentDayName ? 'text-indigo-600 bg-indigo-50/20' : 'text-slate-400'}`}>
+                                            {day}
+                                            {day === currentDayName && <div className="h-1.5 w-1.5 bg-indigo-600 rounded-full mt-2 ring-4 ring-indigo-50 animate-pulse" />}
+                                        </div>
+
+                                        <div className="flex-1 flex">
+                                            {(() => {
+                                                let skipCount = 0;
+                                                return periodSlots.map((slot) => {
+                                                    if (skipCount > 0) {
+                                                        skipCount--;
+                                                        return null;
+                                                    }
+
+                                                    const entry = getEntryForSlot(day, slot.id);
+                                                    const span = entry?.span || 1;
+                                                    if (span > 1) skipCount = span - 1;
+
+                                                    return (
+                                                        <div
+                                                            key={slot.id}
+                                                            className={`p-2 min-h-[110px] flex border-r border-slate-100 last:border-r-0`}
+                                                            style={{ flex: span }}
+                                                        >
+                                                            <TimetableCard entry={entry} span={span} />
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Grid Body */}
-                        <div className="divide-y divide-slate-100">
-                            {days.map((day) => (
-                                <div key={day} className={`flex group transition-colors ${day === currentDay ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}>
-                                    {/* Day Label */}
-                                    <div className={`w-24 flex-shrink-0 p-6 flex items-center justify-center border-r border-slate-100 font-black text-sm tracking-tighter ${day === currentDay ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                        {day === currentDay && <div className="absolute left-0 w-1 h-12 bg-indigo-600 rounded-r-full" />}
-                                        {day}
-                                    </div>
-
-                                    {/* Slots */}
-                                    <div className="flex-1 flex">
-                                        {(() => {
-                                            let skipCount = 0;
-                                            return periodSlots.map((slot) => {
-                                                if (skipCount > 0) {
-                                                    skipCount--;
-                                                    return null;
-                                                }
-
-                                                const entry = getEntryForSlot(day, slot.id);
-                                                const span = entry?.span || 1;
-                                                if (span > 1) skipCount = span - 1;
-
-                                                return (
-                                                    <div
-                                                        key={slot.id}
-                                                        className={`flex flex-col p-3 border-r border-slate-100 last:border-r-0 min-h-[100px] transition-all`}
-                                                        style={{ flex: span }}
-                                                    >
-                                                        {entry ? (
-                                                            <div className={`h-full rounded-2xl p-4 flex flex-col justify-between border shadow-sm transition-transform hover:scale-[1.02] cursor-default ${entry.type === 'subject' ? 'bg-white border-slate-200' :
-                                                                    entry.type === 'lab' ? 'bg-purple-50 border-purple-100' :
-                                                                        'bg-amber-50 border-amber-100'
-                                                                }`}>
-                                                                <div>
-                                                                    <div className="flex items-start justify-between mb-1">
-                                                                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${entry.type === 'subject' ? 'bg-indigo-100 text-indigo-700' :
-                                                                                entry.type === 'lab' ? 'bg-purple-100 text-purple-700' :
-                                                                                    'bg-amber-100 text-amber-700'
-                                                                            }`}>
-                                                                            {entry.type}
-                                                                        </span>
-                                                                        {span > 1 && (
-                                                                            <span className="text-[10px] font-bold text-slate-400">
-                                                                                {span} periods
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight line-clamp-2">
-                                                                        {entry.type === 'subject' ? entry.subject_name : entry.custom_label}
-                                                                    </h4>
-                                                                </div>
-
-                                                                {entry.type === 'subject' && entry.subject_code && (
-                                                                    <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                                                                        <Info className="w-3.5 h-3.5" />
-                                                                        {entry.subject_code}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="h-full rounded-2xl border border-dashed border-slate-100 flex items-center justify-center group-hover:border-slate-200 transition-colors">
-                                                                <span className="text-[10px] font-bold text-slate-200 group-hover:text-slate-300 uppercase tracking-widest">Free Slot</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            });
-                                        })()}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Info Tips */}
-            <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex gap-3">
-                    <Info className="w-5 h-5 text-blue-500 shrink-0" />
-                    <p className="text-xs text-blue-700 leading-relaxed font-medium">
-                        <strong>Note:</strong> Lab sessions typically span multiple periods. If you see a merged card, it means the class continues through those slots.
-                    </p>
+            {/* Information Cards */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-white border border-slate-200 p-5 rounded-[2rem] flex gap-4 transition-all hover:border-indigo-200 group shadow-sm">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+                        <Info className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h5 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Merged Time Slots</h5>
+                        <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                            Extended cards indicate sessions like Labs that cover multiple periods. Timing is reflected in the top bar.
+                        </p>
+                    </div>
                 </div>
-                <div className="flex-1 bg-amber-50/50 border border-amber-100 p-4 rounded-2xl flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-xs text-amber-700 leading-relaxed font-medium">
-                        <strong>Important:</strong> Changes to the timetable are managed by your Branch HOD. Please contact them for any clarification regarding the schedule.
-                    </p>
+
+                <div className="bg-white border border-slate-200 p-5 rounded-[2rem] flex gap-4 transition-all hover:border-amber-200 group shadow-sm">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors duration-300">
+                        <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h5 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Schedule Queries</h5>
+                        <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                            For any discrepancies or missed classes, please consult your department's HOD or academic coordinator.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="hidden lg:flex bg-gradient-to-br from-indigo-600 to-indigo-700 p-5 rounded-[2.2rem] text-white flex gap-4 shadow-xl shadow-indigo-100 transition-transform hover:scale-[1.02] duration-300">
+                    <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-white shrink-0">
+                        <Calendar className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h5 className="text-[11px] font-black text-white/60 uppercase tracking-widest mb-1.5">Academic Compliance</h5>
+                        <p className="text-xs text-white/90 leading-relaxed font-semibold">
+                            Maintain 100% attendance by strictly following the weekly timetable for all sessions.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
+
 
 export default StudentTimetable;
