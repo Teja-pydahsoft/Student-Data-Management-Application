@@ -133,6 +133,8 @@ const SemesterRegistration = () => {
                     [type === 'student' ? 'studentVerified' : 'parentVerified']: true
                 }));
                 toast.success('Mobile verified successfully!');
+                // Automatically refresh data - backend will auto-complete if this was the last step
+                fetchStudentDetails();
             } else {
                 toast.error(response.data.message || 'Invalid OTP');
             }
@@ -189,38 +191,27 @@ const SemesterRegistration = () => {
         return isStepCompleted(1) && isStepCompleted(2) && isStepCompleted(3) && isStepCompleted(4) && isStepCompleted(5);
     };
 
-    const handleFinalize = async () => {
-        if (!canFinalize()) {
-            toast.error('Please complete all required steps (Verification, Certificates, Fees, Promotion, Scholarship) before finalizing.');
-            return;
+    // Auto-completion effect
+    useEffect(() => {
+        if (!initialLoading && !loading && canFinalize() && (studentData?.registration_status || '').toLowerCase() !== 'completed') {
+            const autoFinalize = async () => {
+                setLoading(true);
+                try {
+                    // Even though backend auto-checks on verify, we double check here
+                    const response = await api.get(`/students/${user.admission_number}`);
+                    if (response.data?.success) {
+                        setStudentData(response.data.data);
+                        toast.success('Registration finalized automatically!');
+                    }
+                } catch (e) {
+                    console.error('Auto-finalize sync error:', e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            autoFinalize();
         }
-
-        setLoading(true);
-        try {
-            const response = await api.put(`/students/${user.admission_number}/registration-status`, {
-                registration_status: 'completed'
-            });
-            if (response.data?.success) {
-                toast.success('Registration finalized!');
-                navigate('/student/dashboard');
-            } else {
-                throw new Error(response.data?.message);
-            }
-        } catch (error) {
-            // Fallback generic update
-            try {
-                await api.put(`/students/${user.admission_number}`, {
-                    studentData: { 'Registration Status': 'completed', registration_status: 'completed' }
-                });
-                toast.success('Registration finalized!');
-                navigate('/student/dashboard');
-            } catch (err) {
-                toast.error('Failed to finalize registration');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [initialLoading, studentData, verificationState]);
 
     // ------------ DATA & CONFIG ------------
 
@@ -393,25 +384,17 @@ const SemesterRegistration = () => {
             </div>
 
             {/* Final Action Bar */}
+            {/* Footer replaced with Status Info */}
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg z-30 lg:pl-64">
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                     <div>
-                        <p className="text-sm font-medium text-gray-900">Ready to finish?</p>
-                        <p className="text-xs text-gray-500">Ensure all required steps are marked as DONE.</p>
+                        <p className="text-sm font-medium text-gray-900">Registration Status</p>
+                        <p className="text-xs text-gray-500">Your registration will be automatically finalized once all steps are completed.</p>
                     </div>
-                    <button
-                        onClick={handleFinalize}
-                        disabled={!canFinalize() || loading}
-                        className={`
-                            px-8 py-3 rounded-lg font-bold flex items-center gap-2 transition-all
-                            ${canFinalize()
-                                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
-                        `}
-                    >
-                        {loading && <Loader2 className="animate-spin" size={18} />}
-                        Finalize Registration
-                    </button>
+                    <div className="flex items-center gap-2 text-blue-600 font-semibold text-sm bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
+                        <Zap size={16} className="animate-pulse" />
+                        Automated System Active
+                    </div>
                 </div>
             </div>
 

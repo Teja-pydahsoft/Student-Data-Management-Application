@@ -5351,6 +5351,9 @@ exports.verifyOtp = async (req, res) => {
             'UPDATE students SET student_data = ? WHERE id = ?',
             [JSON.stringify(data), student.id]
           );
+
+          // Auto-check for registration completion after verification
+          await checkAndAutoCompleteRegistration(admissionNumber);
         }
       } catch (dbError) {
         console.error('Error persisting OTP verification status:', dbError);
@@ -7066,6 +7069,9 @@ exports.adminVerifyMobile = async (req, res) => {
 
     // 4. Clear cache
     clearStudentsCache();
+
+    // 5. Auto-check for registration completion after verification
+    await checkAndAutoCompleteRegistration(admissionNumber);
 
     res.json({
       success: true,
