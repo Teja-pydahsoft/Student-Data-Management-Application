@@ -164,9 +164,9 @@ const Login = () => {
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-white via-neutral-bg to-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
           <p className="mt-4 text-gray-600">Verifying authentication...</p>
         </div>
       </div>
@@ -176,7 +176,7 @@ const Login = () => {
   if (!showLoginForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto" />
       </div>
     );
   }
@@ -187,7 +187,7 @@ const Login = () => {
       <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex min-h-[600px]">
 
         {/* Left Side - Blue Panel (Hidden on mobile) */}
-        <div className="hidden md:flex md:w-1/2 bg-blue-600 text-white flex-col justify-between p-12 relative overflow-hidden">
+        <div className="hidden md:flex md:w-1/2 bg-primary text-white flex-col justify-between p-12 relative overflow-hidden">
           {/* Background Pattern/Accents */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             <div className="absolute -top-24 -left-24 w-96 h-96 bg-white rounded-full blur-3xl" />
@@ -200,7 +200,7 @@ const Login = () => {
               <Users size={20} className="text-white" />
             </div>
             <h2 className="text-4xl font-bold mb-4">Student<br />Management</h2>
-            <p className="text-blue-100 text-lg opacity-90">
+            <p className="text-accent text-lg opacity-90">
               Access your academic dashboard, results, and campus updates in one place.
             </p>
           </div>
@@ -221,11 +221,11 @@ const Login = () => {
           {/* Bottom Content */}
           <div className="relative z-10">
             <div className="flex items-center gap-3 bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
-              <div className="w-10 h-10 rounded-full bg-green-400 flex items-center justify-center shadow-lg">
-                <Users size={18} className="text-blue-900" />
+              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center shadow-lg">
+                <Users size={18} className="text-primary-dark" />
               </div>
               <div>
-                <p className="text-xs font-medium text-blue-200 uppercase tracking-wider">Connect With Us</p>
+                <p className="text-xs font-medium text-accent uppercase tracking-wider">Connect With Us</p>
                 <p className="text-sm font-semibold">Campus Connect</p>
               </div>
             </div>
@@ -240,7 +240,7 @@ const Login = () => {
               <p className="text-sm text-amber-800">{ssoError}</p>
               <a
                 href={CRM_FRONTEND_URL}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                className="text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap"
               >
                 Return to CRM Portal
               </a>
@@ -264,14 +264,14 @@ const Login = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Users className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                    <Users className="h-5 w-5 text-gray-400 group-focus-within:text-primary transition-colors" />
                   </div>
                   <input
                     type="text"
                     name="username"
                     value={formData.username}
                     onChange={handleChange}
-                    className="block w-full pl-10 pr-3 py-3 bg-blue-50/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    className="block w-full pl-10 pr-3 py-3 bg-neutral-bg/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="Enter Username or Admission No"
                     disabled={loading}
                   />
@@ -284,14 +284,14 @@ const Login = () => {
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <LogIn className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                    <LogIn className="h-5 w-5 text-gray-400 group-focus-within:text-primary transition-colors" />
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className="block w-full pl-10 pr-10 py-3 bg-blue-50/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    className="block w-full pl-10 pr-10 py-3 bg-neutral-bg/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     placeholder="Enter your password"
                     disabled={loading}
                   />
@@ -308,7 +308,7 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-all transform hover:-translate-y-0.5"
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white bg-primary hover:bg-primary-dark active:bg-primary-dark transition-all transform hover:-translate-y-0.5"
               >
                 {loading ? (
                   <>
@@ -327,7 +327,7 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => setShowForgotModal(true)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                className="text-sm font-medium text-primary hover:text-primary-dark transition-colors"
               >
                 Forgot Password?
               </button>
@@ -388,7 +388,7 @@ const Login = () => {
                   type="tel"
                   value={forgotMobile}
                   onChange={(e) => setForgotMobile(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none"
                   placeholder="Enter mobile number"
                   required
                 />
@@ -397,7 +397,7 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={forgotLoading}
-                className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex justify-center items-center gap-2"
+                className="w-full bg-primary text-white py-2 rounded-lg font-medium hover:bg-primary-dark disabled:opacity-50 flex justify-center items-center gap-2"
               >
                 {forgotLoading ? <Loader2 className="animate-spin" size={16} /> : null}
                 {forgotLoading ? 'Sending...' : 'Send New Password'}

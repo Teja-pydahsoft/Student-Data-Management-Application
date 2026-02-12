@@ -7,29 +7,29 @@ export default {
     theme: {
         extend: {
             colors: {
-                // Primary Brand Color: #2AB7A9 (Soft Teal Green)
-                primary: '#2AB7A9',
-                'primary-dark': '#26A699',
-                'primary-light': '#3AC5B8',
+                // Primary Brand Color: #1A2517 (Deep Olive)
+                primary: '#1A2517',
+                'primary-dark': '#11180F',
+                'primary-light': '#2B3C26',
 
-                // Accent Color: #FF6B6B (Coral Red)
-                accent: '#FF6B6B',
-                'accent-light': '#FF8A8A',
-                'accent-dark': '#E55A5A',
+                // Accent Color: #A3B18A (Sage Green) - Matches text in Deep Olive combo image
+                accent: '#A3B18A',
+                'accent-light': '#CAD2C5',
+                'accent-dark': '#849669',
 
-                // Secondary Color: #FFD166 (Soft Amber)
-                secondary: '#FFD166',
-                'secondary-light': '#FFE599',
-                'secondary-dark': '#E6BB5A',
+                // Secondary Color: #FAFAF5 (Milk White)
+                secondary: '#FAFAF5',
+                'secondary-light': '#FFFFFF',
+                'secondary-dark': '#E6E6E1',
 
-                // Neutral Background: #F9FAFB (Off-White)
-                'neutral-bg': '#F9FAFB',
+                // Neutral Background: #FAFAF5 (Milk White)
+                'neutral-bg': '#FAFAF5',
 
                 // Card / Section Background: #FFFFFF
                 'card-bg': '#FFFFFF',
 
-                // Sidebar Background: #FAF3E0 (Cream Beige)
-                'sidebar-bg': '#FAF3E0',
+                // Sidebar Background: #F3F1EB (Slightly darker Milk White)
+                'sidebar-bg': '#F3F1EB',
 
                 // Text Colors
                 'text-primary': '#333333',     // Dark Charcoal

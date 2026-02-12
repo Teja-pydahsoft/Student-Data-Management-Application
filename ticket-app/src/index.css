@@ -16,7 +16,7 @@
 }
 
 .progress-shimmer {
-  background: linear-gradient(90deg, #2563eb 25%, #3b82f6 50%, #2563eb 75%);
+  background: linear-gradient(90deg, #1A2517 25%, #2B3C26 50%, #1A2517 75%);
   background-size: 200px 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -25,11 +25,11 @@
 
   0%,
   100% {
-    box-shadow: 0 0 5px rgba(37, 99, 235, 0.5);
+    box-shadow: 0 0 5px rgba(26, 37, 23, 0.5);
   }
 
   50% {
-    box-shadow: 0 0 20px rgba(37, 99, 235, 0.8);
+    box-shadow: 0 0 20px rgba(26, 37, 23, 0.8);
   }
 }
 
@@ -70,8 +70,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #ffffff;
   /* Pure White Background */
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  background-image: url('data:image/svg+xml,<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><defs><path id="wave" d="M0 300c50-50 100-50 200 0s150 50 200 0 150-50 200 0 150 50 200 0" fill="none" stroke="%232563EB" stroke-width="2" opacity="0.05"/></defs><use href="%23wave" transform="translate(0,50)"/><use href="%23wave" transform="translate(0,150)"/><use href="%23wave" transform="translate(0,250)"/></svg>');
+  background: linear-gradient(135deg, #FFFCF5 0%, #FAFAF5 100%);
+  background-image: url('data:image/svg+xml,<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><defs><path id="wave" d="M0 300c50-50 100-50 200 0s150 50 200 0 150-50 200 0 150 50 200 0" fill="none" stroke="%231A2517" stroke-width="2" opacity="0.05"/></defs><use href="%23wave" transform="translate(0,50)"/><use href="%23wave" transform="translate(0,150)"/><use href="%23wave" transform="translate(0,250)"/></svg>');
   background-repeat: no-repeat;
   background-position: bottom right;
   background-size: 600px;
@@ -184,7 +184,7 @@ code {
 
 .card-hover:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 8px 25px rgba(26, 37, 23, 0.15);
 }
 
 /* Button hover effects */
@@ -193,9 +193,9 @@ code {
 }
 
 .btn-hover:hover {
-  background-color: #1d4ed8;
+  background-color: #11180F;
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 4px 8px rgba(26, 37, 23, 0.2);
 }
 
 .btn-hover:active {
@@ -208,8 +208,8 @@ code {
 }
 
 .input-focus:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #1A2517;
+  box-shadow: 0 0 0 3px rgba(26, 37, 23, 0.1);
 }
 
 /* Sidebar hover effects */
@@ -219,8 +219,8 @@ code {
 }
 
 .sidebar-link-hover:hover {
-  color: #2563eb;
-  background-color: rgba(37, 99, 235, 0.1);
+  color: #1A2517;
+  background-color: rgba(26, 37, 23, 0.1);
   transform: translateX(4px);
 }
 
