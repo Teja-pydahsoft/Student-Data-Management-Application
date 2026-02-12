@@ -9,9 +9,15 @@ import clubService from '../../services/clubService';
 import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
-    const { user } = useAuthStore();
+    const { user, token } = useAuthStore(); // Get token for SSO
     const navigate = useNavigate();
     const [studentData, setStudentData] = useState(null);
+
+    // Ticket App SSO URL
+    const ticketAppUrl = useMemo(() => {
+        if (!token) return 'http://localhost:5174/student';
+        return `http://localhost:5174/auth-callback?token=${token}&role=student&from=portal`;
+    }, [token]);
     const [loading, setLoading] = useState(true);
 
     // Additional Data States
@@ -827,10 +833,10 @@ const Dashboard = () => {
                                 <div
                                     key={slot.id}
                                     className={`w-44 p-4 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md ${slot.entry
-                                            ? slot.entry.type === 'subject' ? 'bg-indigo-50/50 border-indigo-100' :
-                                                slot.entry.type === 'lab' ? 'bg-purple-50/50 border-purple-100' :
-                                                    'bg-amber-50/50 border-amber-100'
-                                            : 'bg-slate-50 border-slate-100 opacity-60'
+                                        ? slot.entry.type === 'subject' ? 'bg-indigo-50/50 border-indigo-100' :
+                                            slot.entry.type === 'lab' ? 'bg-purple-50/50 border-purple-100' :
+                                                'bg-amber-50/50 border-amber-100'
+                                        : 'bg-slate-50 border-slate-100 opacity-60'
                                         }`}
                                 >
                                     <div className="mb-3">
@@ -844,8 +850,8 @@ const Dashboard = () => {
                                     {slot.entry && (
                                         <div className="flex items-center justify-between mt-auto">
                                             <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${slot.entry.type === 'subject' ? 'bg-indigo-100 text-indigo-600' :
-                                                    slot.entry.type === 'lab' ? 'bg-purple-100 text-purple-600' :
-                                                        'bg-amber-100 text-amber-600'
+                                                slot.entry.type === 'lab' ? 'bg-purple-100 text-purple-600' :
+                                                    'bg-amber-100 text-amber-600'
                                                 }`}>
                                                 {slot.entry.type}
                                             </span>
@@ -1158,6 +1164,33 @@ const Dashboard = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* Ticket Support Widget */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit relative z-10 mb-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                    <Users size={20} />
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Support</h3>
+                            </div>
+                            <a href={ticketAppUrl} className="text-indigo-600 hover:bg-indigo-50 p-1 rounded">
+                                <ArrowRight size={16} />
+                            </a>
+                        </div>
+
+                        <div className="flex flex-col items-center justify-center py-4 text-center text-gray-500 mb-2">
+                            <p className="text-sm">Need help?</p>
+                            <p className="text-xs text-gray-400 mt-1">Raise a ticket for issues or support.</p>
+                        </div>
+
+                        <a
+                            href={ticketAppUrl}
+                            className="w-full py-2.5 bg-indigo-600 text-white text-center font-medium rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm"
+                        >
+                            Go to Support
+                        </a>
+                    </div>
 
                     {/* Services Widget */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col h-fit relative z-10">

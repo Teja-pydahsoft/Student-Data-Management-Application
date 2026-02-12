@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
@@ -6,7 +6,6 @@ import { Toaster } from 'react-hot-toast';
 import AdminLayout from './components/Layout/AdminLayout';
 import StudentLayout from './components/Layout/StudentLayout';
 
-// Pages
 // Pages
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
@@ -44,19 +43,18 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
   }
 
   if (!isAuthenticated) {
-    // Redirect to Main App Login
-    const mainAppUrl = import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173';
-    window.location.href = `${mainAppUrl}/login`;
-    return null;
+    // Redirect to Local Login instead of Main App
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user?.role)) {
-    // Check if role is sub_admin which might not be in allowedRoles if checking specifically for others
-    // But usually allowedRoles should include sub_admin if they are allowed
+    // If not allowed, check if they are trying to access a legacy route or simple mismatch
+    // For now, just send to unauthorized or home
     return <Navigate to="/unauthorized" replace />;
   }
 
-  if (requiredPermission && !hasPermission(requiredPermission)) {
+  // Optional: Check granular permissions if provided
+  if (requiredPermission && hasPermission && !hasPermission(requiredPermission)) {
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -64,15 +62,11 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
 };
 
 const App = () => {
-  const { verifyToken, isLoading } = useAuthStore();
+  const { isLoading } = useAuthStore();
 
-  useEffect(() => {
-    // Verify token on mount to ensure session validity
-    // Skip verification on auth-callback page to verify race condition with SSO
-    if (!window.location.pathname.includes('/auth-callback')) {
-      verifyToken();
-    }
-  }, [verifyToken]);
+  // REMOVED: Automatic verifyToken() on mount.
+  // This was causing 401s on the login page by trying to validate non-existent sessions against the portal.
+  // The Ticket App Login is standalone. Authentication state is persisted in localStorage and handled by authStore.
 
   if (isLoading) {
     return (
@@ -81,6 +75,14 @@ const App = () => {
       </div>
     );
   }
+
+  // Define roles allowed to access AdminLayout
+  // Extended list to ensure all potential roles can at least land on the dashboard
+  const adminLayoutRoles = [
+    'super_admin', 'admin', 'staff', 'sub_admin', 'worker',
+    'college_principal', 'college_ao', 'college_attender',
+    'branch_hod', 'office_assistant', 'cashier', 'faculty'
+  ];
 
   return (
     <>
@@ -96,48 +98,52 @@ const App = () => {
       />
 
       <Routes>
+        {/* Auth callback for portal-to-app workspace integration (if needed later) */}
         <Route path="/auth-callback" element={<AuthCallback />} />
-        {/* Redirect Login routes to Main App */}
-        <Route path="/login" element={<AuthCallback />} />
-        <Route path="/student/login" element={<AuthCallback />} />
 
-        {/* Admin Routes */}
+        {/* Local Login for direct access */}
+        <Route path="/login" element={<Login />} />
+
+        {/* Redirect /student/login to main login to keep it unified */}
+        <Route path="/student/login" element={<Navigate to="/login" replace />} />
+
+        {/* Admin/Manager/Worker Routes */}
+        <Route element={<Navigate to="/login" replace />} path="/" />
+
+        {/* Admin Layout Routes */}
         <Route
+          path="/*"
           element={
-            <ProtectedRoute allowedRoles={['super_admin', 'admin', 'staff', 'sub_admin']}>
+            <ProtectedRoute allowedRoles={adminLayoutRoles}>
               <AdminLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<AdminDashboard />} />
-
-          <Route path="/configuration" element={<TicketConfiguration />} />
-          <Route path="/employees" element={<EmployeeManagement />} />
-          <Route path="/task-management" element={<TaskManagement />} />
-          <Route path="/sub-admins" element={<SubAdminCreation />} />
-          <Route path="/roles" element={<RoleManagement />} />
-
-          {/* Legacy redirects */}
-          <Route path="/tickets" element={<Navigate to="/task-management" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="configuration" element={<TicketConfiguration />} />
+          <Route path="employees" element={<EmployeeManagement />} />
+          <Route path="task-management" element={<TaskManagement />} />
+          <Route path="sub-admins" element={<SubAdminCreation />} />
+          <Route path="roles" element={<RoleManagement />} />
+          <Route path="tickets" element={<Navigate to="/task-management" replace />} />
         </Route>
 
+        {/* Student Routes */}
         <Route
-          path="/student"
+          path="/student/*"
           element={
             <ProtectedRoute allowedRoles={['student']}>
               <StudentLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="" element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="my-tickets" element={<MyTickets />} />
           <Route path="raise-ticket" element={<RaiseTicket />} />
+          {/* Default redirect for /student root */}
+          <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>
   );

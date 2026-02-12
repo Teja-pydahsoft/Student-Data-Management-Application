@@ -16,6 +16,7 @@ const Login = () => {
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginType, setLoginType] = useState('student');
 
   // SSO state
   const [isVerifying, setIsVerifying] = useState(false);
@@ -181,143 +182,161 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-gray-50 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
-      {/* Decorative background accents */}
-      <div className="absolute inset-0">
-        <div className="absolute top-[-5%] left-[10%] w-80 h-80 bg-blue-100 rounded-full blur-3xl opacity-60 animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[5%] w-96 h-96 bg-blue-200 rounded-full blur-3xl opacity-70 animate-pulse" />
-      </div>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      {/* Main Card Container */}
+      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex min-h-[600px]">
 
-      {/* SSO error banner */}
-      {ssoError && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 max-w-md w-full mx-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 z-20">
-          <p className="text-sm text-amber-800">{ssoError}</p>
-          <a
-            href={CRM_FRONTEND_URL}
-            className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
-          >
-            Return to CRM Portal
-          </a>
-        </div>
-      )}
+        {/* Left Side - Blue Panel (Hidden on mobile) */}
+        <div className="hidden md:flex md:w-1/2 bg-blue-600 text-white flex-col justify-between p-12 relative overflow-hidden">
+          {/* Background Pattern/Accents */}
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <div className="absolute -top-24 -left-24 w-96 h-96 bg-white rounded-full blur-3xl" />
+            <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-white rounded-full blur-3xl" />
+          </div>
 
-      {/* Login card */}
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-border-light shadow-xl rounded-2xl sm:rounded-3xl relative z-10 p-6 sm:p-8 transition-transform duration-500">
-        {/* Header */}
-        <div className="text-center mb-6 sm:mb-8">
-          <img
-            src="/logo.png"
-            alt="Pydah DB Logo"
-            className="h-12 sm:h-14 w-auto max-w-full object-contain mx-auto mb-3 sm:mb-4"
-            loading="lazy"
-          />
-          <h1 className="text-xl sm:text-2xl font-semibold text-text-primary mb-1 tracking-tight">
-            Portal Login
-          </h1>
-          <p className="text-muted-text text-xs sm:text-sm">
-            Sign in to access your dashboard
-          </p>
-        </div>
+          {/* Top Content */}
+          <div className="relative z-10">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center mb-8 cursor-pointer hover:bg-white/30 transition-all">
+              <Users size={20} className="text-white" />
+            </div>
+            <h2 className="text-4xl font-bold mb-4">Student<br />Management</h2>
+            <p className="text-blue-100 text-lg opacity-90">
+              Access your academic dashboard, results, and campus updates in one place.
+            </p>
+          </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-          {/* Username */}
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium text-text-secondary mb-2"
-            >
-              Username
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="username"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                className="w-full px-4 py-3 text-base sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl bg-white text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 touch-manipulation min-h-[44px]"
-                placeholder="Enter Username or Admission No"
-                disabled={loading}
-              />
-              <Users
-                size={18}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-text pointer-events-none"
+          {/* Center Illustration Placeholder */}
+          <div className="relative z-10 flex-1 flex items-center justify-center my-8">
+            <div className="relative w-64 h-64">
+              <div className="absolute inset-0 bg-white/10 rounded-full animate-pulse-subtle" />
+              <img
+                src="/logo.png"
+                alt="Illustration"
+                className="relative w-full h-full object-contain drop-shadow-2xl"
+                onError={(e) => e.target.style.display = 'none'}
               />
             </div>
           </div>
 
-          {/* Password */}
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-text-secondary mb-2"
-            >
-              Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full px-4 py-3 text-base sm:text-sm border border-gray-200 rounded-lg sm:rounded-xl bg-white text-gray-900 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 pr-12 touch-manipulation min-h-[44px]"
-                placeholder="Enter your password"
+          {/* Bottom Content */}
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
+              <div className="w-10 h-10 rounded-full bg-green-400 flex items-center justify-center shadow-lg">
+                <Users size={18} className="text-blue-900" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-blue-200 uppercase tracking-wider">Connect With Us</p>
+                <p className="text-sm font-semibold">Campus Connect</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side - Login Form */}
+        <div className="w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center bg-white relative">
+          {/* SSO error banner */}
+          {ssoError && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2">
+              <p className="text-sm text-amber-800">{ssoError}</p>
+              <a
+                href={CRM_FRONTEND_URL}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+              >
+                Return to CRM Portal
+              </a>
+            </div>
+          )}
+
+          <div className="max-w-sm mx-auto w-full">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                Welcome Back
+              </h2>
+              <p className="text-gray-500 text-sm">
+                Sign in to your account to continue
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username / Admission No
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Users className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    className="block w-full pl-10 pr-3 py-3 bg-blue-50/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    placeholder="Enter Username or Admission No"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <LogIn className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="block w-full pl-10 pr-10 py-3 bg-blue-50/50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    placeholder="Enter your password"
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
                 disabled={loading}
-              />
+                className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-all transform hover:-translate-y-0.5"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-8 text-center space-y-4">
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-text hover:text-text-secondary active:text-text-primary transition touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowForgotModal(true)}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                Forgot Password?
               </button>
+
+              <p className="text-xs text-gray-400">
+                © {new Date().getFullYear()} Student Management System
+              </p>
             </div>
           </div>
-
-          {/* Login Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-3.5 px-5 rounded-lg sm:rounded-xl text-white font-medium text-base sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 focus:ring-4 focus:ring-blue-300 shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] relative overflow-hidden group touch-manipulation min-h-[44px]"
-          >
-            {/* Button Shine Effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin text-white" size={18} />
-                Signing in...
-              </>
-            ) : (
-              <>
-                <LogIn size={18} />
-                Access Dashboard
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <button
-            type="button"
-            onClick={() => setShowForgotModal(true)}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Forgot Password?
-          </button>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center text-xs text-muted-text mt-6 space-y-1">
-          <p>© {new Date().getFullYear()} Student Management System</p>
-          <a
-            href={CRM_FRONTEND_URL}
-            className="text-blue-600 hover:text-blue-800 font-medium inline-block"
-          >
-            Return to CRM Portal
-          </a>
         </div>
       </div>
 

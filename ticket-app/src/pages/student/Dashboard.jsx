@@ -15,8 +15,12 @@ import api from '../../config/api';
 import { SkeletonBox } from '../../components/SkeletonLoader';
 import '../../styles/student-pages.css';
 
+import useAuthStore from '../../store/authStore'; // Import store
+
 const Dashboard = () => {
     const navigate = useNavigate();
+    const { token } = useAuthStore(); // Get token
+    const MAIN_APP_URL = import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173';
 
     // Fetch tickets data for summary
     const { data: tickets = [], isLoading } = useQuery({
@@ -198,15 +202,15 @@ const Dashboard = () => {
 
                         <div className="action-card secondary">
                             <div style={{ position: 'relative', zIndex: 10 }}>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '-0.025em', fontFamily: 'Poppins, sans-serif' }}>Support Desk</h3>
-                                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>Our support team is available 24/7 for urgent academic and facility issues.</p>
-                                <button
-                                    onClick={() => navigate('/student/my-tickets')}
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '-0.025em', fontFamily: 'Poppins, sans-serif' }}>Student Portal</h3>
+                                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>Access academic results, services, and attendance.</p>
+                                <a
+                                    href={token ? `${MAIN_APP_URL}/auth-callback?token=${token}&role=student&from=ticket_app` : `${MAIN_APP_URL}/student/dashboard`}
                                     className="btn-secondary"
-                                    style={{ width: '100%', fontSize: '0.875rem' }}
+                                    style={{ width: '100%', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
                                 >
-                                    View FAQ
-                                </button>
+                                    Go to Portal
+                                </a>
                             </div>
                         </div>
                     </div>

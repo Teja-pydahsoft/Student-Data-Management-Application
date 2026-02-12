@@ -98,7 +98,7 @@ const AdminDashboard = () => {
             <div className="dashboard-main-grid animate-fade-in" style={{ animationDelay: '0.1s' }}>
                 <div className="col-span-12">
                     <h2 className="dashboard-section-title">Quick Actions</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div
                             className="card-base hover:shadow-md cursor-pointer transition-all bg-white"
                             onClick={() => navigate('/task-management')}
@@ -142,6 +142,23 @@ const AdminDashboard = () => {
                                 <div className="flex-1">
                                     <h3 className="font-bold text-gray-900">System Configuration</h3>
                                     <p className="text-sm text-gray-500 mt-1">Update ticket headers and settings</p>
+                                </div>
+                                <ArrowRight size={20} className="text-gray-300" />
+                            </div>
+                        </div>
+                        <div
+                            className="card-base hover:shadow-md cursor-pointer transition-all bg-white"
+                            onClick={() => window.location.href = `${import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173'}/`}
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="quick-action-icon text-blue-600 bg-blue-50 flex items-center justify-center rounded-lg" style={{ width: '40px', height: '40px' }}>
+                                    <div style={{ transform: 'rotate(180deg)' }}>
+                                        <ArrowRight size={24} />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-gray-900">Student Database</h3>
+                                    <p className="text-sm text-gray-500 mt-1">Switch to main application</p>
                                 </div>
                                 <ArrowRight size={20} className="text-gray-300" />
                             </div>

@@ -11,7 +11,8 @@ if (rawApiUrl) {
     // Ensure it includes /api
     API_BASE_URL = cleanUrl.endsWith('/api') ? cleanUrl : cleanUrl + '/api';
 } else {
-    // Default to Ticket Backend (5001)
+    // Default to Ticket Backend (5001) for local development
+    // CRITICAL: Must point to port 5001 for ticket-backend, NOT 5000
     API_BASE_URL = 'http://localhost:5001/api';
 }
 

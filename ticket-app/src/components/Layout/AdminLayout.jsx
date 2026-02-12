@@ -8,7 +8,10 @@ import {
     Shield,
     LogOut,
     Menu,
-    ArrowLeftCircle
+    ArrowLeftCircle,
+    FolderTree,
+    ChevronDown,
+    ChevronRight
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -20,6 +23,7 @@ const MAIN_APP_URL = import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173
 const AdminLayout = () => {
     // State
     const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+    const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
     const navigate = useNavigate();
     const { user, logout } = useAuthStore();
 
@@ -179,6 +183,23 @@ const AdminLayout = () => {
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
             fontSize: '13px', fontWeight: '600'
+        },
+        mobileHeader: {
+            display: 'none',
+            height: '64px',
+            background: 'linear-gradient(135deg, #2563EB, #4F46E5)',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 16px',
+            position: 'fixed',
+            top: 0, left: 0, right: 0,
+            zIndex: 45,
+            color: 'white',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        },
+        backdrop: {
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 48,
+            backdropFilter: 'blur(2px)',
         }
     };
 
@@ -187,12 +208,13 @@ const AdminLayout = () => {
             {/* Inject CSS for Media Queries */}
             <style>{`
                 @media (max-width: 1024px) {
-                    .desktop-sidebar { display: none !important; }
-                    .main-content { margin-left: 0 !important; padding-top: 80px !important; }
-                    .menu-toggle { display: block !important; }
+                    .desktop-sidebar { width: 270px; z-index: 50; }
+                    .main-content { margin-left: 0 !important; padding-top: 84px !important; }
+                    .mobile-header { display: flex !important; }
                 }
                 @media (min-width: 1025px) {
                     .desktop-sidebar { display: flex !important; }
+                    .mobile-header { display: none !important; }
                 }
             `}</style>
 
@@ -207,16 +229,37 @@ const AdminLayout = () => {
                 backgroundSize: '24px 24px'
             }} />
 
-            {/* Mobile Sidebar Toggle */}
-            {!desktopSidebarOpen && (
+            {/* Mobile Sidebar Backdrop */}
+            {desktopSidebarOpen && (
+                <div
+                    className="lg:hidden"
+                    style={styles.backdrop}
+                    onClick={() => setDesktopSidebarOpen(false)}
+                />
+            )}
+
+            {/* Mobile Header (Blue Theme) */}
+            <header style={styles.mobileHeader} className="mobile-header">
                 <button
                     onClick={() => setDesktopSidebarOpen(true)}
-                    style={styles.toggleButton}
-                    className="menu-toggle"
+                    className="p-2 -ml-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
-                    <Menu size={20} color="#6B7280" />
+                    <Menu size={24} />
                 </button>
-            )}
+
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                        <span className="font-bold text-white">A</span>
+                    </div>
+                    <span className="font-bold text-lg tracking-wide text-white">Admin Portal</span>
+                </div>
+
+                <div
+                    className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center overflow-hidden border-2 border-white/20"
+                >
+                    <span className="text-sm font-bold text-white">{user?.username?.charAt(0).toUpperCase() || 'A'}</span>
+                </div>
+            </header>
 
             {/* Sidebar */}
             <aside style={styles.sidebar} className="desktop-sidebar shadow-xl">
@@ -263,6 +306,52 @@ const AdminLayout = () => {
                             </NavLink>
                         );
                     })}
+
+                    {/* Workspace Dropdown */}
+                    <div style={{ marginTop: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                        <button
+                            onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
+                            style={{
+                                ...styles.navItem(false),
+                                width: '100%',
+                                justifyContent: 'space-between',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#4B5563'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <FolderTree size={20} />
+                                <span>Workspace</span>
+                            </div>
+                            {workspaceDropdownOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+
+                        {workspaceDropdownOpen && (
+                            <div style={{ paddingLeft: '24px', marginTop: '4px' }}>
+                                <a
+                                    href={`${MAIN_APP_URL}/`}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        padding: '10px 16px',
+                                        borderRadius: '10px',
+                                        fontSize: '13px',
+                                        fontWeight: '500',
+                                        textDecoration: 'none',
+                                        color: '#4B5563',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    className="hover:bg-blue-50 hover:text-blue-700"
+                                >
+                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
+                                    <span>Student Database</span>
+                                </a>
+                            </div>
+                        )}
+                    </div>
                 </nav>
 
                 {/* User Info */}

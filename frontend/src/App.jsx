@@ -6,6 +6,7 @@ import useAuthStore from './store/authStore';
 // Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import AuthCallback from './pages/AuthCallback';
 import Forms from './pages/Forms';
 import FormBuilder from './pages/FormBuilder';
 import FeedbackForms from './pages/FeedbackForms';
@@ -152,6 +153,7 @@ function App() {
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/student/login" element={<Login />} />
+        <Route path="/auth-callback" element={<AuthCallback />} />
         <Route path="/form/:formId" element={<PublicForm />} />
 
         {/* Protected Admin Routes */}

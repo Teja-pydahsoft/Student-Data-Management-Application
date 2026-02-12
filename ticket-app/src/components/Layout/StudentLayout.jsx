@@ -26,39 +26,15 @@ const StudentLayout = ({ children }) => {
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
     const navigate = useNavigate();
-    const { user, logout } = useAuthStore();
-
-    // Push Notification Registration
-    React.useEffect(() => {
-        const initPush = async () => {
-            // Only run if user is logged in
-            if (user) {
-                const { registerServiceWorker, subscribeUser, getSubscriptionStatus } = await import('../../services/pushService');
-                const status = await getSubscriptionStatus();
-                if (status !== 'granted') {
-                    const registration = await registerServiceWorker();
-                    if (registration) {
-                        await subscribeUser(registration);
-                    }
-                }
-            }
-        };
-        initPush();
-    }, [user]);
-
-    const handleLogout = () => {
-        logout();
-        toast.success('Logged out successfully');
-        navigate('/login');
-    };
+    const { user, logout, token } = useAuthStore();
 
     // --- Navigation Configuration (Short List) ---
     const navItems = [
         { icon: RiHome4Line, activeIcon: RiHome4Fill, label: 'Dashboard', path: '/student/dashboard', isExternal: false },
         { icon: RiAddCircleLine, activeIcon: RiAddCircleFill, label: 'Raise Ticket', path: '/student/raise-ticket', isExternal: false },
         { icon: RiTicketLine, activeIcon: RiTicketFill, label: 'Ticket History', path: '/student/my-tickets', isExternal: false },
-        { icon: RiUser3Line, activeIcon: RiUser3Fill, label: 'Profile', path: '/student/profile', isExternal: true },
-        { icon: RiLogoutBoxRLine, activeIcon: RiLogoutBoxRLine, label: 'Back to Portal', path: '/', isExternal: true },
+        { icon: RiUser3Line, activeIcon: RiUser3Fill, label: 'Portal Profile', path: '/student/profile', isExternal: true },
+        { icon: RiLogoutBoxRLine, activeIcon: RiLogoutBoxRLine, label: 'Back to Portal', path: '/student/dashboard', isExternal: true },
     ];
 
     const mobilePrimaryItems = navItems.slice(0, 4); // Show first 4 on mobile bar
@@ -66,7 +42,11 @@ const StudentLayout = ({ children }) => {
     const handleNavigation = (e, item) => {
         if (item.isExternal) {
             e.preventDefault();
-            window.location.href = `${MAIN_APP_URL}${item.path}`;
+            // Construct SSO URL if token exists
+            const target = token
+                ? `${MAIN_APP_URL}/auth-callback?token=${token}&role=student&from=ticket_app`
+                : `${MAIN_APP_URL}${item.path}`;
+            window.location.href = target;
         }
         setMoreMenuOpen(false);
     };
@@ -193,6 +173,23 @@ const StudentLayout = ({ children }) => {
             gap: '12px',
             cursor: 'pointer',
         },
+        mobileHeader: {
+            display: 'none',
+            height: '64px',
+            background: 'linear-gradient(135deg, #2563EB, #4F46E5)',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 16px',
+            position: 'fixed',
+            top: 0, left: 0, right: 0,
+            zIndex: 45,
+            color: 'white',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        },
+        backdrop: {
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 48,
+            backdropFilter: 'blur(2px)',
+        }
     };
 
     return (
@@ -201,21 +198,15 @@ const StudentLayout = ({ children }) => {
             <style>{`
                 /* Desktop Sidebar */
                 @media (max-width: 1024px) {
-                    .desktop-sidebar { display: none !important; }
-                    .main-content { margin-left: 0 !important; padding-top: 60px !important; }
-                    .menu-toggle { display: block !important; }
+                    .desktop-sidebar { width: 270px; z-index: 50; }
+                    .main-content { margin-left: 0 !important; padding-top: 84px !important; }
+                    .mobile-header { display: flex !important; }
+                    .mobile-bottom-bar { display: flex !important; }
                 }
                 @media (min-width: 1025px) {
                     .desktop-sidebar { display: flex !important; }
-                    /* Toggle button visibility is handled by React state */
-                }
-                
-                /* Mobile Bottom Bar */
-                @media (min-width: 1025px) {
+                    .mobile-header { display: none !important; }
                     .mobile-bottom-bar { display: none !important; }
-                }
-                @media (max-width: 1024px) {
-                    .mobile-bottom-bar { display: flex !important; }
                 }
             `}</style>
 
@@ -231,20 +222,42 @@ const StudentLayout = ({ children }) => {
             }} />
 
             {/* Default Sidebar Toggle (Mobile Header area or similar can go here, but using simple float button) */}
-            {!desktopSidebarOpen && (
+            {/* Mobile Sidebar Backdrop */}
+            {desktopSidebarOpen && (
+                <div
+                    className="lg:hidden"
+                    style={styles.backdrop}
+                    onClick={() => setDesktopSidebarOpen(false)}
+                />
+            )}
+
+            {/* Mobile Header (Blue Theme) */}
+            <header style={styles.mobileHeader} className="mobile-header">
                 <button
                     onClick={() => setDesktopSidebarOpen(true)}
-                    style={{
-                        position: 'fixed', top: '24px', left: '24px', zIndex: 50,
-                        padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(255,255,255,0.8)',
-                        border: '1px solid #e5e7eb', cursor: 'pointer', backdropFilter: 'blur(4px)',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                    }}
-                    className="menu-toggle"
+                    className="p-2 -ml-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
-                    <RiMenuLine size={20} color="#6B7280" />
+                    <RiMenuLine size={24} />
                 </button>
-            )}
+
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                        <span className="font-bold text-white">T</span>
+                    </div>
+                    <span className="font-bold text-lg tracking-wide text-white">Ticket Support</span>
+                </div>
+
+                <div
+                    onClick={() => window.location.href = `${MAIN_APP_URL}/student/profile`}
+                    className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center overflow-hidden border-2 border-white/20 cursor-pointer hover:border-white/50 transition-colors"
+                >
+                    {user?.student_photo ? (
+                        <img src={user.student_photo} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                        <RiUser3Fill size={18} className="text-white" />
+                    )}
+                </div>
+            </header>
 
             {/* Desktop Sidebar */}
             <aside style={styles.sidebar} className="desktop-sidebar shadow-xl">
@@ -265,6 +278,7 @@ const StudentLayout = ({ children }) => {
                             <a
                                 key={index}
                                 href={`${MAIN_APP_URL}${item.path}`}
+                                onClick={(e) => handleNavigation(e, item)}
                                 style={styles.navItem(false)}
                                 className="hover:bg-blue-50 hover:text-blue-700"
                             >
@@ -342,6 +356,7 @@ const StudentLayout = ({ children }) => {
                             <a
                                 key={index}
                                 href={`${MAIN_APP_URL}${item.path}`}
+                                onClick={(e) => handleNavigation(e, item)}
                                 style={styles.mobileNavItem(false)}
                             >
                                 <item.icon size={24} />
