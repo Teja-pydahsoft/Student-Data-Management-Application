@@ -25,7 +25,7 @@ const AdminLayout = () => {
     const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
     const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
     const navigate = useNavigate();
-    const { user, logout } = useAuthStore();
+    const { user, logout, token } = useAuthStore();
 
     const handleLogout = () => {
         logout();
@@ -331,7 +331,7 @@ const AdminLayout = () => {
                         {workspaceDropdownOpen && (
                             <div style={{ paddingLeft: '24px', marginTop: '4px' }}>
                                 <a
-                                    href={`${MAIN_APP_URL}/`}
+                                    href={`${MAIN_APP_URL}/auth-callback?token=${token}&role=${user?.role || 'admin'}&from=ticket_app`}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'center',

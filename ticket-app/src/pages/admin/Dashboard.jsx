@@ -6,8 +6,11 @@ import api from '../../config/api';
 import LoadingAnimation from '../../components/LoadingAnimation';
 import '../../styles/admin-pages.css';
 
+import useAuthStore from '../../store/authStore';
+
 const AdminDashboard = () => {
     const navigate = useNavigate();
+    const { token, user } = useAuthStore();
 
     // Fetch ticket stats
     const { data: statsData, isLoading } = useQuery({
@@ -148,7 +151,7 @@ const AdminDashboard = () => {
                         </div>
                         <div
                             className="card-base hover:shadow-md cursor-pointer transition-all bg-white"
-                            onClick={() => window.location.href = `${import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173'}/`}
+                            onClick={() => window.location.href = `${import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173'}/auth-callback?token=${token}&role=${user?.role || 'admin'}&from=ticket_app`}
                         >
                             <div className="flex items-center gap-4">
                                 <div className="quick-action-icon text-blue-600 bg-blue-50 flex items-center justify-center rounded-lg" style={{ width: '40px', height: '40px' }}>
