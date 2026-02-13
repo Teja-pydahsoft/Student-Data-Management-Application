@@ -61,8 +61,8 @@ export const StatsGridSkeleton = ({ count = 4 }) => (
     </div>
 );
 
-export const TableSkeleton = ({ rows = 5, columns = 5 }) => (
-    <div className="bg-white rounded-lg border overflow-hidden">
+export const TableSkeleton = ({ rows = 5, columns = 5, className }) => (
+    <div className={twMerge(clsx("bg-white rounded-lg border overflow-hidden", className))}>
         <div className="overflow-x-auto">
             <table className="w-full">
                 <thead className="bg-gray-50">
@@ -160,6 +160,60 @@ export const TreeSkeleton = () => (
                         </div>
                     </div>
                 ))}
+            </div>
+        </div>
+    </div>
+);
+
+export const TaskManagementSkeleton = () => (
+    <div className="space-y-6">
+        <PageHeaderSkeleton />
+        <div className="bg-white rounded-lg border overflow-hidden">
+            {/* Tabs mock */}
+            <div className="border-b p-4 flex gap-4">
+                <SkeletonBox width="w-32" height="h-10" />
+                <SkeletonBox width="w-48" height="h-10" />
+                <SkeletonBox width="w-32" height="h-10" />
+            </div>
+            {/* Filters mock */}
+            <div className="border-b p-4 flex gap-4">
+                <SkeletonBox width="w-64" height="h-10" />
+                <SkeletonBox width="w-48" height="h-10" />
+            </div>
+            {/* Table */}
+            <TableSkeleton rows={10} columns={5} className="border-none rounded-none" />
+        </div>
+    </div>
+);
+
+export const StudentDashboardSkeleton = () => (
+    <div className="student-page-container animate-pulse">
+        <PageHeaderSkeleton />
+        <StatsGridSkeleton count={4} />
+        <div className="dashboard-main-grid">
+            <div className="col-span-8 flex flex-col gap-4">
+                <div className="flex justify-between mb-4">
+                    <SkeletonBox width="w-32" height="h-6" />
+                    <SkeletonBox width="w-20" height="h-4" />
+                </div>
+                {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="bg-white p-4 rounded-lg border h-20 flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <SkeletonCircle size={12} />
+                            <div>
+                                <SkeletonBox width="w-48" height="h-5" className="mb-2" />
+                                <SkeletonBox width="w-32" height="h-4" />
+                            </div>
+                        </div>
+                        <SkeletonBox width="w-20" height="h-6" rounded="rounded-full" />
+                    </div>
+                ))}
+            </div>
+
+            <div className="col-span-4 flex flex-col gap-6">
+                <SkeletonBox width="w-32" height="h-6" />
+                <SkeletonBox width="w-full" height="h-48" rounded="rounded-lg" />
+                <SkeletonBox width="w-full" height="h-32" rounded="rounded-lg" />
             </div>
         </div>
     </div>

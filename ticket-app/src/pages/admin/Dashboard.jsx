@@ -4,6 +4,7 @@ import { Ticket, Users, CheckCircle, Clock, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../config/api';
 import '../../styles/admin-pages.css';
+import { DashboardSkeleton } from '../../components/SkeletonLoader';
 
 import useAuthStore from '../../store/authStore';
 
@@ -22,37 +23,8 @@ const AdminDashboard = () => {
 
     if (isLoading) {
         return (
-            <div className="admin-page-container animate-pulse">
-                {/* Header Skeleton */}
-                <div className="mb-8">
-                    <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-96"></div>
-                </div>
-
-                {/* Stats Grid Skeleton */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 h-32">
-                            <div className="flex items-center gap-4 h-full">
-                                <div className="w-12 h-12 rounded-lg bg-gray-200"></div>
-                                <div className="space-y-2 flex-1">
-                                    <div className="h-4 bg-gray-200 rounded w-20"></div>
-                                    <div className="h-6 bg-gray-200 rounded w-12"></div>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Quick Actions Skeleton */}
-                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                    <div className="h-6 bg-gray-200 rounded w-48 mb-6"></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                            <div key={i} className="bg-gray-50 rounded-lg p-4 h-24"></div>
-                        ))}
-                    </div>
-                </div>
+            <div className="admin-page-container">
+                <DashboardSkeleton />
             </div>
         );
     }

@@ -16,6 +16,7 @@ import {
 } from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
+import NotificationPrompt from '../NotificationPrompt';
 
 // Main App URL for redirection
 const MAIN_APP_URL = import.meta.env.VITE_MAIN_APP_URL || 'http://localhost:5173';
@@ -377,6 +378,7 @@ const StudentLayout = ({ children }) => {
                     );
                 })}
             </div>
+            <NotificationPrompt />
         </div>
     );
 };

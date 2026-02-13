@@ -105,7 +105,7 @@ const App = () => {
         <Route path="/login" element={<Login />} />
 
         {/* Redirect /student/login to main login to keep it unified */}
-        <Route path="/student/login" element={<Navigate to="/login" replace />} />
+        <Route path="/student/login" element={<Login isStudent={true} />} />
 
         {/* Admin/Manager/Worker Routes */}
         <Route element={<Navigate to="/login" replace />} path="/" />

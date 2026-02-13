@@ -14,6 +14,7 @@ import {
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import TicketDetailsModal from '../../components/admin/TicketDetailsModal';
+import { TaskManagementSkeleton } from '../../components/SkeletonLoader';
 import '../../styles/admin-pages.css';
 
 const STATUS_COLORS = {
@@ -185,66 +186,7 @@ const TaskManagement = () => {
     };
 
     if (isLoading) {
-        return (
-            <div className="admin-page-container animate-pulse">
-                <div className="page-header mb-8">
-                    <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-48"></div>
-                </div>
-
-                <div className="card-base p-0">
-                    <div className="admin-tabs-container p-4 border-b">
-                        <div className="flex gap-4">
-                            <div className="h-10 bg-gray-200 rounded-t w-32"></div>
-                            <div className="h-10 bg-gray-200 rounded-t w-48"></div>
-                            <div className="h-10 bg-gray-200 rounded-t w-32"></div>
-                        </div>
-                    </div>
-
-                    <div className="admin-filters-section p-4 border-b">
-                        <div className="flex gap-4">
-                            <div className="h-10 bg-gray-200 rounded w-64"></div>
-                            <div className="h-10 bg-gray-200 rounded w-48"></div>
-                        </div>
-                    </div>
-
-                    <div className="p-0">
-                        <table className="admin-table w-full">
-                            <thead>
-                                <tr>
-                                    {[1, 2, 3, 4, 5].map((i) => (
-                                        <th key={i}><div className="h-4 bg-gray-200 rounded w-20"></div></th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {[1, 2, 3, 4, 5].map((i) => (
-                                    <tr key={i}>
-                                        <td>
-                                            <div className="h-4 bg-gray-200 rounded w-16 mb-1"></div>
-                                            <div className="h-3 bg-gray-200 rounded w-24"></div>
-                                        </td>
-                                        <td>
-                                            <div className="h-4 bg-gray-200 rounded w-48 mb-1"></div>
-                                            <div className="h-3 bg-gray-200 rounded w-32"></div>
-                                        </td>
-                                        <td><div className="h-6 bg-gray-200 rounded w-24"></div></td>
-                                        <td><div className="h-6 bg-gray-200 rounded w-20"></div></td>
-                                        <td>
-                                            <div className="flex gap-2">
-                                                <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                                                <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                                                <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        );
+        return <TaskManagementSkeleton />;
     }
 
     return (

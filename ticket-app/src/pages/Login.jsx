@@ -4,7 +4,7 @@ import { LogIn, Loader2, Eye, EyeOff, Users } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
-const Login = () => {
+const Login = ({ isStudent = false }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { login, isAuthenticated, userType } = useAuthStore();
@@ -15,8 +15,8 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    // Determine if this is a student login based on route
-    const isStudentLogin = location.pathname.startsWith('/student/login');
+    // Use prop or fallback to route check (though prop is preferred now)
+    const isStudentLogin = isStudent || location.pathname.startsWith('/student/login');
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -87,7 +87,7 @@ const Login = () => {
                             {/* Abstract representation using CSS/Logo */}
                             <div className="absolute inset-0 bg-white/10 rounded-full animate-pulse-subtle" />
                             <img
-                                src="/logo.png"
+                                src={isStudentLogin ? "/logo.png" : "/logo.png"} // TODO: Use student-specific logo if available, e.g. /student-logo.png
                                 alt="Illustration"
                                 className="relative w-full h-full object-contain drop-shadow-2xl"
                                 onError={(e) => e.target.style.display = 'none'}
