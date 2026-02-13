@@ -52,6 +52,11 @@ const StudentLayout = ({ children }) => {
         setMoreMenuOpen(false);
     };
 
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
     // --- Inline Styles & Media Queries ---
     const styles = {
         container: {

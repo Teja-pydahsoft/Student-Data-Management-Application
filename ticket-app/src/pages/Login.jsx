@@ -4,6 +4,8 @@ import { LogIn, Loader2, Eye, EyeOff, Users } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
+import { motion } from 'framer-motion';
+
 const Login = ({ isStudent = false }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -58,9 +60,14 @@ const Login = ({ isStudent = false }) => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 overflow-hidden">
             {/* Main Card Container */}
-            <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex min-h-[600px]">
+            <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex min-h-[600px]"
+            >
 
                 {/* Left Side - Blue Panel (Hidden on mobile) */}
                 <div className="hidden md:flex md:w-1/2 bg-blue-600 text-white flex-col justify-between p-12 relative overflow-hidden">
@@ -203,7 +210,7 @@ const Login = ({ isStudent = false }) => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };

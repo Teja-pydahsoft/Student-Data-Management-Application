@@ -195,8 +195,9 @@ const StudentLayout = ({ children }) => {
         { icon: RiCalendar2Line, activeIcon: RiCalendar2Fill, label: 'Time Table', path: '/student/timetable' },
         { icon: RiFileList3Line, activeIcon: RiFileList3Fill, label: 'Sem Registration', path: '/student/semester-registration' },
         { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
-        { icon: RiBusLine, activeIcon: RiBusFill, label: 'Transport', path: '/student/transport' },
-        { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
+        { icon: RiTicketLine, activeIcon: RiTicketFill, label: 'Maintenance', path: '/student/my-tickets', isExternal: true, isTicketApp: true },
+        // { icon: RiBusLine, activeIcon: RiBusFill, label: 'Transport', path: '/student/transport' },
+        // { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
         { icon: RiQuestionAnswerLine, activeIcon: RiQuestionAnswerFill, label: 'Feed Back', path: '/student/feedback' },
     ];
 
@@ -328,49 +329,7 @@ const StudentLayout = ({ children }) => {
                         ))}
                     </nav>
 
-                    {/* Workspace Dropdown */}
-                    <div className="px-4 mb-2">
-                        <div className="relative">
-                            <button
-                                onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
-                                className={`
-                                    w-full flex items-center justify-between gap-3.5 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200
-                                    ${workspaceDropdownOpen
-                                        ? 'bg-gray-50 text-gray-900'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-                                `}
-                            >
-                                <div className="flex items-center gap-3.5">
-                                    <RiFolderLine size={20} className="transition-transform duration-300" />
-                                    <span className="tracking-wide">Workspace</span>
-                                </div>
-                                {workspaceDropdownOpen ? (
-                                    <RiArrowDownSLine
-                                        size={18}
-                                        className="transition-transform duration-200"
-                                    />
-                                ) : (
-                                    <RiArrowDownSLine
-                                        size={18}
-                                        className="transition-transform duration-200 rotate-[-90deg]"
-                                    />
-                                )}
-                            </button>
 
-                            {/* Workspace Dropdown Menu */}
-                            {workspaceDropdownOpen && (
-                                <div className={`mt-1.5 ml-2 space-y-0.5 pl-6 py-2 border-l-2 rounded-r-md ${isBirthday ? 'border-amber-300 bg-gradient-to-r from-amber-50/50 to-transparent' : 'border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent'}`}>
-                                    <a
-                                        href={getTicketAppUrl('/student/my-tickets')}
-                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:translate-x-1 hover:shadow-sm ${isBirthday ? 'hover:bg-amber-100 active:bg-amber-200 hover:text-amber-700' : 'hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700'}`}
-                                    >
-                                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isBirthday ? 'bg-amber-500' : 'bg-blue-500'}`}></div>
-                                        <span className="tracking-wide whitespace-nowrap">Maintenance Management</span>
-                                    </a>
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
                     {/* User Info Card */}
                     <div
@@ -539,47 +498,7 @@ const StudentLayout = ({ children }) => {
                             </button>
                         </div>
 
-                        {/* Workspace Section */}
-                        <div className="mb-4">
-                            <button
-                                onClick={() => setWorkspaceDropdownOpen(!workspaceDropdownOpen)}
-                                className={`
-                                    w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 mb-2
-                                    ${workspaceDropdownOpen
-                                        ? 'bg-gray-50 text-gray-900'
-                                        : 'bg-white text-gray-600 border border-gray-100 shadow-sm hover:shadow-md'}
-                                `}
-                            >
-                                <div className="flex items-center gap-3.5">
-                                    <RiFolderLine size={20} />
-                                    <span className="tracking-wide font-bold">Workspace</span>
-                                </div>
-                                {workspaceDropdownOpen ? (
-                                    <RiArrowDownSLine
-                                        size={18}
-                                        className="transition-transform duration-200"
-                                    />
-                                ) : (
-                                    <RiArrowDownSLine
-                                        size={18}
-                                        className="transition-transform duration-200 rotate-[-90deg]"
-                                    />
-                                )}
-                            </button>
 
-                            {/* Workspace Dropdown Menu */}
-                            {workspaceDropdownOpen && (
-                                <div className={`ml-2 mb-2 space-y-0.5 pl-6 py-2 border-l-2 rounded-r-md ${isBirthday ? 'border-amber-300 bg-gradient-to-r from-amber-50/50 to-transparent' : 'border-blue-300 bg-gradient-to-r from-blue-50/50 to-transparent'}`}>
-                                    <a
-                                        href={getTicketAppUrl('/student/my-tickets')}
-                                        className={`flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 text-gray-700 hover:translate-x-1 hover:shadow-sm ${isBirthday ? 'hover:bg-amber-100 active:bg-amber-200 hover:text-amber-700' : 'hover:bg-blue-100 active:bg-blue-200 hover:text-blue-700'}`}
-                                    >
-                                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isBirthday ? 'bg-amber-500' : 'bg-blue-500'}`}></div>
-                                        <span className="tracking-wide whitespace-nowrap">Maintenance Management</span>
-                                    </a>
-                                </div>
-                            )}
-                        </div>
 
                         <div className="grid grid-cols-4 gap-2 mb-4">
                             {mobileSecondaryItems.map((item) => (

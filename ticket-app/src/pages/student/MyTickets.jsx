@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SkeletonBox } from '../../components/SkeletonLoader';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
     Ticket,
@@ -35,6 +35,7 @@ const STATUS_LABELS = {
 };
 
 const MyTickets = () => {
+    const queryClient = useQueryClient();
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [feedbackForm, setFeedbackForm] = useState({ rating: 5, feedback_text: '' });
@@ -69,6 +70,10 @@ const MyTickets = () => {
             setShowFeedbackModal(false);
             setFeedbackForm({ rating: 5, feedback_text: '' });
             setSelectedTicket(null);
+            queryClient.invalidateQueries(['student-tickets']);
+            if (selectedTicket?.id) {
+                queryClient.invalidateQueries(['ticket', selectedTicket.id]);
+            }
         },
         onError: (error) => {
             toast.error(error.response?.data?.message || 'Failed to submit feedback');
@@ -89,9 +94,10 @@ const MyTickets = () => {
         onSuccess: () => {
             toast.success('Ticket reopened successfully');
             setSelectedTicket(null);
-            // Invalidate queries to refresh list
-            // queryClient.invalidateQueries(['student-tickets']); // If we had access to queryClient here
-            window.location.reload(); // Simple reload to refresh state for now or use queryClient if available
+            queryClient.invalidateQueries(['student-tickets']);
+            if (selectedTicket?.id) {
+                queryClient.invalidateQueries(['ticket', selectedTicket.id]);
+            }
         },
         onError: (error) => {
             toast.error(error.response?.data?.message || 'Failed to reopen ticket');
@@ -259,11 +265,41 @@ const MyTickets = () => {
                                         {ticket.status === 'completed' && (!ticket.feedback || (ticket.feedback && !ticket.feedback.id)) && (
                                             <button
                                                 onClick={() => setSelectedTicket(ticket)}
-                                                style={{ backgroundColor: '#16a34a', background: 'none', backgroundColor: '#16a34a', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)', color: 'white' }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.75rem 1rem',
+                                                    backgroundColor: '#16a34a',
+                                                    color: 'white',
+                                                    borderRadius: '0.75rem',
+                                                    border: 'none',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)'
+                                                }}
                                             >
                                                 <MessageSquare size={18} />
-                                                Review
+                                                <span>Review</span>
                                             </button>
+                                        )}
+
+                                        {ticket.status === 'completed' && ticket.feedback && ticket.feedback.id && (
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.75rem 1rem',
+                                                color: '#15803d',
+                                                backgroundColor: '#dcfce7',
+                                                borderRadius: '0.75rem',
+                                                border: '1px solid #bbf7d0',
+                                                fontWeight: '600',
+                                                fontSize: '0.875rem'
+                                            }}>
+                                                <CheckCircle size={18} />
+                                                <span>Reviewed</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

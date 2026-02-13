@@ -509,7 +509,17 @@ exports.getStudentTickets = async (req, res) => {
             `SELECT 
         t.*,
         c.name as category_name,
-        sc.name as sub_category_name
+        sc.name as sub_category_name,
+        (
+            SELECT JSON_OBJECT(
+                'id', tf_sub.id,
+                'rating', tf_sub.rating,
+                'feedback_text', tf_sub.feedback_text
+            )
+            FROM ticket_feedback tf_sub
+            WHERE tf_sub.ticket_id = t.id
+            LIMIT 1
+        ) as feedback
       FROM tickets t
       LEFT JOIN complaint_categories c ON t.category_id = c.id
       LEFT JOIN complaint_categories sc ON t.sub_category_id = sc.id
@@ -681,11 +691,11 @@ exports.changeTicketStatus = async (req, res) => {
             });
         }
 
-        // Fix: If user is a student, we cannot pass user.id as changedBy because it might conflict with RBAC users 
-        // or fail foreign key constraints if ticket_status_history expects rbac_users.id.
-        // We'll pass null for changedBy if it's a student and mention it in notes.
+        // We pass user.id even if it's a student to satisfy the NOT NULL constraint on changed_by.
+        // Although this might conceptually conflict with RBAC user IDs in history joins, 
+        // the notes field will clarify that this was a student action.
         const isStudent = !!(user.role === 'student' || user.admission_number);
-        const changedBy = isStudent ? null : user.id;
+        const changedBy = user.id;
         const statusNotes = notes || (isStudent ? 'Status updated by student' : null);
 
         await updateTicketStatus(id, status, changedBy, statusNotes);
