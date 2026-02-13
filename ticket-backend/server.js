@@ -17,7 +17,12 @@ app.use(express.urlencoded({ extended: true }));
 // CORS - Allow Ticket App and Main App (development + production)
 const allowedOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:5174', 'http://localhost:5173'];
+    : [
+        'http://localhost:5174',
+        'http://localhost:5173',
+        'https://pydahsdms-tickets.vercel.app',
+        'https://student-data-management-app.vercel.app'
+    ];
 
 app.use(cors({
     origin: allowedOrigins,
