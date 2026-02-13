@@ -141,6 +141,21 @@ exports.verifyToken = async (req, res) => {
             if (!rbacUser.is_active) {
                 return res.status(403).json({ success: false, message: 'Account deactivated' });
             }
+
+            // Check if this RBAC user has been explicitly deactivated in Ticket App
+            const [ticketEmp] = await masterPool.query(
+                'SELECT is_active FROM ticket_employees WHERE rbac_user_id = ? LIMIT 1',
+                [rbacUser.id]
+            );
+
+            // If a ticket employee record exists and is deactivated, deny access to Ticket App
+            if (ticketEmp.length > 0 && !ticketEmp[0].is_active) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Ticket Management access has been revoked'
+                });
+            }
+
             return res.status(200).json({
                 success: true,
                 user: buildRBACUserResponse(rbacUser)

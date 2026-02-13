@@ -513,9 +513,11 @@ const TaskManagement = () => {
                                     className="form-input cursor-pointer"
                                 >
                                     <option value="">Select Status</option>
-                                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                                        <option key={k} value={k}>{v}</option>
-                                    ))}
+                                    {Object.entries(STATUS_LABELS)
+                                        .filter(([k]) => k !== 'closed')
+                                        .map(([k, v]) => (
+                                            <option key={k} value={k}>{v}</option>
+                                        ))}
                                 </select>
                             </div>
                         </div>

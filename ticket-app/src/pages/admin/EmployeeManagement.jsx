@@ -110,7 +110,16 @@ const EmployeeManagement = () => {
     // Filtering
     const employees = employeesData || [];
     const filteredEmployees = employees.filter(employee => {
-        const matchesRole = activeRole === 'all' ? true : employee.role === activeRole;
+        let matchesRole = false;
+        if (activeRole === 'all') {
+            matchesRole = true;
+        } else if (activeRole === 'staff') {
+            // Include both staff and manager roles in the Managers tab
+            matchesRole = employee.role === 'staff' || employee.role === 'manager';
+        } else {
+            matchesRole = employee.role === activeRole;
+        }
+
         const name = employee.name?.toLowerCase() || '';
         const email = employee.email?.toLowerCase() || '';
         const search = searchTerm.toLowerCase();

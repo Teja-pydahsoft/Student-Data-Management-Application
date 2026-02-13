@@ -455,33 +455,39 @@ const EmployeeModal = ({
 
                             <div className="role-select-grid">
                                 {availableRoles && availableRoles.length > 0 ? (
-                                    availableRoles.map(role => (
-                                        <button
-                                            key={role.id}
-                                            onClick={() => setFormData({
-                                                ...formData,
-                                                role: role.role_name,
-                                                custom_role_id: role.id
-                                            })}
-                                            className={`role-card ${formData.custom_role_id === role.id ? 'active' : ''}`}
-                                        >
-                                            <div className="role-icon">
-                                                {role.role_name.includes('worker') ? <Briefcase size={28} /> : <Shield size={28} />}
-                                            </div>
-                                            <h4 style={{ fontWeight: 'bold', fontSize: '1.125rem', color: 'var(--gray-900)', marginBottom: '0.5rem' }}>
-                                                {role.display_name}
-                                            </h4>
-                                            <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', lineHeight: '1.625' }}>
-                                                {role.description || 'No description provided.'}
-                                            </p>
+                                    availableRoles.map(role => {
+                                        const isWorker = role.role_name.includes('worker');
+                                        const isSelected = formData.custom_role_id === role.id;
 
-                                            {formData.custom_role_id === role.id && (
-                                                <div className="role-selection-check">
-                                                    <Check size={14} style={{ color: 'white' }} strokeWidth={3} />
+                                        return (
+                                            <button
+                                                key={role.id}
+                                                type="button"
+                                                onClick={() => setFormData({
+                                                    ...formData,
+                                                    role: role.role_name,
+                                                    custom_role_id: role.id
+                                                })}
+                                                className={`role-card ${isSelected ? `active ${isWorker ? 'role-worker' : 'role-staff'}` : ''}`}
+                                            >
+                                                <div className={`role-icon ${isWorker ? 'worker-icon-hover' : ''}`}>
+                                                    {isWorker ? <Briefcase size={28} /> : <Shield size={28} />}
                                                 </div>
-                                            )}
-                                        </button>
-                                    ))
+                                                <h4 style={{ fontWeight: 'bold', fontSize: '1.125rem', color: 'var(--gray-900)', marginBottom: '0.5rem' }}>
+                                                    {role.display_name}
+                                                </h4>
+                                                <p style={{ fontSize: '0.875rem', color: 'var(--gray-500)', lineHeight: '1.625' }}>
+                                                    {role.description || 'No description provided.'}
+                                                </p>
+
+                                                {isSelected && (
+                                                    <div className="role-selection-check">
+                                                        <Check size={14} style={{ color: 'white' }} strokeWidth={3} />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })
                                 ) : (
                                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--gray-500)' }}>
                                         No roles available.

@@ -10,7 +10,8 @@ exports.getEmployees = async (req, res) => {
             SELECT 
                 te.id,
                 te.rbac_user_id,
-                te.role,
+                COALESCE(te.role_name, te.role) as role,
+                te.role as legacy_role, 
                 te.custom_role_id,
                 te.role_name,
                 te.permissions as user_permissions,
@@ -24,7 +25,7 @@ exports.getEmployees = async (req, res) => {
                 COALESCE(te.email, ru.email) as email,
                 COALESCE(te.phone, ru.phone) as phone,
                 COALESCE(te.username, ru.username) as username,
-                tr.display_name as role_display_name,
+                COALESCE(tr.display_name, te.role) as role_display_name,
                 tr.permissions as role_permissions,
                 (
                     SELECT COUNT(DISTINCT ta.ticket_id)
