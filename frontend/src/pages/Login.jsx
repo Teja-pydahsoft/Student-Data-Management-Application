@@ -187,7 +187,7 @@ const Login = () => {
       <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex min-h-[600px]">
 
         {/* Left Side - Blue Panel (Hidden on mobile) */}
-        <div className="hidden md:flex md:w-1/2 bg-primary text-white flex-col justify-between p-12 relative overflow-hidden">
+        <div className="hidden lg:flex lg:w-1/2 bg-primary text-white flex-col justify-between p-12 relative overflow-hidden">
           {/* Background Pattern/Accents */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             <div className="absolute -top-24 -left-24 w-96 h-96 bg-white rounded-full blur-3xl" />
@@ -233,7 +233,7 @@ const Login = () => {
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center bg-white relative">
+        <div className="w-full lg:w-1/2 p-4 sm:p-12 flex flex-col justify-center bg-white relative">
           {/* SSO error banner */}
           {ssoError && (
             <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -248,6 +248,13 @@ const Login = () => {
           )}
 
           <div className="max-w-sm mx-auto w-full">
+            {/* Mobile Logo */}
+            <img
+              src="/logo.png"
+              alt="Logo"
+              className="h-16 w-auto mx-auto mb-6 lg:hidden object-contain"
+            />
+
             <div className="text-center mb-8">
               <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                 Welcome Back

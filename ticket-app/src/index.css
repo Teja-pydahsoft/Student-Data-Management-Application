@@ -43,6 +43,13 @@
   animation: pulse-glow 2s infinite;
 }
 
+/* Login page - Force hide left panel on mobile/tablet */
+@media (max-width: 1279px) {
+  .login-left-panel {
+    display: none !important;
+  }
+}
+
 /* 
 * {
   margin: 0;
