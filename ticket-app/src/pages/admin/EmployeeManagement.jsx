@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
-import LoadingAnimation from '../../components/LoadingAnimation';
 import EmployeeModal from '../../components/admin/EmployeeModal';
 import EmployeeHistoryModal from '../../components/admin/EmployeeHistoryModal';
 import '../../styles/admin-pages.css';
@@ -184,7 +183,58 @@ const EmployeeManagement = () => {
         setEditingUser(null);
     };
 
-    if (isLoading) return <LoadingAnimation />;
+    if (isLoading) {
+        return (
+            <div className="admin-page-container animate-pulse">
+                <div className="page-header mb-8">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+                            <div className="h-4 bg-gray-200 rounded w-48"></div>
+                        </div>
+                        <div className="h-10 bg-gray-200 rounded w-32"></div>
+                    </div>
+                </div>
+
+                <div className="mb-6">
+                    <div className="flex gap-4 border-b">
+                        <div className="h-10 bg-gray-200 rounded-t w-32"></div>
+                        <div className="h-10 bg-gray-200 rounded-t w-32"></div>
+                        <div className="h-10 bg-gray-200 rounded-t w-32"></div>
+                    </div>
+                </div>
+
+                <div className="mb-6">
+                    <div className="h-10 bg-gray-200 rounded w-full max-w-md"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="bg-white rounded-lg p-6 border h-40 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-gray-200"></div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gray-200"></div>
+                                    <div>
+                                        <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+                                        <div className="h-3 bg-gray-200 rounded w-16"></div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <div className="w-8 h-8 rounded bg-gray-200"></div>
+                                    <div className="w-8 h-8 rounded bg-gray-200"></div>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="h-4 bg-gray-200 rounded w-48"></div>
+                                <div className="h-4 bg-gray-200 rounded w-32"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="admin-page-container">

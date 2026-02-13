@@ -131,9 +131,38 @@ const RoleManagement = () => {
 
     if (loading) {
         return (
-            <div className="role-management-loading">
-                <div className="spinner"></div>
-                <p>Loading roles...</p>
+            <div className="role-management-page animate-pulse">
+                <div className="role-management-header mb-8">
+                    <div>
+                        <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+                        <div className="h-4 bg-gray-200 rounded w-96"></div>
+                    </div>
+                    <div className="h-10 bg-gray-200 rounded w-32"></div>
+                </div>
+
+                <div className="roles-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="role-card p-6 bg-white border rounded-lg h-64 flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg bg-gray-200"></div>
+                                    <div className="space-y-2">
+                                        <div className="h-5 bg-gray-200 rounded w-32"></div>
+                                        <div className="h-3 bg-gray-200 rounded w-20"></div>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="h-3 bg-gray-200 rounded w-full"></div>
+                                    <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <div className="h-8 bg-gray-200 rounded w-20"></div>
+                                <div className="h-8 bg-gray-200 rounded w-20"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }

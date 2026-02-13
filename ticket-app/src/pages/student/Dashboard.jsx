@@ -57,16 +57,48 @@ const Dashboard = () => {
         return (
             <div className="student-page-container animate-pulse">
                 <div className="page-header">
-                    <SkeletonBox height="h-10" width="w-64" />
+                    <SkeletonBox height="h-10" width="w-64" className="mb-2" />
                     <SkeletonBox height="h-4" width="w-48" />
                 </div>
-                <div className="stats-grid">
-                    {[1, 2, 3].map(i => (
-                        <div key={i} className="stat-card" style={{ height: '160px' }}>
-                            <SkeletonBox height="h-4" width="w-24" className="mb-4" />
-                            <SkeletonBox height="h-10" width="w-full" />
+                <div className="stats-grid mb-8">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="stat-card" style={{ height: '140px' }}>
+                            <div className="flex flex-col gap-4">
+                                <div className="w-10 h-10 rounded-lg bg-gray-200" />
+                                <div>
+                                    <SkeletonBox height="h-4" width="w-24" className="mb-2" />
+                                    <SkeletonBox height="h-8" width="w-16" />
+                                </div>
+                            </div>
                         </div>
                     ))}
+                </div>
+
+                <div className="dashboard-main-grid">
+                    <div className="col-span-8 flex flex-col gap-4">
+                        <div className="flex justify-between mb-4">
+                            <SkeletonBox height="h-6" width="w-32" />
+                            <SkeletonBox height="h-4" width="w-20" />
+                        </div>
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="bg-white p-4 rounded-lg border h-20 flex justify-between items-center">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-full bg-gray-200" />
+                                    <div>
+                                        <SkeletonBox height="h-5" width="w-48" className="mb-2" />
+                                        <SkeletonBox height="h-4" width="w-32" />
+                                    </div>
+                                </div>
+                                <SkeletonBox height="h-6" width="w-20" rounded="rounded-full" />
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="col-span-4 flex flex-col gap-6">
+                        <SkeletonBox height="h-6" width="w-32" />
+                        <div className="bg-gray-200 h-48 rounded-lg" />
+                        <div className="bg-gray-200 h-32 rounded-lg" />
+                    </div>
                 </div>
             </div>
         );

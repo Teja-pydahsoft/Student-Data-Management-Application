@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
-import LoadingAnimation from '../../components/LoadingAnimation';
 import {
     TICKET_MODULES,
     TICKET_MODULE_LABELS,
@@ -134,7 +133,54 @@ const SubAdminCreation = () => {
         }
     };
 
-    if (isLoading) return <LoadingAnimation />;
+    if (isLoading) {
+        return (
+            <div className="admin-page-container animate-pulse">
+                <div className="page-header mb-8">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+                            <div className="h-4 bg-gray-200 rounded w-48"></div>
+                        </div>
+                        <div className="h-10 bg-gray-200 rounded w-40"></div>
+                    </div>
+                </div>
+
+                <div className="card-base p-0">
+                    <div className="p-4 border-b">
+                        <div className="h-10 bg-gray-200 rounded w-64"></div>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="border rounded-lg p-6 flex flex-col gap-4">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                                        <div>
+                                            <div className="h-5 bg-gray-200 rounded w-40 mb-2"></div>
+                                            <div className="h-4 bg-gray-200 rounded w-64"></div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <div className="h-9 w-24 bg-gray-200 rounded"></div>
+                                        <div className="h-9 w-10 bg-gray-200 rounded"></div>
+                                    </div>
+                                </div>
+                                <div className="border-t pt-4 mt-2">
+                                    <div className="h-4 bg-gray-200 rounded w-32 mb-3"></div>
+                                    <div className="flex gap-2">
+                                        <div className="h-6 w-24 bg-gray-200 rounded"></div>
+                                        <div className="h-6 w-24 bg-gray-200 rounded"></div>
+                                        <div className="h-6 w-24 bg-gray-200 rounded"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="admin-page-container">

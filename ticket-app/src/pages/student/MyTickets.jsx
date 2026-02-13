@@ -119,17 +119,32 @@ const MyTickets = () => {
     if (isLoading) {
         return (
             <div className="student-page-container animate-pulse">
-                <div className="flex-between">
-                    <div className="page-header">
-                        <SkeletonBox height="h-8" width="w-48" />
+                <div className="flex-col md:flex-row flex-between pb-2 border-b border-gray-100" style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '1rem', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <div className="page-header" style={{ marginBottom: 0 }}>
+                        <SkeletonBox height="h-4" width="w-32" className="mb-2" />
+                        <SkeletonBox height="h-8" width="w-48" className="mb-2" />
                         <SkeletonBox height="h-4" width="w-64" />
                     </div>
-                    <SkeletonBox height="h-10" width="w-40" />
+                    <SkeletonBox height="h-10" width="w-40" rounded="rounded-lg" />
                 </div>
-                <div className="flex-col" style={{ gap: '1rem' }}>
+                <div className="flex-col" style={{ gap: '1.25rem', marginTop: '1.5rem' }}>
                     {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="ticket-item">
-                            <SkeletonBox height="h-16" width="w-full" />
+                        <div key={i} className="ticket-item" style={{ height: '140px' }}>
+                            <div className="flex justify-between items-start w-full gap-6">
+                                <div className="flex-1 space-y-4">
+                                    <div className="flex gap-4 items-center mb-4">
+                                        <SkeletonBox height="h-6" width="w-48" />
+                                        <SkeletonBox height="h-6" width="w-24" rounded="rounded-full" />
+                                    </div>
+                                    <div className="flex gap-4 mb-4">
+                                        <SkeletonBox height="h-8" width="w-24" rounded="rounded-lg" />
+                                        <SkeletonBox height="h-8" width="w-32" rounded="rounded-lg" />
+                                        <SkeletonBox height="h-8" width="w-32" rounded="rounded-lg" />
+                                    </div>
+                                    <SkeletonBox height="h-4" width="w-full" />
+                                </div>
+                                <SkeletonBox height="h-10" width="w-10" rounded="rounded-lg" />
+                            </div>
                         </div>
                     ))}
                 </div>

@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import api from '../config/api';
 import toast from 'react-hot-toast';
-import LoadingAnimation from '../components/LoadingAnimation';
 
 const STATUS_COLORS = {
     pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -229,7 +228,41 @@ const TicketManagement = () => {
     };
 
     if (isLoading) {
-        return <LoadingAnimation />;
+        return (
+            <div className="p-6">
+                {/* Skeletal Loading State */}
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="bg-gray-200 h-8 w-48 rounded animate-pulse" />
+                        <div className="bg-gray-200 h-10 w-32 rounded animate-pulse" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        {[...Array(5)].map((_, i) => (
+                            <div key={i} className="bg-white p-4 rounded-lg border h-24 animate-pulse">
+                                <div className="flex justify-between">
+                                    <div className="h-4 w-20 bg-gray-200 rounded mb-2" />
+                                    <div className="h-8 w-8 bg-gray-200 rounded-full" />
+                                </div>
+                                <div className="h-8 w-12 bg-gray-200 rounded" />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border animate-pulse">
+                        <div className="grid grid-cols-4 gap-4">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="h-10 bg-gray-200 rounded" />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg border animate-pulse">
+                        <div className="h-12 bg-gray-100 border-b" />
+                        {[...Array(5)].map((_, i) => (
+                            <div key={i} className="h-16 border-b bg-white" />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
