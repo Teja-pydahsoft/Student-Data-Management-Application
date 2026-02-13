@@ -697,8 +697,73 @@ exports.changeTicketStatus = async (req, res) => {
         const isStudent = !!(user.role === 'student' || user.admission_number);
         const changedBy = user.id;
         const statusNotes = notes || (isStudent ? 'Status updated by student' : null);
+        let finalStatus = status;
+        let finalNotes = statusNotes;
 
-        await updateTicketStatus(id, status, changedBy, statusNotes);
+        // Reopen Logic: If student reopens (pending), try to auto-assign based on configuration
+        if (status === 'pending' && isStudent) {
+            try {
+                // Get ticket category
+                const [ticketInfo] = await masterPool.query('SELECT category_id FROM tickets WHERE id = ?', [id]);
+
+                if (ticketInfo.length > 0) {
+                    const category_id = ticketInfo[0].category_id;
+
+                    // Find managers (staff) for this category
+                    const [managers] = await masterPool.query(`
+                        SELECT rbac_user_id, assigned_categories 
+                        FROM ticket_employees 
+                        WHERE role = 'staff' AND is_active = 1
+                    `);
+
+                    const assignedManagerIds = [];
+
+                    for (const manager of managers) {
+                        let categories = [];
+                        try {
+                            categories = typeof manager.assigned_categories === 'string'
+                                ? JSON.parse(manager.assigned_categories)
+                                : manager.assigned_categories;
+                        } catch (e) {
+                            continue;
+                        }
+
+                        if (Array.isArray(categories)) {
+                            const categoryIds = categories.map(c => Number(c));
+                            const targetCategoryId = Number(category_id);
+
+                            if (categoryIds.includes(targetCategoryId)) {
+                                assignedManagerIds.push(manager.rbac_user_id);
+                            }
+                        }
+                    }
+
+                    if (assignedManagerIds.length > 0) {
+                        // Deactivate old assignments first? Maybe good practice.
+                        await masterPool.query('UPDATE ticket_assignments SET is_active = FALSE WHERE ticket_id = ?', [id]);
+
+                        const assignmentValues = assignedManagerIds.map(userId => [
+                            id,
+                            userId,
+                            null, // assigned_by is null for system
+                            'Auto-assigned on Reopen (Not Satisfied)'
+                        ]);
+
+                        await masterPool.query(
+                            `INSERT INTO ticket_assignments (ticket_id, assigned_to, assigned_by, notes) VALUES ?`,
+                            [assignmentValues]
+                        );
+
+                        finalStatus = 'approaching';
+                        finalNotes += ' (Auto-assigned to manager)';
+                    }
+                }
+            } catch (assignError) {
+                console.error('Reopen auto-assignment failed:', assignError);
+            }
+        }
+
+        await updateTicketStatus(id, finalStatus, changedBy, finalNotes);
 
         res.json({
             success: true,
@@ -854,7 +919,7 @@ exports.submitFeedback = async (req, res) => {
 
         // Auto-close ticket after feedback
         await masterPool.query(
-            "UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = ?",
+            "UPDATE tickets SET status = 'closed' WHERE id = ?",
             [id]
         );
 

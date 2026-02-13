@@ -23,7 +23,7 @@ const STATUS_CLASSES = {
     approaching: 'status-active',
     resolving: 'status-active',
     completed: 'status-completed',
-    closed: 'status-pending'
+    closed: 'status-closed'
 };
 
 const STATUS_LABELS = {
@@ -228,8 +228,8 @@ const MyTickets = () => {
                                     <div style={{ flex: 1 }}>
                                         <div className="flex-start" style={{ gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                                             <h3 className="heading-font" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>{ticket.title}</h3>
-                                            <span className={`status-badge ${STATUS_CLASSES[ticket.status] || 'status-pending'}`}>
-                                                {STATUS_LABELS[ticket.status] || ticket.status}
+                                            <span className={`status-badge ${STATUS_CLASSES[ticket.feedback?.id ? 'closed' : ticket.status] || 'status-pending'}`}>
+                                                {STATUS_LABELS[ticket.feedback?.id ? 'closed' : ticket.status] || ticket.status}
                                             </span>
                                         </div>
 
@@ -284,7 +284,7 @@ const MyTickets = () => {
                                             </button>
                                         )}
 
-                                        {ticket.status === 'completed' && ticket.feedback && ticket.feedback.id && (
+                                        {(ticket.status === 'completed' || ticket.status === 'closed') && ticket.feedback && ticket.feedback.id && (
                                             <div style={{
                                                 display: 'flex',
                                                 alignItems: 'center',

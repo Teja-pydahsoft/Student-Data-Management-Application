@@ -313,6 +313,12 @@
     border-color: var(--yellow-100);
 }
 
+.status-closed {
+    background-color: var(--gray-50);
+    color: var(--gray-500);
+    border-color: var(--gray-200);
+}
+
 
 /* Buttons */
 .btn-primary {
