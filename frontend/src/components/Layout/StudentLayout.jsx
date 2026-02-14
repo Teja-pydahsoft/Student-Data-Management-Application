@@ -36,7 +36,9 @@ import {
     RiQuestionAnswerLine,
     RiQuestionAnswerFill,
     RiCalendar2Line,
-    RiCalendar2Fill
+    RiCalendar2Fill,
+    RiMapPinLine,
+    RiMapPinFill
 } from 'react-icons/ri';
 import useAuthStore from '../../store/authStore';
 import api from '../../config/api';
@@ -57,6 +59,7 @@ const StudentLayout = ({ children }) => {
     const [fetchedStatus, setFetchedStatus] = useState(null);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false); // New: For mobile "More" menu
     const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+    const [hasInternship, setHasInternship] = useState(false);
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -77,6 +80,23 @@ const StudentLayout = ({ children }) => {
         };
         fetchStudentStatus();
     }, [user?.admission_number]);
+
+    // Check Internship Status
+    useEffect(() => {
+        const checkInternship = async () => {
+            try {
+                const res = await api.get('/internship/my-assignment');
+                if (res.data.success && res.data.assignment) {
+                    setHasInternship(true);
+                } else {
+                    setHasInternship(false);
+                }
+            } catch (error) {
+                console.error("Failed to check internship status", error);
+            }
+        };
+        checkInternship();
+    }, []);
 
     // Birthday check: is today the student's birthday? (for portal birthday theme)
     const isBirthday = (() => {
@@ -192,6 +212,7 @@ const StudentLayout = ({ children }) => {
         { icon: RiGroupLine, activeIcon: RiGroupFill, label: 'Clubs', path: '/student/clubs' },
         { icon: RiCalendarEventLine, activeIcon: RiCalendarEventFill, label: 'Event Calendar', path: '/student/events' },
         { icon: RiCheckboxCircleLine, activeIcon: RiCheckboxCircleFill, label: 'Attendance', path: '/student/attendance' },
+        { icon: RiMapPinLine, activeIcon: RiMapPinFill, label: 'Internship', path: '/student/internship' },
         { icon: RiCalendar2Line, activeIcon: RiCalendar2Fill, label: 'Time Table', path: '/student/timetable' },
         { icon: RiFileList3Line, activeIcon: RiFileList3Fill, label: 'Sem Registration', path: '/student/semester-registration' },
         { icon: RiServiceLine, activeIcon: RiServiceFill, label: 'Services', path: '/student/services' },
@@ -199,7 +220,10 @@ const StudentLayout = ({ children }) => {
         // { icon: RiBusLine, activeIcon: RiBusFill, label: 'Transport', path: '/student/transport' },
         // { icon: RiWallet3Line, activeIcon: RiWallet3Fill, label: 'Fee Management', path: '/student/fees' },
         { icon: RiQuestionAnswerLine, activeIcon: RiQuestionAnswerFill, label: 'Feed Back', path: '/student/feedback' },
-    ];
+    ].filter(item => {
+        if (item.label === 'Internship' && !hasInternship) return false;
+        return true;
+    });
 
     // Split items for Mobile Navigation
     // Primary: Dashboard, Attendance, Fees, Services (or Registration if pending)

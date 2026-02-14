@@ -187,6 +187,15 @@ exports.getFilterOptions = async (req, res) => {
 
     // --- Queries ---
 
+
+    // 0. Colleges (Independent)
+    let collegeRowsRes = [];
+    {
+      let collegeQuery = 'SELECT id, name FROM colleges WHERE is_active = 1 ORDER BY name ASC';
+      const [colleges] = await masterPool.query(collegeQuery);
+      collegeRowsRes = colleges;
+    }
+
     // 1. Batches (Use Level 0 - Independent of other filters except college/scope)
     const [batchRowsRes] = await masterPool.query(
       `SELECT DISTINCT batch FROM students ${level0.clause} AND batch IS NOT NULL AND batch <> '' ORDER BY batch ASC`,
@@ -326,6 +335,7 @@ exports.getFilterOptions = async (req, res) => {
     res.json({
       success: true,
       data: {
+        colleges: collegeRowsRes,
         batches: batchRowsRes.map((row) => row.batch),
         years: yearRows.map((row) => row.currentYear),
         semesters: semesterRows.map((row) => row.currentSemester),

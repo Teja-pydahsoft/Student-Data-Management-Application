@@ -37,6 +37,8 @@ import FacultyManagement from './pages/admin/FacultyManagement';
 import AttendanceMonitoring from './pages/admin/AttendanceMonitoring';
 import Profile from './pages/Profile';
 import Clubs from './pages/Clubs';
+import InternshipAdmin from './internship/InternshipAdmin';
+
 
 // Student Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -52,6 +54,8 @@ import StudentServices from './pages/student/Services';
 import StudentClubs from './pages/student/StudentClubs';
 import FeeManagement from './pages/student/FeeManagement';
 import Transport from './pages/student/Transport';
+import InternshipStudent from './internship/InternshipStudent';
+
 
 // Faculty Pages (v2.0)
 import FacultyLayout from './components/Layout/FacultyLayout';
@@ -201,7 +205,9 @@ function App() {
           <Route path="clubs" element={<Clubs />} />
           <Route path="faculty-management" element={<FacultyManagement />} />
           <Route path="attendance-monitoring" element={<AttendanceMonitoring />} />
+          <Route path="internship-management" element={<InternshipAdmin />} />
         </Route>
+
 
         {/* Protected Student Routes */}
         <Route
@@ -228,7 +234,9 @@ function App() {
           <Route path="fees" element={<FeeManagement />} />
 
           <Route path="transport" element={<Transport />} />
+          <Route path="internship" element={<InternshipStudent />} />
           <Route path="feedback" element={<StudentFeedback />} />
+
         </Route>
 
         {/* Protected Faculty Routes (v2.0) */}

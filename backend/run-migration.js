@@ -19,10 +19,10 @@ async function runMigration() {
         console.log('✅ Connected to database');
 
         // Read migration file
-        const migrationPath = path.join(__dirname, 'migrations', 'create_feedback_responses.sql');
+        const migrationPath = path.join(__dirname, 'migrations', 'create_internship_assignments.sql');
         const sql = fs.readFileSync(migrationPath, 'utf8');
 
-        console.log('📄 Running migration: create_feedback_responses.sql');
+        console.log('📄 Running migration: create_internship_assignments.sql');
 
         // Execute migration
         await connection.query(sql);

@@ -92,13 +92,25 @@ const NAV_ITEMS = [
     icon: CalendarCheck,
     label: "Attendance",
     permission: FRONTEND_MODULES.ATTENDANCE,
+    subItems: [
+      {
+        path: "/attendance",
+        label: "Daily Attendance",
+        permission: FRONTEND_MODULES.ATTENDANCE,
+      },
+      {
+        path: "/attendance-monitoring",
+        label: "Hourly Attendance",
+        permission: FRONTEND_MODULES.ATTENDANCE,
+      },
+      {
+        path: "/internship-management",
+        label: "Internship Attendance",
+        permission: FRONTEND_MODULES.ATTENDANCE,
+      }
+    ]
   },
-  {
-    path: "/attendance-monitoring",
-    icon: CalendarCheck,
-    label: "Hourly Attendance",
-    permission: FRONTEND_MODULES.ATTENDANCE,
-  },
+
 
   {
     path: "/courses",
